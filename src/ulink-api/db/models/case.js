@@ -4,6 +4,8 @@ module.exports = (sequelize, DataTypes) => {
     {
       id: { type: DataTypes.UUID, primaryKey: true, defaultValue: DataTypes.UUIDV4 },
       currentStatus: { type: DataTypes.STRING, allowNull: false, defaultValue: 'EMAIL_RECEIVED' },
+      recognizedType: { type: DataTypes.STRING, allowNull: true },
+      extractedFields: { type: DataTypes.JSONB, allowNull: true },
     },
     { tableName: 'ulink_cases' }
   );

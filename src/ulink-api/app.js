@@ -16,6 +16,7 @@ const rootRouter = require('./routes/meta/root');
 const healthRouter = require('./routes/meta/health');
 const usersRouter = require('./routes/users');
 const jobsRouter = require('./routes/jobs');
+const devClaimRecognitionRouter = require('./routes/dev/claimRecognition');
 
 const app = express();
 
@@ -47,6 +48,7 @@ app.use('/', rootRouter);
 app.use('/health', healthRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/jobs', jobsRouter);
+app.use('/api/dev/claim-recognition', devClaimRecognitionRouter);
 
 // Swagger UI needs inline script/style, which the global helmet CSP blocks —
 // relax it for this path only, everything else keeps the strict default.

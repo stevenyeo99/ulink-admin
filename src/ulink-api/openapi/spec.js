@@ -24,12 +24,14 @@ const spec = swaggerJsdoc({
       { name: 'meta', description: 'Service identity / liveness' },
       { name: 'jobs', description: 'Cron-triggered pipeline block runners' },
       { name: 'users', description: 'Scaffold route, not wired to a real module yet' },
+      { name: 'dev', description: 'Developer-only tools — dry runs, no persistence, no auth' },
     ],
   },
   apis: [
     path.join(__dirname, '../routes/meta/*.js'),
     path.join(__dirname, '../routes/users/*.js'),
     path.join(__dirname, '../routes/jobs/index.js'),
+    path.join(__dirname, '../routes/dev/*.js'),
   ],
 });
 

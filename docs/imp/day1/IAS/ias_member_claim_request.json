@@ -1,0 +1,33 @@
+{
+  "MemberRefNo": "12/BATAHTA(N)123456",
+  "isValidation": "Y",
+  "Items": [
+    {
+      "DiagnosisCode": "A02.9",
+      "DiagnosisCodeDesc": "Pruritus",
+      "DiagnosisDescription": "Salmonella infection, unspecified",
+      "InvoiceID": "NIL",
+      "ReceivedDate": "12052025",
+      "SymptomDate": "12062025",
+      "ClaimType": "P",
+      "TreatmentCountry": "Myanmar",
+      "BenefitType": "",
+      "ProviderName": "City Hospital",
+      "IncurDateFrom": "12062025",
+      "IncurDateTo": "",
+      "PresentedCurrency": "MMK",
+      "PresentedAmt": 700000,
+      "ExchangeRate": 1,
+      "BenefitHead": "",
+      "PaymentCurrency": "MMK",
+      "PaymentExchangeRate": 1,
+      "PaymentMethod": "",
+      "PlanId": "2109",
+      "MeplOid": "58986709",
+      "BankName": "",
+      "BankAcctNo": "",
+      "BankAcctName": "",
+      "PayeeEmail": ""
+    }
+  ]
+}

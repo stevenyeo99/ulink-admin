@@ -74,9 +74,9 @@ Postgres-backed lock (`ulink_job_locks`, `jobs/jobLock.js`) so overlapping
 cron triggers for the same block skip instead of running concurrently — no
 request body.
 
-**Currently registered blocks**: `email-intake` (see below). Other blocks
-(document-reader, document-classifier, claim-scope-classifier) are out of
-scope for the current build phase and not mounted.
+**Currently registered blocks**: `email-intake`, `claim-recognition` (see
+below for both). Other blocks (document-reader, document-classifier) are out
+of scope for the current build phase and not mounted.
 
 **Response 200 — started**
 ```json
@@ -134,6 +134,51 @@ On completion (success or failure), the result is logged server-side —
 success, or the thrown error on failure (channel connection/auth failure,
 storage write failure, DB transaction failure) — and the job lock is
 released either way.
+
+---
+
+## claim-recognition job (background behavior)
+
+Module: `modules/claim-recognition/service.js`, started via
+`POST /api/jobs/claim-recognition/run`. Picks up cases at
+`currentStatus = 'READY_FOR_DOCUMENT_READING'` (Block 1's output), up to
+`CLAIM_RECOGNITION_BATCH_LIMIT` per run.
+
+For each case:
+
+1. Gathers every attachment across every `EmailMessage` in the case's
+   thread(s) — not just the message that first created it.
+2. Rasterizes each attachment to page images (`rasterize.js`,
+   `pdftoppm` + `sharp`, `CLAIM_RECOGNITION_RASTER_DPI`) and cleans up the
+   temp files afterward.
+3. **Vision pass**: one LLM call per page (`llmClient.js::transcribePage`),
+   `reasoning_effort: 'none'` — required to avoid a verified failure mode
+   where this class of model can enter an unbounded "thinking" loop on hard
+   content (e.g. handwriting) that never converges even with a large token
+   budget.
+4. **Synthesis pass**: one text-only LLM call
+   (`llmClient.js::synthesizeJson`) merges all page transcripts + the email
+   content against the enabled routes in `ulink_claim_routes`, returning a
+   route decision (`route`, `confidence`, `reason`) plus `extracted_fields`
+   matching that route's `extraction_schema`.
+5. Validates the parsed response against the same schema with `ajv` —
+   on failure, `MANUAL_REVIEW` with `reasonCode: SCHEMA_VALIDATION_FAILED`,
+   nothing untrusted gets persisted.
+6. Transitions `Case.currentStatus`:
+   - matched route + confidence ≥ `CLAIM_RECOGNITION_CONFIDENCE_THRESHOLD` → `RECOGNIZED`, `recognizedType` set
+   - matched route, low confidence → `MANUAL_REVIEW` (`LOW_CONFIDENCE`)
+   - no route matched (`fallback`) → `NOT_RECOGNIZED` (`NO_ROUTE_MATCH`)
+
+   Sets `Case.extractedFields` to the validated JSON either way, and logs a
+   `CaseEvent`.
+
+**`extracted_fields` shape** (per the `ayas_member_claim` route): `policy`,
+`claimant`, `claim`, `medical`, `bank` groups sourced from typed/printed
+text (proven reliable); `documents_present` presence flags; `medical_record`
+(`present` only — per meeting notes, no field-level check yet);
+`invoice` (`present` + its own `date_of_voucher`/`invoice_amount`/
+`patient_name`, captured as raw fields — comparison against the form's
+fields is a code-level concern for later, not decided by the LLM).
 
 ---
 

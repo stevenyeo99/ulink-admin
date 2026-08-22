@@ -2,6 +2,7 @@ const express = require('express');
 const createJobRouter = require('./createJobRouter');
 
 const emailIntakeService = require('../../modules/email-intake/service');
+const claimRecognitionService = require('../../modules/claim-recognition/service');
 
 const router = express.Router();
 
@@ -78,7 +79,70 @@ const router = express.Router();
  *               block: email-intake
  *               released: true
  *               wasLocked: true
+ *
+ * /api/jobs/claim-recognition/run:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Start the claim-recognition job (fire-and-forget)
+ *     description: >
+ *       Acquires the job lock and returns immediately. In the background, for each case
+ *       at currentStatus=READY_FOR_DOCUMENT_READING (up to CLAIM_RECOGNITION_BATCH_LIMIT
+ *       per run): rasterizes every attachment across the whole case thread into page
+ *       images, transcribes each page via a vision LLM call, then a text-only LLM call
+ *       decides the route (against ulink_claim_routes) and extracts fields into a fixed
+ *       JSON shape validated by ajv against the matched route's schema. Updates
+ *       Case.currentStatus to RECOGNIZED / NOT_RECOGNIZED / MANUAL_REVIEW, sets
+ *       Case.recognizedType/extractedFields, and logs a CaseEvent. Same lock/release
+ *       pattern as email-intake.
+ *     requestBody:
+ *       required: false
+ *       description: No body needed — trigger only.
+ *     responses:
+ *       200:
+ *         description: Started, or skipped because a prior run is still in progress
+ *         content:
+ *           application/json:
+ *             schema:
+ *               oneOf:
+ *                 - type: object
+ *                   properties:
+ *                     block: { type: string }
+ *                     started: { type: boolean }
+ *                 - type: object
+ *                   properties:
+ *                     block: { type: string }
+ *                     skipped: { type: boolean }
+ *                     reason: { type: string }
+ *             examples:
+ *               started:
+ *                 value: { block: claim-recognition, started: true }
+ *               skipped:
+ *                 value: { block: claim-recognition, skipped: true, reason: already_running }
+ *
+ * /api/jobs/claim-recognition/release:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Manually clear a stuck claim-recognition lock
+ *     requestBody:
+ *       required: false
+ *       description: No body needed.
+ *     responses:
+ *       200:
+ *         description: Lock cleared
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 block: { type: string }
+ *                 released: { type: boolean }
+ *                 wasLocked: { type: boolean }
+ *             example:
+ *               block: claim-recognition
+ *               released: true
+ *               wasLocked: true
  */
 router.use('/email-intake', createJobRouter('email-intake', emailIntakeService));
+router.use('/claim-recognition', createJobRouter('claim-recognition', claimRecognitionService));
 
 module.exports = router;
