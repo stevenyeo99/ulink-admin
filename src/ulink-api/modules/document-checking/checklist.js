@@ -35,8 +35,13 @@ function checkIncompleteClaimForm(fields) {
   return hasDiagnosis ? null : ISSUES.INCOMPLETE_CLAIM_FORM;
 }
 
+// `?.`/`|| []` throughout, not plain property reads: extractedFields on a case processed
+// before invoices became an array (or before identity_consistency existed at all) won't
+// have these fields in the current shape — treat that the same as any other "can't
+// determine" null, don't crash the whole run.
+
 function checkMissingVoucher(fields) {
-  return fields.invoice.present === false ? ISSUES.MISSING_VOUCHER : null;
+  return fields.invoices?.present === false ? ISSUES.MISSING_VOUCHER : null;
 }
 
 function checkNoMedicalReport(fields) {
@@ -44,8 +49,9 @@ function checkNoMedicalReport(fields) {
 }
 
 function checkUnclearVoucher(fields) {
-  if (fields.invoice.present !== true) return null; // covered by MISSING_VOUCHER instead
-  return fields.invoice.legible === false ? ISSUES.UNCLEAR_VOUCHER : null;
+  if (fields.invoices?.present !== true) return null; // covered by MISSING_VOUCHER instead
+  const anyUnclear = (fields.invoices.items || []).some((item) => item.legible === false);
+  return anyUnclear ? ISSUES.UNCLEAR_VOUCHER : null;
 }
 
 function checkIncompleteMedicalReport(fields) {
@@ -54,29 +60,39 @@ function checkIncompleteMedicalReport(fields) {
 }
 
 function checkMissingVoucherBreakdown(fields) {
-  if (fields.invoice.present !== true) return null;
-  return fields.invoice.has_itemized_breakdown === false ? ISSUES.MISSING_VOUCHER_BREAKDOWN : null;
+  if (fields.invoices?.present !== true) return null;
+  const anyMissingBreakdown = (fields.invoices.items || []).some((item) => item.has_itemized_breakdown === false);
+  return anyMissingBreakdown ? ISSUES.MISSING_VOUCHER_BREAKDOWN : null;
 }
 
+/**
+ * Sums every voucher's own subtotal before comparing to the form's claimed amount — a
+ * case can have more than one voucher (e.g. a hospital receipt + a separate pharmacy
+ * receipt), and the claimed total is meant to match their combined subtotal, not any
+ * single one of them (verified against real data: 45,000 + 9,690 = 54,690).
+ */
 function checkVoucherAmountMismatch(fields) {
-  const voucherAmount = fields.invoice.invoice_amount;
+  if (fields.invoices?.present !== true) return null;
+  const subtotals = (fields.invoices.items || []).map((item) => item.subtotal).filter((amount) => amount != null);
+  if (subtotals.length === 0) return null; // no readable amount on any voucher — nothing to compare
+  const voucherTotal = subtotals.reduce((sum, amount) => sum + amount, 0);
   const claimedAmount = fields.claim.total_claim_amount;
-  if (voucherAmount == null || claimedAmount == null) return null;
-  return voucherAmount !== claimedAmount ? ISSUES.VOUCHER_AMOUNT_MISMATCH : null;
+  if (claimedAmount == null) return null;
+  return voucherTotal !== claimedAmount ? ISSUES.VOUCHER_AMOUNT_MISMATCH : null;
 }
 
 function checkIncorrectPatientDetails(fields) {
-  return fields.identity_consistency.patient_name_consistent === false ? ISSUES.INCORRECT_PATIENT_DETAILS : null;
+  return fields.identity_consistency?.patient_name_consistent === false ? ISSUES.INCORRECT_PATIENT_DETAILS : null;
 }
 
 function checkIncorrectVoucher(fields) {
-  if (fields.invoice.present !== true) return null;
-  return fields.identity_consistency.invoice_provider_consistent === false ? ISSUES.INCORRECT_VOUCHER : null;
+  if (fields.invoices?.present !== true) return null;
+  return fields.identity_consistency?.invoice_provider_consistent === false ? ISSUES.INCORRECT_VOUCHER : null;
 }
 
 function checkIncorrectMedicalReport(fields) {
   if (fields.medical_record.present !== true) return null;
-  return fields.identity_consistency.medical_record_provider_consistent === false
+  return fields.identity_consistency?.medical_record_provider_consistent === false
     ? ISSUES.INCORRECT_MEDICAL_REPORT
     : null;
 }
