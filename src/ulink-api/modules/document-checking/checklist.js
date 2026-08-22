@@ -8,6 +8,12 @@
  * "Incorrect bank details" is intentionally NOT evaluated here — that specifically means
  * "doesn't match what's on file at IAS," which needs the member-verification block
  * (not built yet). Everything else is checkable from Case.extractedFields alone.
+ *
+ * The 3 identity-matching checks (patient/provider names) read pre-computed
+ * extractedFields.identity_consistency.* rather than comparing strings here — those
+ * comparisons can legitimately cross scripts (Burmese on a form vs Latin on a scanned
+ * document), which is not something code-level string matching can judge at all, only
+ * an LLM that already read both documents can. See claim-recognition's synthesize.md.
  */
 
 const ISSUES = {
@@ -23,38 +29,6 @@ const ISSUES = {
   INCOMPLETE_MEDICAL_REPORT: 'Incomplete medical report(s)',
   MISSING_BANK_INFO: 'Missing bank information',
 };
-
-function normalize(value) {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim().toLowerCase().replace(/\s+/g, ' ');
-  return trimmed || null;
-}
-
-function stripTitle(value) {
-  const normalized = normalize(value);
-  if (!normalized) return null;
-  return normalized.replace(/^(mr|mrs|ms|miss|dr)\.?\s+/, '');
-}
-
-/**
- * Returns true/false when both sides have data to compare, null when either side is
- * unknown — a null here means "can't say," not "matches." A missing/unclear field is a
- * different problem, already covered by its own unclear/incomplete/missing check —
- * never let that same null also trigger an "incorrect" flag here.
- */
-function namesMatch(a, b) {
-  const left = stripTitle(a);
-  const right = stripTitle(b);
-  if (!left || !right) return null;
-  return left === right;
-}
-
-function stringsMatch(a, b) {
-  const left = normalize(a);
-  const right = normalize(b);
-  if (!left || !right) return null;
-  return left === right;
-}
 
 function checkIncompleteClaimForm(fields) {
   const hasDiagnosis = fields.medical.detail_of_illness_injury || fields.medical.full_description_of_treatment;
@@ -92,27 +66,19 @@ function checkVoucherAmountMismatch(fields) {
 }
 
 function checkIncorrectPatientDetails(fields) {
-  const claimantName = fields.claimant.claimant_name;
-  const invoiceMismatch = namesMatch(claimantName, fields.invoice.patient_name) === false;
-  const medicalRecordMismatch = namesMatch(claimantName, fields.medical_record.patient_name) === false;
-  return invoiceMismatch || medicalRecordMismatch ? ISSUES.INCORRECT_PATIENT_DETAILS : null;
+  return fields.identity_consistency.patient_name_consistent === false ? ISSUES.INCORRECT_PATIENT_DETAILS : null;
 }
 
 function checkIncorrectVoucher(fields) {
   if (fields.invoice.present !== true) return null;
-  const mismatch = stringsMatch(fields.medical.hospital_or_clinic_name, fields.invoice.hospital_or_clinic_name) === false;
-  return mismatch ? ISSUES.INCORRECT_VOUCHER : null;
+  return fields.identity_consistency.invoice_provider_consistent === false ? ISSUES.INCORRECT_VOUCHER : null;
 }
 
 function checkIncorrectMedicalReport(fields) {
   if (fields.medical_record.present !== true) return null;
-  // Doctor names carry the same "Dr."/"Dr" title-formatting variance as patient names —
-  // use namesMatch (title-stripping), not a plain string compare, or "Dr Aye Mrat Khine"
-  // vs "Dr. Aye Mrat Khine" false-positives as a mismatch (verified against real data).
-  const doctorMismatch = namesMatch(fields.medical.doctor_name, fields.medical_record.doctor_name) === false;
-  const hospitalMismatch =
-    stringsMatch(fields.medical.hospital_or_clinic_name, fields.medical_record.hospital_or_clinic_name) === false;
-  return doctorMismatch || hospitalMismatch ? ISSUES.INCORRECT_MEDICAL_REPORT : null;
+  return fields.identity_consistency.medical_record_provider_consistent === false
+    ? ISSUES.INCORRECT_MEDICAL_REPORT
+    : null;
 }
 
 function checkMissingBankInfo(fields) {

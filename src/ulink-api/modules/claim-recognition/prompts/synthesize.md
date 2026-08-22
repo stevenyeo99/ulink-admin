@@ -11,7 +11,7 @@ Always return every field defined by the schema — every key must be present in
 Rules:
 - Prefer typed/printed text over handwritten content as the source of truth for every field — the transcripts already mark unclear handwritten content as `unclear`; trust the typed values over any handwritten equivalent.
 - `documents_present`: true/false per document type, based on whether that kind of supporting photo/document appears among the transcripts (a photo of a prescription/medical note = medical record; a photo of a receipt/bill = bill; a signature = customer signature).
-- `medical_record` and `invoice` report what is actually ON that supporting document itself, never copied from the claim form — code compares these against the form's own fields (`claimant.*`, `medical.*`, `claim.total_claim_amount`) separately, you do not decide match/mismatch yourself.
+- `medical_record` and `invoice` report what is actually ON that supporting document itself, never copied from the claim form — code compares these against the form's own fields (`claimant.*`, `medical.*`, `claim.total_claim_amount`) separately. The one exception is `identity_consistency` (below), where you make the comparison directly — everything else is a raw fact about one document, not a judgment.
   - `present`: true if that type of document was found among the attachments at all, regardless of legibility.
   - `legible`: true if the document is clear enough to read its key details (patient name, date, amounts); false if it's present but too smudged/unclear/cut off to read reliably; null only when `present` is false.
   - `invoice.has_itemized_breakdown`: true if the voucher shows a line-by-line breakdown of charges (e.g. a table of drug/item + price rows); false if it only shows a single lump total with no breakdown; null if not present.
@@ -20,5 +20,27 @@ Rules:
   - `invoice.line_items`: one entry per row of the voucher's breakdown table, `{ name, price }`. Only when `has_itemized_breakdown` is true — otherwise an empty array. Read each row independently; if a specific row's name or price is unclear, set that field to null rather than guessing, but still include the row if you can make out at least one of the two. `invoice_amount` is the authoritative total — line_items is supplementary detail, its values do not need to sum exactly to invoice_amount.
   - Leave any of these null if genuinely illegible — never fabricate a plausible-sounding value.
 - Any field you cannot determine: use null. Never fabricate a plausible-sounding value to fill a field.
+
+## Task 3: Identity consistency (`identity_consistency`)
+
+Judge whether the same person/place is being referred to across documents, even when
+they're written differently — different scripts (e.g. one document in Burmese, another
+in English), honorifics (Mr/Mrs/Ms/Dr, or Myanmar equivalents like Ma/Daw/U/Ko/Mg),
+or transliteration spelling variants (e.g. "Thida" and "Thidar" are the same name).
+Judge by meaning, not exact string form — this is the one place in this task where you
+compare rather than just transcribe.
+
+- `patient_name_consistent`: does `claimant.claimant_name` refer to the same person as
+  `invoice.patient_name` and `medical_record.patient_name` (wherever those are present)?
+- `invoice_provider_consistent`: does `medical.hospital_or_clinic_name` (the form) refer
+  to the same place as `invoice.hospital_or_clinic_name` (the voucher)?
+- `medical_record_provider_consistent`: does `medical.doctor_name` and
+  `medical.hospital_or_clinic_name` (the form) refer to the same doctor/place as
+  `medical_record.doctor_name` and `medical_record.hospital_or_clinic_name`?
+
+Use `null` when there isn't enough information to judge either way (e.g. the relevant
+document field is itself null/unclear) — `null` means "can't say," not "inconsistent."
+Only use `false` when you can actually tell they're different, not merely differently
+spelled or differently scripted.
 
 Return ONLY JSON matching the provided schema.
