@@ -1,7 +1,8 @@
 /**
- * Canonical customer-facing issue wording (matches the real missing-document email
- * template verbatim) + the evaluator logic that decides which apply to a case's
- * extracted_fields. Pure code, deliberately not config-driven — each check has
+ * Canonical customer-facing issue wording + the evaluator logic that decides which apply
+ * to a case's extracted_fields. All but one entry matches the real missing-document email
+ * template verbatim (DELEGATION_LETTER_REQUIRED does not — no canned wording exists for it
+ * yet; see its check function). Pure code, deliberately not config-driven — each check has
  * genuinely distinct comparison logic (boolean read, numeric compare, OR-across-fields,
  * null-handling), not a repeatable shape a generic rules engine would pay for itself on.
  *
@@ -9,11 +10,14 @@
  * "doesn't match what's on file at IAS," which needs the member-verification block
  * (not built yet). Everything else is checkable from Case.extractedFields alone.
  *
- * The 3 identity-matching checks (patient/provider names) read pre-computed
- * extractedFields.identity_consistency.* rather than comparing strings here — those
- * comparisons can legitimately cross scripts (Burmese on a form vs Latin on a scanned
- * document), which is not something code-level string matching can judge at all, only
- * an LLM that already read both documents can. See claim-recognition's synthesize.md.
+ * Of extractedFields.identity_consistency.*, only bank_account_holder_consistent
+ * (delegation letter) is currently evaluated — patient_name_consistent and
+ * medical_record_provider_consistent are computed upstream by claim-recognition
+ * (script-crossing name/place comparisons an LLM can judge but code-level string matching
+ * structurally can't) but not trusted by this checklist at the moment; see the block
+ * comment above EVALUATORS. invoice_provider_consistent no longer exists at all — its only
+ * data source (invoices.items[].hospital_or_clinic_name) was removed as a fabrication risk
+ * (see the schema migration that simplified invoices.items).
  */
 
 const ISSUES = {
@@ -28,6 +32,7 @@ const ISSUES = {
   INCORRECT_MEDICAL_REPORT: 'Incorrect medical report(s)',
   INCOMPLETE_MEDICAL_REPORT: 'Incomplete medical report(s)',
   MISSING_BANK_INFO: 'Missing bank information',
+  DELEGATION_LETTER_REQUIRED: 'Please fill in the attached delegation letter to proceed with the payment process',
 };
 
 function checkIncompleteClaimForm(fields) {
@@ -81,15 +86,28 @@ function checkVoucherAmountMismatch(fields) {
   return voucherTotal !== claimedAmount ? ISSUES.VOUCHER_AMOUNT_MISMATCH : null;
 }
 
+// Disabled (not in EVALUATORS) — see the block comment above EVALUATORS. Kept defined so
+// re-enabling later is a one-line change, not a rewrite.
 function checkIncorrectPatientDetails(fields) {
   return fields.identity_consistency?.patient_name_consistent === false ? ISSUES.INCORRECT_PATIENT_DETAILS : null;
 }
 
+// Deliberately does NOT read identity_consistency.invoice_provider_consistent — verified
+// unreliable against real data (complete/1: came back false with nothing on either side to
+// compare) on top of being a compounding-error-prone LLM judgment layered on top of
+// extraction that's itself sometimes wrong (see synthesize.md's invoices-fabrication
+// guidance). Deadline-driven call: not worth chasing further right now, so this check is
+// scoped down to just the one signal that's held up — the clinic/doctor authentication
+// mark (has_clinic_stamp_or_doctor_signature, verified against incomplete/jd1/1, Shin Minn
+// Thi, where a handwritten voucher carrying only a generic pharmacy dispensing stamp was
+// rejected under this same reason by the human reviewer).
 function checkIncorrectVoucher(fields) {
   if (fields.invoices?.present !== true) return null;
-  return fields.identity_consistency?.invoice_provider_consistent === false ? ISSUES.INCORRECT_VOUCHER : null;
+  const anyMissingStamp = (fields.invoices.items || []).some((item) => item.has_clinic_stamp_or_doctor_signature === false);
+  return anyMissingStamp ? ISSUES.INCORRECT_VOUCHER : null;
 }
 
+// Disabled (not in EVALUATORS) — see the block comment above EVALUATORS.
 function checkIncorrectMedicalReport(fields) {
   if (fields.medical_record.present !== true) return null;
   return fields.identity_consistency?.medical_record_provider_consistent === false
@@ -103,18 +121,42 @@ function checkMissingBankInfo(fields) {
   return allMissing ? ISSUES.MISSING_BANK_INFO : null;
 }
 
+// Confirmed JD2-scope rule (delegation letter required when the payment recipient differs
+// from the claimant — docs/samples/20260820/20260821 ULINK STP Confirmed Assumptions and
+// Implementation Advice.md), pulled forward into this checklist as a plain detection flag.
+// Not in the canned-response template (no fixed wording exists yet for it) — verified
+// against real sample data (incomplete/jd2, Khin Maung) where the human reviewer sent this
+// exact request as free text. This is a different concept from "Incorrect bank details"
+// above: the bank details here are valid, just for someone other than the claimant.
+function checkDelegationLetterRequired(fields) {
+  return fields.identity_consistency?.bank_account_holder_consistent === false ? ISSUES.DELEGATION_LETTER_REQUIRED : null;
+}
+
+// identity_consistency.patient_name_consistent and .medical_record_provider_consistent are
+// deliberately not evaluated right now — checkIncorrectPatientDetails and
+// checkIncorrectMedicalReport are defined above but left out of this list. Deadline-driven
+// call (2026-08-22): this LLM-judged comparison layer, on top of extraction that's itself
+// sometimes unreliable on messy/handwritten documents, produced enough false positives on
+// known-complete samples (complete/1, complete/2) that it's not worth the remaining time to
+// harden before ship. .invoice_provider_consistent was dropped the same way (see
+// checkIncorrectVoucher). Scope was deliberately kept to two identity_consistency-backed
+// checks — stamp/authentication (checkIncorrectVoucher's has_clinic_stamp_or_doctor_signature
+// path) and delegation letter (checkDelegationLetterRequired, below) — both verified
+// reliable against real sample data, unlike the other two. Re-enable the rest by adding
+// checkIncorrectPatientDetails/checkIncorrectMedicalReport back to EVALUATORS once there's
+// time to revisit reliability (see the two-pass extraction/consistency-judgment split
+// discussed for that work).
 const EVALUATORS = [
   checkIncompleteClaimForm,
-  checkIncorrectPatientDetails,
   checkMissingVoucher,
   checkNoMedicalReport,
   checkUnclearVoucher,
   checkIncorrectVoucher,
   checkMissingVoucherBreakdown,
   checkVoucherAmountMismatch,
-  checkIncorrectMedicalReport,
   checkIncompleteMedicalReport,
   checkMissingBankInfo,
+  checkDelegationLetterRequired,
 ];
 
 function evaluateDocumentChecks(extractedFields) {

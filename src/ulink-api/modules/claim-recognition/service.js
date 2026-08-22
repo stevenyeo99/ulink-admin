@@ -1,12 +1,13 @@
 const fs = require('fs');
 const path = require('path');
 const Ajv = require('ajv');
-const { sequelize, Case, EmailThread, EmailMessage, CaseEvent } = require('../../db/models');
+const { sequelize, Case, EmailThread, EmailMessage, EmailAttachment, CaseEvent } = require('../../db/models');
 const config = require('../../config');
 const { getStorageAdapter } = require('../../storage');
 const { getEnabledRoutes } = require('./routeCatalog');
 const { preparePageImages } = require('./rasterize');
 const { transcribePage, synthesizeJson } = require('./llmClient');
+const { extractLinkedDocumentUrls, fetchLinkedDocument } = require('./linkedDocuments');
 
 const BLOCK_NAME = 'claim-recognition';
 const ajv = new Ajv({ allErrors: true });
@@ -32,27 +33,128 @@ async function gatherAttachments(caseId) {
   const attachments = [];
   for (const thread of threads) {
     for (const message of thread.EmailMessages) {
-      attachments.push(...message.EmailAttachments);
+      // Excludes attachments previously fetched from a link found in another attachment
+      // (sourceUrl set) — those get rediscovered and re-transcribed via the owning
+      // attachment's own transcribeLinkedDocuments call below, not as independent
+      // top-level attachments (avoids double-counting their transcript on a reprocess).
+      attachments.push(...message.EmailAttachments.filter((a) => !a.sourceUrl));
     }
   }
   return attachments;
 }
 
-async function transcribeAttachment(attachment, storage) {
-  const buffer = await storage.get(attachment.storageRef);
-  const { pages, cleanup } = await preparePageImages(buffer, attachment.originalFilename, attachment.id);
-
+async function transcribePages(buffer, filename, label) {
+  const { pages, cleanup } = await preparePageImages(buffer, filename, label);
   try {
     const pageTexts = [];
     for (const page of pages) {
       const imageBuffer = await fs.promises.readFile(page.filePath);
       const text = await transcribePage({ imageBuffer, instruction: TRANSCRIBE_INSTRUCTION });
-      pageTexts.push(`[${attachment.originalFilename || 'attachment'} - page ${page.pageNumber}]\n${text}`);
+      pageTexts.push({ pageNumber: page.pageNumber, text });
     }
     return pageTexts;
   } finally {
     await cleanup();
   }
+}
+
+/**
+ * A generated claim PDF sometimes references a supporting photo by URL instead of
+ * embedding it (verified against real sample data — incomplete/jd1/1 and incomplete/jd2,
+ * both real cases where a human reviewer clicked through and found the linked document
+ * fine; without this, the pipeline would wrongly treat it as absent and flag "No Medical
+ * Report(s)"/"Missing voucher(s)"). Only config.linkedDocuments.allowedHosts are ever
+ * fetched. A document already fetched for this attachment (e.g. a retried run) is reused
+ * from storage rather than fetched and stored again.
+ */
+async function transcribeLinkedDocuments(attachment, pdfBuffer, storage) {
+  const ext = path.extname(attachment.originalFilename || '').toLowerCase();
+  if (ext !== '.pdf') return []; // only generated claim PDFs carry this kind of link
+
+  const urls = await extractLinkedDocumentUrls(pdfBuffer, config.linkedDocuments.allowedHosts);
+  const pageTexts = [];
+
+  for (const url of urls) {
+    let linkedAttachment = await EmailAttachment.findOne({ where: { parentAttachmentId: attachment.id, sourceUrl: url } });
+
+    if (!linkedAttachment) {
+      let fetched;
+      try {
+        fetched = await fetchLinkedDocument(url, {
+          timeoutMs: config.linkedDocuments.timeoutMs,
+          maxBytes: config.linkedDocuments.maxBytes,
+        });
+      } catch (error) {
+        pageTexts.push(
+          `[linked document, referenced from ${attachment.originalFilename || 'attachment'}: ${url}]\n` +
+            `COULD NOT BE RETRIEVED (${error.message}) — treat this the same as any other document that could ` +
+            'not be read: its content is unknown, not confirmed absent.'
+        );
+        continue;
+      }
+
+      const key = `linked/${attachment.id}/${Buffer.from(url).toString('base64url')}${fetched.ext}`;
+      const { storageRef } = await storage.put(key, fetched.buffer);
+      linkedAttachment = await EmailAttachment.create({
+        messageId: attachment.messageId,
+        storageRef,
+        originalFilename: `linked${fetched.ext}`,
+        contentType: fetched.contentType,
+        sizeBytes: fetched.buffer.length,
+        sourceUrl: url,
+        parentAttachmentId: attachment.id,
+      });
+    }
+
+    const buffer = await storage.get(linkedAttachment.storageRef);
+    const pages = await transcribePages(buffer, linkedAttachment.originalFilename, linkedAttachment.id);
+    for (const page of pages) {
+      pageTexts.push(`[linked from ${attachment.originalFilename || 'attachment'} - ${url} - page ${page.pageNumber}]\n${page.text}`);
+    }
+  }
+
+  return pageTexts;
+}
+
+async function transcribeAttachment(attachment, storage) {
+  const buffer = await storage.get(attachment.storageRef);
+  const pages = await transcribePages(buffer, attachment.originalFilename, attachment.id);
+  const pageTexts = pages.map((page) => `[${attachment.originalFilename || 'attachment'} - page ${page.pageNumber}]\n${page.text}`);
+  pageTexts.push(...(await transcribeLinkedDocuments(attachment, buffer, storage)));
+  return pageTexts;
+}
+
+/**
+ * Deterministic backstop for a confirmed reliability gap: the model doesn't consistently
+ * follow synthesize.md's "null when there's nothing to compare" rule for
+ * identity_consistency — verified against real data (complete/1: both
+ * invoices.items[].hospital_or_clinic_name came back null, yet invoice_provider_consistent
+ * still came back false, firing a false "Incorrect voucher(s)"). Whether the fields a
+ * given identity_consistency value is comparing are null is directly checkable in code
+ * with zero ambiguity — it doesn't need LLM judgment at all, only the actual
+ * script-crossing name/place comparison does. This runs unconditionally on every result,
+ * overriding the LLM's answer only when there was structurally nothing for it to compare.
+ */
+function normalizeIdentityConsistency(fields) {
+  const consistency = fields.identity_consistency || {};
+
+  const canComparePatientName = fields.claimant?.claimant_name != null && fields.medical_record?.patient_name != null;
+
+  const canCompareMedicalRecordProvider =
+    (fields.medical?.doctor_name != null || fields.medical?.hospital_or_clinic_name != null) &&
+    (fields.medical_record?.doctor_name != null || fields.medical_record?.hospital_or_clinic_name != null);
+
+  const canCompareBankHolder = fields.claimant?.claimant_name != null && fields.bank?.bank_account_name != null;
+
+  return {
+    ...fields,
+    identity_consistency: {
+      ...consistency,
+      patient_name_consistent: canComparePatientName ? consistency.patient_name_consistent : null,
+      medical_record_provider_consistent: canCompareMedicalRecordProvider ? consistency.medical_record_provider_consistent : null,
+      bank_account_holder_consistent: canCompareBankHolder ? consistency.bank_account_holder_consistent : null,
+    },
+  };
 }
 
 /**
@@ -138,7 +240,9 @@ async function recognizeCase(caseRecord, routes) {
     reasonCode = 'NO_ROUTE_MATCH';
   }
 
-  return { caseId: caseRecord.id, outcome, recognizedType, reasonCode, message: parsed.reason, extractedFields: parsed.extracted_fields };
+  const extractedFields = parsed.extracted_fields ? normalizeIdentityConsistency(parsed.extracted_fields) : parsed.extracted_fields;
+
+  return { caseId: caseRecord.id, outcome, recognizedType, reasonCode, message: parsed.reason, extractedFields };
 }
 
 async function persistOutcome(caseRecord, outcome) {

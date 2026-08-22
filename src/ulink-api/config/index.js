@@ -63,6 +63,20 @@ module.exports = {
     batchLimit: parseInt(process.env.DOCUMENT_CHECKING_BATCH_LIMIT, 10) || 50,
   },
 
+  linkedDocuments: {
+    // Some generated claim PDFs reference a supporting photo by URL instead of embedding
+    // it (verified against real sample data — a human reviewer clicked through and found
+    // the linked document fine; the pipeline must not treat it as absent). Only hosts
+    // listed here are ever fetched — this content is attacker-influenceable (anything in
+    // an inbound email), so fetching is never opened up to arbitrary URLs found in it.
+    allowedHosts: (process.env.LINKED_DOCUMENTS_ALLOWED_HOSTS || 'as.expa.ai')
+      .split(',')
+      .map((host) => host.trim().toLowerCase())
+      .filter(Boolean),
+    timeoutMs: parseInt(process.env.LINKED_DOCUMENTS_TIMEOUT_MS, 10) || 30000,
+    maxBytes: parseInt(process.env.LINKED_DOCUMENTS_MAX_BYTES, 10) || 15 * 1000 * 1000,
+  },
+
   imap: {
     host: process.env.IMAP_HOST,
     port: parseInt(process.env.IMAP_PORT, 10) || 993,
