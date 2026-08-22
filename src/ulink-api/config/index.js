@@ -57,6 +57,12 @@ module.exports = {
     maxTokensPerPage: parseInt(process.env.CLAIM_RECOGNITION_MAX_TOKENS_PER_PAGE, 10) || 800,
   },
 
+  documentChecking: {
+    // Pure code, no LLM/external call — safe to process a much larger batch per run
+    // than claim-recognition.
+    batchLimit: parseInt(process.env.DOCUMENT_CHECKING_BATCH_LIMIT, 10) || 50,
+  },
+
   imap: {
     host: process.env.IMAP_HOST,
     port: parseInt(process.env.IMAP_PORT, 10) || 993,

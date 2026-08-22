@@ -3,6 +3,7 @@ const createJobRouter = require('./createJobRouter');
 
 const emailIntakeService = require('../../modules/email-intake/service');
 const claimRecognitionService = require('../../modules/claim-recognition/service');
+const documentCheckingService = require('../../modules/document-checking/service');
 
 const router = express.Router();
 
@@ -141,8 +142,70 @@ const router = express.Router();
  *               block: claim-recognition
  *               released: true
  *               wasLocked: true
+ *
+ * /api/jobs/document-checking/run:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Start the document-checking job (fire-and-forget)
+ *     description: >
+ *       Acquires the job lock and returns immediately. In the background, for each case
+ *       at currentStatus=RECOGNIZED (up to DOCUMENT_CHECKING_BATCH_LIMIT per run): runs
+ *       the 11 checklist evaluators (modules/document-checking/checklist.js) purely over
+ *       Case.extractedFields — no LLM call, no external dependency, deterministic. Updates
+ *       Case.currentStatus to DOCUMENT_CHECKED (no issues) or INCOMPLETE (one or more
+ *       issues), sets Case.documentCheckResult, and logs a CaseEvent. Same lock/release
+ *       pattern as the other jobs. Note: "Incorrect bank details" is not evaluated here —
+ *       it requires the member-verification block (not built yet).
+ *     requestBody:
+ *       required: false
+ *       description: No body needed — trigger only.
+ *     responses:
+ *       200:
+ *         description: Started, or skipped because a prior run is still in progress
+ *         content:
+ *           application/json:
+ *             schema:
+ *               oneOf:
+ *                 - type: object
+ *                   properties:
+ *                     block: { type: string }
+ *                     started: { type: boolean }
+ *                 - type: object
+ *                   properties:
+ *                     block: { type: string }
+ *                     skipped: { type: boolean }
+ *                     reason: { type: string }
+ *             examples:
+ *               started:
+ *                 value: { block: document-checking, started: true }
+ *               skipped:
+ *                 value: { block: document-checking, skipped: true, reason: already_running }
+ *
+ * /api/jobs/document-checking/release:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Manually clear a stuck document-checking lock
+ *     requestBody:
+ *       required: false
+ *       description: No body needed.
+ *     responses:
+ *       200:
+ *         description: Lock cleared
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 block: { type: string }
+ *                 released: { type: boolean }
+ *                 wasLocked: { type: boolean }
+ *             example:
+ *               block: document-checking
+ *               released: true
+ *               wasLocked: true
  */
 router.use('/email-intake', createJobRouter('email-intake', emailIntakeService));
 router.use('/claim-recognition', createJobRouter('claim-recognition', claimRecognitionService));
+router.use('/document-checking', createJobRouter('document-checking', documentCheckingService));
 
 module.exports = router;

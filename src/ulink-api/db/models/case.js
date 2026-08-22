@@ -6,6 +6,7 @@ module.exports = (sequelize, DataTypes) => {
       currentStatus: { type: DataTypes.STRING, allowNull: false, defaultValue: 'EMAIL_RECEIVED' },
       recognizedType: { type: DataTypes.STRING, allowNull: true },
       extractedFields: { type: DataTypes.JSONB, allowNull: true },
+      documentCheckResult: { type: DataTypes.JSONB, allowNull: true },
     },
     { tableName: 'ulink_cases' }
   );
