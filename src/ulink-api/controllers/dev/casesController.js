@@ -15,15 +15,39 @@ const RESET_FIELDS = {
 
 const VALID_STATUSES = Object.keys(RESET_FIELDS);
 
+async function resetOneCase(caseId, to) {
+  const caseRecord = await Case.findByPk(caseId);
+  if (!caseRecord) {
+    throw new Error(`Case ${caseId} not found`);
+  }
+
+  const clearedFields = RESET_FIELDS[to];
+  const previousStatus = caseRecord.currentStatus;
+  const updates = { currentStatus: to };
+  for (const field of clearedFields) updates[field] = null;
+
+  await Case.update(updates, { where: { id: caseId } });
+  await CaseEvent.create({
+    caseId,
+    blockName: BLOCK_NAME,
+    prevStatus: previousStatus,
+    newStatus: to,
+    reasonCode: 'MANUAL_RESET',
+    message: `Reset via dev tool, cleared: ${clearedFields.join(', ')}`,
+  });
+
+  return { caseId, previousStatus, currentStatus: to, clearedFields };
+}
+
 /**
- * Developer-only: rewinds a case to an earlier pipeline stage so it gets picked up and
- * reprocessed by that stage's job again — e.g. after a bugfix, replay an already-processed
- * real case instead of waiting for new test data. Logs a CaseEvent so a manual reset is
- * never silent/untraceable in the case's history.
+ * Developer-only: rewinds one or more cases to an earlier pipeline stage so they get
+ * picked up and reprocessed by that stage's job again — e.g. after a bugfix, replay
+ * already-processed real cases instead of waiting for new test data. Each case is
+ * processed independently (one not-found/invalid id doesn't fail the rest of the batch),
+ * and every reset logs its own CaseEvent so this is never silent/untraceable.
  */
-async function resetCase(req, res) {
-  const { caseId } = req.params;
-  const { to } = req.body || {};
+async function resetCases(req, res) {
+  const { caseIds, to } = req.body || {};
 
   if (!VALID_STATUSES.includes(to)) {
     return res.status(400).json({
@@ -31,32 +55,21 @@ async function resetCase(req, res) {
     });
   }
 
-  try {
-    const caseRecord = await Case.findByPk(caseId);
-    if (!caseRecord) {
-      return res.status(404).json({ error: { message: `Case ${caseId} not found`, status: 404 } });
-    }
-
-    const clearedFields = RESET_FIELDS[to];
-    const previousStatus = caseRecord.currentStatus;
-    const updates = { currentStatus: to };
-    for (const field of clearedFields) updates[field] = null;
-
-    await Case.update(updates, { where: { id: caseId } });
-    await CaseEvent.create({
-      caseId,
-      blockName: BLOCK_NAME,
-      prevStatus: previousStatus,
-      newStatus: to,
-      reasonCode: 'MANUAL_RESET',
-      message: `Reset via dev tool, cleared: ${clearedFields.join(', ')}`,
-    });
-
-    res.json({ caseId, previousStatus, currentStatus: to, clearedFields });
-  } catch (error) {
-    logger.error('case reset failed', { caseId, error: error.message, stack: error.stack });
-    res.status(500).json({ error: { message: error.message, status: 500 } });
+  if (!Array.isArray(caseIds) || caseIds.length === 0) {
+    return res.status(400).json({ error: { message: '"caseIds" must be a non-empty array', status: 400 } });
   }
+
+  const results = [];
+  for (const caseId of caseIds) {
+    try {
+      results.push({ ok: true, ...(await resetOneCase(caseId, to)) });
+    } catch (error) {
+      logger.error('case reset failed', { caseId, error: error.message, stack: error.stack });
+      results.push({ ok: false, caseId, error: error.message });
+    }
+  }
+
+  res.json({ results });
 }
 
-module.exports = { resetCase, VALID_STATUSES };
+module.exports = { resetCases, VALID_STATUSES };
