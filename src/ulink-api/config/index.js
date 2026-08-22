@@ -2,6 +2,11 @@ require('dotenv').config();
 
 const env = process.env.NODE_ENV || 'development';
 
+function parseBool(value, fallback) {
+  if (value === undefined || value === null || value === '') return fallback;
+  return ['true', '1', 'yes', 'y'].includes(String(value).trim().toLowerCase());
+}
+
 module.exports = {
   env,
   isProduction: env === 'production',
@@ -11,5 +16,49 @@ module.exports = {
   rateLimit: {
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || 15 * 60 * 1000,
     max: parseInt(process.env.RATE_LIMIT_MAX, 10) || 100,
+  },
+
+  db: {
+    enabled: parseBool(process.env.SUPABASE_DB_ENABLED, false),
+    connectionString: process.env.SUPABASE_DB_CONN_STR,
+    ssl: parseBool(process.env.SUPABASE_DB_SSL, true),
+    pool: {
+      max: parseInt(process.env.SUPABASE_DB_POOL_MAX, 10) || 10,
+      min: parseInt(process.env.SUPABASE_DB_POOL_MIN, 10) || 0,
+      idleTimeoutMillis: parseInt(process.env.SUPABASE_DB_POOL_IDLE_MS, 10) || 30000,
+      connectionTimeoutMillis: parseInt(process.env.SUPABASE_DB_POOL_ACQUIRE_MS, 10) || 30000,
+    },
+  },
+
+  llm: {
+    baseUrl: process.env.LLM_URL || process.env.LM_URL,
+    visionModel: process.env.MODEL,
+    assistantModel: process.env.MODEL_ASSISTANT || process.env.MODEL,
+    reasoningEffort: process.env.LLM_REASONING_EFFORT || undefined,
+    timeoutMs: parseInt(process.env.LLM_TIMEOUT_MS, 10) || 120000,
+    maxImages: parseInt(process.env.LLM_MAX_IMAGES, 10) || 6,
+    maxRequestBytes: parseInt(process.env.LLM_MAX_REQUEST_BYTES, 10) || 25 * 1000 * 1000,
+  },
+
+  imap: {
+    host: process.env.IMAP_HOST,
+    port: parseInt(process.env.IMAP_PORT, 10) || 993,
+    secure: parseBool(process.env.IMAP_TLS, true),
+    user: process.env.IMAP_USER,
+    password: process.env.IMAP_PASSWORD,
+    folder: process.env.IMAP_FOLDER || 'INBOX',
+    fetchLimit: parseInt(process.env.IMAP_FETCH_LIMIT, 10) || 20,
+    socketTimeoutMs: parseInt(process.env.IMAP_SOCKET_TIMEOUT_MS, 10) || 30000,
+    connectionTimeoutMs: parseInt(process.env.IMAP_CONNECTION_TIMEOUT_MS, 10) || 30000,
+    greetingTimeoutMs: parseInt(process.env.IMAP_GREETING_TIMEOUT_MS, 10) || 15000,
+  },
+
+  storage: {
+    driver: process.env.STORAGE_DRIVER || 'local',
+    root: process.env.STORAGE_ROOT || './data/attachments',
+  },
+
+  channel: {
+    driver: process.env.CHANNEL_DRIVER || 'imap_smtp',
   },
 };
