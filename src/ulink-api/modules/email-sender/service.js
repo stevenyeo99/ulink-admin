@@ -1,4 +1,4 @@
-const { sequelize, Sequelize, EmailThread, EmailMessage, EmailTask, CaseEvent } = require('../../db/models');
+const { sequelize, Sequelize, Case, ClaimRoute, EmailThread, EmailMessage, EmailTask, CaseEvent } = require('../../db/models');
 const config = require('../../config');
 const { getChannelAdapter } = require('../../channels');
 const { render } = require('./templates');
@@ -30,6 +30,20 @@ async function findLastInboundMessage(caseId) {
   });
 }
 
+/**
+ * Per-route CC recipient (ulink_claim_routes.cc_email), joined via Case.recognizedType ->
+ * ClaimRoute.routeKey (set by claim-recognition when the case was first classified). A case
+ * with no recognizedType, or a route with no cc_email set, just means no CC — never an error
+ * that should block the send.
+ */
+async function findCcEmail(caseId) {
+  const caseRecord = await Case.findByPk(caseId, { attributes: ['recognizedType'] });
+  if (!caseRecord?.recognizedType) return null;
+
+  const route = await ClaimRoute.findOne({ where: { routeKey: caseRecord.recognizedType }, attributes: ['ccEmail'] });
+  return route?.ccEmail || null;
+}
+
 async function sendTask(task) {
   const lastInbound = await findLastInboundMessage(task.caseId);
   if (!lastInbound) {
@@ -45,8 +59,9 @@ async function sendTask(task) {
 
   const rendered = render(task.taskType, task.payload);
   const subject = rendered.subject || (lastInbound.subject ? `Re: ${lastInbound.subject}` : null);
+  const cc = await findCcEmail(task.caseId);
 
-  const { messageId } = await getChannelAdapter().sendReply(submission, { subject, bodyText: rendered.bodyText });
+  const { messageId } = await getChannelAdapter().sendReply(submission, { subject, bodyText: rendered.bodyText, cc });
 
   await sequelize.transaction(async (transaction) => {
     const referencesHeader = [lastInbound.referencesHeader, lastInbound.messageId].filter(Boolean).join(' ') || null;
@@ -61,6 +76,7 @@ async function sendTask(task) {
         referencesHeader,
         fromAddr: config.smtp.fromAddr,
         toAddr: lastInbound.fromAddr,
+        ccAddr: cc,
         subject,
         bodyText: rendered.bodyText,
         status: 'sent',

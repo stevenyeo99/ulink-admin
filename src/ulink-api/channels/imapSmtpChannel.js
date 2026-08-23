@@ -74,7 +74,8 @@ function getTransporter() {
  * replied to (channel-agnostic Submission shape, see channels/index.js),
  * using its `messageId`/`references`/`from` for threading headers and reply
  * recipient. Returns the new outbound message's Message-ID so the caller can
- * persist it on the outbound EmailMessage row.
+ * persist it on the outbound EmailMessage row. `reply.cc` is optional — a plain
+ * comma-separated address string, passed straight through to nodemailer.
  */
 async function sendReply(submission, reply) {
   const references = [submission.references, submission.messageId].filter(Boolean).join(' ');
@@ -82,6 +83,7 @@ async function sendReply(submission, reply) {
   const info = await getTransporter().sendMail({
     from: config.smtp.fromAddr,
     to: submission.from,
+    cc: reply.cc || undefined,
     subject: reply.subject || (submission.subject ? `Re: ${submission.subject}` : undefined),
     text: reply.bodyText,
     inReplyTo: submission.messageId || undefined,

@@ -6,9 +6,10 @@ const freshdeskChannel = require('./freshdeskChannel');
  * ChannelAdapter shape (all adapters must implement):
  *   fetchNewSubmissions(onSubmission: (submission: Submission) => Promise<any>)
  *     -> Promise<Array<{ externalId: string, ok: boolean, error?: string, ...onSubmission's resolved value }>>
- *   sendReply(submission: Submission, reply: { subject, bodyText, attachments? }): Promise<{ messageId: string }>
+ *   sendReply(submission: Submission, reply: { subject, bodyText, cc?, attachments? }): Promise<{ messageId: string }>
  *     submission here is the inbound Submission being replied to — its messageId/references
- *     thread the reply, and its from becomes the reply's recipient.
+ *     thread the reply, and its from becomes the reply's recipient. reply.cc is optional —
+ *     a plain (comma-separated if more than one) address string.
  *
  * Submission shape (channel-agnostic, produced by every adapter):
  *   {

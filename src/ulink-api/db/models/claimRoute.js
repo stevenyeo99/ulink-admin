@@ -9,6 +9,7 @@ module.exports = (sequelize, DataTypes) => {
       insurer: { type: DataTypes.STRING, allowNull: true },
       claimType: { type: DataTypes.STRING, allowNull: true },
       extractionSchema: { type: DataTypes.JSONB, allowNull: false },
+      ccEmail: { type: DataTypes.TEXT, allowNull: true },
     },
     { tableName: 'ulink_claim_routes' }
   );
