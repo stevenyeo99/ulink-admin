@@ -3,14 +3,21 @@ const logger = require('../../utils/logger');
 
 const BLOCK_NAME = 'dev-reset';
 
+// Every field any stage from member-verification onward computes — cleared on top of
+// whichever stage-specific fields a given reset target adds below, so resetting never
+// leaves stale data from a prior run sitting around implying work that hasn't actually
+// happened yet (previously this stopped at documentCheckResult, missing everything
+// member-verification/ias-claim-preparation/ias-claim-creation had written).
+const DOWNSTREAM_FIELDS = ['memberVerifyResult', 'iasMemberInfoResponse', 'iasClaimPayload', 'claimNo', 'iasClaimResult'];
+
 /**
  * Which fields get cleared when resetting TO a given status — everything that status's
  * own stage (and anything downstream of it) would have computed, so no stale data from
  * a prior run sits around implying work that hasn't actually happened yet.
  */
 const RESET_FIELDS = {
-  READY_FOR_DOCUMENT_READING: ['recognizedType', 'extractedFields', 'documentCheckResult'],
-  RECOGNIZED: ['documentCheckResult'],
+  READY_FOR_DOCUMENT_READING: ['recognizedType', 'extractedFields', 'documentCheckResult', ...DOWNSTREAM_FIELDS],
+  RECOGNIZED: ['documentCheckResult', ...DOWNSTREAM_FIELDS],
 };
 
 const VALID_STATUSES = Object.keys(RESET_FIELDS);
@@ -19,6 +26,17 @@ async function resetOneCase(caseId, to) {
   const caseRecord = await Case.findByPk(caseId);
   if (!caseRecord) {
     throw new Error(`Case ${caseId} not found`);
+  }
+
+  // A real, non-idempotent claim already exists in IAS for this case — resetting would
+  // silently null out our only record of it (claimNo) while reprocessing could go on to
+  // submit a second, duplicate claim to IAS. Refuse rather than clear; a case in this state
+  // needs a deliberate manual decision, not a routine dev reset.
+  if (caseRecord.claimNo) {
+    throw new Error(
+      `Case ${caseId} already has a real IAS claim number (claimNo=${caseRecord.claimNo}) — refusing to reset. ` +
+        'Resetting would erase the only local record of an already-created, non-idempotent external claim.'
+    );
   }
 
   const clearedFields = RESET_FIELDS[to];
