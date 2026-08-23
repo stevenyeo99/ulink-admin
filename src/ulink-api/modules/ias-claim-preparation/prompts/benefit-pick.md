@@ -12,8 +12,9 @@ Rules:
 - "Voucher type" (this specific line) is your strongest signal when it's not null/"other" —
   it's read directly off that voucher's own printed content: "consultation" points at an
   office-visit/specialist-type head, "pharmacy" points at a prescribed-medicine/dispensing
-  head, "lab" points at a diagnostic/imaging-test head. Prefer it over the other fields
-  when they'd suggest something different.
+  head, "lab" points at a diagnostic/imaging-test head, "optical" points at an
+  eyewear/optical-care head. Prefer it over the other fields when they'd suggest something
+  different.
 - When voucher type is null or "other" (couldn't be determined, or genuinely mixed), fall
   back to the claim's type of patient (outpatient/inpatient), illness/diagnosis
   description, and treatment description together. An outpatient claim should virtually
