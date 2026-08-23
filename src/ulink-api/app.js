@@ -19,6 +19,7 @@ const jobsRouter = require('./routes/jobs');
 const devClaimRecognitionRouter = require('./routes/dev/claimRecognition');
 const devDocumentCheckingRouter = require('./routes/dev/documentChecking');
 const devCasesRouter = require('./routes/dev/cases');
+const devEmailSenderRouter = require('./routes/dev/emailSender');
 
 const app = express();
 
@@ -53,6 +54,7 @@ app.use('/api/jobs', jobsRouter);
 app.use('/api/dev/claim-recognition', devClaimRecognitionRouter);
 app.use('/api/dev/document-checking', devDocumentCheckingRouter);
 app.use('/api/dev/cases', devCasesRouter);
+app.use('/api/dev/email-sender', devEmailSenderRouter);
 
 // Swagger UI needs inline script/style, which the global helmet CSP blocks —
 // relax it for this path only, everything else keeps the strict default.

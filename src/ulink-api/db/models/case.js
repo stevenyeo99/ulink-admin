@@ -14,6 +14,7 @@ module.exports = (sequelize, DataTypes) => {
   Case.associate = (models) => {
     Case.hasMany(models.EmailThread, { foreignKey: 'caseId' });
     Case.hasMany(models.CaseEvent, { foreignKey: 'caseId' });
+    Case.hasMany(models.EmailTask, { foreignKey: 'caseId' });
   };
 
   return Case;

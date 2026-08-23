@@ -1,5 +1,7 @@
+const nodemailer = require('nodemailer');
 const { simpleParser } = require('mailparser');
 const { processUnseenMessages } = require('../modules/email-intake/imapClient');
+const config = require('../config');
 
 /**
  * IMAP (read) side of the Day-1 demo channel — converts each raw IMAP
@@ -46,14 +48,47 @@ async function fetchNewSubmissions(onSubmission) {
   return results.map(({ uid, ...rest }) => ({ externalId: String(uid), ...rest }));
 }
 
+function assertSmtpConfigured() {
+  if (!config.smtp.host || !config.smtp.user || !config.smtp.password) {
+    throw new Error('SMTP_HOST, SMTP_USER, and SMTP_PASSWORD must be configured');
+  }
+}
+
+let transporter;
+function getTransporter() {
+  if (!transporter) {
+    assertSmtpConfigured();
+    transporter = nodemailer.createTransport({
+      host: config.smtp.host,
+      port: config.smtp.port,
+      secure: config.smtp.secure,
+      auth: { user: config.smtp.user, pass: config.smtp.password },
+      connectionTimeout: config.smtp.connectionTimeoutMs,
+    });
+  }
+  return transporter;
+}
+
 /**
- * SMTP (send) side — not implemented yet. Nothing in the current pipeline
- * drafts a reply to send (that's the demo plan's Block 13-15: missing-doc
- * drafting, manual approval, then SMTP send), so there's no caller for this
- * yet. Implement against the Submission shape below when that workflow lands.
+ * SMTP (send) side — replies in the same thread as the `submission` being
+ * replied to (channel-agnostic Submission shape, see channels/index.js),
+ * using its `messageId`/`references`/`from` for threading headers and reply
+ * recipient. Returns the new outbound message's Message-ID so the caller can
+ * persist it on the outbound EmailMessage row.
  */
-async function sendReply() {
-  throw new Error('imapSmtpChannel.sendReply is not implemented yet (no drafting/approval workflow exists)');
+async function sendReply(submission, reply) {
+  const references = [submission.references, submission.messageId].filter(Boolean).join(' ');
+
+  const info = await getTransporter().sendMail({
+    from: config.smtp.fromAddr,
+    to: submission.from,
+    subject: reply.subject || (submission.subject ? `Re: ${submission.subject}` : undefined),
+    text: reply.bodyText,
+    inReplyTo: submission.messageId || undefined,
+    references: references || undefined,
+  });
+
+  return { messageId: info.messageId };
 }
 
 module.exports = { fetchNewSubmissions, sendReply };

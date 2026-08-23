@@ -4,6 +4,7 @@ const createJobRouter = require('./createJobRouter');
 const emailIntakeService = require('../../modules/email-intake/service');
 const claimRecognitionService = require('../../modules/claim-recognition/service');
 const documentCheckingService = require('../../modules/document-checking/service');
+const emailSenderService = require('../../modules/email-sender/service');
 
 const router = express.Router();
 
@@ -203,9 +204,73 @@ const router = express.Router();
  *               block: document-checking
  *               released: true
  *               wasLocked: true
+ *
+ * /api/jobs/email-sender/run:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Start the email-sender job (fire-and-forget)
+ *     description: >
+ *       Acquires the job lock and returns immediately. In the background, for each
+ *       ulink_email_tasks row at status=PENDING (up to EMAIL_SENDER_BATCH_LIMIT per run):
+ *       renders the task's template (modules/email-sender/templates.js), sends it via the
+ *       configured channel adapter's sendReply (channels/imapSmtpChannel.js, SMTP) as a
+ *       reply in the case's existing email thread, records the outbound EmailMessage,
+ *       flips the task to SENT, and logs a CaseEvent. A per-task failure is retried on
+ *       later runs up to EMAIL_SENDER_MAX_ATTEMPTS before the task is marked FAILED; it
+ *       does not block other tasks in the same batch. Same lock/release pattern as the
+ *       other jobs. Tasks are created by validators (document-checking today; a future
+ *       member-verify/JD2 module for DOCUMENT_COMPLETE_ACK), never by this job itself.
+ *     requestBody:
+ *       required: false
+ *       description: No body needed — trigger only.
+ *     responses:
+ *       200:
+ *         description: Started, or skipped because a prior run is still in progress
+ *         content:
+ *           application/json:
+ *             schema:
+ *               oneOf:
+ *                 - type: object
+ *                   properties:
+ *                     block: { type: string }
+ *                     started: { type: boolean }
+ *                 - type: object
+ *                   properties:
+ *                     block: { type: string }
+ *                     skipped: { type: boolean }
+ *                     reason: { type: string }
+ *             examples:
+ *               started:
+ *                 value: { block: email-sender, started: true }
+ *               skipped:
+ *                 value: { block: email-sender, skipped: true, reason: already_running }
+ *
+ * /api/jobs/email-sender/release:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Manually clear a stuck email-sender lock
+ *     requestBody:
+ *       required: false
+ *       description: No body needed.
+ *     responses:
+ *       200:
+ *         description: Lock cleared
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 block: { type: string }
+ *                 released: { type: boolean }
+ *                 wasLocked: { type: boolean }
+ *             example:
+ *               block: email-sender
+ *               released: true
+ *               wasLocked: true
  */
 router.use('/email-intake', createJobRouter('email-intake', emailIntakeService));
 router.use('/claim-recognition', createJobRouter('claim-recognition', claimRecognitionService));
 router.use('/document-checking', createJobRouter('document-checking', documentCheckingService));
+router.use('/email-sender', createJobRouter('email-sender', emailSenderService));
 
 module.exports = router;

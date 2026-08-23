@@ -63,6 +63,14 @@ module.exports = {
     batchLimit: parseInt(process.env.DOCUMENT_CHECKING_BATCH_LIMIT, 10) || 50,
   },
 
+  emailSender: {
+    // Pure DB + one SMTP call per task — no LLM involved.
+    batchLimit: parseInt(process.env.EMAIL_SENDER_BATCH_LIMIT, 10) || 20,
+    // After this many failed attempts, a task is marked FAILED instead of retried
+    // on the next run.
+    maxAttempts: parseInt(process.env.EMAIL_SENDER_MAX_ATTEMPTS, 10) || 5,
+  },
+
   linkedDocuments: {
     // Some generated claim PDFs reference a supporting photo by URL instead of embedding
     // it (verified against real sample data — a human reviewer clicked through and found
@@ -97,5 +105,15 @@ module.exports = {
 
   channel: {
     driver: process.env.CHANNEL_DRIVER || 'imap_smtp',
+  },
+
+  smtp: {
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT, 10) || 587,
+    secure: parseBool(process.env.SMTP_TLS, false),
+    user: process.env.SMTP_USER,
+    password: process.env.SMTP_PASSWORD,
+    fromAddr: process.env.SMTP_FROM || process.env.SMTP_USER,
+    connectionTimeoutMs: parseInt(process.env.SMTP_CONNECTION_TIMEOUT_MS, 10) || 30000,
   },
 };

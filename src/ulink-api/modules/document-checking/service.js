@@ -1,4 +1,4 @@
-const { sequelize, Case, CaseEvent } = require('../../db/models');
+const { sequelize, Case, CaseEvent, EmailTask } = require('../../db/models');
 const config = require('../../config');
 const { evaluateDocumentChecks } = require('./checklist');
 
@@ -23,6 +23,31 @@ function checkCase(caseRecord) {
   return { caseId: caseRecord.id, outcome, result };
 }
 
+/**
+ * Signature of the issue list so a re-check that finds the exact same problems doesn't
+ * queue a duplicate email — only an actual change in what's wrong (customer replied with
+ * some but not all documents, etc.) queues a fresh one.
+ */
+function issuesDedupeKey(issues) {
+  return [...issues].sort().join('|');
+}
+
+async function queueMissingDocumentsEmail(transaction, caseId, result) {
+  const dedupeKey = issuesDedupeKey(result.issues);
+  const lastTask = await EmailTask.findOne({
+    where: { caseId, taskType: 'MISSING_DOCUMENTS' },
+    order: [['createdAt', 'DESC']],
+    transaction,
+  });
+
+  if (lastTask && lastTask.dedupeKey === dedupeKey) return;
+
+  await EmailTask.create(
+    { caseId, taskType: 'MISSING_DOCUMENTS', dedupeKey, payload: { issues: result.issues } },
+    { transaction }
+  );
+}
+
 async function persistOutcome(caseRecord, outcome) {
   return sequelize.transaction(async (transaction) => {
     const prevStatus = caseRecord.currentStatus;
@@ -37,6 +62,14 @@ async function persistOutcome(caseRecord, outcome) {
       reasonCode: outcome.result.passed ? null : 'DOCUMENT_ISSUES_FOUND',
       message: outcome.result.passed ? 'All document checks passed' : outcome.result.issues.join('; '),
     });
+
+    if (!outcome.result.passed) {
+      await queueMissingDocumentsEmail(transaction, caseRecord.id, outcome.result);
+    }
+    // outcome.result.passed === true (DOCUMENT_CHECKED): no email task is queued here.
+    // The "complete" acknowledgement (DOCUMENT_COMPLETE_ACK) requires member verify
+    // (JD2/iAS) to also pass, which isn't built yet — that future module is what should
+    // create this task type, not this one.
   });
 }
 
