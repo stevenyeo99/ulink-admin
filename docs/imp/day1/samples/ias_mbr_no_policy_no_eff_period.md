@@ -1,14 +1,60 @@
+staging plan id = 2147
+
+
 complete/1
+tpa CLAIM number = CL/YGN/AYH/26024449
+POCY no = 00505300000001
 mbr no = 104201500
-2026-07-25 00:00:00
+POCY COV = 2025-10-15 00:00:00	2026-10-14 00:00:00
+OP-OV
+
+Staging
+Poho no = 000728-000
+Pocy No = 000728-000-00001, Effective Date=10152025)
+Mbr no = 098563700
+
+
 
 complete/2
+tpa CLAIM number = CL/YGN/AYH/26024418
+POCY no = 00964800000001
 mbr no = 105851400
+POCY COV = 2025-10-01 00:00:00	2026-09-30 00:00:00
+OP-OV
+
+Staging
+Poho no = 000729-000
+Pocy No = 000729-000-00001, Effective Date=10012025
+Mbr no = 098563800
+
+
 
 
 incomplete/jd1
+tpa CLAIM number = CL/YGN/AYH/26024407
+POCY no = 01116300000001
 mbr no = 106403000
+POCY COV = 2026-01-26 00:00:00	2027-01-25 00:00:00
+OP-OV
+OP-OV
+MAN_REJ_CODE_M018	Vitamins / non-prescribed drugs are not covered.
+
+Staging
+Poho no = 000730-000
+Pocy No = 000730-000-00001, Effective Date=01262026
+Mbr no = 098563900
+
+
 
 
 incomplete/jd2
+tpa CLAIM number = CL/YGN/AYH/26021287
+POCY no = 01092200000001
 mbr no = 106283900
+POCY COV = 2026-01-01 00:00:00	2026-12-31 00:00:00
+VS-SPEC
+
+Staging
+Poho no = 000731-000
+Pocy No = 000731-000-00001, Effective Date=01012026
+Mbr no = 098564000
