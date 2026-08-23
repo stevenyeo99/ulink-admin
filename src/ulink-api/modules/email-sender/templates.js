@@ -11,7 +11,9 @@
  * approved doc — MEMBER_NOT_VERIFIED and POLICY_NOT_ACTIVE_ON_TREATMENT_DATE, defined in
  * modules/document-checking/checklist.js, are placeholder wording composed for this feature
  * (no approved canned line exists for "member not found"/"coverage inactive" yet) — flag
- * for business sign-off before relying on the exact phrasing.
+ * for business sign-off before relying on the exact phrasing. CLAIM_CREATED_NOTIFICATION is
+ * the same story — no approved canned line exists for "your claim number is X" either;
+ * composed wording, needs sign-off before real customers see it.
  */
 
 const MISSING_DOCUMENTS_INTRO = `Dear Valued Customer,
@@ -47,9 +49,26 @@ function renderDocumentCompleteAck() {
   return { subject: null, bodyText: DOCUMENT_COMPLETE_ACK_BODY };
 }
 
+function renderClaimCreatedNotification(payload) {
+  const claimNo = payload.claimNo || 'N/A';
+  return {
+    subject: null,
+    bodyText: `Dear Valued Customer,
+
+We are pleased to inform you that your claim has been successfully created in our system.
+
+Your Claim Number: ${claimNo}
+
+We will notify you of the outcome in due course. If you have any questions, kindly contact us at ayahealthinfo@ayasompo.com.
+
+Thank you and Best Regards,`,
+  };
+}
+
 const RENDERERS = {
   MISSING_DOCUMENTS: renderMissingDocuments,
   DOCUMENT_COMPLETE_ACK: renderDocumentCompleteAck,
+  CLAIM_CREATED_NOTIFICATION: renderClaimCreatedNotification,
 };
 
 function render(taskType, payload) {

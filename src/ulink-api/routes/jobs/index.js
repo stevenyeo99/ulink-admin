@@ -7,6 +7,7 @@ const documentCheckingService = require('../../modules/document-checking/service
 const emailSenderService = require('../../modules/email-sender/service');
 const memberVerificationService = require('../../modules/member-verification/service');
 const iasClaimPreparationService = require('../../modules/ias-claim-preparation/service');
+const iasClaimCreationService = require('../../modules/ias-claim-creation/service');
 
 const router = express.Router();
 
@@ -410,6 +411,75 @@ const router = express.Router();
  *               block: ias-claim-preparation
  *               released: true
  *               wasLocked: true
+ *
+ * /api/jobs/ias-claim-creation/run:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Start the ias-claim-creation job (fire-and-forget)
+ *     description: >
+ *       Acquires the job lock and returns immediately. In the background, for each case at
+ *       currentStatus=CLAIM_PAYLOAD_PREPARED (up to IAS_CLAIM_CREATION_BATCH_LIMIT per run):
+ *       submits Case.iasClaimPayload to the real IAS CL_CLAIM_API
+ *       (modules/ias-claim-creation/iasClaimClient.js). On success, sets
+ *       Case.currentStatus=CLAIM_CREATED, Case.claimNo (the real assigned claim number),
+ *       Case.iasClaimResult, logs a CaseEvent, and queues a CLAIM_CREATED_NOTIFICATION
+ *       EmailTask (a new, distinct customer email — DOCUMENT_COMPLETE_ACK at
+ *       MEMBER_VERIFIED is unrelated and unaffected, both are sent). On a real business
+ *       rejection from IAS (success:false with a reason, e.g. "Claim already exists"), sets
+ *       Case.currentStatus=CLAIM_SUBMIT_FAILED and stores the error — this is NOT retried,
+ *       since retrying a definitive rejection would never resolve it; needs manual
+ *       follow-up. A technical failure (timeout, network error, missing iasClaimPayload)
+ *       leaves the case at CLAIM_PAYLOAD_PREPARED for retry on the next run — this IS
+ *       retried, same pattern as the other jobs. Same lock/release pattern as the other
+ *       jobs. Non-idempotent, real external side effect — unlike every other job here,
+ *       there's no dry-run/validate-only mode confirmed on IAS's side.
+ *     requestBody:
+ *       required: false
+ *       description: No body needed — trigger only.
+ *     responses:
+ *       200:
+ *         description: Started, or skipped because a prior run is still in progress
+ *         content:
+ *           application/json:
+ *             schema:
+ *               oneOf:
+ *                 - type: object
+ *                   properties:
+ *                     block: { type: string }
+ *                     started: { type: boolean }
+ *                 - type: object
+ *                   properties:
+ *                     block: { type: string }
+ *                     skipped: { type: boolean }
+ *                     reason: { type: string }
+ *             examples:
+ *               started:
+ *                 value: { block: ias-claim-creation, started: true }
+ *               skipped:
+ *                 value: { block: ias-claim-creation, skipped: true, reason: already_running }
+ *
+ * /api/jobs/ias-claim-creation/release:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Manually clear a stuck ias-claim-creation lock
+ *     requestBody:
+ *       required: false
+ *       description: No body needed.
+ *     responses:
+ *       200:
+ *         description: Lock cleared
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 block: { type: string }
+ *                 released: { type: boolean }
+ *                 wasLocked: { type: boolean }
+ *             example:
+ *               block: ias-claim-creation
+ *               released: true
+ *               wasLocked: true
  */
 router.use('/email-intake', createJobRouter('email-intake', emailIntakeService));
 router.use('/claim-recognition', createJobRouter('claim-recognition', claimRecognitionService));
@@ -417,5 +487,6 @@ router.use('/document-checking', createJobRouter('document-checking', documentCh
 router.use('/email-sender', createJobRouter('email-sender', emailSenderService));
 router.use('/member-verification', createJobRouter('member-verification', memberVerificationService));
 router.use('/ias-claim-preparation', createJobRouter('ias-claim-preparation', iasClaimPreparationService));
+router.use('/ias-claim-creation', createJobRouter('ias-claim-creation', iasClaimCreationService));
 
 module.exports = router;

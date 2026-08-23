@@ -160,6 +160,42 @@ function normalizeIdentityConsistency(fields) {
 }
 
 /**
+ * Deterministic guard on top of synthesize.md's own "collapse duplicate-signature entries"
+ * instruction — that instruction alone has, verified twice now against the same real case
+ * (complete/1, Hlaing Myo Oo), not reliably stopped the model from reporting one physical
+ * voucher as two invoices.items[] entries with every field identical (subtotal, legible,
+ * has_itemized_breakdown, has_clinic_stamp_or_doctor_signature, has_vitamin_or_supplement,
+ * voucher_type). Two genuinely separate physical vouchers sharing an identical value on
+ * every one of those fields isn't a plausible coincidence, so this collapses them in code
+ * rather than continuing to rely on prompt compliance alone — this directly affects
+ * downstream amount checks (document-checking's VOUCHER_AMOUNT_MISMATCH) and claim payload
+ * construction (ias-claim-preparation would otherwise double the real claim amount).
+ */
+function dedupeInvoiceItems(fields) {
+  const items = fields.invoices?.items;
+  if (!Array.isArray(items) || items.length < 2) return fields;
+
+  const seen = new Set();
+  const deduped = [];
+  for (const item of items) {
+    const fingerprint = JSON.stringify({
+      subtotal: item.subtotal,
+      legible: item.legible,
+      has_itemized_breakdown: item.has_itemized_breakdown,
+      has_clinic_stamp_or_doctor_signature: item.has_clinic_stamp_or_doctor_signature,
+      has_vitamin_or_supplement: item.has_vitamin_or_supplement,
+      voucher_type: item.voucher_type,
+    });
+    if (seen.has(fingerprint)) continue;
+    seen.add(fingerprint);
+    deduped.push(item);
+  }
+
+  if (deduped.length === items.length) return fields;
+  return { ...fields, invoices: { ...fields.invoices, items: deduped } };
+}
+
+/**
  * Day 1: exactly one enabled route, so its extraction_schema is used regardless of the
  * final route decision (a "fallback" result just comes back all-null, which the schema
  * already permits). This stops being valid once a second route exists — at that point
@@ -250,7 +286,9 @@ async function recognizeCase(caseRecord, routes) {
     reasonCode = 'NO_ROUTE_MATCH';
   }
 
-  const extractedFields = parsed.extracted_fields ? normalizeIdentityConsistency(parsed.extracted_fields) : parsed.extracted_fields;
+  const extractedFields = parsed.extracted_fields
+    ? normalizeIdentityConsistency(dedupeInvoiceItems(parsed.extracted_fields))
+    : parsed.extracted_fields;
 
   return { caseId: caseRecord.id, outcome, recognizedType, reasonCode, message: parsed.reason, extractedFields };
 }

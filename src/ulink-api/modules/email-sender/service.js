@@ -8,6 +8,7 @@ const BLOCK_NAME = 'email-sender';
 const CASE_EVENT_STATUS = {
   MISSING_DOCUMENTS: 'MISSING_DOCUMENT_EMAIL_SENT',
   DOCUMENT_COMPLETE_ACK: 'COMPLETE_ACK_EMAIL_SENT',
+  CLAIM_CREATED_NOTIFICATION: 'CLAIM_CREATED_NOTIFICATION_SENT',
 };
 
 async function logEvent(transaction, { caseId, newStatus, reasonCode = null, message = null }) {

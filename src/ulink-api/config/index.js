@@ -95,9 +95,16 @@ module.exports = {
     batchLimit: parseInt(process.env.IAS_CLAIM_PREPARATION_BATCH_LIMIT, 10) || 20,
   },
 
+  iasClaimCreation: {
+    // One real, non-idempotent IAS API call per case — keep modest, same reasoning as
+    // memberVerification's batch size.
+    batchLimit: parseInt(process.env.IAS_CLAIM_CREATION_BATCH_LIMIT, 10) || 20,
+  },
+
   ias: {
     baseUrl: process.env.IAS_URL,
     getMemberInfoApi: process.env.GET_MEMBER_INFO_API,
+    claimApi: process.env.CL_CLAIM_API,
     // Explicit and short, same reasoning as imap/linkedDocuments' own timeouts: an external
     // call must not be able to hang the job (see modules/member-verification/iasClient.js).
     timeoutMs: parseInt(process.env.IAS_TIMEOUT_MS, 10) || 30000,

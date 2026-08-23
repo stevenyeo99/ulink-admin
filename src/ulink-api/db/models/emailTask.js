@@ -7,7 +7,7 @@ module.exports = (sequelize, DataTypes) => {
       taskType: {
         type: DataTypes.STRING,
         allowNull: false,
-        validate: { isIn: [['MISSING_DOCUMENTS', 'DOCUMENT_COMPLETE_ACK']] },
+        validate: { isIn: [['MISSING_DOCUMENTS', 'DOCUMENT_COMPLETE_ACK', 'CLAIM_CREATED_NOTIFICATION']] },
       },
       status: {
         type: DataTypes.STRING,
