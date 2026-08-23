@@ -9,6 +9,12 @@
 // Raw SQL throughout, not queryInterface.createTable/Sequelize model — Sequelize has no
 // `vector` DataType, so this table is defined and queried via sequelize.query() everywhere,
 // same escape hatch already used for this repo's other ORM-can't-express-this queries.
+//
+// NOTE: the HNSW index created below is later dropped by
+// 20260823190000-drop-icd10-hnsw-index.js — verified to give wrong nearest-neighbor
+// results on this dataset. modules/icd10/lookup.js relies on exact search instead. Left
+// here (not edited out) since this migration is already applied; see that later migration
+// for the full story.
 
 module.exports = {
   async up(queryInterface) {

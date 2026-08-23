@@ -4,23 +4,12 @@
  * confirmed coverage-period rule: treatment date must fall within
  * [NVL(memberPlans[0].REINST_DATE, memberPlans[0].EFF_DATE), NVL(memberPlans[0].TERM_DATE, memberPlans[0].EXP_DATE)].
  *
- * Two date formats are in play and must not be confused: extractedFields dates and the
- * request's meplEffDate are YYYY-MM-DD / YYYYMMDD, but every date IAS returns in the
- * response (DOB, EFF_DATE, EXP_DATE, TERM_DATE, REINST_DATE) is MMDDYYYY (verified: member.DOB
- * "03281984" against claimant_dob "1984-03-28" — March 28 1984, not a plausible day-13th month).
+ * Date conversions live in modules/shared/iasDates.js, not here — two date formats are in
+ * play and must not be confused (see that module's own comment), and it's now shared with
+ * modules/ias-claim-preparation, which has its own third IAS date format to keep straight.
  */
 
-function toYYYYMMDD(isoDate) {
-  return isoDate ? isoDate.replaceAll('-', '') : null;
-}
-
-function iasDateToYYYYMMDD(mmddyyyy) {
-  if (!mmddyyyy || mmddyyyy.length !== 8) return null;
-  const mm = mmddyyyy.slice(0, 2);
-  const dd = mmddyyyy.slice(2, 4);
-  const yyyy = mmddyyyy.slice(4, 8);
-  return `${yyyy}${mm}${dd}`;
-}
+const { toYYYYMMDD, iasDateToYYYYMMDD } = require('../shared/iasDates');
 
 function norm(value) {
   if (value == null) return null;

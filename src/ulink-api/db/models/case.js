@@ -9,6 +9,7 @@ module.exports = (sequelize, DataTypes) => {
       documentCheckResult: { type: DataTypes.JSONB, allowNull: true },
       memberVerifyResult: { type: DataTypes.JSONB, allowNull: true },
       iasMemberInfoResponse: { type: DataTypes.JSONB, allowNull: true },
+      iasClaimPayload: { type: DataTypes.JSONB, allowNull: true },
     },
     { tableName: 'ulink_cases' }
   );

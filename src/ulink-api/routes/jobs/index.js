@@ -6,6 +6,7 @@ const claimRecognitionService = require('../../modules/claim-recognition/service
 const documentCheckingService = require('../../modules/document-checking/service');
 const emailSenderService = require('../../modules/email-sender/service');
 const memberVerificationService = require('../../modules/member-verification/service');
+const iasClaimPreparationService = require('../../modules/ias-claim-preparation/service');
 
 const router = express.Router();
 
@@ -341,11 +342,80 @@ const router = express.Router();
  *               block: member-verification
  *               released: true
  *               wasLocked: true
+ *
+ * /api/jobs/ias-claim-preparation/run:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Start the ias-claim-preparation job (fire-and-forget)
+ *     description: >
+ *       Acquires the job lock and returns immediately. In the background, for each case at
+ *       currentStatus=MEMBER_VERIFIED (up to IAS_CLAIM_PREPARATION_BATCH_LIMIT per run):
+ *       picks the best ICD-10 diagnosis code via the vector RAG in modules/icd10/ plus one
+ *       LLM call (modules/ias-claim-preparation/diagnosisPicker.js), picks the best
+ *       BenefitType/BenefitHead from the member's own plan's valid combinations via another
+ *       LLM call (modules/ias-claim-preparation/benefitPicker.js), then builds the full
+ *       CL_CLAIM_API request payload (modules/ias-claim-preparation/payloadBuilder.js,
+ *       verified against the real sample in docs/imp/day1/IAS/ias_claim_submission_api.json).
+ *       Sets Case.iasClaimPayload and Case.currentStatus=CLAIM_PAYLOAD_PREPARED, logs a
+ *       CaseEvent. A diagnosis/benefit pick that comes back null does NOT block
+ *       preparation — the payload still gets built and the case still proceeds, with those
+ *       fields left null (IAS's own validation to catch, not pre-empted here). A technical
+ *       failure (LLM error, missing extractedFields/iasMemberInfoResponse) leaves the case
+ *       at MEMBER_VERIFIED for retry on the next run, same pattern as the other jobs. Same
+ *       lock/release pattern as the other jobs.
+ *     requestBody:
+ *       required: false
+ *       description: No body needed — trigger only.
+ *     responses:
+ *       200:
+ *         description: Started, or skipped because a prior run is still in progress
+ *         content:
+ *           application/json:
+ *             schema:
+ *               oneOf:
+ *                 - type: object
+ *                   properties:
+ *                     block: { type: string }
+ *                     started: { type: boolean }
+ *                 - type: object
+ *                   properties:
+ *                     block: { type: string }
+ *                     skipped: { type: boolean }
+ *                     reason: { type: string }
+ *             examples:
+ *               started:
+ *                 value: { block: ias-claim-preparation, started: true }
+ *               skipped:
+ *                 value: { block: ias-claim-preparation, skipped: true, reason: already_running }
+ *
+ * /api/jobs/ias-claim-preparation/release:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Manually clear a stuck ias-claim-preparation lock
+ *     requestBody:
+ *       required: false
+ *       description: No body needed.
+ *     responses:
+ *       200:
+ *         description: Lock cleared
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 block: { type: string }
+ *                 released: { type: boolean }
+ *                 wasLocked: { type: boolean }
+ *             example:
+ *               block: ias-claim-preparation
+ *               released: true
+ *               wasLocked: true
  */
 router.use('/email-intake', createJobRouter('email-intake', emailIntakeService));
 router.use('/claim-recognition', createJobRouter('claim-recognition', claimRecognitionService));
 router.use('/document-checking', createJobRouter('document-checking', documentCheckingService));
 router.use('/email-sender', createJobRouter('email-sender', emailSenderService));
 router.use('/member-verification', createJobRouter('member-verification', memberVerificationService));
+router.use('/ias-claim-preparation', createJobRouter('ias-claim-preparation', iasClaimPreparationService));
 
 module.exports = router;

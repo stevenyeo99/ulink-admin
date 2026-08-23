@@ -27,12 +27,25 @@ Every job shares the same shape (`routes/jobs/createJobRouter.js` +
 | `document-checking` | `/api/jobs/document-checking/run` | `RECOGNIZED` | `DOCUMENT_CHECKED` / `INCOMPLETE` | Pure code over `Case.extractedFields` (`modules/document-checking/checklist.js`), no external calls. Produces `Case.documentCheckResult.issues[]`. On `INCOMPLETE`, also queues a `MISSING_DOCUMENTS` `EmailTask` for `email-sender` (deduped by issue-set signature, so a re-check that finds the same problems doesn't re-queue). |
 | `member-verification` | `/api/jobs/member-verification/run` | `DOCUMENT_CHECKED` **or** `MEMBER_REVIEW_REQUIRED` (the latter re-checked for recovery — see below; ordered by `updatedAt` so retries don't starve fresh cases) | `MEMBER_VERIFIED` / `MEMBER_REVIEW_REQUIRED` | Calls the IAS `GET_MEMBER_INFO_API` (`modules/member-verification/iasClient.js`, `AbortController`-timeout guarded) and runs Hard/Soft field comparisons (`modules/member-verification/checks.js`). Sets `Case.memberVerifyResult` (evaluated summary) and `Case.iasMemberInfoResponse` (raw IAS response verbatim — kept for the planned `ias-claim-creation` job, which needs fields off it like `MEPL_OID`/`PLAN_ID`/bank details without re-querying IAS). On `MEMBER_VERIFIED`, queues a `DOCUMENT_COMPLETE_ACK` `EmailTask`. On `MEMBER_REVIEW_REQUIRED` (any reasonCode — `MEMBER_NOT_FOUND`, `COVERAGE_NOT_ACTIVE`, `MEMBER_DETAILS_MISMATCH`, `BANK_DETAILS_MISMATCH`), queues a customer-facing `MISSING_DOCUMENTS` `EmailTask` flagging the one line that reasonCode maps to (`REASON_CODE_TO_ISSUE` in `service.js`; `BANK_DETAILS_MISMATCH`'s line finally resolves the "Incorrect bank details" check `document-checking/checklist.js` deferred — two of the other three lines are placeholder wording, not from the approved canned-response doc, see `checklist.js`'s header comment). Deduped so a re-check that finds the same outcome doesn't re-queue. A technical failure (timeout, missing NRC/accident_date) leaves the case at its current status for retry, same as `document-checking`'s own per-case error handling. |
 | `email-sender` | `/api/jobs/email-sender/run` | — (reads `ulink_email_tasks.status = PENDING`, not `Case.currentStatus` directly) | Flips its own task to `SENT`/`FAILED`; doesn't touch `Case.currentStatus` | Renders the task's template (`modules/email-sender/templates.js`) and sends via the channel adapter's `sendReply` (`channels/imapSmtpChannel.js`, SMTP — no longer a stub) as a reply in the case's existing thread, CC'd per the case's route (`Case.recognizedType` -> `ulink_claim_routes.cc_email`, null by default — set per route once a real internal address is known). Deliberately decoupled from `Case.currentStatus`: both `document-checking` and `member-verification` are producers, this is the one consumer, always for `MISSING_DOCUMENTS`/`DOCUMENT_COMPLETE_ACK` task types. |
+| `ias-claim-preparation` | `/api/jobs/ias-claim-preparation/run` | `MEMBER_VERIFIED` | `CLAIM_PAYLOAD_PREPARED` | Picks the best ICD-10 diagnosis code once per case (vector search in `modules/icd10/` + one LLM re-rank call, `modules/ias-claim-preparation/diagnosisPicker.js`), then builds **one `Items[]` line per real voucher** (`extractedFields.invoices.items[]` — verified against real sample data that a claim can genuinely be multiple separate vouchers, e.g. a consultation receipt + a separate pharmacy receipt), each with its own subtotal and its own BenefitType/BenefitHead pick against the member's own plan's valid combinations (`modules/ias-claim-preparation/benefitPicker.js`, using that voucher's own `voucher_type` — `consultation`/`pharmacy`/`lab`/`other`, extracted by `claim-recognition` from what's visibly printed on it — as the strongest signal). Builds the full `CL_CLAIM_API` request payload (`modules/ias-claim-preparation/payloadBuilder.js`, verified against the real sample in `docs/imp/day1/IAS/ias_claim_submission_api.json`). Sets `Case.iasClaimPayload`. A diagnosis/benefit pick that comes back `null` does not block preparation — that line's fields stay null; that's IAS's own validation to catch, not pre-empted here. Technical failure leaves the case at `MEMBER_VERIFIED` for retry. Cases recognized before `voucher_type` existed won't have it — need reprocessing via `claim-recognition` to get accurate per-line benefit picks. |
+
+**Supporting infrastructure (not a job — no `Case.currentStatus`, no cron trigger):**
+- `modules/icd10/` — ICD-10 diagnosis vector search used by `ias-claim-preparation`.
+  `scripts/ingestIcd10Diagnoses.js` is a one-off manual data load (~39,793 rows from
+  `docs/imp/day1/IAS_RAG/DIAG_CLASS_ICD10_2012_STAGING.xlsx`), not a recurring job.
+  Deliberately uses **exact** (sequential-scan) nearest-neighbor search, no vector index —
+  the HNSW index this table originally had gave verifiably wrong top-K results (see
+  `db/migrations/20260823190000-drop-icd10-hnsw-index.js`); since this runs once per case
+  in a background batch job, the ~7-10s exact-scan cost is a fine trade for guaranteed
+  correctness.
 
 **Dev-only tools** (not cron jobs, not part of the orchestrator):
 - `POST /api/dev/claim-recognition/:caseId/preview` — zero persistence.
 - `POST /api/dev/document-checking/:caseId/preview` — zero persistence, no external call.
 - `POST /api/dev/member-verification/:caseId/preview` — real IAS call, zero persistence.
 - `POST /api/dev/email-sender/:caseId/preview` — renders a pending task's email, no SMTP call, zero persistence.
+- `POST /api/dev/icd10/lookup` — nearest-neighbor ICD-10 candidates for arbitrary text, zero persistence.
+- `POST /api/dev/ias-claim-preparation/:caseId/preview` — real LLM calls, zero persistence.
 - `POST /api/dev/cases/reset` — rewinds a case to an earlier status for reprocessing.
 
 ---
@@ -41,7 +54,7 @@ Every job shares the same shape (`routes/jobs/createJobRouter.js` +
 
 | Job | Reads status | Writes status | Notes |
 |---|---|---|---|
-| `ias-claim-creation` | `MEMBER_VERIFIED` | `CLAIM_CREATED` | Calls IAS `CL_CLAIM_API` (`postClaimSubmission`-equivalent, reference: `ulink-is-ai/src/services/iasService.js`). The "happy path" branch — only cases that passed both document-checking and member-verification reach this status. |
+| `ias-claim-creation` | `CLAIM_PAYLOAD_PREPARED` | `CLAIM_CREATED` | Calls IAS `CL_CLAIM_API` with `Case.iasClaimPayload` (reference for HTTP mechanics only: `ulink-is-ai/src/services/iasService.js::postClaimSubmission`). Fully automatic, no approval gate (confirmed). On success, queues a **new, distinct** customer notification (with the real assigned claim number) — `DOCUMENT_COMPLETE_ACK` at `MEMBER_VERIFIED` stays as-is and unrelated; both are kept (confirmed: two separate customer touchpoints, not one replacing the other). |
 
 ---
 
@@ -57,6 +70,7 @@ POST /api/jobs/pipeline/run   ← the only crontab line
   → document-checking.run()
   → member-verification.run()
   → email-sender.run()
+  → ias-claim-preparation.run()
   → ias-claim-creation.run()
 ```
 

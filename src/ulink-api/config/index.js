@@ -89,6 +89,12 @@ module.exports = {
     batchLimit: parseInt(process.env.MEMBER_VERIFICATION_BATCH_LIMIT, 10) || 20,
   },
 
+  iasClaimPreparation: {
+    // Two LLM calls per case (diagnosis pick, benefit pick) — keep modest, same reasoning
+    // as memberVerification's batch size.
+    batchLimit: parseInt(process.env.IAS_CLAIM_PREPARATION_BATCH_LIMIT, 10) || 20,
+  },
+
   ias: {
     baseUrl: process.env.IAS_URL,
     getMemberInfoApi: process.env.GET_MEMBER_INFO_API,
