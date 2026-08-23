@@ -20,14 +20,16 @@ async function logEvent(transaction, { caseId, prevStatus = null, newStatus, rea
 }
 
 /**
- * Every attachment across every message in the case's thread(s) — a case can have more
- * than one EmailMessage by the time this runs (e.g. a follow-up email adding another
- * attachment), not just the one that first created it.
+ * Every attachment across every INBOUND message in the case's thread(s) — a case can have
+ * more than one EmailMessage by the time this runs (e.g. a follow-up email adding another
+ * attachment), not just the one that first created it. Excludes outbound messages
+ * (email-sender's own replies) — those never carry attachments today, but the filter is
+ * explicit rather than incidental, so it stays correct if that ever changes.
  */
 async function gatherAttachments(caseId) {
   const threads = await EmailThread.findAll({
     where: { caseId },
-    include: [{ model: EmailMessage, include: ['EmailAttachments'] }],
+    include: [{ model: EmailMessage, where: { direction: 'inbound' }, include: ['EmailAttachments'], required: false }],
   });
 
   const attachments = [];
@@ -189,7 +191,15 @@ async function recognizeCase(caseRecord, routes) {
     transcriptChunks.push(...(await transcribeAttachment(attachment, storage)));
   }
 
+  // Inbound only — email-sender's own outbound replies (canned "Incorrect bank details...
+  // please resubmit" boilerplate, etc.) must never feed back into extraction as if they
+  // were claimant-provided content. This is reachable in practice, not just theoretical:
+  // email-intake resets Case.currentStatus back to READY_FOR_DOCUMENT_READING whenever a
+  // new inbound message brings new attachments, regardless of the case's current status —
+  // so a customer replying to a MISSING_DOCUMENTS email re-triggers this exact query on a
+  // thread that already contains our own prior reply.
   const emailMessages = await EmailMessage.findAll({
+    where: { direction: 'inbound' },
     include: [{ model: EmailThread, where: { caseId: caseRecord.id } }],
   });
   const emailContext = emailMessages.map((m) => `Subject: ${m.subject || ''}\nBody: ${m.bodyText || ''}`).join('\n---\n');
