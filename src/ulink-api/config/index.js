@@ -45,6 +45,19 @@ module.exports = {
     maxRequestBytes: parseInt(process.env.LLM_MAX_REQUEST_BYTES, 10) || 25 * 1000 * 1000,
   },
 
+  embedding: {
+    // Same LM Studio server as llm.baseUrl by default (EMBEDDING_URL overrides
+    // independently, in case the embedding model ever moves to its own host).
+    baseUrl: process.env.EMBEDDING_URL || process.env.LLM_URL || process.env.LM_URL,
+    model: process.env.EMBEDDING_MODEL || 'text-embedding-nomic-embed-text-v1.5',
+    timeoutMs: parseInt(process.env.EMBEDDING_TIMEOUT_MS, 10) || 30000,
+    // Nomic Embed Text v1.5's actual output size at this model's default setting — verified
+    // directly against the real LM Studio endpoint, not assumed from the model card. The
+    // ulink_icd10_diagnoses.embedding column is a fixed vector(768); if this ever changes,
+    // that column needs a matching migration, not just this config value.
+    dimensions: 768,
+  },
+
   claimRecognition: {
     // Cases processed per job run — bounds one run's total latency/LLM load.
     batchLimit: parseInt(process.env.CLAIM_RECOGNITION_BATCH_LIMIT, 10) || 5,

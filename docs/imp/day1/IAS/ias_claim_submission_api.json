@@ -1,0 +1,88 @@
+request = {
+  "MemberRefNo": "886436TML365",
+  "TpaCaseNumber": "ULK-2026-081234",
+  "TpaClaimNumber": "XX1234567890",
+  "ProvPortalCaseNumber": "",
+  "isValidation": "Y",
+  "isCSR": "N",
+  "Items": [
+    {
+      "PlanId": "1959",
+      "ClaimType": "M",
+      "ReceivedDate": "08202026",
+      "IncurDateFrom": "08182026",
+      "IncurDateTo": "08182026",
+      "SymptomDate": "08162026",
+      "TreatmentCountry": "HONG KONG",
+      "ProviderCode": "HKPRV0042",
+      "ProviderName": "IQ Vision Clinic",
+      "InvoiceID": "2026082000099",
+      "BenefitType": "OP",
+      "BenefitHead": "GP",
+      "DiagnosisCode": "V90.0",
+      "DiagnosisCodeDesc": "",
+      "DiagnosisDescription": "Routine outpatient consultation",
+      "PresentedCurrency": "HKD",
+      "PresentedAmt": 680.00,
+      "ExchangeRate": 1,
+      "PaymentCurrency": "HKD",
+      "PaymentExchangeRate": 1,
+      "PaymentMethod": "AUTOPAY",
+      "BankName": "HSBC",
+      "BankAcctNo": "123-456789-001",
+      "BankAcctName": "SANDI MAUNG",
+      "PayeeEmail": "sandi.maung@example.com",
+      "ContactNumber": "+852 9123 4567",
+      "ReviseClaimReasonCode": ""
+    },
+    {
+      "PlanId": "1959",
+      "ClaimType": "M",
+      "ReceivedDate": "08202026",
+      "IncurDateFrom": "08192026",
+      "IncurDateTo": "08192026",
+      "SymptomDate": null,
+      "TreatmentCountry": "HONG KONG",
+      "ProviderCode": "",
+      "ProviderName": "Dental Villa Clinic",
+      "InvoiceID": "NIL",
+      "BenefitType": "DT",
+      "BenefitHead": "EXT",
+      "DiagnosisCode": "",
+      "DiagnosisCodeDesc": "",
+      "DiagnosisDescription": "Tooth extraction",
+      "PresentedCurrency": "HKD",
+      "PresentedAmt": 1200.00,
+      "ExchangeRate": 1,
+      "PaymentCurrency": "HKD",
+      "PaymentExchangeRate": 1,
+      "PaymentMethod": "AUTOPAY",
+      "BankName": "HSBC",
+      "BankAcctNo": "123-456789-001",
+      "BankAcctName": "SANDI MAUNG",
+      "PayeeEmail": "sandi.maung@example.com",
+      "ContactNumber": "+852 9123 4567",
+      "ReviseClaimReasonCode": ""
+    }
+  ]
+}
+
+response = {
+  "success": true,
+  "payload": {
+    "tpaCaseNumber": "ULK-2026-081234",
+    "claimNo": "0820202600017",
+    "validationResult": "Succesfully Validated Claim.",
+    "totalPresentedAmt": 1880.00,
+    "totalApprovedAmt": 1880.00,
+    "lineResults": [
+      { "lineNo": 1, "presentedAmt": 680.00, "approvedAmt": 680.00, "status": "CL_LINE_STATUS_PV" },
+      { "lineNo": 2, "presentedAmt": 1200.00, "approvedAmt": 1200.00, "status": "CL_LINE_STATUS_PV" }
+    ]
+  }
+}
+
+error = {
+  "success": false,
+  "error": "Claim already exists in system, TpaCaseNumber: ULK-2026-081234"
+}
