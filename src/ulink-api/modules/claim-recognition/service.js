@@ -14,6 +14,34 @@ const ajv = new Ajv({ allErrors: true });
 
 const TRANSCRIBE_INSTRUCTION = fs.readFileSync(path.join(__dirname, 'prompts', 'transcribe-page.md'), 'utf8');
 const SYNTHESIZE_SYSTEM_PROMPT = fs.readFileSync(path.join(__dirname, 'prompts', 'synthesize.md'), 'utf8');
+const MEDICAL_RECORD_FALLBACK_PROMPT = fs.readFileSync(path.join(__dirname, 'prompts', 'medical-record-fallback.md'), 'utf8');
+
+// The AYA Sompo eclaim template's own fixed label text for this section — verified present
+// verbatim in real sample data both as "Medical Record Photos" (a heading directly above an
+// embedded photo — complete/1, complete/2) and as "Medical Records" (a field label pointing
+// at an external link instead — incomplete/jd2). Matches both; see
+// findMedicalRecordFallbackChunk below for how the two are told apart.
+const MEDICAL_RECORD_HEADING_PATTERN = /medical\s+records?(?:\s+photos)?/i;
+
+// A linked-document chunk looks like "[linked from <filename> - <url> - page N]\n...".
+const LINKED_CHUNK_PATTERN = /^\[linked from (.+?) - https?:\/\//;
+// A top-level attachment page chunk looks like "[<filename> - page N]\n...". Checked only
+// after LINKED_CHUNK_PATTERN fails to match, since a linked chunk's own label also contains
+// " - page N]" further along and would otherwise be misread as an "own page" chunk.
+const OWN_PAGE_CHUNK_PATTERN = /^\[(.+?) - page \d+\]/;
+
+const MEDICAL_RECORD_FALLBACK_SCHEMA = {
+  type: 'object',
+  required: ['present', 'legible', 'patient_name', 'doctor_name', 'hospital_or_clinic_name', 'date'],
+  properties: {
+    present: { type: 'boolean' },
+    legible: { type: ['boolean', 'null'] },
+    patient_name: { type: ['string', 'null'] },
+    doctor_name: { type: ['string', 'null'] },
+    hospital_or_clinic_name: { type: ['string', 'null'] },
+    date: { type: ['string', 'null'] },
+  },
+};
 
 async function logEvent(transaction, { caseId, prevStatus = null, newStatus, reasonCode = null, message = null }) {
   await CaseEvent.create({ caseId, blockName: BLOCK_NAME, prevStatus, newStatus, reasonCode, message }, { transaction });
@@ -195,6 +223,83 @@ function dedupeInvoiceItems(fields) {
   return { ...fields, invoices: { ...fields.invoices, items: deduped } };
 }
 
+function linkedChunkOrigin(chunk) {
+  const match = chunk.match(LINKED_CHUNK_PATTERN);
+  return match ? match[1] : null;
+}
+
+function ownPageChunkOrigin(chunk) {
+  if (LINKED_CHUNK_PATTERN.test(chunk)) return null; // a linked chunk's own label also contains " - page N]"
+  const match = chunk.match(OWN_PAGE_CHUNK_PATTERN);
+  return match ? match[1] : null;
+}
+
+/**
+ * Picks which already-computed transcript chunk to re-ask about, given the chunk where the
+ * heading/label match was found. Two real shapes verified against real sample data:
+ *  - Embedded photo (complete/1, complete/2): the heading ("Medical Record Photos") and the
+ *    actual clinic letterhead content are on the SAME page/chunk — use it directly.
+ *  - External link (incomplete/jd2): the form only has a field label ("Medical Records")
+ *    plus a URL on that page — the real content is in a SEPARATE chunk produced by
+ *    transcribeLinkedDocuments for that same top-level attachment. This template
+ *    consistently lists the medical-record link before the bills link (verified against both
+ *    real submission forms in the samples), so the first linked chunk belonging to the same
+ *    originating attachment, scanning forward from the heading chunk, is the medical
+ *    record's own content, not the bill's. Stops as soon as scanning reaches a different
+ *    attachment entirely (no such linked chunk exists for this one) and falls back to the
+ *    heading chunk itself — the embedded-photo case, unchanged from before this existed.
+ */
+function findMedicalRecordFallbackChunk(transcriptChunks, headingIndex) {
+  const headingChunk = transcriptChunks[headingIndex];
+  const originFilename = ownPageChunkOrigin(headingChunk);
+  if (!originFilename) return headingChunk;
+
+  for (let i = headingIndex + 1; i < transcriptChunks.length; i += 1) {
+    const chunk = transcriptChunks[i];
+    if (linkedChunkOrigin(chunk) === originFilename) return chunk;
+    if (ownPageChunkOrigin(chunk) !== originFilename) break; // moved on to a different attachment
+  }
+
+  return headingChunk;
+}
+
+/**
+ * Fallback for a confirmed false negative: the main synthesis call missed a medical record
+ * that was genuinely present (verified against real data — complete/1, Hlaing Myo Oo — a
+ * page explicitly headed "Medical Record Photos", with a legible clinic letterhead and
+ * doctor's stamp, still came back medical_record.present: false). Only triggers when the
+ * main result says absent AND the page transcripts themselves contain this template's own
+ * fixed label text — a deterministic contradiction, not a guess. Re-asks with a single,
+ * narrow, text-only call scoped to just the relevant already-computed transcript chunk
+ * (cheap — no re-rasterization, no new vision call — and considerably more reliable than the
+ * original whole-case merge, per synthesizeJson's own doc comment). If the fallback still
+ * can't confirm a real record, the original (absent) result is left as-is — no escalation
+ * path; the existing INCOMPLETE/resubmit-request flow is the safety net, not a new
+ * manual-review state (confirmed: no manual review at this stage of the project).
+ */
+async function applyMedicalRecordFallback(fields, transcriptChunks) {
+  if (fields.medical_record?.present === true) return fields;
+
+  const headingIndex = transcriptChunks.findIndex((chunk) => MEDICAL_RECORD_HEADING_PATTERN.test(chunk));
+  if (headingIndex === -1) return fields;
+
+  const targetChunk = findMedicalRecordFallbackChunk(transcriptChunks, headingIndex);
+
+  let fallback;
+  try {
+    fallback = await synthesizeJson({
+      systemPrompt: MEDICAL_RECORD_FALLBACK_PROMPT,
+      userText: targetChunk,
+      jsonSchema: MEDICAL_RECORD_FALLBACK_SCHEMA,
+    });
+  } catch {
+    return fields; // fallback call itself failing is no worse than the status quo
+  }
+
+  if (fallback?.present !== true) return fields;
+  return { ...fields, medical_record: fallback };
+}
+
 /**
  * Day 1: exactly one enabled route, so its extraction_schema is used regardless of the
  * final route decision (a "fallback" result just comes back all-null, which the schema
@@ -286,9 +391,13 @@ async function recognizeCase(caseRecord, routes) {
     reasonCode = 'NO_ROUTE_MATCH';
   }
 
-  const extractedFields = parsed.extracted_fields
+  let extractedFields = parsed.extracted_fields
     ? normalizeIdentityConsistency(dedupeInvoiceItems(parsed.extracted_fields))
     : parsed.extracted_fields;
+
+  if (extractedFields) {
+    extractedFields = await applyMedicalRecordFallback(extractedFields, transcriptChunks);
+  }
 
   return { caseId: caseRecord.id, outcome, recognizedType, reasonCode, message: parsed.reason, extractedFields };
 }

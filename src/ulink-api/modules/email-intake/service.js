@@ -5,8 +5,28 @@ const { matchOrCreateThread } = require('./threadMatcher');
 
 const BLOCK_NAME = 'email-intake';
 
-async function logEvent(transaction, { caseId, prevStatus = null, newStatus, message = null }) {
-  await CaseEvent.create({ caseId, blockName: BLOCK_NAME, prevStatus, newStatus, message }, { transaction });
+// Statuses where the case is genuinely waiting on the customer (or hasn't been through any
+// job yet) — a new inbound attachment here is exactly the resubmission the pipeline is
+// waiting for, so it's safe to reset back to READY_FOR_DOCUMENT_READING and reprocess from
+// scratch. Deliberately excludes every status from RECOGNIZED onward (DOCUMENT_CHECKED,
+// MEMBER_VERIFIED, CLAIM_PAYLOAD_PREPARED, CLAIM_CREATED, CLAIM_SUBMIT_FAILED, ...) — those
+// represent real progress (a real IAS member lookup, a real prepared/submitted claim
+// payload), and a stray attachment-bearing reply landing on that same thread later must not
+// silently wipe extractedFields and re-run everything, especially post-CLAIM_CREATED where a
+// real, non-idempotent claim already exists in IAS. Use POST /api/dev/cases/reset to
+// reprocess one of those manually if a case genuinely needs it.
+const AWAITING_CUSTOMER_STATUSES = [
+  'EMAIL_RECEIVED',
+  'ATTACHMENTS_STORED',
+  'READY_FOR_DOCUMENT_READING',
+  'NOT_RECOGNIZED',
+  'MANUAL_REVIEW',
+  'INCOMPLETE',
+  'MEMBER_REVIEW_REQUIRED',
+];
+
+async function logEvent(transaction, { caseId, prevStatus = null, newStatus, reasonCode = null, message = null }) {
+  await CaseEvent.create({ caseId, blockName: BLOCK_NAME, prevStatus, newStatus, reasonCode, message }, { transaction });
 }
 
 function datePathSegments(date) {
@@ -107,14 +127,28 @@ async function persistSubmission(submission) {
     }
 
     if (storedCount > 0) {
+      const caseBeforeAttachments = await Case.findByPk(caseId, { attributes: ['currentStatus'], transaction });
+      const prevStatus = caseBeforeAttachments.currentStatus;
+
       await logEvent(transaction, {
         caseId,
-        prevStatus: 'EMAIL_RECEIVED',
+        prevStatus,
         newStatus: 'ATTACHMENTS_STORED',
         message: `${storedCount} attachment(s) stored`,
       });
-      await logEvent(transaction, { caseId, prevStatus: 'ATTACHMENTS_STORED', newStatus: 'READY_FOR_DOCUMENT_READING' });
-      await Case.update({ currentStatus: 'READY_FOR_DOCUMENT_READING' }, { where: { id: caseId }, transaction });
+
+      if (AWAITING_CUSTOMER_STATUSES.includes(prevStatus)) {
+        await logEvent(transaction, { caseId, prevStatus: 'ATTACHMENTS_STORED', newStatus: 'READY_FOR_DOCUMENT_READING' });
+        await Case.update({ currentStatus: 'READY_FOR_DOCUMENT_READING' }, { where: { id: caseId }, transaction });
+      } else {
+        await logEvent(transaction, {
+          caseId,
+          prevStatus,
+          newStatus: prevStatus,
+          reasonCode: 'ATTACHMENT_ON_NON_AWAITING_STATUS',
+          message: `New attachment(s) arrived on a case already at '${prevStatus}' — not an awaiting-customer status, so not auto-reprocessed. Use POST /api/dev/cases/reset to reprocess manually if needed.`,
+        });
+      }
     }
 
     return { caseId, attachmentsStored: storedCount };
