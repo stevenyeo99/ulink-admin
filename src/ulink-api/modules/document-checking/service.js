@@ -1,6 +1,7 @@
-const { sequelize, Case, CaseEvent, EmailTask } = require('../../db/models');
+const { sequelize, Case, CaseEvent } = require('../../db/models');
 const config = require('../../config');
 const { evaluateDocumentChecks } = require('./checklist');
+const { queueDedupedTask } = require('../shared/emailTaskQueue');
 
 const BLOCK_NAME = 'document-checking';
 
@@ -33,19 +34,12 @@ function issuesDedupeKey(issues) {
 }
 
 async function queueMissingDocumentsEmail(transaction, caseId, result) {
-  const dedupeKey = issuesDedupeKey(result.issues);
-  const lastTask = await EmailTask.findOne({
-    where: { caseId, taskType: 'MISSING_DOCUMENTS' },
-    order: [['createdAt', 'DESC']],
-    transaction,
+  await queueDedupedTask(transaction, {
+    caseId,
+    taskType: 'MISSING_DOCUMENTS',
+    dedupeKey: issuesDedupeKey(result.issues),
+    payload: { issues: result.issues },
   });
-
-  if (lastTask && lastTask.dedupeKey === dedupeKey) return;
-
-  await EmailTask.create(
-    { caseId, taskType: 'MISSING_DOCUMENTS', dedupeKey, payload: { issues: result.issues } },
-    { transaction }
-  );
 }
 
 async function persistOutcome(caseRecord, outcome) {
@@ -66,10 +60,9 @@ async function persistOutcome(caseRecord, outcome) {
     if (!outcome.result.passed) {
       await queueMissingDocumentsEmail(transaction, caseRecord.id, outcome.result);
     }
-    // outcome.result.passed === true (DOCUMENT_CHECKED): no email task is queued here.
-    // The "complete" acknowledgement (DOCUMENT_COMPLETE_ACK) requires member verify
-    // (JD2/iAS) to also pass, which isn't built yet — that future module is what should
-    // create this task type, not this one.
+    // outcome.result.passed === true (DOCUMENT_CHECKED): no email task is queued here. The
+    // "complete" acknowledgement (DOCUMENT_COMPLETE_ACK) requires member verify to also
+    // pass — modules/member-verification/service.js queues that task, not this one.
   });
 }
 

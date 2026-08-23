@@ -1,14 +1,22 @@
 /**
  * Canonical customer-facing issue wording + the evaluator logic that decides which apply
- * to a case's extracted_fields. All but one entry matches the real missing-document email
- * template verbatim (DELEGATION_LETTER_REQUIRED does not — no canned wording exists for it
- * yet; see its check function). Pure code, deliberately not config-driven — each check has
+ * to a case's extracted_fields. Most entries match the real missing-document email
+ * template verbatim; three do not — see their own comments for why (no canned wording
+ * exists for them yet). Pure code, deliberately not config-driven — each check has
  * genuinely distinct comparison logic (boolean read, numeric compare, OR-across-fields,
  * null-handling), not a repeatable shape a generic rules engine would pay for itself on.
  *
- * "Incorrect bank details" is intentionally NOT evaluated here — that specifically means
- * "doesn't match what's on file at IAS," which needs the member-verification block
- * (not built yet). Everything else is checkable from Case.extractedFields alone.
+ * INCORRECT_BANK_DETAILS is intentionally NOT evaluated by anything in this file — that
+ * specifically means "doesn't match what's on file at IAS," which needs
+ * modules/member-verification/checks.js (its BANK_DETAILS_MISMATCH reasonCode). Its
+ * canonical wording lives here (one source of truth for customer-facing wording), but is
+ * looked up and used by modules/member-verification/service.js, not EVALUATORS below.
+ * MEMBER_NOT_VERIFIED and POLICY_NOT_ACTIVE_ON_TREATMENT_DATE are the same story for
+ * member-verification's other two reasonCodes (MEMBER_NOT_FOUND, COVERAGE_NOT_ACTIVE) —
+ * with the added caveat that unlike every other entry here, these two are NOT from the
+ * approved canned-response doc (no such line exists there yet) — placeholder wording,
+ * flag for business sign-off before relying on the exact phrasing. Everything else here is
+ * checkable from Case.extractedFields alone.
  *
  * Of extractedFields.identity_consistency.*, only bank_account_holder_consistent
  * (delegation letter) is currently evaluated — patient_name_consistent and
@@ -32,7 +40,12 @@ const ISSUES = {
   INCORRECT_MEDICAL_REPORT: 'Incorrect medical report(s)',
   INCOMPLETE_MEDICAL_REPORT: 'Incomplete medical report(s)',
   MISSING_BANK_INFO: 'Missing bank information',
+  INCORRECT_BANK_DETAILS: 'Incorrect bank details',
   DELEGATION_LETTER_REQUIRED: 'Please fill in the attached delegation letter to proceed with the payment process',
+  MEMBER_NOT_VERIFIED:
+    'We could not verify your membership/policy details in our system. Please double check your NRC/passport number and policy number and resubmit.',
+  POLICY_NOT_ACTIVE_ON_TREATMENT_DATE:
+    'Your policy does not appear to have been active on the date of treatment. Please contact us to verify your coverage period.',
 };
 
 function checkIncompleteClaimForm(fields) {

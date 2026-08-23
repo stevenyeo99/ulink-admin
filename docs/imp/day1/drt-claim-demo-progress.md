@@ -26,11 +26,11 @@ output). Step 6 branches off independently for cases that pass step 2 cleanly.
 | # | Step | Status |
 |---|---|---|
 | 1 | Email submission recognition | ✅ Done — verified end-to-end on real sample case |
-| 2 | Document checking and member verification | ⚠️ In progress — extraction data ready, comparison logic + IAS lookup not yet built |
-| 3 | Identify missing document | ❌ Not started (blocked on 2) |
-| 4 | Draft email requesting missing document | ❌ Not started (blocked on 3) |
-| 5 | Send to Ulink's email | ❌ Not started (blocked on 4; SMTP send is a stub, see below) |
-| 6 | Complete case → create claim number in iAS | ❌ Not started (independent of 3-5) |
+| 2 | Document checking and member verification | ✅ Done — `document-checking` + `member-verification` jobs built, verified against real samples (see `jobs-registry.md`) |
+| 3 | Identify missing document | ✅ Done — `document-checking/checklist.js`'s `issues[]` output |
+| 4 | Draft email requesting missing document | ✅ Done — `modules/email-sender/templates.js` |
+| 5 | Send to Ulink's email | ✅ Done — `email-sender` job + `channels/imapSmtpChannel.js::sendReply` (no longer a stub); confirmed direction changed since this was written, see note in section 5 below |
+| 6 | Complete case → create claim number in iAS | ❌ Not started — next up (`ias-claim-creation` in `jobs-registry.md`) |
 
 ---
 
@@ -72,14 +72,20 @@ silently persisting incomplete data.
 
 ---
 
-## 2. Document checking and member verification — ⚠️ In progress
+## 2. Document checking and member verification — ✅ Done
 
-**Not yet built**: the code that consumes `extracted_fields` to actually flag
-issues, and the IAS member lookup.
+Built as two separate jobs (`modules/document-checking/`, `modules/member-verification/`),
+per `jobs-registry.md` — see that file for endpoints/status-chain detail. Below is the
+design as originally settled; the implementation followed it, with two corrections found
+along the way: `meplEffDate` is `YYYYMMDD` (not `MMDDYYYY` as stated below), and IAS's own
+response dates (`DOB`/`EFF_DATE`/`EXP_DATE`/`TERM_DATE`/`REINST_DATE`) are `MMDDYYYY`.
 
-### Document checking (design settled, not implemented)
+### Document checking (implemented — `modules/document-checking/checklist.js`)
 Maps directly onto `extracted_fields` — no new extraction needed, this is
-comparison logic in code:
+comparison logic in code. The extraction schema evolved since this table was written
+(`invoice` → `invoices.items[]`, an array — a claim can have more than one voucher), and a
+few checks (incorrect patient details / incorrect medical report) are deliberately disabled
+for now — see `checklist.js`'s own header comment for the current, authoritative list:
 
 | Checklist item | Check |
 |---|---|
@@ -94,13 +100,18 @@ comparison logic in code:
 | Incomplete medical claims form (Section B) | `medical.detail_of_illness_injury`/`full_description_of_treatment` non-null |
 | Missing/incorrect bank information | `bank.*` non-null / vs IAS member record (needs member verification) |
 
-### Member verification (design settled, not implemented)
-Reference: `ulink-is-ai/src/services/iasService.js::postMemberInfoByPolicy` +
-`docs/imp/day1/IAS/ias_get_member_information_response_v2.json` (sample response).
+### Member verification (implemented — `modules/member-verification/`)
+Reference: `ulink-is-ai/src/services/iasService.js::postMemberInfoByPolicy` (HTTP mechanics
+only, not business logic) + the real sample req/res pairs in
+`docs/imp/day1/samples/*/IAS Member Info API Req-Res.json` and
+`docs/imp/day1/samples/no_member_exist_case.json` (the not-found shape).
 
 - **Lookup**: `POST {IAS_URL}{GET_MEMBER_INFO_API}` with
-  `{ memberNrc: claimant.claimant_nrc_passport, meplEffDate: claim.accident_date }`
-  (formatted `MMDDYYYY`). No new OCR fields needed — both already extracted.
+  `{ memberNrc: claimant.claimant_nrc_passport, meplEffDate: claim.accident_date }`,
+  **`YYYYMMDD`** (verified against real samples — corrects this doc's earlier `MMDDYYYY`
+  note). No new OCR fields needed — both already extracted. Coverage-active check uses
+  `memberPlans[0]`'s own `EFF_DATE`/`EXP_DATE`, with `REINST_DATE`/`TERM_DATE` overriding
+  them when set (`NVL(REINST_DATE, EFF_DATE)` .. `NVL(TERM_DATE, EXP_DATE)`).
 - **Comparison** (code-level, normalized string/date equality — no LLM):
 
   | OCR field | IAS field | Tier |
@@ -134,13 +145,17 @@ Needs step 3's list as input, plus a drafting prompt/template. Plan document has
 a starter template (`docs/imp/day1/drt-claim-demo-implementation-plan.md`,
 Block 13).
 
-## 5. Send to Ulink's email — ❌ Not started
+## 5. Send to Ulink's email — ✅ Done
 
-**Blocker**: `channels/imapSmtpChannel.js::sendReply()` is a deliberate stub
-(throws `not implemented yet`) — built that way earlier specifically anticipating
-this step. Confirmed direction: drafted emails go to Ulink's own inbox for
-review, not directly to the claimant/sender — worth re-confirming before
-building the send path.
+Built as `modules/email-sender/` — `channels/imapSmtpChannel.js::sendReply()` is
+implemented (no longer the stub this section originally described). **Direction
+changed from what's recorded above**: this section previously said drafted emails
+go to Ulink's own inbox for review, not the claimant directly — that's
+superseded. Confirmed instead (2026-08-23): replies go straight back to whoever
+the case's inbound email actually came from (`EmailMessage.fromAddr` on the last
+inbound message in the thread), fully automatically, no manual-approval step.
+`channels/imapSmtpChannel.js`'s own comment referencing the demo plan's "Block 14:
+Manual Approval Step" is the same superseded direction — not implemented.
 
 ## 6. Complete case → create claim number in iAS — ❌ Not started
 

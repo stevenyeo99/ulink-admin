@@ -1,0 +1,120 @@
+/**
+ * Pure comparison logic — no I/O. Implements the Hard/Soft field table settled in
+ * docs/imp/day1/drt-claim-demo-progress.md's "Member verification" section, plus the
+ * confirmed coverage-period rule: treatment date must fall within
+ * [NVL(memberPlans[0].REINST_DATE, memberPlans[0].EFF_DATE), NVL(memberPlans[0].TERM_DATE, memberPlans[0].EXP_DATE)].
+ *
+ * Two date formats are in play and must not be confused: extractedFields dates and the
+ * request's meplEffDate are YYYY-MM-DD / YYYYMMDD, but every date IAS returns in the
+ * response (DOB, EFF_DATE, EXP_DATE, TERM_DATE, REINST_DATE) is MMDDYYYY (verified: member.DOB
+ * "03281984" against claimant_dob "1984-03-28" — March 28 1984, not a plausible day-13th month).
+ */
+
+function toYYYYMMDD(isoDate) {
+  return isoDate ? isoDate.replaceAll('-', '') : null;
+}
+
+function iasDateToYYYYMMDD(mmddyyyy) {
+  if (!mmddyyyy || mmddyyyy.length !== 8) return null;
+  const mm = mmddyyyy.slice(0, 2);
+  const dd = mmddyyyy.slice(2, 4);
+  const yyyy = mmddyyyy.slice(4, 8);
+  return `${yyyy}${mm}${dd}`;
+}
+
+function norm(value) {
+  if (value == null) return null;
+  const trimmed = String(value).trim().toLowerCase().replace(/\s+/g, ' ');
+  return trimmed === '' ? null : trimmed;
+}
+
+/**
+ * true/false/null (null = can't determine, one or both sides missing) — never guesses.
+ */
+function compare(extractedValue, iasValue) {
+  const a = norm(extractedValue);
+  const b = norm(iasValue);
+  if (a == null || b == null) return null;
+  return a === b;
+}
+
+/**
+ * Bank names get abbreviated (extracted "AYA" vs IAS's own "AYA bank") in a way exact
+ * `compare()` would wrongly flag as a mismatch — unlike account numbers/DOB, dropping a
+ * generic suffix word ("bank", "co.", "ltd") doesn't change which real bank is meant.
+ * Containment either direction covers both abbreviation directions; this is intentionally
+ * looser than compare() and is used for bank_name only — account number/name and DOB stay
+ * on exact compare(), where a substring match would be a real, dangerous false positive
+ * (e.g. "123" is a substring of a longer real account number).
+ */
+function compareBankName(extractedValue, iasValue) {
+  const a = norm(extractedValue);
+  const b = norm(iasValue);
+  if (a == null || b == null) return null;
+  return a === b || a.includes(b) || b.includes(a);
+}
+
+function checkCoverageActive(plan, treatmentDateYYYYMMDD) {
+  if (!plan || !treatmentDateYYYYMMDD) return null;
+  const start = iasDateToYYYYMMDD(plan.REINST_DATE) || iasDateToYYYYMMDD(plan.EFF_DATE);
+  const end = iasDateToYYYYMMDD(plan.TERM_DATE) || iasDateToYYYYMMDD(plan.EXP_DATE);
+  if (!start || !end) return null;
+  return treatmentDateYYYYMMDD >= start && treatmentDateYYYYMMDD <= end;
+}
+
+function evaluate(extractedFields, iasResponse) {
+  if (!iasResponse || iasResponse.success !== true) {
+    return { outcome: 'MEMBER_REVIEW_REQUIRED', reasonCode: 'MEMBER_NOT_FOUND', checks: {} };
+  }
+
+  const member = iasResponse.payload?.member || {};
+  const policies = iasResponse.payload?.policies || [];
+  const memberPlans = iasResponse.payload?.memberPlans || [];
+  const plan = memberPlans[0] || null;
+  const policy = policies[0] || null;
+
+  const treatmentDate = toYYYYMMDD(extractedFields.claim?.accident_date);
+  const coverageActive = checkCoverageActive(plan, treatmentDate);
+
+  const hard = {
+    coverageActive,
+    dobMatch: compare(toYYYYMMDD(extractedFields.claimant?.claimant_dob), iasDateToYYYYMMDD(member.DOB)),
+    bankNameMatch: compareBankName(extractedFields.bank?.bank_name, member.BANK_NAME),
+    // Known limitation, accepted as-is per the settled Hard-tier design: this is a plain
+    // normalized string compare, unlike JD1's identity_consistency (LLM-judged
+    // specifically to handle Burmese-vs-Latin-script/transliteration name variants — see
+    // checklist.js/synthesize.md). A person whose name is legitimately the same but
+    // written in a different script/spelling than IAS's own record will false-positive
+    // here as a mismatch. Accepted for now since a real mismatch (a genuinely different
+    // payee, e.g. the jd2 delegation-letter case) is the far more likely real-world
+    // trigger; revisit if false positives show up in practice.
+    bankAccountNameMatch: compare(extractedFields.bank?.bank_account_name, member.CL_PAY_ACCT_NAME),
+    bankAccountNumberMatch: compare(extractedFields.bank?.bank_account_number, member.CL_PAY_ACCT_NO),
+    policyNoMatch: compare(extractedFields.policy?.policy_no, policy?.POCY_REF_NO),
+  };
+
+  const soft = {
+    claimantName: { extracted: extractedFields.claimant?.claimant_name ?? null, ias: member.MBR_LAST_NAME ?? null },
+    phone: { extracted: extractedFields.claimant?.phone_number ?? null, ias: member.MOBILE_NO ?? null },
+    email: { extracted: extractedFields.claimant?.email_address ?? null, ias: member.EMAIL ?? null },
+  };
+
+  const checks = { hard, soft };
+
+  if (hard.coverageActive === false) {
+    return { outcome: 'MEMBER_REVIEW_REQUIRED', reasonCode: 'COVERAGE_NOT_ACTIVE', checks };
+  }
+  if (hard.dobMatch === false) {
+    return { outcome: 'MEMBER_REVIEW_REQUIRED', reasonCode: 'MEMBER_DETAILS_MISMATCH', checks };
+  }
+  if (hard.bankNameMatch === false || hard.bankAccountNameMatch === false || hard.bankAccountNumberMatch === false) {
+    return { outcome: 'MEMBER_REVIEW_REQUIRED', reasonCode: 'BANK_DETAILS_MISMATCH', checks };
+  }
+  if (hard.policyNoMatch === false) {
+    return { outcome: 'MEMBER_REVIEW_REQUIRED', reasonCode: 'MEMBER_DETAILS_MISMATCH', checks };
+  }
+
+  return { outcome: 'MEMBER_VERIFIED', reasonCode: null, checks };
+}
+
+module.exports = { evaluate };

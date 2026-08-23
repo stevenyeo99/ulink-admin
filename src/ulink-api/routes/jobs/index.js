@@ -5,6 +5,7 @@ const emailIntakeService = require('../../modules/email-intake/service');
 const claimRecognitionService = require('../../modules/claim-recognition/service');
 const documentCheckingService = require('../../modules/document-checking/service');
 const emailSenderService = require('../../modules/email-sender/service');
+const memberVerificationService = require('../../modules/member-verification/service');
 
 const router = express.Router();
 
@@ -267,10 +268,84 @@ const router = express.Router();
  *               block: email-sender
  *               released: true
  *               wasLocked: true
+ *
+ * /api/jobs/member-verification/run:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Start the member-verification job (fire-and-forget)
+ *     description: >
+ *       Acquires the job lock and returns immediately. In the background, for each case at
+ *       currentStatus=DOCUMENT_CHECKED or MEMBER_REVIEW_REQUIRED (up to
+ *       MEMBER_VERIFICATION_BATCH_LIMIT per run, oldest-updated first — MEMBER_REVIEW_REQUIRED
+ *       is included so a case that only failed due to stale IAS data can recover on a later
+ *       run): calls the IAS GET_MEMBER_INFO_API with the claimant's NRC and accident date
+ *       (modules/member-verification/iasClient.js), then runs deterministic Hard/Soft field
+ *       comparisons (modules/member-verification/checks.js — coverage-active date range,
+ *       DOB, bank details vs IAS's on-file payee record, policy number). Updates
+ *       Case.currentStatus to MEMBER_VERIFIED or MEMBER_REVIEW_REQUIRED, sets
+ *       Case.memberVerifyResult (evaluated summary) and Case.iasMemberInfoResponse (the raw
+ *       IAS response verbatim, kept for the future ias-claim-creation job and audit — see
+ *       docs/imp/day1/jobs-registry.md), and logs a CaseEvent. On MEMBER_VERIFIED, queues a
+ *       DOCUMENT_COMPLETE_ACK EmailTask. On MEMBER_REVIEW_REQUIRED (any reasonCode —
+ *       MEMBER_NOT_FOUND, COVERAGE_NOT_ACTIVE, MEMBER_DETAILS_MISMATCH, or
+ *       BANK_DETAILS_MISMATCH), queues a customer-facing MISSING_DOCUMENTS EmailTask
+ *       flagging the one line that reasonCode maps to (modules/member-verification/service.js's
+ *       REASON_CODE_TO_ISSUE) — deduped so a re-check finding the same outcome doesn't
+ *       re-queue. A technical failure (IAS timeout/error, missing required fields) leaves the
+ *       case at its current status for retry on the next run, same pattern as
+ *       document-checking. Same lock/release pattern as the other jobs.
+ *     requestBody:
+ *       required: false
+ *       description: No body needed — trigger only.
+ *     responses:
+ *       200:
+ *         description: Started, or skipped because a prior run is still in progress
+ *         content:
+ *           application/json:
+ *             schema:
+ *               oneOf:
+ *                 - type: object
+ *                   properties:
+ *                     block: { type: string }
+ *                     started: { type: boolean }
+ *                 - type: object
+ *                   properties:
+ *                     block: { type: string }
+ *                     skipped: { type: boolean }
+ *                     reason: { type: string }
+ *             examples:
+ *               started:
+ *                 value: { block: member-verification, started: true }
+ *               skipped:
+ *                 value: { block: member-verification, skipped: true, reason: already_running }
+ *
+ * /api/jobs/member-verification/release:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Manually clear a stuck member-verification lock
+ *     requestBody:
+ *       required: false
+ *       description: No body needed.
+ *     responses:
+ *       200:
+ *         description: Lock cleared
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 block: { type: string }
+ *                 released: { type: boolean }
+ *                 wasLocked: { type: boolean }
+ *             example:
+ *               block: member-verification
+ *               released: true
+ *               wasLocked: true
  */
 router.use('/email-intake', createJobRouter('email-intake', emailIntakeService));
 router.use('/claim-recognition', createJobRouter('claim-recognition', claimRecognitionService));
 router.use('/document-checking', createJobRouter('document-checking', documentCheckingService));
 router.use('/email-sender', createJobRouter('email-sender', emailSenderService));
+router.use('/member-verification', createJobRouter('member-verification', memberVerificationService));
 
 module.exports = router;

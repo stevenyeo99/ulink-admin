@@ -4,9 +4,14 @@
  * defaults to "Re: <original subject>" itself, matching how a human agent's reply stays
  * on the same subject line rather than introducing a new one.
  *
- * Wording is copied verbatim from docs/samples/20260820/Canned response for Sample.docx
- * (the ULINK-approved canned responses) — not paraphrased, including its own phrasing/
- * quirks, since this is approved customer-facing copy, not our prose to edit.
+ * MISSING_DOCUMENTS's wording is copied verbatim from docs/samples/20260820/Canned
+ * response for Sample.docx (the ULINK-approved canned responses) where a line has one —
+ * not paraphrased, including its own phrasing/quirks. Two of the issue lines it can carry
+ * (see modules/member-verification/service.js's REASON_CODE_TO_ISSUE) are NOT from that
+ * approved doc — MEMBER_NOT_VERIFIED and POLICY_NOT_ACTIVE_ON_TREATMENT_DATE, defined in
+ * modules/document-checking/checklist.js, are placeholder wording composed for this feature
+ * (no approved canned line exists for "member not found"/"coverage inactive" yet) — flag
+ * for business sign-off before relying on the exact phrasing.
  */
 
 const MISSING_DOCUMENTS_INTRO = `Dear Valued Customer,
