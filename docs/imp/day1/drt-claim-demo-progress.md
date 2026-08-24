@@ -30,7 +30,7 @@ output). Step 6 branches off independently for cases that pass step 2 cleanly.
 | 3 | Identify missing document | ✅ Done — `document-checking/checklist.js`'s `issues[]` output |
 | 4 | Draft email requesting missing document | ✅ Done — `modules/email-sender/templates.js` |
 | 5 | Send to Ulink's email | ✅ Done — `email-sender` job + `channels/imapSmtpChannel.js::sendReply` (no longer a stub); confirmed direction changed since this was written, see note in section 5 below |
-| 6 | Complete case → create claim number in iAS | ❌ Not started — next up (`ias-claim-creation` in `jobs-registry.md`) |
+| 6 | Complete case → create claim number in iAS | ✅ Done — `ias-claim-preparation` + `ias-claim-creation` jobs built, verified against real IAS `CL_CLAIM_API` (see `jobs-registry.md`) |
 
 ---
 
@@ -157,11 +157,17 @@ inbound message in the thread), fully automatically, no manual-approval step.
 `channels/imapSmtpChannel.js`'s own comment referencing the demo plan's "Block 14:
 Manual Approval Step" is the same superseded direction — not implemented.
 
-## 6. Complete case → create claim number in iAS — ❌ Not started
+## 6. Complete case → create claim number in iAS — ✅ Done
 
-Independent of 3-5. Reference: `ulink-is-ai/src/services/iasService.js::postClaimSubmission`.
-Needs a new `Case` status (plan's suggested `CLAIM_CREATED`) and a claim-number
-field on `Case` (not yet added to the schema).
+Built as two jobs, per `jobs-registry.md`: `ias-claim-preparation`
+(`MEMBER_VERIFIED` → `CLAIM_PAYLOAD_PREPARED`, picks ICD-10 diagnosis + builds
+one `Items[]` line per real voucher with its own BenefitType/BenefitHead pick,
+sets `Case.iasClaimPayload`) and `ias-claim-creation` (`CLAIM_PAYLOAD_PREPARED`
+→ `CLAIM_CREATED`/`CLAIM_SUBMIT_FAILED`, submits to the real IAS `CL_CLAIM_API`,
+sets `Case.claimNo`/`Case.iasClaimResult`, queues a `CLAIM_CREATED_NOTIFICATION`
+email task on success). Fully automatic, no approval gate. A technical failure
+(timeout/network/non-2xx) retries next run; a definitive IAS rejection
+(`success: false`) does not retry. See `jobs-registry.md` for full detail.
 
 ---
 
