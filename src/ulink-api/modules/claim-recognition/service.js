@@ -192,6 +192,31 @@ function normalizeIdentityConsistency(fields) {
 }
 
 /**
+ * Deterministic backstop, same reasoning as normalizeIdentityConsistency above: verified
+ * against real data (2026-08-24, incomplete/jd2 with a delegation letter attached) that the
+ * model can return delegation_letter.present: false alongside legible: true and other
+ * fields non-null — an internally contradictory result (nothing to judge legibility or
+ * fields *of* a document that isn't there). Whether present is true is what everything else
+ * on this object depends on, so force the rest to null whenever it isn't.
+ */
+function normalizeDelegationLetter(fields) {
+  if (fields.delegation_letter?.present === true) return fields;
+
+  return {
+    ...fields,
+    delegation_letter: {
+      ...fields.delegation_letter,
+      present: false,
+      legible: null,
+      delegator_name: null,
+      delegator_nrc: null,
+      authorized_payee_name: null,
+      authorized_payee_contact: null,
+    },
+  };
+}
+
+/**
  * Deterministic guard on top of synthesize.md's own "collapse duplicate-signature entries"
  * instruction — that instruction alone has, verified twice now against the same real case
  * (complete/1, Hlaing Myo Oo), not reliably stopped the model from reporting one physical
@@ -405,7 +430,7 @@ async function recognizeCase(caseRecord, routes) {
   }
 
   let extractedFields = parsed.extracted_fields
-    ? normalizeIdentityConsistency(dedupeInvoiceItems(parsed.extracted_fields))
+    ? normalizeIdentityConsistency(normalizeDelegationLetter(dedupeInvoiceItems(parsed.extracted_fields)))
     : parsed.extracted_fields;
 
   if (extractedFields) {
