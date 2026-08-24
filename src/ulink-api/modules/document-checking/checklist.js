@@ -114,9 +114,19 @@ function checkIncorrectPatientDetails(fields) {
 // mark (has_clinic_stamp_or_doctor_signature, verified against incomplete/jd1/1, Shin Minn
 // Thi, where a handwritten voucher carrying only a generic pharmacy dispensing stamp was
 // rejected under this same reason by the human reviewer).
+//
+// Flags `!== true` (both `false` and `null`), not just `=== false`. This is an authenticity
+// check — "extraction couldn't confirm a legitimate stamp" must not silently pass the same
+// as "confirmed present", or the check is defeated by exactly the uncertainty it exists to
+// catch. Verified against real data before widening it (2026-08-24): re-running against
+// live cases, both known-complete samples (Hlaing Myo Oo, Moe Thida) have this field as
+// `true` on every voucher; the jd1 Shin Minn Thi case — this check's own reference
+// example — came back `null` on all three (not `false` as whenever the comment above was
+// last verified), which silently defeated the check. `!== true` re-catches that case
+// without creating false positives on the two complete samples.
 function checkIncorrectVoucher(fields) {
   if (fields.invoices?.present !== true) return null;
-  const anyMissingStamp = (fields.invoices.items || []).some((item) => item.has_clinic_stamp_or_doctor_signature === false);
+  const anyMissingStamp = (fields.invoices.items || []).some((item) => item.has_clinic_stamp_or_doctor_signature !== true);
   return anyMissingStamp ? ISSUES.INCORRECT_VOUCHER : null;
 }
 
