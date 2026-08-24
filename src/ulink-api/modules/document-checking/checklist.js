@@ -167,16 +167,25 @@ function checkMissingBankInfo(fields) {
 // Fix 2 (2026-08-24): originally fired on bank_account_holder_consistent === false alone,
 // with no way to ever resolve — a submitted delegation_letter doesn't change either name
 // that comparison is over, so replying with one didn't change the outcome (case would loop
-// forever on this same issue). Now also passes when a legible delegation_letter is on file
-// that identity_consistency confirms authorizes the same payee named in
-// bank.bank_account_name — see modules/claim-recognition/prompts/synthesize.md's
-// delegation_letter / delegation_letter_authorizes_payee rules.
+// forever on this same issue). Now passes on presence of a legible delegation_letter alone.
+//
+// DEMO-SCOPED SIMPLIFICATION (2026-08-24): deliberately does NOT also require
+// identity_consistency.delegation_letter_authorizes_payee === true (does the letter's
+// named payee actually match bank.bank_account_name) — that field is still extracted and
+// recorded on the case (see synthesize.md's delegation_letter_authorizes_payee rule,
+// modules/claim-recognition/service.js's normalizeIdentityConsistency), just not required
+// to clear this check. Verified against real data: the payee-name handwriting has proven
+// far less reliable to extract than presence/legibility of the letter itself across
+// repeated real tests (incomplete/jd2, Khin Maung). Real trade-off, not a free
+// simplification: this means ANY legible delegation letter clears the flag, even one that
+// doesn't actually name the bank-account holder as payee — the fraud-prevention half of
+// this check is off for the demo. Re-add `&& identity_consistency.delegation_letter_authorizes_payee
+// === true` to the condition below before relying on this for real claims.
 function checkDelegationLetterRequired(fields) {
   if (fields.identity_consistency?.bank_account_holder_consistent !== false) return null;
 
   const letter = fields.delegation_letter;
-  const authorized =
-    letter?.present === true && letter?.legible === true && fields.identity_consistency?.delegation_letter_authorizes_payee === true;
+  const authorized = letter?.present === true && letter?.legible === true;
 
   return authorized ? null : ISSUES.DELEGATION_LETTER_REQUIRED;
 }
