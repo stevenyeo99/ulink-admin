@@ -163,8 +163,22 @@ function checkMissingBankInfo(fields) {
 // against real sample data (incomplete/jd2, Khin Maung) where the human reviewer sent this
 // exact request as free text. This is a different concept from "Incorrect bank details"
 // above: the bank details here are valid, just for someone other than the claimant.
+//
+// Fix 2 (2026-08-24): originally fired on bank_account_holder_consistent === false alone,
+// with no way to ever resolve — a submitted delegation_letter doesn't change either name
+// that comparison is over, so replying with one didn't change the outcome (case would loop
+// forever on this same issue). Now also passes when a legible delegation_letter is on file
+// that identity_consistency confirms authorizes the same payee named in
+// bank.bank_account_name — see modules/claim-recognition/prompts/synthesize.md's
+// delegation_letter / delegation_letter_authorizes_payee rules.
 function checkDelegationLetterRequired(fields) {
-  return fields.identity_consistency?.bank_account_holder_consistent === false ? ISSUES.DELEGATION_LETTER_REQUIRED : null;
+  if (fields.identity_consistency?.bank_account_holder_consistent !== false) return null;
+
+  const letter = fields.delegation_letter;
+  const authorized =
+    letter?.present === true && letter?.legible === true && fields.identity_consistency?.delegation_letter_authorizes_payee === true;
+
+  return authorized ? null : ISSUES.DELEGATION_LETTER_REQUIRED;
 }
 
 // identity_consistency.patient_name_consistent and .medical_record_provider_consistent are

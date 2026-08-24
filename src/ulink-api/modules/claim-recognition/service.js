@@ -176,6 +176,9 @@ function normalizeIdentityConsistency(fields) {
 
   const canCompareBankHolder = fields.claimant?.claimant_name != null && fields.bank?.bank_account_name != null;
 
+  const canCompareDelegationPayee =
+    fields.delegation_letter?.present === true && fields.delegation_letter?.authorized_payee_name != null && fields.bank?.bank_account_name != null;
+
   return {
     ...fields,
     identity_consistency: {
@@ -183,6 +186,7 @@ function normalizeIdentityConsistency(fields) {
       patient_name_consistent: canComparePatientName ? consistency.patient_name_consistent : null,
       medical_record_provider_consistent: canCompareMedicalRecordProvider ? consistency.medical_record_provider_consistent : null,
       bank_account_holder_consistent: canCompareBankHolder ? consistency.bank_account_holder_consistent : null,
+      delegation_letter_authorizes_payee: canCompareDelegationPayee ? consistency.delegation_letter_authorizes_payee : null,
     },
   };
 }
