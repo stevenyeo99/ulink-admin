@@ -64,6 +64,8 @@ function getTransporter() {
       secure: config.smtp.secure,
       auth: { user: config.smtp.user, pass: config.smtp.password },
       connectionTimeout: config.smtp.connectionTimeoutMs,
+      greetingTimeout: config.smtp.greetingTimeoutMs,
+      socketTimeout: config.smtp.socketTimeoutMs,
     });
   }
   return transporter;

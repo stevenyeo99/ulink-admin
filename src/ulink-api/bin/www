@@ -8,6 +8,7 @@ var app = require('../app');
 var debug = require('debug')('ulink-api:server');
 var http = require('http');
 var logger = require('../utils/logger');
+var { reconcileStaleRuns } = require('../modules/pipeline/reconcile');
 
 /**
  * Get port from environment and store in Express.
@@ -29,6 +30,12 @@ var server = http.createServer(app);
 server.listen(port);
 server.on('error', onError);
 server.on('listening', onListening);
+
+// A PipelineRun still RUNNING at boot is stale — the process that owned it is gone by
+// definition. Fire-and-forget: must not block port binding on a DB round-trip.
+reconcileStaleRuns().catch((err) => {
+  logger.error('Pipeline stale-run reconciliation failed', { message: err.message, stack: err.stack });
+});
 
 /**
  * Normalize a port into a number, string, or false.

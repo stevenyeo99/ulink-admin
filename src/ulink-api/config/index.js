@@ -154,5 +154,20 @@ module.exports = {
     password: process.env.SMTP_PASSWORD,
     fromAddr: process.env.SMTP_FROM || process.env.SMTP_USER,
     connectionTimeoutMs: parseInt(process.env.SMTP_CONNECTION_TIMEOUT_MS, 10) || 30000,
+    // connectionTimeout alone only guards the initial connect — without these, a stall
+    // after connecting (waiting on the server's greeting, or mid-send) falls back to
+    // nodemailer's own defaults (30s / 10min), same gap imap's own block above already
+    // closed with explicit values.
+    greetingTimeoutMs: parseInt(process.env.SMTP_GREETING_TIMEOUT_MS, 10) || 10000,
+    socketTimeoutMs: parseInt(process.env.SMTP_SOCKET_TIMEOUT_MS, 10) || 30000,
+  },
+
+  pipeline: {
+    // Backstop only, not the primary defense — every external call each block makes
+    // already has its own timeout (ias.timeoutMs, imap.*TimeoutMs, smtp.*TimeoutMs,
+    // linkedDocuments.timeoutMs). This exists because sequential orchestration means a
+    // hang anywhere would otherwise stall every step behind it, unlike today where each
+    // block only stalls its own independent cron line.
+    stepTimeoutMs: parseInt(process.env.PIPELINE_STEP_TIMEOUT_MS, 10) || 300000,
   },
 };
