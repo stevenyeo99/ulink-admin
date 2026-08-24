@@ -77,9 +77,21 @@ function checkIncompleteMedicalReport(fields) {
   return fields.medical_record.legible === false ? ISSUES.INCOMPLETE_MEDICAL_REPORT : null;
 }
 
+// Scoped to voucher_type === 'pharmacy' only — the canonical wording (verified verbatim
+// against docs/samples/20260820/Canned response for Sample.docx) specifically says
+// "pharmacy charges", but has_itemized_breakdown's own extraction definition
+// (synthesize.md) is voucher-type-agnostic, so before this scoping the check fired on any
+// voucher type (verified against real data 2026-08-24: a jd2 optical voucher with no
+// itemized frame/lens/exam breakdown was flagged with this pharmacy-specific wording,
+// which is misleading for a non-pharmacy claim). Non-pharmacy vouchers lacking a breakdown
+// are deliberately not flagged under this line until/unless business approves a
+// generalized wording — this isn't a coverage gap being silently accepted, it's staying
+// within what the approved customer-facing text actually says.
 function checkMissingVoucherBreakdown(fields) {
   if (fields.invoices?.present !== true) return null;
-  const anyMissingBreakdown = (fields.invoices.items || []).some((item) => item.has_itemized_breakdown === false);
+  const anyMissingBreakdown = (fields.invoices.items || []).some(
+    (item) => item.voucher_type === 'pharmacy' && item.has_itemized_breakdown === false
+  );
   return anyMissingBreakdown ? ISSUES.MISSING_VOUCHER_BREAKDOWN : null;
 }
 
