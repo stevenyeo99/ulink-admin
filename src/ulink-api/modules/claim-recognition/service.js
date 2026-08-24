@@ -310,14 +310,23 @@ async function applyMedicalRecordFallback(fields, transcriptChunks) {
  * already permits). This stops being valid once a second route exists — at that point
  * the schema needs to vary per candidate route, not be fixed to routes[0].
  */
+// `reason` is ordered before `route`/`confidence` deliberately, not just alphabetically —
+// verified against real data (2026-08-24, incomplete/jd2 with a delegation letter
+// attached): with `route` first, the model would sometimes reason its way to the correct
+// conclusion inside `reason`'s own text ("...Therefore, the correct route is
+// ayas_member_claim") while `route` itself still held an earlier, already-committed wrong
+// value (`fallback`) from before that reasoning happened — a self-correction in the prose
+// that never propagated back to the structured field next to it. Putting `reason` first
+// makes the model write out its evidence/reasoning before it has to commit to `route`, so
+// the committed value is consistent with the conclusion instead of preceding it.
 function buildResponseSchema(routes) {
   return {
     type: 'object',
-    required: ['route', 'confidence', 'reason', 'extracted_fields'],
+    required: ['reason', 'route', 'confidence', 'extracted_fields'],
     properties: {
+      reason: { type: 'string' },
       route: { enum: [...routes.map((r) => r.routeKey), 'fallback'] },
       confidence: { type: 'number' },
-      reason: { type: 'string' },
       extracted_fields: routes[0].extractionSchema,
     },
   };
