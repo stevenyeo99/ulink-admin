@@ -14,6 +14,16 @@ const iasClaimCreationService = require('../ias-claim-creation/service');
 // Fixed order — later steps read the Case.currentStatus earlier steps write, per
 // docs/imp/day1/jobs-registry.md's "Orchestrator" section. Each block keeps its own
 // independent /api/jobs/<name>/run endpoint too; this only consolidates scheduling.
+//
+// email-sender appears twice, deliberately, not a duplicate/typo: it's a shared consumer
+// of ulink_email_tasks queued by THREE different producers, not two — document-checking
+// and member-verification queue theirs earlier in this same run (caught by the first
+// email-sender call), but ias-claim-creation (the last step) queues its own
+// CLAIM_CREATED_NOTIFICATION task on success, after the first email-sender call has
+// already run. Without a second call at the end, that notification would sit PENDING and
+// unsent until the next pipeline run picks it up. Both calls run the exact same
+// idempotent service.run() (queries PENDING tasks, no state of its own) — the second call
+// is simply a no-op on runs where ias-claim-creation didn't queue anything new.
 const STEPS = [
   ['email-intake', emailIntakeService],
   ['claim-recognition', claimRecognitionService],
@@ -22,6 +32,7 @@ const STEPS = [
   ['email-sender', emailSenderService],
   ['ias-claim-preparation', iasClaimPreparationService],
   ['ias-claim-creation', iasClaimCreationService],
+  ['email-sender', emailSenderService],
 ];
 
 function withTimeout(promise, ms, blockName) {

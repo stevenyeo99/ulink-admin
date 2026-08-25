@@ -1,0 +1,63 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ulink-teal: #2fbfcc;
+  --ulink-teal-light: #8ad3d9;
+  --ulink-orange: #f36d21;
+  --ulink-orange-light: #fbb05d;
+  --canvas-bg: #f7f8fa;
+  --ink: #0f172a;
+  --ink-soft: #64748b;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--canvas-bg);
+  color: var(--ink);
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  -webkit-font-smoothing: antialiased;
+}
+
+/* @xyflow/react's base stylesheet (imported in main.tsx, before this file) provides the
+   structural CSS the canvas needs to function — pane sizing, node/edge positioning
+   transforms — not just cosmetics, so it stays imported. Everything visible (node card,
+   edge stroke, controls, minimap) is reskinned on top of it below and in each component's
+   own classes for the Apple/brand look. */
+.react-flow__attribution {
+  display: none;
+}
+
+.react-flow__controls {
+  box-shadow: none;
+}
+
+.react-flow__controls-button {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(8px);
+}
+
+.react-flow__controls-button:hover {
+  background: rgba(255, 255, 255, 0.95);
+}
+
+/* Animated "data flowing" dashes on the edge feeding the currently RUNNING node —
+   PipelineEdge.tsx applies this class only while data.isActive is true. */
+.edge-flowing {
+  stroke-dasharray: 6 5;
+  animation: edge-flow 0.7s linear infinite;
+}
+
+@keyframes edge-flow {
+  to {
+    stroke-dashoffset: -11;
+  }
+}
