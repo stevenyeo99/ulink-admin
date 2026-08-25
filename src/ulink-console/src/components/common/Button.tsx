@@ -1,13 +1,22 @@
-import type { ButtonHTMLAttributes } from 'react';
+import { forwardRef, type ButtonHTMLAttributes } from 'react';
 import clsx from 'clsx';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'ghost';
 }
 
-export function Button({ variant = 'primary', className, children, ...rest }: ButtonProps) {
+// forwardRef is required here, not stylistic — Radix's `asChild` pattern (AlertDialog.Trigger,
+// Dialog.Close, etc.) clones this element and attaches its own ref to it for focus
+// management; a plain function component drops that ref and React warns at runtime
+// ("Function components cannot be given refs"). Confirmed via that exact warning when this
+// was first wired into CaseDetailPage.tsx's AlertDialog.
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
+  { variant = 'primary', className, children, ...rest },
+  ref
+) {
   return (
     <button
+      ref={ref}
       className={clsx(
         'inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition-all duration-200 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60',
         variant === 'primary' &&
@@ -20,4 +29,4 @@ export function Button({ variant = 'primary', className, children, ...rest }: Bu
       {children}
     </button>
   );
-}
+});

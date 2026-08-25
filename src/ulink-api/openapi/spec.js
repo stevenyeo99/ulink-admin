@@ -23,6 +23,7 @@ const spec = swaggerJsdoc({
     tags: [
       { name: 'meta', description: 'Service identity / liveness' },
       { name: 'jobs', description: 'Cron-triggered pipeline block runners' },
+      { name: 'cases', description: 'Human-in-the-loop case review and manual override — real (non-dev) surface, still no auth' },
       { name: 'users', description: 'Scaffold route, not wired to a real module yet' },
       { name: 'dev', description: 'Developer-only tools — dry runs, no persistence, no auth' },
     ],
@@ -32,6 +33,7 @@ const spec = swaggerJsdoc({
     path.join(__dirname, '../routes/users/*.js'),
     path.join(__dirname, '../routes/jobs/index.js'),
     path.join(__dirname, '../routes/jobs/pipeline.js'),
+    path.join(__dirname, '../routes/cases.js'),
     path.join(__dirname, '../routes/dev/*.js'),
   ],
 });

@@ -1,25 +1,34 @@
-import { useState } from 'react';
-import { ReactFlowProvider } from '@xyflow/react';
+import { Routes, Route } from 'react-router-dom';
 import { BackgroundBlobs } from './components/layout/BackgroundBlobs';
-import { TopBar } from './components/layout/TopBar';
-import { WorkflowCanvas, type SelectedNode } from './components/workflow/WorkflowCanvas';
-import { NodeDetailPanel } from './components/panel/NodeDetailPanel';
-import { usePipelineRun } from './hooks/usePipelineRun';
+import { AppNav } from './components/layout/AppNav';
+import { PipelinePage } from './pages/PipelinePage';
+import { CasesPage } from './pages/CasesPage';
+import { CaseDetailPage } from './pages/CaseDetailPage';
+import { useCases } from './hooks/useCases';
+
+const NEEDS_REVIEW_STATUSES = 'INCOMPLETE,MEMBER_REVIEW_REQUIRED';
 
 export function App() {
-  const { run, steps, isRunning, wasSkipped, isRateLimited, trigger } = usePipelineRun();
-  const [selectedNode, setSelectedNode] = useState<SelectedNode | null>(null);
+  // Distinct from CasesPage's own unfiltered fetch (different query key, see useCases.ts) —
+  // this one exists purely to drive the nav badge, which should reflect "how many need a
+  // human," not the total case count.
+  const { data } = useCases(NEEDS_REVIEW_STATUSES);
 
   return (
     <div className="relative flex h-screen flex-col overflow-hidden">
       <BackgroundBlobs />
-      <TopBar run={run} isRunning={isRunning} wasSkipped={wasSkipped} isRateLimited={isRateLimited} onRun={trigger} />
-      <main className="relative flex-1">
-        <ReactFlowProvider>
-          <WorkflowCanvas steps={steps} onSelectNode={setSelectedNode} />
-        </ReactFlowProvider>
-      </main>
-      <NodeDetailPanel selected={selectedNode} onClose={() => setSelectedNode(null)} />
+      <AppNav reviewCount={data?.total} />
+      {/* React Flow (PipelinePage) needs a bounded, non-scrolling container to measure
+          against — it pans/zooms internally rather than relying on page scroll. The case
+          pages are normal scrollable content instead, so each of them opts into its own
+          overflow-y-auto rather than this shared wrapper doing it for everyone. */}
+      <div className="relative flex flex-1 flex-col overflow-hidden">
+        <Routes>
+          <Route path="/" element={<PipelinePage />} />
+          <Route path="/cases" element={<CasesPage />} />
+          <Route path="/cases/:id" element={<CaseDetailPage />} />
+        </Routes>
+      </div>
     </div>
   );
 }

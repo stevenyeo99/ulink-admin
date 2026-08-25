@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getLatestRun, getRun, RateLimitedError, runPipeline } from '../api/pipelineApi';
+import { RateLimitedError } from '../api/client';
+import { getLatestRun, getRun, runPipeline } from '../api/pipelineApi';
 import type { PipelineRun } from '../types/pipeline';
 
 const TERMINAL_STATUSES: PipelineRun['status'][] = ['COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED'];
