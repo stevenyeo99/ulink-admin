@@ -2,6 +2,7 @@ staging plan id = 2147
 
 
 complete/1
+tpa case number = AYA-CL-26029586
 tpa CLAIM number = CL/YGN/AYH/26024449
 POCY no = 00505300000001
 mbr no = 104201500
@@ -16,6 +17,7 @@ Mbr no = 098563700
 
 
 complete/2
+tpa case number = AYA-CL-26031496
 tpa CLAIM number = CL/YGN/AYH/26024418
 POCY no = 00964800000001
 mbr no = 105851400
@@ -31,6 +33,7 @@ Mbr no = 098563800
 
 
 incomplete/jd1
+tpa case number = AYA-CL-26031486
 tpa CLAIM number = CL/YGN/AYH/26024407
 POCY no = 01116300000001
 mbr no = 106403000
@@ -48,6 +51,7 @@ Mbr no = 098563900
 
 
 incomplete/jd2
+tpa case number = AYA-CL-26027251
 tpa CLAIM number = CL/YGN/AYH/26021287
 POCY no = 01092200000001
 mbr no = 106283900
