@@ -2,6 +2,7 @@ const { sequelize, Case, EmailThread, EmailMessage, EmailAttachment, CaseEvent }
 const { getStorageAdapter } = require('../../storage');
 const { getChannelAdapter } = require('../../channels');
 const { matchOrCreateThread } = require('./threadMatcher');
+const { queueDedupedTask } = require('../shared/emailTaskQueue');
 
 const BLOCK_NAME = 'email-intake';
 
@@ -24,6 +25,16 @@ const AWAITING_CUSTOMER_STATUSES = [
   'INCOMPLETE',
   'MEMBER_REVIEW_REQUIRED',
 ];
+
+// Real scenario, not hypothetical (verified 2026-08-24): a customer replies believing
+// they attached the requested document, but the attachment never actually made it into
+// the raw email (a Gmail send race, a slow upload, etc.) — mailparser correctly finds
+// zero attachments, no reprocessing happens (nothing changed), and without this the
+// customer is left silently waiting on a case that will never move. Scoped to INCOMPLETE
+// only for now, not MEMBER_REVIEW_REQUIRED — document-checking's issues[] is a ready-to-
+// reuse array; member-verification's is a single reasonCode-derived line that would need
+// its own rebuild logic. Add MEMBER_REVIEW_REQUIRED here once that's worth doing too.
+const NO_ATTACHMENT_REMINDER_STATUSES = ['INCOMPLETE'];
 
 async function logEvent(transaction, { caseId, prevStatus = null, newStatus, reasonCode = null, message = null }) {
   await CaseEvent.create({ caseId, blockName: BLOCK_NAME, prevStatus, newStatus, reasonCode, message }, { transaction });
@@ -149,9 +160,39 @@ async function persistSubmission(submission) {
           message: `New attachment(s) arrived on a case already at '${prevStatus}' — not an awaiting-customer status, so not auto-reprocessed. Use POST /api/dev/cases/reset to reprocess manually if needed.`,
         });
       }
+    } else if (submission.direction === 'inbound') {
+      await queueNoAttachmentReminder(transaction, caseId, emailMessage.id);
     }
 
     return { caseId, attachmentsStored: storedCount };
+  });
+}
+
+/**
+ * See NO_ATTACHMENT_REMINDER_STATUSES' comment for why this exists. Reuses the exact same
+ * MISSING_DOCUMENTS task type/template/payload shape document-checking already queues —
+ * this is a reminder of the same still-outstanding issues, not a new kind of message.
+ * The one thing that must differ from document-checking's own queuing call:
+ * dedupeKey. document-checking dedupes on the *issue-set signature* (skip re-sending when
+ * nothing's changed) — that would be exactly wrong here, since the issues are expected to
+ * be unchanged; the point is reminding about them anyway. Keying on the triggering inbound
+ * message's own id instead guarantees exactly one reminder per genuinely new no-attachment
+ * reply: persistSubmission already dedupes on EmailMessage.externalId before any of this
+ * runs, so a given raw email can never reach here twice, and each separate qualifying
+ * reply naturally gets its own reminder rather than being suppressed by the last one.
+ */
+async function queueNoAttachmentReminder(transaction, caseId, triggeringMessageId) {
+  const caseRecord = await Case.findByPk(caseId, { attributes: ['currentStatus', 'documentCheckResult'], transaction });
+  if (!NO_ATTACHMENT_REMINDER_STATUSES.includes(caseRecord.currentStatus)) return;
+
+  const issues = caseRecord.documentCheckResult?.issues;
+  if (!Array.isArray(issues) || issues.length === 0) return;
+
+  await queueDedupedTask(transaction, {
+    caseId,
+    taskType: 'MISSING_DOCUMENTS',
+    dedupeKey: triggeringMessageId,
+    payload: { issues },
   });
 }
 

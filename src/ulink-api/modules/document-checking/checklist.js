@@ -167,7 +167,18 @@ function checkMissingBankInfo(fields) {
 // Fix 2 (2026-08-24): originally fired on bank_account_holder_consistent === false alone,
 // with no way to ever resolve — a submitted delegation_letter doesn't change either name
 // that comparison is over, so replying with one didn't change the outcome (case would loop
-// forever on this same issue). Now passes on presence of a legible delegation_letter alone.
+// forever on this same issue). Now passes on presence of a delegation_letter alone.
+//
+// Fix 3 (2026-08-25): dropped the additional `legible === true` requirement this fix
+// originally had. legible is a document-level judgment call (verified against real data,
+// incomplete/jd2, Khin Maung: a delegation letter the model correctly found `present: true`
+// on, with a clearly legible printed template, still came back `legible: false` just because
+// some handwritten signature-block values were individually hard to read) — too unreliable
+// to gate a customer-facing "please resend" request on. This check now only confirms the
+// letter is included at all; delegator_name/delegator_nrc/authorized_payee_name/
+// authorized_payee_contact/legible are still extracted and recorded on the case as-is (see
+// synthesize.md, claim-recognition/service.js's normalizeIdentityConsistency) for the record,
+// just not used to gate this check.
 //
 // DEMO-SCOPED SIMPLIFICATION (2026-08-24): deliberately does NOT also require
 // identity_consistency.delegation_letter_authorizes_payee === true (does the letter's
@@ -175,17 +186,16 @@ function checkMissingBankInfo(fields) {
 // recorded on the case (see synthesize.md's delegation_letter_authorizes_payee rule,
 // modules/claim-recognition/service.js's normalizeIdentityConsistency), just not required
 // to clear this check. Verified against real data: the payee-name handwriting has proven
-// far less reliable to extract than presence/legibility of the letter itself across
-// repeated real tests (incomplete/jd2, Khin Maung). Real trade-off, not a free
-// simplification: this means ANY legible delegation letter clears the flag, even one that
-// doesn't actually name the bank-account holder as payee — the fraud-prevention half of
-// this check is off for the demo. Re-add `&& identity_consistency.delegation_letter_authorizes_payee
-// === true` to the condition below before relying on this for real claims.
+// far less reliable to extract than presence of the letter itself across repeated real
+// tests (incomplete/jd2, Khin Maung). Real trade-off, not a free simplification: this means
+// ANY included delegation letter clears the flag, even one that doesn't actually name the
+// bank-account holder as payee — the fraud-prevention half of this check is off for the
+// demo. Re-add `&& identity_consistency.delegation_letter_authorizes_payee === true` to the
+// condition below before relying on this for real claims.
 function checkDelegationLetterRequired(fields) {
   if (fields.identity_consistency?.bank_account_holder_consistent !== false) return null;
 
-  const letter = fields.delegation_letter;
-  const authorized = letter?.present === true && letter?.legible === true;
+  const authorized = fields.delegation_letter?.present === true;
 
   return authorized ? null : ISSUES.DELEGATION_LETTER_REQUIRED;
 }
