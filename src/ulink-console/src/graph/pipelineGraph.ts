@@ -15,8 +15,8 @@ export interface StaticEdge {
   sourceHandle: 'source-right' | 'source-bottom';
   targetHandle: 'target-left' | 'target-top';
   /** 'main' = the Case.currentStatus chain each job filters on. 'branch' = email-sender's
-   * shared-consumer relationship to its two producers (see jobs-registry.md) — it queues
-   * from both, doesn't gate either. */
+   * shared-consumer relationship to its three producers (see jobs-registry.md) — it queues
+   * from all three, doesn't gate any of them. */
   kind: 'main' | 'branch';
   label?: string;
 }
@@ -43,4 +43,8 @@ export const EDGES: StaticEdge[] = [
   { id: 'e-preparation-creation', source: 'ias-claim-preparation', target: 'ias-claim-creation', sourceHandle: 'source-right', targetHandle: 'target-left', kind: 'main' },
   { id: 'e-checking-sender', source: 'document-checking', target: 'email-sender', sourceHandle: 'source-bottom', targetHandle: 'target-top', kind: 'branch', label: 'on INCOMPLETE' },
   { id: 'e-verification-sender', source: 'member-verification', target: 'email-sender', sourceHandle: 'source-bottom', targetHandle: 'target-top', kind: 'branch', label: 'on VERIFIED / REVIEW' },
+  // email-sender runs a second time after ias-claim-creation (see modules/pipeline/service.js's
+  // STEPS comment) specifically to send CLAIM_CREATED_NOTIFICATION the same run — a third
+  // producer feeding the same shared consumer, same as the two branches above.
+  { id: 'e-creation-sender', source: 'ias-claim-creation', target: 'email-sender', sourceHandle: 'source-bottom', targetHandle: 'target-top', kind: 'branch', label: 'on CLAIM_CREATED' },
 ];
