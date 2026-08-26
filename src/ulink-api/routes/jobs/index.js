@@ -97,8 +97,11 @@ const router = express.Router();
  *       decides the route (against ulink_claim_routes) and extracts fields into a fixed
  *       JSON shape validated by ajv against the matched route's schema. Updates
  *       Case.currentStatus to RECOGNIZED / NOT_RECOGNIZED / MANUAL_REVIEW, sets
- *       Case.recognizedType/extractedFields, and logs a CaseEvent. Same lock/release
- *       pattern as email-intake.
+ *       Case.recognizedType/extractedFields, and logs a CaseEvent. On NOT_RECOGNIZED
+ *       (submission didn't match any enabled claim route), also queues a
+ *       SUBMISSION_NOT_RECOGNIZED EmailTask asking the sender to contact CS directly —
+ *       deliberately not queued for MANUAL_REVIEW, since a route DID match there. Same
+ *       lock/release pattern as email-intake.
  *     requestBody:
  *       required: false
  *       description: No body needed — trigger only.

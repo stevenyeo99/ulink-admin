@@ -54,7 +54,7 @@ export function CaseDetailPage() {
   const { case: caseRecord, events } = data;
 
   return (
-    <div className="mx-auto h-full w-full max-w-3xl overflow-y-auto px-6 py-6">
+    <div className="mx-auto h-full w-full max-w-6xl overflow-y-auto px-6 py-6">
       <button
         onClick={() => navigate('/cases')}
         className="mb-4 inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800"

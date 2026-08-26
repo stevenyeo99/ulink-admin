@@ -8,6 +8,7 @@ const { getEnabledRoutes } = require('./routeCatalog');
 const { preparePageImages } = require('./rasterize');
 const { transcribePage, synthesizeJson } = require('./llmClient');
 const { extractLinkedDocumentUrls, fetchLinkedDocument } = require('./linkedDocuments');
+const { queueDedupedTask } = require('../shared/emailTaskQueue');
 
 const BLOCK_NAME = 'claim-recognition';
 const ajv = new Ajv({ allErrors: true });
@@ -474,6 +475,15 @@ async function recognizeCase(caseRecord, routes) {
   return { caseId: caseRecord.id, outcome, recognizedType, reasonCode, message: parsed.reason, extractedFields };
 }
 
+// Deliberately does NOT fire for MANUAL_REVIEW — that outcome means a route DID match
+// (just at low confidence, or a schema-validation failure), so it's still "our job", just
+// needs a human look, not a "we don't handle this, contact CS" message. dedupeKey is the
+// LLM's own reason text: a genuinely different resubmission (different content) gets its
+// own email; an identical no-op reprocess doesn't re-send.
+async function queueSubmissionNotRecognizedEmail(transaction, caseId, reason) {
+  await queueDedupedTask(transaction, { caseId, taskType: 'SUBMISSION_NOT_RECOGNIZED', dedupeKey: reason || null, payload: {} });
+}
+
 async function persistOutcome(caseRecord, outcome) {
   return sequelize.transaction(async (transaction) => {
     const prevStatus = caseRecord.currentStatus;
@@ -488,6 +498,10 @@ async function persistOutcome(caseRecord, outcome) {
       reasonCode: outcome.reasonCode,
       message: outcome.message,
     });
+
+    if (outcome.outcome === 'NOT_RECOGNIZED') {
+      await queueSubmissionNotRecognizedEmail(transaction, caseRecord.id, outcome.message);
+    }
   });
 }
 

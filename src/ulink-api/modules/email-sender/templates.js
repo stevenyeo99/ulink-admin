@@ -9,10 +9,11 @@
  * not paraphrased, including its own phrasing/quirks. Two of the issue lines it can carry
  * (see modules/document-checking/checklist.js's ISSUES) are NOT from that approved doc —
  * placeholder wording, flag for business sign-off before relying on the exact phrasing.
- * CLAIM_CREATED_NOTIFICATION, MEMBER_VERIFY_ISSUE, and CLAIM_SUBMIT_ISSUE are the same
- * story — no approved canned line exists yet for "your claim number is X", a
- * member-verification mismatch, or a claim submission rejection; composed wording, needs
- * sign-off before real customers see it.
+ * CLAIM_CREATED_NOTIFICATION, MEMBER_VERIFY_ISSUE, CLAIM_SUBMIT_ISSUE, and
+ * SUBMISSION_NOT_RECOGNIZED are the same story — no approved canned line exists yet for
+ * "your claim number is X", a member-verification mismatch, a claim submission rejection,
+ * or an unrecognized submission; composed wording, needs sign-off before real customers see
+ * it.
  *
  * MEMBER_VERIFY_ISSUE is member-verification's own template (its four reasonCodes used to
  * reuse MISSING_DOCUMENTS — same ISSUES.* lines, but framed as "please resubmit documents",
@@ -85,6 +86,21 @@ function renderClaimSubmitIssue() {
   return { subject: null, bodyText: CLAIM_SUBMIT_ISSUE_BODY };
 }
 
+const SUBMISSION_NOT_RECOGNIZED_BODY = `Dear Valued Customer,
+
+Thank you for reaching out. We were unable to recognize this submission as a claim we can process automatically.
+
+Kindly contact our customer service team directly at ayahealthinfo@ayasompo.com or call our hotline during office hours so we can assist you further.
+
+Thank you and Best Regards,`;
+
+// Deliberately generic — this fires when the submission didn't match any known claim
+// route at all (Case.currentStatus=NOT_RECOGNIZED), so there's no specific issue list to
+// give, unlike MISSING_DOCUMENTS/MEMBER_VERIFY_ISSUE.
+function renderSubmissionNotRecognized() {
+  return { subject: null, bodyText: SUBMISSION_NOT_RECOGNIZED_BODY };
+}
+
 function renderClaimCreatedNotification(payload) {
   const claimNo = payload.claimNo || 'N/A';
   return {
@@ -107,6 +123,7 @@ const RENDERERS = {
   CLAIM_CREATED_NOTIFICATION: renderClaimCreatedNotification,
   MEMBER_VERIFY_ISSUE: renderMemberVerifyIssue,
   CLAIM_SUBMIT_ISSUE: renderClaimSubmitIssue,
+  SUBMISSION_NOT_RECOGNIZED: renderSubmissionNotRecognized,
 };
 
 function render(taskType, payload) {

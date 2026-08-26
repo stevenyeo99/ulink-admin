@@ -15,6 +15,7 @@ module.exports = (sequelize, DataTypes) => {
               'CLAIM_CREATED_NOTIFICATION',
               'MEMBER_VERIFY_ISSUE',
               'CLAIM_SUBMIT_ISSUE',
+              'SUBMISSION_NOT_RECOGNIZED',
             ],
           ],
         },
