@@ -9,9 +9,10 @@
  * not paraphrased, including its own phrasing/quirks. Two of the issue lines it can carry
  * (see modules/document-checking/checklist.js's ISSUES) are NOT from that approved doc —
  * placeholder wording, flag for business sign-off before relying on the exact phrasing.
- * CLAIM_CREATED_NOTIFICATION and MEMBER_VERIFY_ISSUE are the same story — no approved canned
- * line exists yet for "your claim number is X" or for a member-verification mismatch;
- * composed wording, needs sign-off before real customers see it.
+ * CLAIM_CREATED_NOTIFICATION, MEMBER_VERIFY_ISSUE, and CLAIM_SUBMIT_ISSUE are the same
+ * story — no approved canned line exists yet for "your claim number is X", a
+ * member-verification mismatch, or a claim submission rejection; composed wording, needs
+ * sign-off before real customers see it.
  *
  * MEMBER_VERIFY_ISSUE is member-verification's own template (its four reasonCodes used to
  * reuse MISSING_DOCUMENTS — same ISSUES.* lines, but framed as "please resubmit documents",
@@ -68,6 +69,22 @@ function renderDocumentCompleteAck() {
   return { subject: null, bodyText: DOCUMENT_COMPLETE_ACK_BODY };
 }
 
+const CLAIM_SUBMIT_ISSUE_BODY = `Dear Valued Customer,
+
+We encountered an issue while submitting your claim and are unable to proceed automatically at this time. Our team will review your case and follow up with you directly.
+
+If you have any questions, kindly contact us at ayahealthinfo@ayasompo.com or call our hotline during office hours.
+
+Thank you and Best Regards,`;
+
+// Deliberately generic — no raw IAS error text (e.g. "Claim already exists") to the
+// customer; that detail stays internal (Case.iasClaimResult / CaseEvent.message, per
+// ias-claim-creation/service.js) for admin follow-up, same as every other outcome here never
+// exposing raw system detail to a customer.
+function renderClaimSubmitIssue() {
+  return { subject: null, bodyText: CLAIM_SUBMIT_ISSUE_BODY };
+}
+
 function renderClaimCreatedNotification(payload) {
   const claimNo = payload.claimNo || 'N/A';
   return {
@@ -89,6 +106,7 @@ const RENDERERS = {
   DOCUMENT_COMPLETE_ACK: renderDocumentCompleteAck,
   CLAIM_CREATED_NOTIFICATION: renderClaimCreatedNotification,
   MEMBER_VERIFY_ISSUE: renderMemberVerifyIssue,
+  CLAIM_SUBMIT_ISSUE: renderClaimSubmitIssue,
 };
 
 function render(taskType, payload) {

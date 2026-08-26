@@ -8,7 +8,15 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: false,
         validate: {
-          isIn: [['MISSING_DOCUMENTS', 'DOCUMENT_COMPLETE_ACK', 'CLAIM_CREATED_NOTIFICATION', 'MEMBER_VERIFY_ISSUE']],
+          isIn: [
+            [
+              'MISSING_DOCUMENTS',
+              'DOCUMENT_COMPLETE_ACK',
+              'CLAIM_CREATED_NOTIFICATION',
+              'MEMBER_VERIFY_ISSUE',
+              'CLAIM_SUBMIT_ISSUE',
+            ],
+          ],
         },
       },
       status: {
