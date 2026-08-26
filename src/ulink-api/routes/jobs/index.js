@@ -426,9 +426,11 @@ const router = express.Router();
  *       EmailTask (a new, distinct customer email — DOCUMENT_COMPLETE_ACK at
  *       MEMBER_VERIFIED is unrelated and unaffected, both are sent). On a real business
  *       rejection from IAS (success:false with a reason, e.g. "Claim already exists"), sets
- *       Case.currentStatus=CLAIM_SUBMIT_FAILED and stores the error — this is NOT retried,
- *       since retrying a definitive rejection would never resolve it; needs manual
- *       follow-up. A technical failure (timeout, network error, missing iasClaimPayload)
+ *       Case.currentStatus=CLAIM_SUBMIT_FAILED, stores the error, and queues a
+ *       CLAIM_SUBMIT_ISSUE EmailTask notifying the customer (generic wording — the raw IAS
+ *       error stays internal, in Case.iasClaimResult/the CaseEvent, for admin follow-up) —
+ *       this is NOT retried, since retrying a definitive rejection would never resolve it;
+ *       needs manual follow-up. A technical failure (timeout, network error, missing iasClaimPayload)
  *       leaves the case at CLAIM_PAYLOAD_PREPARED for retry on the next run — this IS
  *       retried, same pattern as the other jobs. Same lock/release pattern as the other
  *       jobs. Non-idempotent, real external side effect — unlike every other job here,

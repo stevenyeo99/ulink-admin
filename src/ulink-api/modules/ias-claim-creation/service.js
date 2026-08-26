@@ -38,6 +38,18 @@ async function queueClaimCreatedNotification(transaction, caseId, claimNo) {
   });
 }
 
+// dedupeKey on the error text: a case retried after a genuinely different rejection reason
+// gets a fresh email; the exact same rejection re-surfacing (shouldn't happen, since
+// CLAIM_SUBMIT_FAILED isn't retried — defensive only) won't double-send.
+async function queueClaimSubmitIssueEmail(transaction, caseId, errorMessage) {
+  await queueDedupedTask(transaction, {
+    caseId,
+    taskType: 'CLAIM_SUBMIT_ISSUE',
+    dedupeKey: errorMessage || null,
+    payload: {},
+  });
+}
+
 async function persistOutcome(caseRecord, outcome) {
   return sequelize.transaction(async (transaction) => {
     const prevStatus = caseRecord.currentStatus;
@@ -59,8 +71,10 @@ async function persistOutcome(caseRecord, outcome) {
     } else {
       // A real business rejection from IAS (e.g. "Claim already exists"), not a technical
       // failure — do NOT retry (retrying "already exists" forever would never resolve).
-      // Case sits at CLAIM_SUBMIT_FAILED for manual follow-up; no email queued (no
-      // confirmed requirement for one on this path yet).
+      // Case sits at CLAIM_SUBMIT_FAILED for manual follow-up, and the customer is notified
+      // via CLAIM_SUBMIT_ISSUE (generic wording — the raw IAS error stays internal, in
+      // iasClaimResult/the CaseEvent below, for admin follow-up).
+      const errorMessage = response.error || 'IAS rejected the claim submission';
       await Case.update(
         { currentStatus: 'CLAIM_SUBMIT_FAILED', iasClaimResult: response },
         { where: { id: caseRecord.id }, transaction }
@@ -70,8 +84,9 @@ async function persistOutcome(caseRecord, outcome) {
         prevStatus,
         newStatus: 'CLAIM_SUBMIT_FAILED',
         reasonCode: 'IAS_REJECTED',
-        message: response.error || 'IAS rejected the claim submission',
+        message: errorMessage,
       });
+      await queueClaimSubmitIssueEmail(transaction, caseRecord.id, errorMessage);
     }
   });
 }
