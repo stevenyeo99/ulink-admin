@@ -35,4 +35,16 @@ function isoToMMDDYYYY(isoDate) {
   return `${mm}${dd}${yyyy}`;
 }
 
-module.exports = { toYYYYMMDD, iasDateToYYYYMMDD, isoToMMDDYYYY };
+// For a JS Date/timestamp (e.g. Case.createdAt) rather than an ISO date string — same
+// MMDDYYYY, date-only, no time component.
+function dateToMMDDYYYY(date) {
+  if (!date) return null;
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return null;
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const yyyy = String(d.getFullYear());
+  return `${mm}${dd}${yyyy}`;
+}
+
+module.exports = { toYYYYMMDD, iasDateToYYYYMMDD, isoToMMDDYYYY, dateToMMDDYYYY };

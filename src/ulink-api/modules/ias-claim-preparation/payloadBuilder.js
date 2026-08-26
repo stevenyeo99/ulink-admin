@@ -1,4 +1,4 @@
-const { isoToMMDDYYYY } = require('../shared/iasDates');
+const { isoToMMDDYYYY, dateToMMDDYYYY } = require('../shared/iasDates');
 
 /**
  * Pure — no I/O. Builds the CL_CLAIM_API request shape (verified against the real sample
@@ -27,7 +27,7 @@ const { isoToMMDDYYYY } = require('../shared/iasDates');
  * fabrication incident, not reintroduced — see db/migrations/20260822200000-simplify-
  * invoice-items.js), so a different visit date per voucher isn't something this can express.
  */
-function buildPayload({ extractedFields, iasMemberInfoResponse, route, diagnosis, lines }) {
+function buildPayload({ extractedFields, iasMemberInfoResponse, route, diagnosis, lines, receivedAt }) {
   const member = iasMemberInfoResponse?.payload?.member || {};
   const memberPlan = iasMemberInfoResponse?.payload?.memberPlans?.[0] || {};
   const planId = memberPlan?.plan?.PLAN_ID ?? null;
@@ -48,7 +48,10 @@ function buildPayload({ extractedFields, iasMemberInfoResponse, route, diagnosis
   const items = lines.map(({ subtotal, benefit }) => ({
     PlanId: planId,
     ClaimType: route?.claimType ?? null,
-    ReceivedDate: isoToMMDDYYYY(claim.date_submitted),
+    // The case's own creation timestamp (when its originating email was ingested), not
+    // claim.date_submitted — that's an OCR-extracted field, not always present or reliable,
+    // and "date received" for a TPA should be a system-recorded fact, not self-reported.
+    ReceivedDate: dateToMMDDYYYY(receivedAt),
     IncurDateFrom: isoToMMDDYYYY(claim.appointment_date),
     IncurDateTo: isoToMMDDYYYY(claim.appointment_date),
     SymptomDate: isoToMMDDYYYY(claim.accident_date),

@@ -58,7 +58,14 @@ async function checkCase(caseRecord) {
     lines.push({ subtotal: extractedFields.claim?.total_claim_amount, benefit });
   }
 
-  const payload = buildPayload({ extractedFields, iasMemberInfoResponse, route, diagnosis, lines });
+  const payload = buildPayload({
+    extractedFields,
+    iasMemberInfoResponse,
+    route,
+    diagnosis,
+    lines,
+    receivedAt: caseRecord.createdAt,
+  });
 
   return { caseId: caseRecord.id, payload, diagnosis, lines };
 }
