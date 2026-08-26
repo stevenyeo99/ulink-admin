@@ -192,6 +192,57 @@ function normalizeIdentityConsistency(fields) {
   };
 }
 
+// U/Daw/Ko/Ma/Mg(Maung)/Saya/Sayama are virtually always titles on these forms, never a
+// literal given name on their own — consistent with real data throughout this project's
+// samples ("Mg Kaung Nyan Lynn", "Daw Yu Wah Khaing", etc.). English titles included for the
+// same reason. One leading token only, case-insensitive.
+const NAME_HONORIFIC_PATTERN = /^(u|daw|ko|ma|mg|maung|saya|sayama|dr|mr|mrs|ms)\.?\s+/i;
+
+function stripHonorific(name) {
+  const match = String(name).match(NAME_HONORIFIC_PATTERN);
+  const honorific = match ? match[1].toLowerCase() : null;
+  const rest = String(name)
+    .replace(NAME_HONORIFIC_PATTERN, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+  return { honorific, rest };
+}
+
+/**
+ * Deterministic backstop, same reasoning as normalizeIdentityConsistency above: the LLM's
+ * own bank_account_holder_consistent judgment can come back false purely because of a
+ * Burmese honorific prefix on one side (e.g. claimant "Yu Wah Khaing" vs bank account "Daw
+ * Yu Wah Khaing" — same person, "Daw" is just a title, not a different payee) — verified
+ * against real data 2026-08-26, demo/complete/1 (Yu Wah Khaing), where this false positive
+ * wrongly triggered checkDelegationLetterRequired. Only overrides a real `false` to `true`
+ * when the two names become string-IDENTICAL after stripping one leading honorific from
+ * each side, AND the two sides don't carry two DIFFERENT honorifics (e.g. "U Thant" vs "Daw
+ * Thant" — a differing title on both sides is a real signal of an actually different person,
+ * e.g. a spouse, not just title noise, so that combination is deliberately left alone). A
+ * targeted equivalence rule, not a loose/fuzzy match — can't paper over the
+ * actually-different-payee case checkDelegationLetterRequired exists to catch. Never touches
+ * `true` or `null` — `null` already means "can't determine" from normalizeIdentityConsistency
+ * above and must stay that way.
+ */
+function normalizeBankAccountHolderConsistency(fields) {
+  if (fields.identity_consistency?.bank_account_holder_consistent !== false) return fields;
+
+  const claimantName = fields.claimant?.claimant_name;
+  const bankAccountName = fields.bank?.bank_account_name;
+  if (claimantName == null || bankAccountName == null) return fields;
+
+  const claimant = stripHonorific(claimantName);
+  const bankHolder = stripHonorific(bankAccountName);
+  if (claimant.rest === '' || claimant.rest !== bankHolder.rest) return fields;
+  if (claimant.honorific && bankHolder.honorific && claimant.honorific !== bankHolder.honorific) return fields;
+
+  return {
+    ...fields,
+    identity_consistency: { ...fields.identity_consistency, bank_account_holder_consistent: true },
+  };
+}
+
 /**
  * Deterministic backstop, same reasoning as normalizeIdentityConsistency above: verified
  * against real data (2026-08-24, incomplete/jd2 with a delegation letter attached) that the
@@ -400,8 +451,6 @@ async function applyMedicalRecordFallback(fields, transcriptChunks) {
   }
 
   if (presentButIllegible) {
-    console.error('DEBUG illegible-rescue fallback result:', JSON.stringify(fallback));
-    console.error('DEBUG illegible-rescue userText was:', userText);
     const improved = fallback?.present === true && fallback?.legible === true && fallback?.patient_name;
     return improved ? { ...fields, medical_record: fallback } : fields;
   }
@@ -511,7 +560,7 @@ async function recognizeCase(caseRecord, routes) {
   }
 
   let extractedFields = parsed.extracted_fields
-    ? normalizeIdentityConsistency(normalizeDelegationLetter(dedupeInvoiceItems(parsed.extracted_fields)))
+    ? normalizeBankAccountHolderConsistency(normalizeIdentityConsistency(normalizeDelegationLetter(dedupeInvoiceItems(parsed.extracted_fields))))
     : parsed.extracted_fields;
 
   if (extractedFields) {
