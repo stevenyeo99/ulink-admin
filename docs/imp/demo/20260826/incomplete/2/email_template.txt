@@ -1,0 +1,46 @@
+Subject = ULINK // 318356 // AYA SOMPO - Reimbursement Claim Submission [ATOM MYANMAR LIMITED] [AYA/YGN/AYH/25000660] [Hsu Yee Mon] //
+
+Body = 
+
+Dear Team,
+
+We'd like to inform you that a claim is intimated for [AYA/YGN/AYH/25000660] with below information.
+Claimant Name	Hsu Yee Mon
+Claimant Date of Birth	11/07/1989
+Claimant Gender	
+Claimant NRC no or Passport no	7/PAMANA(N)271984
+Relationship with main policy holder	
+Claimant Member Reference ID	
+Phone Number	09123456
+Email Address	testing.com.mm
+NRC no or Passport no	184676966
+Product Name	AYA Health Insurance (non motor)
+Type of Plan	CAFETERIA PLAN
+Policy Holder Name	ATOM MYANMAR LIMITED
+Policy Number	AYA/YGN/AYH/25000660
+Date of Birth (main policy holder)	
+Gender of the main policy holder	
+Policy Holder Member Reference ID	C000075782
+Inception Date	12/14/2025
+Effective date	12/14/2025
+Expiry Date	12/14/2026
+Termination Date	12/14/2026
+Submitted Date	8/25/2026 3:59 AM
+Claim No	CL/YGN/AYH/26027051
+Case No	AYA-CL-26034787
+Claim Benefit Type	Reimbursement
+Type of patient	Outpatient
+Appointment Date / Visit Date	08/10/2026
+Doctor Name	Dr Hein Tay Zar Soe
+Diagnosis	I am breast cancer and kidney cancer patient; doctor gave instructions to meet every 3 months and i have to test some items to show, to follow up during the doctor appointment, so here is the test to see the doctor, so i attached the previous history when he, doctor, asked me to come back with the results 3 months later , i will meet with the doctor with the result on 26 August
+Hospital Name	Moe Kaung Yadanar Hospital
+Estimate Amount	321,000
+Hospitalization Day	
+Treatment is Outside	False
+Bank Name	CB bank
+Bank Address	CB bank ( Sule Branch )
+Bank Account Name	Hsu Yee Mon
+Bank Account No	012345678910
+AYASOMPO Health Plan	AYA HEALTH CAFETERIA PLAN
+Type of Plan	CAFETERIA PLAN
+SI Amount	165,000,000
