@@ -328,36 +328,82 @@ function findMedicalRecordFallbackChunk(transcriptChunks, headingIndex) {
 }
 
 /**
- * Fallback for a confirmed false negative: the main synthesis call missed a medical record
- * that was genuinely present (verified against real data — complete/1, Hlaing Myo Oo — a
- * page explicitly headed "Medical Record Photos", with a legible clinic letterhead and
- * doctor's stamp, still came back medical_record.present: false). Only triggers when the
- * main result says absent AND the page transcripts themselves contain this template's own
- * fixed label text — a deterministic contradiction, not a guess. Re-asks with a single,
- * narrow, text-only call scoped to just the relevant already-computed transcript chunk
- * (cheap — no re-rasterization, no new vision call — and considerably more reliable than the
- * original whole-case merge, per synthesizeJson's own doc comment). If the fallback still
- * can't confirm a real record, the original (absent) result is left as-is — no escalation
- * path; the existing INCOMPLETE/resubmit-request flow is the safety net, not a new
- * manual-review state (confirmed: no manual review at this stage of the project).
+ * Every chunk belonging to the same originating attachment as the heading chunk (own-page
+ * chunks matching the same filename, plus any linked chunk for that filename), in transcript
+ * order — unlike findMedicalRecordFallbackChunk's single-chunk pick, used by the
+ * present-but-illegible rescue below because the missing identity info can genuinely sit on
+ * a different, clearly legible page of the very same attachment rather than the one page the
+ * heading itself points at. Verified against real data 2026-08-26, demo/complete/1 (Yu Wah
+ * Khaing): the clinical note photo directly under "Medical Records" is illegible on its own,
+ * but the very next page in that same attachment is a clean, legible patient-registration
+ * page carrying the patient's name — the main synthesis call had this same page in its
+ * context already and still didn't use it, so a second, narrower, name-focused ask over just
+ * this attachment's own pages gets a fair second look without the rest of the claim form's
+ * unrelated content competing for attention.
+ */
+function gatherAttachmentChunks(transcriptChunks, headingIndex) {
+  const headingChunk = transcriptChunks[headingIndex];
+  const originFilename = ownPageChunkOrigin(headingChunk) || linkedChunkOrigin(headingChunk);
+  if (!originFilename) return [headingChunk];
+
+  return transcriptChunks.filter(
+    (chunk) => ownPageChunkOrigin(chunk) === originFilename || linkedChunkOrigin(chunk) === originFilename
+  );
+}
+
+/**
+ * Two rescue paths, both re-asking with a single, narrow, text-only call (cheap — no
+ * re-rasterization, no new vision call) scoped to already-computed transcript chunks, not the
+ * whole-case merge the main synthesis call already did:
+ *
+ * 1. Missing entirely (medical_record.present !== true): fallback for a confirmed false
+ *    negative — the main call missed a medical record that was genuinely present (verified
+ *    against real data — complete/1, Hlaing Myo Oo — a page explicitly headed "Medical Record
+ *    Photos", with a legible clinic letterhead and doctor's stamp, still came back
+ *    present: false). Scoped to the one chunk findMedicalRecordFallbackChunk picks.
+ *
+ * 2. Present but illegible (medical_record.legible === false): same idea, different gap —
+ *    the record was found but a detail (typically patient_name) couldn't be read from the one
+ *    page the model focused on, even though a companion page of the same attachment has it
+ *    (see gatherAttachmentChunks above). Only accepted if it actually improves on the
+ *    original — confirms legible AND finds a patient_name — otherwise the original illegible
+ *    result is kept rather than risking a same-or-worse re-ask silently overwriting it.
+ *
+ * Both only trigger when the page transcripts themselves contain this template's own fixed
+ * label text — a deterministic contradiction/gap, not a guess. If a rescue still can't
+ * confirm a real, legible record, the original result is left as-is — no escalation path;
+ * the existing INCOMPLETE/resubmit-request flow is the safety net, not a new manual-review
+ * state (confirmed: no manual review at this stage of the project).
  */
 async function applyMedicalRecordFallback(fields, transcriptChunks) {
-  if (fields.medical_record?.present === true) return fields;
+  const record = fields.medical_record || {};
+  const missingEntirely = record.present !== true;
+  const presentButIllegible = record.present === true && record.legible === false;
+  if (!missingEntirely && !presentButIllegible) return fields;
 
   const headingIndex = transcriptChunks.findIndex((chunk) => MEDICAL_RECORD_HEADING_PATTERN.test(chunk));
   if (headingIndex === -1) return fields;
 
-  const targetChunk = findMedicalRecordFallbackChunk(transcriptChunks, headingIndex);
+  const userText = presentButIllegible
+    ? gatherAttachmentChunks(transcriptChunks, headingIndex).join('\n\n')
+    : findMedicalRecordFallbackChunk(transcriptChunks, headingIndex);
 
   let fallback;
   try {
     fallback = await synthesizeJson({
       systemPrompt: MEDICAL_RECORD_FALLBACK_PROMPT,
-      userText: targetChunk,
+      userText,
       jsonSchema: MEDICAL_RECORD_FALLBACK_SCHEMA,
     });
   } catch {
     return fields; // fallback call itself failing is no worse than the status quo
+  }
+
+  if (presentButIllegible) {
+    console.error('DEBUG illegible-rescue fallback result:', JSON.stringify(fallback));
+    console.error('DEBUG illegible-rescue userText was:', userText);
+    const improved = fallback?.present === true && fallback?.legible === true && fallback?.patient_name;
+    return improved ? { ...fields, medical_record: fallback } : fields;
   }
 
   if (fallback?.present !== true) return fields;

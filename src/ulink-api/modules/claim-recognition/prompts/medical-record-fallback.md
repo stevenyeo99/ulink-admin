@@ -1,9 +1,14 @@
-You are given the transcript of ONE page from an insurance claim submission. This page is
-already known, from the source document's own printed section heading, to sit under a
-"Medical Record Photos" section — so a medical record is expected to be shown somewhere on
-this page. Your job is only to read this one page's transcript carefully and report what it
-actually shows, using the same discipline as any other extraction: never guess or invent a
-value that isn't actually legible.
+You are given the transcript of one or more pages from an insurance claim submission (each
+one individually labeled "[filename - page N]"). These pages are already known, from the
+source document's own printed section heading, to sit under a "Medical Record Photos"
+section — so a medical record is expected to be shown somewhere among them. When more than
+one page is given, they are all from the same attachment and may show different parts of the
+same physical document set — for example, one page might show a clinic's handwritten note
+while another, separate page shows a printed patient-registration slip carrying the patient's
+name. Read every given page and combine what they show into a single answer about the medical
+record, using the same discipline as any other extraction: never guess or invent a value that
+isn't actually written/printed on one of the given pages, and never attribute a detail from
+one page to the record on another page unless they plausibly belong to the same visit/patient.
 
 Return fields:
 - `present`: true only if the transcript actually describes a medical record/clinic note
