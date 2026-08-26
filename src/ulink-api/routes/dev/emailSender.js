@@ -28,7 +28,7 @@ const router = express.Router();
  *                 caseId: { type: string }
  *                 dryRun: { type: boolean }
  *                 taskId: { type: string }
- *                 taskType: { type: string, enum: [MISSING_DOCUMENTS, DOCUMENT_COMPLETE_ACK] }
+ *                 taskType: { type: string, enum: [MISSING_DOCUMENTS, DOCUMENT_COMPLETE_ACK, CLAIM_CREATED_NOTIFICATION, MEMBER_VERIFY_ISSUE] }
  *                 subject: { type: string, nullable: true }
  *                 bodyText: { type: string }
  *       404:

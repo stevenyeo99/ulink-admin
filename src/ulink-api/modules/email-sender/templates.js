@@ -7,13 +7,17 @@
  * MISSING_DOCUMENTS's wording is copied verbatim from docs/samples/20260820/Canned
  * response for Sample.docx (the ULINK-approved canned responses) where a line has one —
  * not paraphrased, including its own phrasing/quirks. Two of the issue lines it can carry
- * (see modules/member-verification/service.js's REASON_CODE_TO_ISSUE) are NOT from that
- * approved doc — MEMBER_NOT_VERIFIED and POLICY_NOT_ACTIVE_ON_TREATMENT_DATE, defined in
- * modules/document-checking/checklist.js, are placeholder wording composed for this feature
- * (no approved canned line exists for "member not found"/"coverage inactive" yet) — flag
- * for business sign-off before relying on the exact phrasing. CLAIM_CREATED_NOTIFICATION is
- * the same story — no approved canned line exists for "your claim number is X" either;
+ * (see modules/document-checking/checklist.js's ISSUES) are NOT from that approved doc —
+ * placeholder wording, flag for business sign-off before relying on the exact phrasing.
+ * CLAIM_CREATED_NOTIFICATION and MEMBER_VERIFY_ISSUE are the same story — no approved canned
+ * line exists yet for "your claim number is X" or for a member-verification mismatch;
  * composed wording, needs sign-off before real customers see it.
+ *
+ * MEMBER_VERIFY_ISSUE is member-verification's own template (its four reasonCodes used to
+ * reuse MISSING_DOCUMENTS — same ISSUES.* lines, but framed as "please resubmit documents",
+ * which is wrong for a details-mismatch/not-found outcome where nothing is actually
+ * missing). Same issue-line source of truth (document-checking/checklist.js's ISSUES), only
+ * the surrounding intro/footer differs.
  */
 
 const MISSING_DOCUMENTS_INTRO = `Dear Valued Customer,
@@ -45,6 +49,21 @@ function renderMissingDocuments(payload) {
   return { subject: null, bodyText: `${MISSING_DOCUMENTS_INTRO}${bullets}\n${MISSING_DOCUMENTS_FOOTER}` };
 }
 
+const MEMBER_VERIFY_ISSUE_INTRO = `Dear Valued Customer,
+
+Thank you for your claim submission. We were unable to verify the following against our records:
+`;
+
+const MEMBER_VERIFY_ISSUE_FOOTER = `
+Please reply to this email with the corrected information so we can proceed with your claim. Should you have any questions, kindly contact us at ayahealthinfo@ayasompo.com or call our hotline during office hours.
+Thank you & Best Regards,`;
+
+function renderMemberVerifyIssue(payload) {
+  const issues = payload.issues || [];
+  const bullets = issues.map((issue) => `- ${issue}`).join('\n');
+  return { subject: null, bodyText: `${MEMBER_VERIFY_ISSUE_INTRO}${bullets}\n${MEMBER_VERIFY_ISSUE_FOOTER}` };
+}
+
 function renderDocumentCompleteAck() {
   return { subject: null, bodyText: DOCUMENT_COMPLETE_ACK_BODY };
 }
@@ -69,6 +88,7 @@ const RENDERERS = {
   MISSING_DOCUMENTS: renderMissingDocuments,
   DOCUMENT_COMPLETE_ACK: renderDocumentCompleteAck,
   CLAIM_CREATED_NOTIFICATION: renderClaimCreatedNotification,
+  MEMBER_VERIFY_ISSUE: renderMemberVerifyIssue,
 };
 
 function render(taskType, payload) {

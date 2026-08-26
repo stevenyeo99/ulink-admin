@@ -40,12 +40,13 @@ async function queueCompleteAckEmail(transaction, caseId) {
 }
 
 /**
- * Maps each MEMBER_REVIEW_REQUIRED reasonCode to the ISSUES line it queues in the same
- * customer-facing MISSING_DOCUMENTS email/task document-checking already uses — no
- * separate internal-review path right now (a deliberate simplification: all four
- * reasonCodes get a customer email for now, not just BANK_DETAILS_MISMATCH). See
- * checklist.js's header comment for which of these lines are approved canned wording vs.
- * placeholder.
+ * Maps each MEMBER_REVIEW_REQUIRED reasonCode to the ISSUES line it queues on its own
+ * MEMBER_VERIFY_ISSUE email/task (email-sender/templates.js) — not document-checking's
+ * MISSING_DOCUMENTS, which frames things as "please resubmit documents" and doesn't fit a
+ * details-mismatch/not-found outcome. No separate internal-review path right now (a
+ * deliberate simplification: all four reasonCodes get a customer email for now, not just
+ * BANK_DETAILS_MISMATCH). See checklist.js's header comment for which of these lines are
+ * approved canned wording vs. placeholder.
  */
 const REASON_CODE_TO_ISSUE = {
   MEMBER_NOT_FOUND: ISSUES.MEMBER_NOT_VERIFIED,
@@ -58,7 +59,7 @@ async function queueReviewRequiredEmail(transaction, caseId, reasonCode) {
   const issue = REASON_CODE_TO_ISSUE[reasonCode];
   await queueDedupedTask(transaction, {
     caseId,
-    taskType: 'MISSING_DOCUMENTS',
+    taskType: 'MEMBER_VERIFY_ISSUE',
     dedupeKey: issue,
     payload: { issues: [issue] },
   });

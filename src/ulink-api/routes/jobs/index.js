@@ -290,7 +290,7 @@ const router = express.Router();
  *       docs/imp/day1/jobs-registry.md), and logs a CaseEvent. On MEMBER_VERIFIED, queues a
  *       DOCUMENT_COMPLETE_ACK EmailTask. On MEMBER_REVIEW_REQUIRED (any reasonCode —
  *       MEMBER_NOT_FOUND, COVERAGE_NOT_ACTIVE, MEMBER_DETAILS_MISMATCH, or
- *       BANK_DETAILS_MISMATCH), queues a customer-facing MISSING_DOCUMENTS EmailTask
+ *       BANK_DETAILS_MISMATCH), queues a customer-facing MEMBER_VERIFY_ISSUE EmailTask
  *       flagging the one line that reasonCode maps to (modules/member-verification/service.js's
  *       REASON_CODE_TO_ISSUE) — deduped so a re-check finding the same outcome doesn't
  *       re-queue. A technical failure (IAS timeout/error, missing required fields) leaves the
