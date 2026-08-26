@@ -24,9 +24,17 @@ async function checkCase(caseRecord) {
   }
 
   const memberNrc = extractedFields.claimant?.claimant_nrc_passport;
-  const meplEffDate = extractedFields.claim?.accident_date?.replaceAll('-', '');
+  // accident_date is only populated for an actual accident/injury claim — an illness
+  // reimbursement claim (the common case, e.g. an outpatient visit for a cold) genuinely has
+  // no accident, so it's null there and appointment_date (the real visit date) is what
+  // exists instead. Falling back to it here is what unblocks those cases from being stuck at
+  // DOCUMENT_CHECKED forever (confirmed 2026-08-26, case 3db18419-6e79-4cb4-b45e-82393926e80c
+  // — a routine outpatient claim, never had an accident_date to begin with). An
+  // accident/injury claim still prefers its own accident_date, unchanged.
+  const treatmentDate = extractedFields.claim?.accident_date || extractedFields.claim?.appointment_date;
+  const meplEffDate = treatmentDate?.replaceAll('-', '');
   if (!memberNrc || !meplEffDate) {
-    throw new Error(`Case ${caseRecord.id} is missing claimant_nrc_passport or accident_date needed for IAS lookup`);
+    throw new Error(`Case ${caseRecord.id} is missing claimant_nrc_passport or accident_date/appointment_date needed for IAS lookup`);
   }
 
   const iasResponse = await getMemberInfo({ memberNrc, meplEffDate });

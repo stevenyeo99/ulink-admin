@@ -62,7 +62,11 @@ function evaluate(extractedFields, iasResponse) {
   const plan = memberPlans[0] || null;
   const policy = policies[0] || null;
 
-  const treatmentDate = toYYYYMMDD(extractedFields.claim?.accident_date);
+  // Same accident_date -> appointment_date fallback as service.js's IAS lookup key (see its
+  // comment) — an illness claim has no accident_date, so the coverage-active check must fall
+  // back to the actual visit date too, or it would wrongly treat "no accident" as "can't
+  // determine coverage" (checkCoverageActive returns null when its date arg is falsy).
+  const treatmentDate = toYYYYMMDD(extractedFields.claim?.accident_date || extractedFields.claim?.appointment_date);
   const coverageActive = checkCoverageActive(plan, treatmentDate);
 
   const hard = {
