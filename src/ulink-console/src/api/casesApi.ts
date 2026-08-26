@@ -1,5 +1,5 @@
 import { API_BASE_URL, request } from './client';
-import type { GetCaseResponse, ListCasesResponse, OverrideCaseResponse } from '../types/case';
+import type { GetCaseResponse, ListCasesResponse, OverrideCaseResponse, ResetCaseResponse } from '../types/case';
 
 export function listCases(status?: string): Promise<ListCasesResponse> {
   const query = status ? `?status=${encodeURIComponent(status)}` : '';
@@ -15,6 +15,12 @@ export function overrideCase(id: string, reason: string, operatorName: string): 
     method: 'POST',
     body: JSON.stringify({ reason, operatorName }),
   });
+}
+
+// Always rewinds to READY_FOR_DOCUMENT_READING (the only target the console exposes) — see
+// casesController.js::resetCase. Fails with 409 if the case already has a real IAS claimNo.
+export function resetCase(id: string): Promise<ResetCaseResponse> {
+  return request<ResetCaseResponse>(`/api/cases/${id}/reset`, { method: 'POST' });
 }
 
 // Not a fetch wrapper — the browser handles the actual GET itself (opened via

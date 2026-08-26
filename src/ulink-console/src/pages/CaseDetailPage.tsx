@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as AlertDialog from '@radix-ui/react-alert-dialog';
 import { ArrowLeft, Clock } from 'lucide-react';
-import { getCase, overrideCase } from '../api/casesApi';
+import { getCase, overrideCase, resetCase } from '../api/casesApi';
 import { CaseStatusPill } from '../components/cases/CaseStatusPill';
 import { EmailThreadSection } from '../components/cases/EmailThreadSection';
 import { JsonViewer } from '../components/panel/JsonViewer';
@@ -22,6 +22,7 @@ export function CaseDetailPage() {
   const [operatorName, setOperatorName] = useState('');
   const [reason, setReason] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['case', id],
@@ -38,6 +39,14 @@ export function CaseDetailPage() {
   });
 
   const canSubmit = operatorName.trim() !== '' && reason.trim() !== '' && !overrideMutation.isPending;
+
+  const resetMutation = useMutation({
+    mutationFn: () => resetCase(id as string),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cases'] });
+      navigate('/cases');
+    },
+  });
 
   if (isLoading) return <div className="p-6 text-sm text-slate-400">Loading…</div>;
   if (isError || !data) return <div className="p-6 text-sm text-red-500">Couldn't load this case.</div>;
@@ -123,6 +132,54 @@ export function CaseDetailPage() {
           ))}
         </ol>
       </section>
+
+      {caseRecord.claimNo ? (
+        <section className="mb-6 rounded-xl2 border border-slate-900/5 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
+          <h2 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Reset Case</h2>
+          <p className="text-xs text-slate-500">
+            This case already has a real IAS claim number (Claim {caseRecord.claimNo}) — resetting is disabled to
+            avoid losing the only local record of an already-created claim.
+          </p>
+        </section>
+      ) : (
+        <section className="mb-6 rounded-xl2 border border-slate-900/5 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
+          <h2 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Reset Case</h2>
+          <p className="mb-4 text-xs text-slate-500">
+            Rewinds this case back to READY_FOR_DOCUMENT_READING and clears everything the pipeline computed for
+            it, so the next pipeline run reprocesses it from scratch. Logged permanently to this case's audit
+            trail.
+          </p>
+
+          <AlertDialog.Root open={resetConfirmOpen} onOpenChange={setResetConfirmOpen}>
+            <AlertDialog.Trigger asChild>
+              <Button variant="ghost">Reset Case</Button>
+            </AlertDialog.Trigger>
+            <AlertDialog.Portal>
+              <AlertDialog.Overlay className="fixed inset-0 z-40 bg-slate-900/30 backdrop-blur-sm" />
+              <AlertDialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-xl2 bg-white p-5 shadow-glass">
+                <AlertDialog.Title className="text-sm font-semibold text-slate-900">Confirm reset</AlertDialog.Title>
+                <AlertDialog.Description className="mt-2 text-xs leading-relaxed text-slate-500">
+                  This clears the recognized route, extracted fields, and every check result this case has, and
+                  sends it back to READY_FOR_DOCUMENT_READING. The next pipeline run will reprocess it as if it
+                  were freshly submitted. This is logged permanently and cannot be automatically undone.
+                </AlertDialog.Description>
+                <div className="mt-4 flex justify-end gap-2">
+                  <AlertDialog.Cancel asChild>
+                    <Button variant="ghost">Cancel</Button>
+                  </AlertDialog.Cancel>
+                  <AlertDialog.Action asChild>
+                    <Button onClick={() => resetMutation.mutate()} disabled={resetMutation.isPending}>
+                      {resetMutation.isPending ? 'Resetting…' : 'Confirm Reset'}
+                    </Button>
+                  </AlertDialog.Action>
+                </div>
+              </AlertDialog.Content>
+            </AlertDialog.Portal>
+          </AlertDialog.Root>
+
+          {resetMutation.isError && <p className="mt-3 text-xs text-red-500">{(resetMutation.error as Error).message}</p>}
+        </section>
+      )}
 
       {REVIEWABLE_STATUSES.includes(caseRecord.currentStatus) && (
       <section className="rounded-xl2 border border-ulink-orange/20 bg-white/80 p-5 shadow-glass backdrop-blur-xl">

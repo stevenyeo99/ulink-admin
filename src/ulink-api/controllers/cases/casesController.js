@@ -1,5 +1,6 @@
 const { Case, CaseEvent, EmailThread, EmailMessage, EmailAttachment } = require('../../db/models');
 const { getStorageAdapter } = require('../../storage');
+const { resetOneCase } = require('../dev/casesController');
 const logger = require('../../utils/logger');
 
 const BLOCK_NAME = 'case-review';
@@ -218,4 +219,26 @@ async function overrideCase(req, res) {
   res.json({ caseId: caseRecord.id, previousStatus: prevStatus, currentStatus: targetStatus });
 }
 
-module.exports = { listCases, getCase, getAttachment, overrideCase, OVERRIDE_TARGETS, REVIEWABLE_STATUSES };
+/**
+ * POST /api/cases/:id/reset — always rewinds to READY_FOR_DOCUMENT_READING, clearing
+ * recognizedType/extractedFields/documentCheckResult and everything downstream, so the next
+ * pipeline run reprocesses the case from claim-recognition onward as if it were freshly
+ * submitted. Thin wrapper over resetOneCase (controllers/dev/casesController.js) — same
+ * logic/safety checks (refuses a case that already has a real IAS claimNo) as the dev batch
+ * reset tool, just single-case and reachable from the console UI without hitting /api/dev.
+ */
+async function resetCase(req, res) {
+  try {
+    const result = await resetOneCase(req.params.id, 'READY_FOR_DOCUMENT_READING', { source: 'console' });
+    logger.info('Case manually reset', { caseId: result.caseId, previousStatus: result.previousStatus });
+    res.json(result);
+  } catch (error) {
+    if (error.message.includes('not found')) {
+      return res.status(404).json({ error: { message: error.message, status: 404 } });
+    }
+    // Only remaining failure mode is the claimNo guard — a real, already-created IAS claim.
+    res.status(409).json({ error: { message: error.message, status: 409 } });
+  }
+}
+
+module.exports = { listCases, getCase, getAttachment, overrideCase, resetCase, OVERRIDE_TARGETS, REVIEWABLE_STATUSES };

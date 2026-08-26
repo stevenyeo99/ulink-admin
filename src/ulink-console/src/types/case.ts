@@ -93,3 +93,10 @@ export interface OverrideCaseResponse {
   previousStatus: string;
   currentStatus: string;
 }
+
+export interface ResetCaseResponse {
+  caseId: string;
+  previousStatus: string;
+  currentStatus: string;
+  clearedFields: string[];
+}

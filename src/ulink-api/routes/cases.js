@@ -1,5 +1,5 @@
 const express = require('express');
-const { listCases, getCase, getAttachment, overrideCase } = require('../controllers/cases/casesController');
+const { listCases, getCase, getAttachment, overrideCase, resetCase } = require('../controllers/cases/casesController');
 
 const router = express.Router();
 
@@ -124,5 +124,35 @@ router.get('/:caseId/attachments/:attachmentId', getAttachment);
  *         description: Case not found
  */
 router.post('/:id/override', overrideCase);
+
+/**
+ * @openapi
+ * /api/cases/{id}/reset:
+ *   post:
+ *     tags: [cases]
+ *     summary: Rewind a case back to READY_FOR_DOCUMENT_READING for reprocessing
+ *     description: >
+ *       Sets Case.currentStatus back to READY_FOR_DOCUMENT_READING and clears
+ *       recognizedType/extractedFields/documentCheckResult and everything downstream
+ *       (memberVerifyResult/iasMemberInfoResponse/iasClaimPayload/claimNo/iasClaimResult), so
+ *       the next pipeline run reprocesses the case from claim-recognition onward. Logs a
+ *       CaseEvent (reasonCode MANUAL_RESET). Refuses (409) if the case already has a real
+ *       IAS claimNo — resetting would erase the only local record of an already-created,
+ *       non-idempotent external claim. Single-case equivalent of POST /api/dev/cases/reset
+ *       (to: READY_FOR_DOCUMENT_READING), reachable from the console UI.
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Case reset
+ *       404:
+ *         description: Case not found
+ *       409:
+ *         description: Case already has a real IAS claim number — refusing to reset
+ */
+router.post('/:id/reset', resetCase);
 
 module.exports = router;
