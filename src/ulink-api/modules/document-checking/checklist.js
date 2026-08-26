@@ -227,9 +227,74 @@ const EVALUATORS = [
   checkDelegationLetterRequired,
 ];
 
+/**
+ * Re-derives a plain-English "why" for one already-decided issue, straight from
+ * extractedFields — the same evidence each check function above computed internally to
+ * decide pass/fail, but never returned. Keyed by the exact ISSUES.* text so it can never
+ * drift out of sync with whichever checks actually fired. Purely additive/read-only: does
+ * not change any check function above, does not affect issues[]/passed, and callers that
+ * only read issues[]/passed (email templates, dedupe, CaseEvent messages) are unaffected.
+ */
+function reasonForIssue(issue, fields) {
+  const invoiceItems = fields.invoices?.items || [];
+  const indexed = (predicate) =>
+    invoiceItems
+      .map((item, i) => ({ item, i }))
+      .filter(({ item }) => predicate(item))
+      .map(({ i }) => `#${i + 1}`)
+      .join(', ');
+
+  switch (issue) {
+    case ISSUES.INCOMPLETE_CLAIM_FORM:
+      return {
+        code: 'INCOMPLETE_CLAIM_FORM',
+        reason: 'medical.detail_of_illness_injury and medical.full_description_of_treatment are both empty on the claim form.',
+      };
+    case ISSUES.MISSING_VOUCHER:
+      return { code: 'MISSING_VOUCHER', reason: 'invoices.present is false — no voucher/invoice was submitted.' };
+    case ISSUES.NO_MEDICAL_REPORT:
+      return { code: 'NO_MEDICAL_REPORT', reason: 'medical_record.present is false — no medical record document was submitted.' };
+    case ISSUES.UNCLEAR_VOUCHER:
+      return {
+        code: 'UNCLEAR_VOUCHER',
+        reason: `Voucher(s) ${indexed((item) => item.legible === false)} are marked illegible (legible: false).`,
+      };
+    case ISSUES.INCORRECT_VOUCHER:
+      return {
+        code: 'INCORRECT_VOUCHER',
+        reason: `Voucher(s) ${indexed((item) => item.has_clinic_stamp_or_doctor_signature !== true)} have no confirmed clinic stamp or doctor signature (has_clinic_stamp_or_doctor_signature is not true).`,
+      };
+    case ISSUES.MISSING_VOUCHER_BREAKDOWN:
+      return {
+        code: 'MISSING_VOUCHER_BREAKDOWN',
+        reason: `Pharmacy voucher(s) ${indexed((item) => item.voucher_type === 'pharmacy' && item.has_itemized_breakdown === false)} have no itemized breakdown (has_itemized_breakdown: false).`,
+      };
+    case ISSUES.VOUCHER_AMOUNT_MISMATCH: {
+      const subtotals = invoiceItems.map((item) => item.subtotal).filter((amount) => amount != null);
+      const voucherTotal = subtotals.reduce((sum, amount) => sum + amount, 0);
+      return {
+        code: 'VOUCHER_AMOUNT_MISMATCH',
+        reason: `Sum of voucher subtotals (${voucherTotal}) does not match claim.total_claim_amount (${fields.claim.total_claim_amount}).`,
+      };
+    }
+    case ISSUES.INCOMPLETE_MEDICAL_REPORT:
+      return { code: 'INCOMPLETE_MEDICAL_REPORT', reason: 'medical_record.present is true but medical_record.legible is false.' };
+    case ISSUES.MISSING_BANK_INFO:
+      return { code: 'MISSING_BANK_INFO', reason: 'bank.bank_name, bank.bank_account_name, and bank.bank_account_number are all missing.' };
+    case ISSUES.DELEGATION_LETTER_REQUIRED:
+      return {
+        code: 'DELEGATION_LETTER_REQUIRED',
+        reason: `identity_consistency.bank_account_holder_consistent is false (bank.bank_account_name "${fields.bank.bank_account_name ?? ''}" vs claimant.claimant_name "${fields.claimant.claimant_name ?? ''}") and delegation_letter.present is not true.`,
+      };
+    default:
+      return { code: null, reason: null };
+  }
+}
+
 function evaluateDocumentChecks(extractedFields) {
   const issues = EVALUATORS.map((evaluate) => evaluate(extractedFields)).filter(Boolean);
-  return { issues, passed: issues.length === 0 };
+  const details = issues.map((issue) => ({ issue, ...reasonForIssue(issue, extractedFields) }));
+  return { issues, passed: issues.length === 0, details };
 }
 
 module.exports = { ISSUES, evaluateDocumentChecks };
