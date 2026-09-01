@@ -9,7 +9,7 @@ const BLOCK_NAME = 'email-intake';
 // Statuses where the case is genuinely waiting on the customer (or hasn't been through any
 // job yet) — a new inbound attachment here is exactly the resubmission the pipeline is
 // waiting for, so it's safe to reset back to READY_FOR_DOCUMENT_READING and reprocess from
-// scratch. Deliberately excludes every status from RECOGNIZED onward (DOCUMENT_CHECKED,
+// scratch. Deliberately excludes every status from RECOGNIZED onward (READY_FOR_DOCUMENT_CHECKING,
 // MEMBER_VERIFIED, CLAIM_PAYLOAD_PREPARED, CLAIM_CREATED, CLAIM_SUBMIT_FAILED, ...) — those
 // represent real progress (a real IAS member lookup, a real prepared/submitted claim
 // payload), and a stray attachment-bearing reply landing on that same thread later must not

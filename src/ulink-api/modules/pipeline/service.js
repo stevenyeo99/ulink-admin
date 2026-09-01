@@ -15,9 +15,17 @@ const iasClaimCreationService = require('../ias-claim-creation/service');
 // docs/imp/day1/jobs-registry.md's "Orchestrator" section. Each block keeps its own
 // independent /api/jobs/<name>/run endpoint too; this only consolidates scheduling.
 //
+// member-verification now runs BEFORE document-checking (swapped 2026-09-01 per demo
+// feedback — end user wants member/coverage eligibility checked first). See those two
+// modules' own service.js comments for the currentStatus values each reads/writes:
+// member-verification now takes RECOGNIZED and hands off via READY_FOR_DOCUMENT_CHECKING;
+// document-checking now takes that and is the one that writes the final MEMBER_VERIFIED
+// gate ias-claim-preparation reads. MEMBER_VERIFIED as a literal string is unchanged and
+// still means "both checks passed" — only which job sets it changed.
+//
 // email-sender appears twice, deliberately, not a duplicate/typo: it's a shared consumer
-// of ulink_email_tasks queued by THREE different producers, not two — document-checking
-// and member-verification queue theirs earlier in this same run (caught by the first
+// of ulink_email_tasks queued by THREE different producers, not two — member-verification
+// and document-checking queue theirs earlier in this same run (caught by the first
 // email-sender call), but ias-claim-creation (the last step) queues its own
 // CLAIM_CREATED_NOTIFICATION task on success, after the first email-sender call has
 // already run. Without a second call at the end, that notification would sit PENDING and
@@ -27,8 +35,8 @@ const iasClaimCreationService = require('../ias-claim-creation/service');
 const STEPS = [
   ['email-intake', emailIntakeService],
   ['claim-recognition', claimRecognitionService],
-  ['document-checking', documentCheckingService],
   ['member-verification', memberVerificationService],
+  ['document-checking', documentCheckingService],
   ['email-sender', emailSenderService],
   ['ias-claim-preparation', iasClaimPreparationService],
   ['ias-claim-creation', iasClaimCreationService],

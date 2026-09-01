@@ -15,7 +15,7 @@ async function logEvent(transaction, { caseId, prevStatus = null, newStatus, rea
  */
 function checkCase(caseRecord) {
   if (!caseRecord.extractedFields) {
-    throw new Error(`Case ${caseRecord.id} has no extractedFields (reached RECOGNIZED without extraction data)`);
+    throw new Error(`Case ${caseRecord.id} has no extractedFields (reached READY_FOR_DOCUMENT_CHECKING without extraction data)`);
   }
 
   const result = evaluateDocumentChecks(caseRecord.extractedFields);
@@ -42,33 +42,53 @@ async function queueMissingDocumentsEmail(transaction, caseId, result) {
   });
 }
 
+async function queueCompleteAckEmail(transaction, caseId) {
+  await queueDedupedTask(transaction, { caseId, taskType: 'DOCUMENT_COMPLETE_ACK', dedupeKey: null, payload: {} });
+}
+
+// checkCase()'s own outcome names (DOCUMENT_CHECKED/INCOMPLETE) describe what this block
+// itself concluded — kept as-is (dev preview endpoint documents this exact enum, see
+// routes/dev/documentChecking.js) and are NOT the Case.currentStatus to write. Since this
+// block now runs after member-verification (swapped 2026-09-01) and is the last of the two
+// checks, a pass here is what sets the real MEMBER_VERIFIED gate ias-claim-preparation
+// reads — not a status named after this block.
+const OUTCOME_TO_STATUS = {
+  DOCUMENT_CHECKED: 'MEMBER_VERIFIED',
+  INCOMPLETE: 'INCOMPLETE',
+};
+
 async function persistOutcome(caseRecord, outcome) {
   return sequelize.transaction(async (transaction) => {
     const prevStatus = caseRecord.currentStatus;
+    const newStatus = OUTCOME_TO_STATUS[outcome.outcome];
     await Case.update(
-      { currentStatus: outcome.outcome, documentCheckResult: outcome.result },
+      { currentStatus: newStatus, documentCheckResult: outcome.result },
       { where: { id: caseRecord.id }, transaction }
     );
     await logEvent(transaction, {
       caseId: caseRecord.id,
       prevStatus,
-      newStatus: outcome.outcome,
+      newStatus,
       reasonCode: outcome.result.passed ? null : 'DOCUMENT_ISSUES_FOUND',
       message: outcome.result.passed ? 'All document checks passed' : outcome.result.issues.join('; '),
     });
 
-    if (!outcome.result.passed) {
+    if (outcome.result.passed) {
+      // Both checks have now passed (member-verification already passed this case earlier
+      // in the same run/an earlier run, or this case wouldn't be at READY_FOR_DOCUMENT_CHECKING) —
+      // this block is the final gate now, so it's the one that queues the "complete"
+      // acknowledgement. Previously queued by member-verification/service.js; moved here
+      // when the step order swapped.
+      await queueCompleteAckEmail(transaction, caseRecord.id);
+    } else {
       await queueMissingDocumentsEmail(transaction, caseRecord.id, outcome.result);
     }
-    // outcome.result.passed === true (DOCUMENT_CHECKED): no email task is queued here. The
-    // "complete" acknowledgement (DOCUMENT_COMPLETE_ACK) requires member verify to also
-    // pass — modules/member-verification/service.js queues that task, not this one.
   });
 }
 
 async function run() {
   const cases = await Case.findAll({
-    where: { currentStatus: 'RECOGNIZED' },
+    where: { currentStatus: 'READY_FOR_DOCUMENT_CHECKING' },
     limit: config.documentChecking.batchLimit,
     order: [['createdAt', 'ASC']],
   });

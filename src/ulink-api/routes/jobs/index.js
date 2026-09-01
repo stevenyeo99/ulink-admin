@@ -156,13 +156,17 @@ const router = express.Router();
  *     summary: Start the document-checking job (fire-and-forget)
  *     description: >
  *       Acquires the job lock and returns immediately. In the background, for each case
- *       at currentStatus=RECOGNIZED (up to DOCUMENT_CHECKING_BATCH_LIMIT per run): runs
- *       the 11 checklist evaluators (modules/document-checking/checklist.js) purely over
+ *       at currentStatus=READY_FOR_DOCUMENT_CHECKING (up to DOCUMENT_CHECKING_BATCH_LIMIT
+ *       per run — set by member-verification once it passes a case, since the step order
+ *       swapped 2026-09-01 to check member/coverage eligibility first): runs the 11
+ *       checklist evaluators (modules/document-checking/checklist.js) purely over
  *       Case.extractedFields — no LLM call, no external dependency, deterministic. Updates
- *       Case.currentStatus to DOCUMENT_CHECKED (no issues) or INCOMPLETE (one or more
- *       issues), sets Case.documentCheckResult, and logs a CaseEvent. Same lock/release
- *       pattern as the other jobs. Note: "Incorrect bank details" is not evaluated here —
- *       it requires the member-verification block (not built yet).
+ *       Case.currentStatus to MEMBER_VERIFIED (no issues — the final gate
+ *       ias-claim-preparation reads, since this is now the last of the two checks) or
+ *       INCOMPLETE (one or more issues), sets Case.documentCheckResult, and logs a
+ *       CaseEvent. On MEMBER_VERIFIED, also queues a DOCUMENT_COMPLETE_ACK EmailTask (both
+ *       checks have now passed). Same lock/release pattern as the other jobs. Note:
+ *       "Incorrect bank details" is evaluated by member-verification, not here.
  *     requestBody:
  *       required: false
  *       description: No body needed — trigger only.
@@ -279,26 +283,29 @@ const router = express.Router();
  *     tags: [jobs]
  *     summary: Start the member-verification job (fire-and-forget)
  *     description: >
- *       Acquires the job lock and returns immediately. In the background, for each case at
- *       currentStatus=DOCUMENT_CHECKED or MEMBER_REVIEW_REQUIRED (up to
- *       MEMBER_VERIFICATION_BATCH_LIMIT per run, oldest-updated first — MEMBER_REVIEW_REQUIRED
- *       is included so a case that only failed due to stale IAS data can recover on a later
- *       run): calls the IAS GET_MEMBER_INFO_API with the claimant's NRC and accident date
+ *       Acquires the job lock and returns immediately. Runs BEFORE document-checking as of
+ *       2026-09-01 (swapped per demo feedback — member/coverage eligibility is checked
+ *       first now). In the background, for each case at currentStatus=RECOGNIZED or
+ *       MEMBER_REVIEW_REQUIRED (up to MEMBER_VERIFICATION_BATCH_LIMIT per run,
+ *       oldest-updated first — MEMBER_REVIEW_REQUIRED is included so a case that only
+ *       failed due to stale IAS data can recover on a later run): calls the IAS
+ *       GET_MEMBER_INFO_API with the claimant's NRC and accident date
  *       (modules/member-verification/iasClient.js), then runs deterministic Hard/Soft field
  *       comparisons (modules/member-verification/checks.js — coverage-active date range,
  *       DOB, bank details vs IAS's on-file payee record, policy number). Updates
- *       Case.currentStatus to MEMBER_VERIFIED or MEMBER_REVIEW_REQUIRED, sets
- *       Case.memberVerifyResult (evaluated summary) and Case.iasMemberInfoResponse (the raw
- *       IAS response verbatim, kept for the future ias-claim-creation job and audit — see
- *       docs/imp/day1/jobs-registry.md), and logs a CaseEvent. On MEMBER_VERIFIED, queues a
- *       DOCUMENT_COMPLETE_ACK EmailTask. On MEMBER_REVIEW_REQUIRED (any reasonCode —
- *       MEMBER_NOT_FOUND, COVERAGE_NOT_ACTIVE, MEMBER_DETAILS_MISMATCH, or
- *       BANK_DETAILS_MISMATCH), queues a customer-facing MEMBER_VERIFY_ISSUE EmailTask
- *       flagging the one line that reasonCode maps to (modules/member-verification/service.js's
- *       REASON_CODE_TO_ISSUE) — deduped so a re-check finding the same outcome doesn't
- *       re-queue. A technical failure (IAS timeout/error, missing required fields) leaves the
- *       case at its current status for retry on the next run, same pattern as
- *       document-checking. Same lock/release pattern as the other jobs.
+ *       Case.currentStatus to READY_FOR_DOCUMENT_CHECKING (pass — picked up by
+ *       document-checking next, the block that now owns the final MEMBER_VERIFIED gate) or
+ *       MEMBER_REVIEW_REQUIRED (fail), sets Case.memberVerifyResult (evaluated summary) and
+ *       Case.iasMemberInfoResponse (the raw IAS response verbatim, kept for the
+ *       ias-claim-creation job and audit — see docs/imp/day1/jobs-registry.md), and logs a
+ *       CaseEvent. On MEMBER_REVIEW_REQUIRED (any reasonCode — MEMBER_NOT_FOUND,
+ *       COVERAGE_NOT_ACTIVE, MEMBER_DETAILS_MISMATCH, or BANK_DETAILS_MISMATCH), queues a
+ *       customer-facing MEMBER_VERIFY_ISSUE EmailTask flagging the one line that reasonCode
+ *       maps to (modules/member-verification/service.js's REASON_CODE_TO_ISSUE) — deduped
+ *       so a re-check finding the same outcome doesn't re-queue. A technical failure (IAS
+ *       timeout/error, missing required fields) leaves the case at its current status for
+ *       retry on the next run, same pattern as document-checking. Same lock/release pattern
+ *       as the other jobs.
  *     requestBody:
  *       required: false
  *       description: No body needed — trigger only.

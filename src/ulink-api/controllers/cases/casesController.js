@@ -13,9 +13,14 @@ const BLOCK_NAME = 'case-review';
 // a stale/wrong IAS lookup) and that this project has no other escalation path for (see
 // claim-recognition/service.js's applyMedicalRecordFallback comment: no manual-review state
 // exists elsewhere in this project, by design).
+// Swapped 2026-09-01 alongside the member-verification/document-checking step order:
+// document-checking is now the last of the two checks, so overriding a stuck INCOMPLETE
+// skips straight to the final MEMBER_VERIFIED gate. member-verification runs first now, so
+// overriding a stuck MEMBER_REVIEW_REQUIRED sends the case into document-checking next
+// (READY_FOR_DOCUMENT_CHECKING), same as if member-verification itself had passed it.
 const OVERRIDE_TARGETS = {
-  INCOMPLETE: 'DOCUMENT_CHECKED',
-  MEMBER_REVIEW_REQUIRED: 'MEMBER_VERIFIED',
+  INCOMPLETE: 'MEMBER_VERIFIED',
+  MEMBER_REVIEW_REQUIRED: 'READY_FOR_DOCUMENT_CHECKING',
 };
 
 const REVIEWABLE_STATUSES = Object.keys(OVERRIDE_TARGETS);
@@ -30,7 +35,7 @@ const KNOWN_STATUSES = [
   'RECOGNIZED',
   'MANUAL_REVIEW',
   'NOT_RECOGNIZED',
-  'DOCUMENT_CHECKED',
+  'READY_FOR_DOCUMENT_CHECKING',
   'INCOMPLETE',
   'MEMBER_VERIFIED',
   'MEMBER_REVIEW_REQUIRED',

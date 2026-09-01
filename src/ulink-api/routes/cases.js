@@ -94,8 +94,8 @@ router.get('/:caseId/attachments/:attachmentId', getAttachment);
  *     tags: [cases]
  *     summary: Human-in-the-loop bypass — advance a stuck case past its failing check
  *     description: >
- *       Only valid from INCOMPLETE (→ DOCUMENT_CHECKED) or MEMBER_REVIEW_REQUIRED
- *       (→ MEMBER_VERIFIED) — a pure Case.currentStatus write, so the next scheduled job for
+ *       Only valid from INCOMPLETE (→ MEMBER_VERIFIED) or MEMBER_REVIEW_REQUIRED
+ *       (→ READY_FOR_DOCUMENT_CHECKING) — a pure Case.currentStatus write, so the next scheduled job for
  *       the new status picks the case up normally. Requires both reason and operatorName;
  *       no auth exists yet (Day 1, trusted host, same as every /api/jobs/* endpoint) so
  *       operatorName is plain free text, not an authenticated identity. Logs one CaseEvent

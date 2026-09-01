@@ -243,6 +243,34 @@ function normalizeBankAccountHolderConsistency(fields) {
   };
 }
 
+// This claim form template's own fixed field label, followed by an already-ISO-formatted
+// (year-first) date — e.g. "Claimant Date of Birth: 1999-12-07". Deliberately only matches
+// this exact, unambiguous shape (a literal 4-digit year first) — nothing to interpret, so
+// nothing for normalizeClaimantDob below to get wrong either.
+const CLAIMANT_DOB_LABEL_PATTERN = /Claimant Date of Birth:?\s*(\d{4}-\d{2}-\d{2})/i;
+
+/**
+ * Deterministic backstop, same reasoning as the others above: verified against real data
+ * (2026-08-26, demo/complete/2, Hsu Myat Pyae) that the synthesis call can transpose an
+ * already-unambiguous year-first date ("1999-12-07" -> "1999-07-12") purely while copying it
+ * into the structured output — confirmed by isolating the vision transcription step on its
+ * own, which reads this field correctly every time; the error is introduced only in
+ * synthesis, not OCR. A prompt instruction telling it not to do this did not reliably stop
+ * it (verified: still wrong on 2 consecutive re-runs after adding one). Since the raw page
+ * transcript already has the field labeled and in its final target format verbatim, this
+ * requires no interpretation at all — just prefer the transcript's own literal value over
+ * whatever the synthesis call produced when they disagree.
+ */
+function normalizeClaimantDob(fields, transcriptChunks) {
+  const match = transcriptChunks.join('\n').match(CLAIMANT_DOB_LABEL_PATTERN);
+  if (!match) return fields;
+
+  const transcriptDob = match[1];
+  if (fields.claimant?.claimant_dob === transcriptDob) return fields;
+
+  return { ...fields, claimant: { ...fields.claimant, claimant_dob: transcriptDob } };
+}
+
 /**
  * Deterministic backstop, same reasoning as normalizeIdentityConsistency above: verified
  * against real data (2026-08-24, incomplete/jd2 with a delegation letter attached) that the
@@ -560,7 +588,10 @@ async function recognizeCase(caseRecord, routes) {
   }
 
   let extractedFields = parsed.extracted_fields
-    ? normalizeBankAccountHolderConsistency(normalizeIdentityConsistency(normalizeDelegationLetter(dedupeInvoiceItems(parsed.extracted_fields))))
+    ? normalizeClaimantDob(
+        normalizeBankAccountHolderConsistency(normalizeIdentityConsistency(normalizeDelegationLetter(dedupeInvoiceItems(parsed.extracted_fields)))),
+        transcriptChunks
+      )
     : parsed.extracted_fields;
 
   if (extractedFields) {
