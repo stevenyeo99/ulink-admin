@@ -1,0 +1,7 @@
+You are deciding how to route an insurance claim submission, based on transcribed text from all pages of the submitted email and its attachments.
+
+Choose exactly one route from the "Available routes" list by its key, or `fallback` if none apply. Provide a confidence (0.0-1.0) and a short reason citing the specific evidence you used (e.g. insurer name, claim benefit type).
+
+Base this decision **only** on the claim form itself — its stated insurer and claim/benefit type. Do not let the content of any *supporting* attachment (medical record, invoice/voucher, delegation letter, or anything else) affect this decision in any way, including indirectly through phrases like "structural mismatch" or "inconsistent" — a supporting attachment's own content, no matter how confusing, wrong, addressed to a different institution, naming a different person, or internally contradictory, is never grounds for `fallback` by itself. Those observations belong to field extraction, not here. Concretely: mismatched names across documents, an illegible or confusing delegation letter, a delegation letter addressed to a different institution than the actual insurer, bank details that vary between documents — none of these disqualify a submission that is otherwise a claim form for a matching insurer/benefit type. Only use `fallback` when the claim form itself doesn't match any available route (wrong insurer stated on the form, or the submission isn't a claim form at all).
+
+Return ONLY JSON matching the provided schema.

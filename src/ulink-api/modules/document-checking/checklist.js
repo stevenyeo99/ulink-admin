@@ -180,18 +180,29 @@ function checkMissingBankInfo(fields) {
 // synthesize.md, claim-recognition/service.js's normalizeIdentityConsistency) for the record,
 // just not used to gate this check.
 //
-// DEMO-SCOPED SIMPLIFICATION (2026-08-24): deliberately does NOT also require
-// identity_consistency.delegation_letter_authorizes_payee === true (does the letter's
-// named payee actually match bank.bank_account_name) — that field is still extracted and
-// recorded on the case (see synthesize.md's delegation_letter_authorizes_payee rule,
-// modules/claim-recognition/service.js's normalizeIdentityConsistency), just not required
-// to clear this check. Verified against real data: the payee-name handwriting has proven
-// far less reliable to extract than presence of the letter itself across repeated real
-// tests (incomplete/jd2, Khin Maung). Real trade-off, not a free simplification: this means
-// ANY included delegation letter clears the flag, even one that doesn't actually name the
-// bank-account holder as payee — the fraud-prevention half of this check is off for the
-// demo. Re-add `&& identity_consistency.delegation_letter_authorizes_payee === true` to the
-// condition below before relying on this for real claims.
+// DEMO-SCOPED SIMPLIFICATION (2026-08-24, superseded 2026-09-14 — see INERT note below):
+// deliberately did NOT also require identity_consistency.delegation_letter_authorizes_payee
+// === true (does the letter's named payee actually match bank.bank_account_name) — that
+// field was still extracted and recorded on the case, just not required to clear this
+// check. Verified against real data: the payee-name handwriting proved far less reliable to
+// extract than presence of the letter itself across repeated real tests (incomplete/jd2,
+// Khin Maung). Real trade-off, not a free simplification: this meant ANY included
+// delegation letter cleared the flag, even one that didn't actually name the bank-account
+// holder as payee — the fraud-prevention half of this check was off for the demo.
+//
+// INERT as of 2026-09-14, not fixed by this comment: claim-recognition's Task 3
+// (identity_consistency judgment) was removed (split synthesize.md into route-decision.md
+// + extract-fields.md, no Task 3 replacement there — see
+// db/migrations/20260914100000-remove-identity-consistency.js). identity_consistency no
+// longer exists anywhere in extractedFields, so `fields.identity_consistency?.
+// bank_account_holder_consistent` is always `undefined`, `undefined !== false` is always
+// `true`, and this function now ALWAYS returns null — it never fires, but it also never
+// throws (optional chaining), so nothing crashes. This is a deliberate, visible gap, not a
+// silent regression: identity-judgment work (including bank_account_holder_consistent) is
+// moving to its own dedicated module in this file's domain — once that exists, point the
+// condition below at its output instead of identity_consistency, and this check comes back
+// to life. Left in EVALUATORS (not removed) so reviving it is a one-line change, not a
+// rebuild.
 function checkDelegationLetterRequired(fields) {
   if (fields.identity_consistency?.bank_account_holder_consistent !== false) return null;
 

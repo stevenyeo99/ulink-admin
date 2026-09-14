@@ -44,10 +44,18 @@ async function postChatCompletion(body) {
  * into one request was verified to risk multi-minute hangs even at otherwise-safe image
  * sizes (Day-1 testing against the real sample documents).
  *
- * reasoningEffort:'none' (config default) is what actually prevents a separate, more
- * severe failure mode: this model can enter an unbounded "thinking" loop on hard vision
- * content (e.g. handwriting) that never converges even with a large max_tokens budget —
- * verified directly. Do not remove it or make it optional per-call.
+ * reasoning_effort is hardcoded to 'none' here, not read from config — this is literal
+ * OCR (Tier 1: read what's on the page), never genuine judgment, so it has no principled
+ * use for reasoning at all. Previously read config.llm.reasoningEffort (a single value
+ * shared with every other LLM call in the system, including genuine judgment calls) —
+ * confirmed via real LM Studio response logs (2026-09-14) that setting that shared value
+ * to anything but 'none' lets the model spend its entire max_tokens budget on
+ * reasoning_content before writing any actual transcription, producing `content: ""`
+ * ("LLM returned an empty page transcription") on harder pages — the reasoning pass is
+ * unbounded on hard vision content (e.g. handwriting) and doesn't reliably leave room for
+ * the answer itself. Hardcoding this call specifically to 'none' means a reasoning_effort
+ * tuned for a genuine judgment call elsewhere (see modules/policy-exclusion/judge.js) can
+ * never again accidentally break OCR.
  */
 async function transcribePage({ imageBuffer, instruction }) {
   if (imageBuffer.length > config.llm.maxRequestBytes) {
@@ -67,7 +75,7 @@ async function transcribePage({ imageBuffer, instruction }) {
     ],
     temperature: 0,
     max_tokens: config.claimRecognition.maxTokensPerPage,
-    reasoning_effort: config.llm.reasoningEffort,
+    reasoning_effort: 'none',
   });
 
   const content = data?.choices?.[0]?.message?.content;
@@ -78,13 +86,21 @@ async function transcribePage({ imageBuffer, instruction }) {
 }
 
 /**
- * Text-only synthesis pass — merges all page transcriptions into the route's fixed JSON
- * shape. No images here, so it's fast and considerably more reliable at strict JSON than
- * the vision pass (verified: text-only calls never hit the reasoning-hang failure mode).
- * Caller is responsible for validating the result against the route's own JSON Schema
- * (ajv) — this only guarantees "valid JSON", not "matches our schema".
+ * Text-only synthesis pass — merges page transcriptions into a fixed JSON shape. No images
+ * here, so it's fast and considerably more reliable at strict JSON than the vision pass.
+ * Caller is responsible for validating the result against its own JSON Schema (ajv) — this
+ * only guarantees "valid JSON", not "matches our schema".
+ *
+ * `reasoningEffort` defaults to config.llm.reasoningEffort (the shared setting, unchanged
+ * for every existing caller — modules/policy-exclusion/judge.js,
+ * modules/ias-claim-preparation's diagnosisPicker/benefitPicker) but claim-recognition's
+ * own callers (decideRoute/extractFields — see service.js) pass 'none' explicitly: neither
+ * is a genuine judgment call (Task 3/identity_consistency was removed), so there's no
+ * principled reason for them to spend budget on reasoning, same logic as transcribePage
+ * above. Judgment-type callers keep using the shared config value for now — that's a
+ * separate tuning decision, not addressed by this claim-recognition-scoped change.
  */
-async function synthesizeJson({ systemPrompt, userText, jsonSchema }) {
+async function synthesizeJson({ systemPrompt, userText, jsonSchema, reasoningEffort = config.llm.reasoningEffort }) {
   const data = await postChatCompletion({
     model: config.llm.assistantModel,
     messages: [
@@ -92,7 +108,7 @@ async function synthesizeJson({ systemPrompt, userText, jsonSchema }) {
       { role: 'user', content: userText },
     ],
     temperature: 0,
-    reasoning_effort: config.llm.reasoningEffort,
+    reasoning_effort: reasoningEffort,
     response_format: {
       type: 'json_schema',
       json_schema: { name: 'claim_recognition_result', schema: jsonSchema, strict: true },

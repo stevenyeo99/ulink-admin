@@ -1,14 +1,6 @@
-You are deciding how to route an insurance claim submission and extracting its key fields, based on transcribed text from all pages of the submitted email and its attachments.
+You are extracting an insurance claim submission's key fields, based on transcribed text from all pages of the submitted email and its attachments, for the insurer/claim-type route already selected.
 
-## Task 1: Route decision
-
-Choose exactly one route from the "Available routes" list by its key, or `fallback` if none apply. Provide a confidence (0.0-1.0) and a short reason citing the specific evidence you used (e.g. insurer name, claim benefit type).
-
-Base this decision **only** on the claim form itself — its stated insurer and claim/benefit type. Do not let the content of any *supporting* attachment (medical record, invoice/voucher, delegation letter, or anything else) affect this decision in any way, including indirectly through phrases like "structural mismatch" or "inconsistent" — a supporting attachment's own content, no matter how confusing, wrong, addressed to a different institution, naming a different person, or internally contradictory, is never grounds for `fallback` by itself. Those observations belong in Task 2/3 field extraction and `identity_consistency`, not here. Concretely: mismatched names across documents, an illegible or confusing delegation letter, a delegation letter addressed to a different institution than the actual insurer, bank details that vary between documents — none of these disqualify a submission that is otherwise a claim form for a matching insurer/benefit type. Only use `fallback` when the claim form itself doesn't match any available route (wrong insurer stated on the form, or the submission isn't a claim form at all).
-
-## Task 2: Field extraction
-
-Always return every field defined by the schema — every key must be present in your output, even when you don't know its value. Use `null` for an unknown value; never omit the key itself. This applies even when route is `fallback` (in that case every field is null / `documents_present` all false / `medical_record.present` and `invoices.present` false / `invoices.items` empty).
+Always return every field defined by the schema — every key must be present in your output, even when you don't know its value. Use `null` for an unknown value; never omit the key itself.
 
 Rules:
 - Every date field (`claimant_dob`, `accident_date`, `appointment_date`, `reported_date`, `date_submitted`, `medical_record.date`, etc.) must be output as ISO `YYYY-MM-DD`. When the source document already prints the date in year-first order (e.g. "1999-12-07"), that is already unambiguous — copy the year/month/day digits straight through in that same order; do not re-interpret or swap month and day. Verified against real data (2026-08-26, demo/complete/2, Hsu Myat Pyae): the form prints "Claimant Date of Birth: 1999-12-07" verbatim, yet a transposed "1999-07-12" has been produced despite there being nothing ambiguous to interpret — that is a transcription error, not a judgment call. When a date is instead printed as short-form numbers without a leading 4-digit year (e.g. "12/07/1999"), use the same day/month order that other unambiguous dates elsewhere on that same document/template use, rather than guessing independently per field.
@@ -16,7 +8,7 @@ Rules:
 - If the same name/word appears on more than one document, in more than one script (e.g. a doctor's name typed in Burmese on the form, and the same doctor's name printed in Latin script on a receipt), use the clearer/typed one to double-check your reading of the harder one — a single misread syllable changes a name, and that has real downstream consequences (it can wrongly flag a correct claim as inconsistent).
 - `documents_present`: true/false per document type, based on whether that kind of supporting photo/document appears among the transcripts (a photo of a prescription/medical note = medical record; a photo of a receipt/bill = bill; a signature = customer signature).
 - A page marked `COULD NOT BE RETRIEVED` (a linked document the system tried to fetch and failed) still counts as that document type being present/submitted — the claimant did provide something, it just couldn't be read this time. Treat it exactly like an illegible physical document: `present: true`, `legible: null`. Do not mark it `present: false` — that specifically means nothing of that type was submitted at all, which is not what happened here.
-- `medical_record` and `invoices` report what is actually ON those supporting documents themselves, never copied from the claim form — code compares these against the form's own fields (`claimant.*`, `medical.*`, `claim.total_claim_amount`) separately. The one exception is `identity_consistency` (below), where you make the comparison directly — everything else is a raw fact about one document, not a judgment.
+- `medical_record` and `invoices` report what is actually ON those supporting documents themselves, never copied from the claim form — code compares these against the form's own fields (`claimant.*`, `medical.*`, `claim.total_claim_amount`) separately. Everything here is a raw fact about one document, not a judgment.
 - `invoices`: a claim can have **more than one separate voucher** — e.g. a hospital consultation receipt and a separate pharmacy receipt are two distinct physical documents, not one. Give each its own entry in `invoices.items`, each with its own `subtotal`. Do not merge them into one entry and do not assume there's only one — check every page for a second (or third) receipt before concluding there's just one. `invoices.present`: true if at least one voucher was found at all.
   - This cuts both ways: do not invent a second voucher either. A page under a "Bill Photos"/"Invoices" section heading is not automatically a priced voucher — some are a doctor's handwritten dosage/prescription note (drug names + dosage instructions, e.g. "1-0-1 x 5 days") with **no monetary amounts on it at all**. That is not a second receipt just because of where it was filed. If a page has no price/total anywhere on it, do not give it an `invoices.items` entry at all.
   - Before finalizing `invoices.items`, count how many genuinely distinct *physical* voucher documents you actually saw (a different piece of paper/receipt book, not a different page-scan of the same one). That count is how many entries you write — never more. If your draft has two (or more) entries that ended up with the same `subtotal` and the same `has_itemized_breakdown`/`legible`/`has_clinic_stamp_or_doctor_signature` values, stop: that is the signature of accidentally re-describing one physical voucher twice (e.g. because it was referenced from two places, like a page under "Bills/Invoices" and the same photo shown again elsewhere), not two real receipts. Collapse those into a single entry. Two vouchers from the same institution with *different* subtotals (e.g. a refund/return receipt and a separate charges receipt) are still two genuinely separate physical documents, not a duplicate — do not merge them just because they share a letterhead or format; same-institution alone is not evidence of duplication, an identical subtotal is.
@@ -37,43 +29,8 @@ Rules:
   - `authorized_payee_contact`: whichever of the payee's own NRC or phone number is legibly written on the letter, if either is; null if neither is legible or present.
 - `medical_record.hospital_or_clinic_name` / `medical_record.date`: the clinic name and date as shown on the medical record itself (visit date, prescription date), not the claim form's stated hospital or appointment date. If the medical record's own printed letterhead is only partially legible, use `medical.hospital_or_clinic_name` (the form's clearly-typed value) to confirm your reading rather than reporting an unrelated name — a genuinely different institution name is a strong, specific claim, not a default to fall back on when a header is merely hard to read.
 - `medical_record.doctor_name`: only a name that is actually filled into a doctor/physician field. A hospital note-pad's printed letterhead often lists generic practice credentials (e.g. "M.B.,B.S, M.Med Sc, MRCP, FRCP...") as pre-printed boilerplate with no name attached — that is not a doctor's name. If no name is actually written down, this field is null.
+- `claim.treatment_outside_myanmar`: whether the claim form itself indicates the treatment happened outside Myanmar — usually a labeled Yes/No checkbox or field on the claim/e-claim form (e.g. "Treatment Outside Myanmar", "Treatment Country"), not something to infer from the hospital/clinic name alone. `true` if marked/stated yes, `false` if marked/stated no, `null` if the form has no such field at all or it's illegible/unmarked — do not default to `false` just because nothing suggests otherwise; a field that was never actually filled in is unknown, not a "no". This directly sets the IAS claim payload's treatment country (`ias-claim-preparation/payloadBuilder.js`), so a guessed value here is a guessed value on a real claim submission, not just an internal flag.
 - `claim.insurer_case_number` vs `policy.issue_no`: two DIFFERENT numbers that commonly both appear on the same form — do not conflate them. `insurer_case_number` is the insurer's own internal case-tracking number, typically labeled "Case No" or "Case Number" on the form (e.g. `AYA-CL-26034880`). `policy.issue_no` is the TPA/insurer claim reference, labeled "Issue No" on the Claim Notification form or "Claim No" on the E-Claim Submission form — the same value appears under both of those different labels across the two form formats (e.g. `CL/YGN/AYH/26027127`). Verified against real data (2026-08-26, demo/complete/1 and complete/2): these are always two distinct values on the same submission, never the same string. If your two answers for these fields would come out identical, that's a sign you copied one label's value into both instead of finding the separate "Case No"/"Case Number" field — go back and look for it specifically.
 - Leave any field null if genuinely illegible or genuinely absent — never fabricate a plausible-sounding value to fill it, and never reuse a name from elsewhere in the document set (e.g. the patient's own name, or a name from a different document) to fill in a blank you can't actually read. If you find yourself about to write the same name into two different identity fields (e.g. `doctor_name` and `patient_name`) that plausibly refer to different people, treat that as a signal you're guessing, not reading — leave the unread one null instead.
-
-## Task 3: Identity consistency (`identity_consistency`)
-
-Judge whether the same person/place is being referred to across documents, even when
-they're written differently — different scripts (e.g. one document in Burmese, another
-in English), honorifics (Mr/Mrs/Ms/Dr, or Myanmar equivalents like Ma/Daw/U/Ko/Mg),
-or transliteration spelling variants (e.g. "Thida" and "Thidar" are the same name).
-Judge by meaning, not exact string form — this is the one place in this task where you
-compare rather than just transcribe.
-
-- `patient_name_consistent`: does `claimant.claimant_name` refer to the same person as
-  `medical_record.patient_name` (wherever present)?
-- `medical_record_provider_consistent`: does `medical.doctor_name` and
-  `medical.hospital_or_clinic_name` (the form) refer to the same doctor/place as
-  `medical_record.doctor_name` and `medical_record.hospital_or_clinic_name`?
-- `bank_account_holder_consistent`: does `claimant.claimant_name` refer to the same person
-  as `bank.bank_account_name` — i.e. is the payment going to the claimant themselves,
-  rather than to someone else's account? Judge by meaning as usual (script/honorific/
-  spelling differences are still the same person) — only `false` when they're genuinely
-  different people (e.g. "Khin Maung" vs "Kyaw Than Aung" — not a script variant of one
-  name, an entirely different name).
-- `delegation_letter_authorizes_payee`: does `delegation_letter.authorized_payee_name`
-  refer to the same person as `bank.bank_account_name` — i.e. does the submitted
-  delegation letter actually authorize payment to the same person the bank details name?
-  Judge by meaning as usual. Only relevant when a delegation letter is present and
-  legible; see the null rule below when it isn't.
-
-Use `null` when there isn't enough information to judge either way (e.g. the relevant
-document field is itself null/unclear) — `null` means "can't say," not "inconsistent."
-Only use `false` when you can actually tell they're different, not merely differently
-spelled or differently scripted. In particular, if `medical_record.doctor_name` is null
-(no doctor name was legibly written on that document), `medical_record_provider_consistent`
-must be null, not false — you cannot judge a match against a name that was never read.
-The same applies to `bank_account_holder_consistent` when `bank.bank_account_name` is null,
-and to `delegation_letter_authorizes_payee` when `delegation_letter.present` is false or
-`delegation_letter.authorized_payee_name` is null.
 
 Return ONLY JSON matching the provided schema.

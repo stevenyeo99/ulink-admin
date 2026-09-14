@@ -14,7 +14,8 @@ const BLOCK_NAME = 'claim-recognition';
 const ajv = new Ajv({ allErrors: true });
 
 const TRANSCRIBE_INSTRUCTION = fs.readFileSync(path.join(__dirname, 'prompts', 'transcribe-page.md'), 'utf8');
-const SYNTHESIZE_SYSTEM_PROMPT = fs.readFileSync(path.join(__dirname, 'prompts', 'synthesize.md'), 'utf8');
+const ROUTE_DECISION_PROMPT = fs.readFileSync(path.join(__dirname, 'prompts', 'route-decision.md'), 'utf8');
+const EXTRACT_FIELDS_PROMPT = fs.readFileSync(path.join(__dirname, 'prompts', 'extract-fields.md'), 'utf8');
 const MEDICAL_RECORD_FALLBACK_PROMPT = fs.readFileSync(path.join(__dirname, 'prompts', 'medical-record-fallback.md'), 'utf8');
 
 // The AYA Sompo eclaim template's own fixed label text for this section — verified present
@@ -153,94 +154,6 @@ async function transcribeAttachment(attachment, storage) {
   const pageTexts = pages.map((page) => `[${attachment.originalFilename || 'attachment'} - page ${page.pageNumber}]\n${page.text}`);
   pageTexts.push(...(await transcribeLinkedDocuments(attachment, buffer, storage)));
   return pageTexts;
-}
-
-/**
- * Deterministic backstop for a confirmed reliability gap: the model doesn't consistently
- * follow synthesize.md's "null when there's nothing to compare" rule for
- * identity_consistency — verified against real data (complete/1: both
- * invoices.items[].hospital_or_clinic_name came back null, yet invoice_provider_consistent
- * still came back false, firing a false "Incorrect voucher(s)"). Whether the fields a
- * given identity_consistency value is comparing are null is directly checkable in code
- * with zero ambiguity — it doesn't need LLM judgment at all, only the actual
- * script-crossing name/place comparison does. This runs unconditionally on every result,
- * overriding the LLM's answer only when there was structurally nothing for it to compare.
- */
-function normalizeIdentityConsistency(fields) {
-  const consistency = fields.identity_consistency || {};
-
-  const canComparePatientName = fields.claimant?.claimant_name != null && fields.medical_record?.patient_name != null;
-
-  const canCompareMedicalRecordProvider =
-    (fields.medical?.doctor_name != null || fields.medical?.hospital_or_clinic_name != null) &&
-    (fields.medical_record?.doctor_name != null || fields.medical_record?.hospital_or_clinic_name != null);
-
-  const canCompareBankHolder = fields.claimant?.claimant_name != null && fields.bank?.bank_account_name != null;
-
-  const canCompareDelegationPayee =
-    fields.delegation_letter?.present === true && fields.delegation_letter?.authorized_payee_name != null && fields.bank?.bank_account_name != null;
-
-  return {
-    ...fields,
-    identity_consistency: {
-      ...consistency,
-      patient_name_consistent: canComparePatientName ? consistency.patient_name_consistent : null,
-      medical_record_provider_consistent: canCompareMedicalRecordProvider ? consistency.medical_record_provider_consistent : null,
-      bank_account_holder_consistent: canCompareBankHolder ? consistency.bank_account_holder_consistent : null,
-      delegation_letter_authorizes_payee: canCompareDelegationPayee ? consistency.delegation_letter_authorizes_payee : null,
-    },
-  };
-}
-
-// U/Daw/Ko/Ma/Mg(Maung)/Saya/Sayama are virtually always titles on these forms, never a
-// literal given name on their own — consistent with real data throughout this project's
-// samples ("Mg Kaung Nyan Lynn", "Daw Yu Wah Khaing", etc.). English titles included for the
-// same reason. One leading token only, case-insensitive.
-const NAME_HONORIFIC_PATTERN = /^(u|daw|ko|ma|mg|maung|saya|sayama|dr|mr|mrs|ms)\.?\s+/i;
-
-function stripHonorific(name) {
-  const match = String(name).match(NAME_HONORIFIC_PATTERN);
-  const honorific = match ? match[1].toLowerCase() : null;
-  const rest = String(name)
-    .replace(NAME_HONORIFIC_PATTERN, '')
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim();
-  return { honorific, rest };
-}
-
-/**
- * Deterministic backstop, same reasoning as normalizeIdentityConsistency above: the LLM's
- * own bank_account_holder_consistent judgment can come back false purely because of a
- * Burmese honorific prefix on one side (e.g. claimant "Yu Wah Khaing" vs bank account "Daw
- * Yu Wah Khaing" — same person, "Daw" is just a title, not a different payee) — verified
- * against real data 2026-08-26, demo/complete/1 (Yu Wah Khaing), where this false positive
- * wrongly triggered checkDelegationLetterRequired. Only overrides a real `false` to `true`
- * when the two names become string-IDENTICAL after stripping one leading honorific from
- * each side, AND the two sides don't carry two DIFFERENT honorifics (e.g. "U Thant" vs "Daw
- * Thant" — a differing title on both sides is a real signal of an actually different person,
- * e.g. a spouse, not just title noise, so that combination is deliberately left alone). A
- * targeted equivalence rule, not a loose/fuzzy match — can't paper over the
- * actually-different-payee case checkDelegationLetterRequired exists to catch. Never touches
- * `true` or `null` — `null` already means "can't determine" from normalizeIdentityConsistency
- * above and must stay that way.
- */
-function normalizeBankAccountHolderConsistency(fields) {
-  if (fields.identity_consistency?.bank_account_holder_consistent !== false) return fields;
-
-  const claimantName = fields.claimant?.claimant_name;
-  const bankAccountName = fields.bank?.bank_account_name;
-  if (claimantName == null || bankAccountName == null) return fields;
-
-  const claimant = stripHonorific(claimantName);
-  const bankHolder = stripHonorific(bankAccountName);
-  if (claimant.rest === '' || claimant.rest !== bankHolder.rest) return fields;
-  if (claimant.honorific && bankHolder.honorific && claimant.honorific !== bankHolder.honorific) return fields;
-
-  return {
-    ...fields,
-    identity_consistency: { ...fields.identity_consistency, bank_account_holder_consistent: true },
-  };
 }
 
 // This claim form template's own fixed field label, followed by an already-ISO-formatted
@@ -473,6 +386,7 @@ async function applyMedicalRecordFallback(fields, transcriptChunks) {
       systemPrompt: MEDICAL_RECORD_FALLBACK_PROMPT,
       userText,
       jsonSchema: MEDICAL_RECORD_FALLBACK_SCHEMA,
+      reasoningEffort: 'none', // literal re-extraction, same as decideRoute/extractFields below — not judgment
     });
   } catch {
     return fields; // fallback call itself failing is no worse than the status quo
@@ -502,17 +416,132 @@ async function applyMedicalRecordFallback(fields, transcriptChunks) {
 // that never propagated back to the structured field next to it. Putting `reason` first
 // makes the model write out its evidence/reasoning before it has to commit to `route`, so
 // the committed value is consistent with the conclusion instead of preceding it.
-function buildResponseSchema(routes) {
+function buildRouteSchema(routes) {
   return {
     type: 'object',
-    required: ['reason', 'route', 'confidence', 'extracted_fields'],
+    required: ['reason', 'route', 'confidence'],
     properties: {
       reason: { type: 'string' },
       route: { enum: [...routes.map((r) => r.routeKey), 'fallback'] },
       confidence: { type: 'number' },
-      extracted_fields: routes[0].extractionSchema,
     },
   };
+}
+
+/**
+ * Task 1 only: which route (if any) this submission matches — a small, fast call with no
+ * extraction schema attached, so its cost/latency never grows with however large a route's
+ * own schema gets (and, once a second route exists, it's what tells extractFields below
+ * which schema is actually the right one to use — the old combined call always used
+ * routes[0].extractionSchema regardless of which route matched, a Day-1-only assumption).
+ */
+async function decideRoute(transcriptChunks, emailContext, routes) {
+  const routeList = routes
+    .map((r) => `- ${r.routeKey}: ${r.label} (insurer=${r.insurer}, claim_type=${r.claimType})`)
+    .join('\n');
+
+  const responseSchema = buildRouteSchema(routes);
+
+  const userText = [
+    'Available routes:',
+    routeList,
+    '',
+    'Email content:',
+    emailContext || '(no email body text)',
+    '',
+    'Page transcripts:',
+    transcriptChunks.join('\n\n'),
+  ].join('\n');
+
+  const parsed = await synthesizeJson({ systemPrompt: ROUTE_DECISION_PROMPT, userText, jsonSchema: responseSchema, reasoningEffort: 'none' });
+
+  const validate = ajv.compile(responseSchema);
+  if (!validate(parsed)) {
+    return { schemaValidationError: ajv.errorsText(validate.errors) };
+  }
+  return { reason: parsed.reason, route: parsed.route, confidence: parsed.confidence, schemaValidationError: null };
+}
+
+/**
+ * Task 2 only: field extraction against the ONE route that actually matched (never
+ * routes[0] — see decideRoute above). Only ever called once a route has matched; there's no
+ * schema to extract into otherwise. Runs the same normalization chain as before, minus the
+ * two identity_consistency-only normalizers (removed along with Task 3 — see
+ * document-checking/checklist.js's checkDelegationLetterRequired comment for the one live
+ * check that depended on it).
+ */
+async function extractFields(transcriptChunks, matchedRoute) {
+  const responseSchema = matchedRoute.extractionSchema;
+  const userText = ['Page transcripts:', transcriptChunks.join('\n\n')].join('\n');
+
+  const parsed = await synthesizeJson({ systemPrompt: EXTRACT_FIELDS_PROMPT, userText, jsonSchema: responseSchema, reasoningEffort: 'none' });
+
+  const validate = ajv.compile(responseSchema);
+  if (!validate(parsed)) {
+    return { extractedFields: null, schemaValidationError: ajv.errorsText(validate.errors) };
+  }
+
+  let extractedFields = normalizeClaimantDob(normalizeDelegationLetter(dedupeInvoiceItems(parsed)), transcriptChunks);
+  extractedFields = await applyMedicalRecordFallback(extractedFields, transcriptChunks);
+  return { extractedFields, schemaValidationError: null };
+}
+
+/**
+ * The DB-independent core of recognition: given page transcripts already gathered (from a
+ * Case's attachments, or from anywhere else — see recognizeFromPdfPaths below), route-
+ * decide, then (only if a route matched) extract. Split out of recognizeCase so a source
+ * that isn't a Case at all (a dev-only local-file preview) can reuse the exact same logic
+ * instead of a second, drifting copy of it.
+ */
+async function recognizeFromTranscripts(transcriptChunks, emailContext, routes) {
+  const routeResult = await decideRoute(transcriptChunks, emailContext, routes);
+  if (routeResult.schemaValidationError) {
+    return {
+      outcome: 'MANUAL_REVIEW',
+      reasonCode: 'SCHEMA_VALIDATION_FAILED',
+      message: routeResult.schemaValidationError,
+      extractedFields: null,
+    };
+  }
+
+  const matchedRoute = routes.find((r) => r.routeKey === routeResult.route);
+  let outcome;
+  let recognizedType = null;
+  let reasonCode = null;
+
+  if (matchedRoute && routeResult.confidence >= config.claimRecognition.confidenceThreshold) {
+    outcome = 'RECOGNIZED';
+    recognizedType = matchedRoute.routeKey;
+  } else if (matchedRoute) {
+    outcome = 'MANUAL_REVIEW';
+    reasonCode = 'LOW_CONFIDENCE';
+  } else {
+    outcome = 'NOT_RECOGNIZED';
+    reasonCode = 'NO_ROUTE_MATCH';
+  }
+
+  // No route matched (NOT_RECOGNIZED) means no schema to extract into — skip the call
+  // entirely rather than spend it on a submission that isn't going anywhere. The old
+  // combined call still ran extraction on a fallback route and had the model null
+  // everything out itself; nothing downstream ever reads extractedFields for a
+  // NOT_RECOGNIZED case (it just queues SUBMISSION_NOT_RECOGNIZED and stops there), so
+  // `null` directly is equivalent and cheaper.
+  if (!matchedRoute) {
+    return { outcome, recognizedType, reasonCode, message: routeResult.reason, extractedFields: null };
+  }
+
+  const extraction = await extractFields(transcriptChunks, matchedRoute);
+  if (extraction.schemaValidationError) {
+    return {
+      outcome: 'MANUAL_REVIEW',
+      recognizedType,
+      reasonCode: 'SCHEMA_VALIDATION_FAILED',
+      message: extraction.schemaValidationError,
+      extractedFields: null,
+    };
+  }
+
+  return { outcome, recognizedType, reasonCode, message: routeResult.reason, extractedFields: extraction.extractedFields };
 }
 
 async function recognizeCase(caseRecord, routes) {
@@ -541,64 +570,32 @@ async function recognizeCase(caseRecord, routes) {
   });
   const emailContext = emailMessages.map((m) => `Subject: ${m.subject || ''}\nBody: ${m.bodyText || ''}`).join('\n---\n');
 
-  const routeList = routes
-    .map((r) => `- ${r.routeKey}: ${r.label} (insurer=${r.insurer}, claim_type=${r.claimType})`)
-    .join('\n');
+  const result = await recognizeFromTranscripts(transcriptChunks, emailContext, routes);
+  return { caseId: caseRecord.id, ...result };
+}
 
-  const responseSchema = buildResponseSchema(routes);
-
-  const userText = [
-    'Available routes:',
-    routeList,
-    '',
-    'Email content:',
-    emailContext || '(no email body text)',
-    '',
-    'Page transcripts:',
-    transcriptChunks.join('\n\n'),
-  ].join('\n');
-
-  const parsed = await synthesizeJson({ systemPrompt: SYNTHESIZE_SYSTEM_PROMPT, userText, jsonSchema: responseSchema });
-
-  const validate = ajv.compile(responseSchema);
-  if (!validate(parsed)) {
-    return {
-      caseId: caseRecord.id,
-      outcome: 'MANUAL_REVIEW',
-      reasonCode: 'SCHEMA_VALIDATION_FAILED',
-      message: ajv.errorsText(validate.errors),
-      extractedFields: null,
-    };
+/**
+ * Dev-only, DB-free entry point: given a list of local PDF file paths (no Case, no email,
+ * no attachment storage), runs the exact same transcribe -> decide-route -> extract
+ * pipeline as the real job, purely for reviewing what extraction would produce against an
+ * arbitrary file — e.g. a sample not yet attached to any Case. Reads nothing from and
+ * writes nothing to the database except the one existing read routes were already fetched
+ * with (getEnabledRoutes, called by the caller). No email context — pass 'route decision
+ * should ignore the missing email body' framing via the same "(no email body text)"
+ * fallback decideRoute already has for that case.
+ */
+async function recognizeFromPdfPaths(pdfPaths, routes) {
+  const transcriptChunks = [];
+  for (const pdfPath of pdfPaths) {
+    const buffer = await fs.promises.readFile(pdfPath);
+    const filename = path.basename(pdfPath);
+    const pages = await transcribePages(buffer, filename, path.basename(pdfPath, path.extname(pdfPath)));
+    for (const page of pages) {
+      transcriptChunks.push(`[${filename} - page ${page.pageNumber}]\n${page.text}`);
+    }
   }
 
-  const matchedRoute = routes.find((r) => r.routeKey === parsed.route);
-  let outcome;
-  let recognizedType = null;
-  let reasonCode = null;
-
-  if (matchedRoute && parsed.confidence >= config.claimRecognition.confidenceThreshold) {
-    outcome = 'RECOGNIZED';
-    recognizedType = matchedRoute.routeKey;
-  } else if (matchedRoute) {
-    outcome = 'MANUAL_REVIEW';
-    reasonCode = 'LOW_CONFIDENCE';
-  } else {
-    outcome = 'NOT_RECOGNIZED';
-    reasonCode = 'NO_ROUTE_MATCH';
-  }
-
-  let extractedFields = parsed.extracted_fields
-    ? normalizeClaimantDob(
-        normalizeBankAccountHolderConsistency(normalizeIdentityConsistency(normalizeDelegationLetter(dedupeInvoiceItems(parsed.extracted_fields)))),
-        transcriptChunks
-      )
-    : parsed.extracted_fields;
-
-  if (extractedFields) {
-    extractedFields = await applyMedicalRecordFallback(extractedFields, transcriptChunks);
-  }
-
-  return { caseId: caseRecord.id, outcome, recognizedType, reasonCode, message: parsed.reason, extractedFields };
+  return recognizeFromTranscripts(transcriptChunks, '', routes);
 }
 
 // Deliberately does NOT fire for MANUAL_REVIEW — that outcome means a route DID match
@@ -663,4 +660,4 @@ async function run() {
   return { processed, errors };
 }
 
-module.exports = { run, recognizeCase };
+module.exports = { run, recognizeCase, recognizeFromPdfPaths, decideRoute, extractFields, transcribePages };
