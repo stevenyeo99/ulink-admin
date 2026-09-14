@@ -116,7 +116,11 @@ module.exports = {
     // the linked document fine; the pipeline must not treat it as absent). Only hosts
     // listed here are ever fetched — this content is attacker-influenceable (anything in
     // an inbound email), so fetching is never opened up to arbitrary URLs found in it.
-    allowedHosts: (process.env.LINKED_DOCUMENTS_ALLOWED_HOSTS || 'as.expa.ai')
+    // ayasompostorage01.blob.core.windows.net added 2026-09-14 — confirmed real host behind
+    // AYA/ATOM's actual claim-notification emails' "File Attachments Link:" section (seen
+    // only after unwrapping Microsoft Defender's Safe Links redirect — see
+    // linkedDocuments.js's unwrapSafeLink).
+    allowedHosts: (process.env.LINKED_DOCUMENTS_ALLOWED_HOSTS || 'as.expa.ai,ayasompostorage01.blob.core.windows.net')
       .split(',')
       .map((host) => host.trim().toLowerCase())
       .filter(Boolean),

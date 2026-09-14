@@ -18,12 +18,35 @@ const CONTENT_TYPE_EXTENSIONS = {
   'application/pdf': '.pdf',
 };
 
+// Microsoft Defender for Office 365's "Safe Links" — rewrites every link in inbound mail
+// to route through a click-time scanning proxy; the real destination is a URL-encoded
+// value in the wrapper's own `url` query parameter, not the link's own host. Confirmed
+// real, not hypothetical (2026-09-14): AYA/ATOM's actual claim-notification emails' "File
+// Attachments Link:" section arrives wrapped exactly this way — without unwrapping it, the
+// allowlist check below only ever sees "apc01.safelinks.protection.outlook.com" and
+// rejects every link, regardless of what allowedHosts contains. Region-prefixed
+// (apc01/eur01/nam01/...) is the form actually seen; the bare-domain form is matched too
+// since Microsoft's own docs describe both.
+const SAFELINKS_HOST_PATTERN = /(^|\.)safelinks\.protection\.outlook\.com$/i;
+
+function unwrapSafeLink(parsedUrl) {
+  if (!SAFELINKS_HOST_PATTERN.test(parsedUrl.hostname)) return parsedUrl;
+  const inner = parsedUrl.searchParams.get('url');
+  if (!inner) return parsedUrl;
+  try {
+    return new URL(inner);
+  } catch {
+    return parsedUrl; // malformed inner url — fall through, the outer host will just fail the allowlist check below
+  }
+}
+
 /**
- * Shared by both URL sources below: finds every http(s) URL in `text`, keeps only ones
- * whose host is allowlisted, and dedupes while preserving first-seen order. URL_PATTERN
- * already stops at `"`/`'`/`<`/`>`, which is what lets extractEmailBodyLinkedDocumentUrls
- * below pull a clean URL straight out of `href="https://...pdf"` HTML markup with no
- * separate HTML-specific pattern needed.
+ * Shared by both URL sources below: finds every http(s) URL in `text`, unwraps a Safe
+ * Links redirect if that's what it is, keeps only ones whose (real) host is allowlisted,
+ * and dedupes while preserving first-seen order. URL_PATTERN already stops at
+ * `"`/`'`/`<`/`>`, which is what lets extractEmailBodyLinkedDocumentUrls below pull a
+ * clean URL straight out of `href="https://...pdf"` HTML markup with no separate
+ * HTML-specific pattern needed.
  */
 function filterAllowedUrls(text, allowedHosts) {
   const found = text.match(URL_PATTERN) || [];
@@ -38,6 +61,7 @@ function filterAllowedUrls(text, allowedHosts) {
     } catch {
       continue;
     }
+    parsed = unwrapSafeLink(parsed);
     const hostname = parsed.hostname.toLowerCase();
     if (!allowed.has(hostname) || seen.has(parsed.href)) continue;
     seen.add(parsed.href);
@@ -110,7 +134,18 @@ async function fetchLinkedDocument(url, { timeoutMs, maxBytes }) {
   }
 
   const contentType = (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
-  const ext = CONTENT_TYPE_EXTENSIONS[contentType];
+  let ext = CONTENT_TYPE_EXTENSIONS[contentType];
+  if (!ext) {
+    // Azure Blob Storage (and similar object stores) commonly serves
+    // application/octet-stream when a blob was uploaded without an explicit content-type
+    // set — confirmed real (2026-09-14, AYA/ATOM's own claim storage: the header says
+    // application/octet-stream, but the URL's own path ends ".pdf.pdf", matching exactly
+    // what the source email called the file). The header carries no real signal here, so
+    // fall back to the URL's own filename extension rather than reject a file that's
+    // obviously the right type.
+    const urlExt = path.extname(new URL(url).pathname).toLowerCase();
+    ext = Object.entries(CONTENT_TYPE_EXTENSIONS).find(([, mappedExt]) => mappedExt === urlExt)?.[1];
+  }
   if (!ext) {
     throw new Error(`linked document has unsupported content-type "${contentType || 'unknown'}"`);
   }
