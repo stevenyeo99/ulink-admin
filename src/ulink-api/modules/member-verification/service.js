@@ -2,6 +2,7 @@ const { sequelize, Sequelize, Case, CaseEvent } = require('../../db/models');
 const config = require('../../config');
 const { getMemberInfo } = require('./iasClient');
 const { evaluate } = require('./checks');
+const { checkExclusions } = require('./exclusionFlags');
 const { queueDedupedTask } = require('../shared/emailTaskQueue');
 const { ISSUES } = require('../document-checking/checklist');
 
@@ -39,6 +40,12 @@ async function checkCase(caseRecord) {
 
   const iasResponse = await getMemberInfo({ memberNrc, meplEffDate });
   const result = evaluate(extractedFields, iasResponse);
+
+  // Only run the exclusion-possibility check (SOP §6.3) once the hard member/policy checks
+  // already pass — a case still failing on e.g. a DOB mismatch will be re-evaluated on a
+  // later run anyway (see run()'s retry loop), so checking exclusions now would just spend
+  // an LLM call on a result JD2 won't see until the case clears those first.
+  result.flags = result.outcome === 'MEMBER_VERIFIED' ? await checkExclusions(extractedFields, caseRecord.recognizedType) : [];
 
   return { caseId: caseRecord.id, outcome: result.outcome, result, iasResponse };
 }

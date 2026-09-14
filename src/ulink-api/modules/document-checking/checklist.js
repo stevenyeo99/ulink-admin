@@ -291,10 +291,66 @@ function reasonForIssue(issue, fields) {
   }
 }
 
+// Non-blocking completeness flags (SOP §4 mandatory-field table + §10's signature line) —
+// deliberately NOT in ISSUES/EVALUATORS: these never affect `passed`/`issues`, the
+// customer-facing MISSING_DOCUMENTS email, or Case.currentStatus, only the `flags` array
+// below (stored on Case.documentCheckResult same as everything else this function
+// returns). Shipped this way on purpose, not as an oversight — promote an individual field
+// to a real blocking check only after reviewing what it actually flags against real cases.
+// A hard gate that skips that review is exactly what got identity_consistency's
+// patient_name_consistent/medical_record_provider_consistent disabled for false positives
+// (see the block comment above EVALUATORS) — same risk applies to any of these going
+// straight to a gate unreviewed.
+//
+// Covers every SOP §4 field NOT already gated by an existing check above: Illness/Injury
+// Details (checkIncompleteClaimForm), Medical Records (checkNoMedicalReport/
+// checkIncompleteMedicalReport), and Bills/Invoices (checkMissingVoucher) are already
+// covered and intentionally not duplicated here. "Diagnosis" (its own row in the SOP's
+// field table) has no field distinct from medical.detail_of_illness_injury in the current
+// extraction schema — treated as the same field, not a second check on nothing.
+//
+// Member Declaration/Consent (SOP §10) is NOT checked here — there is no extracted field
+// for it at all in the current schema (only documents_present.has_customer_signature
+// exists; no "declaration present" boolean anywhere). Needs a schema decision (a new
+// extraction field) before this can be checked, not just a flip-on — see
+// docs/imp/demo/20260914/JD1_Checklist_SOP_vs_Current_System.md item 1.
+const MANDATORY_FIELDS = [
+  { section: 'Submission Information', field: 'Case Number', get: (f) => f.claim?.insurer_case_number },
+  { section: 'Policy & Member Information', field: 'Product Type', get: (f) => f.policy?.product_name },
+  { section: 'Policy & Member Information', field: 'Policy Number / Risk Name', get: (f) => f.policy?.policy_no },
+  { section: 'Policy & Member Information', field: 'Company Name', get: (f) => f.policy?.company_name },
+  { section: 'Policy & Member Information', field: 'Claimant Name', get: (f) => f.claimant?.claimant_name },
+  { section: 'Policy & Member Information', field: 'Is Claim for Child', get: (f) => f.claimant?.is_claim_for_child },
+  { section: 'Policy & Member Information', field: 'Claimant Date of Birth', get: (f) => f.claimant?.claimant_dob },
+  { section: 'Policy & Member Information', field: 'NRC / Passport Number', get: (f) => f.claimant?.claimant_nrc_passport },
+  { section: 'Policy & Member Information', field: 'Phone Number', get: (f) => f.claimant?.phone_number },
+  { section: 'Policy & Member Information', field: 'Email', get: (f) => f.claimant?.email_address },
+  { section: 'Claim & Treatment Information', field: 'Claim Benefit Type', get: (f) => f.claim?.claim_benefit_type },
+  { section: 'Claim & Treatment Information', field: 'Type of Patient', get: (f) => f.claim?.type_of_patient },
+  { section: 'Claim & Treatment Information', field: 'Appointment / Visited Date', get: (f) => f.claim?.appointment_date },
+  { section: 'Claim & Treatment Information', field: 'Hospital / Clinic Name', get: (f) => f.medical?.hospital_or_clinic_name },
+  { section: 'Claim & Treatment Information', field: 'Claim Amount', get: (f) => f.claim?.total_claim_amount },
+  // Unlike every field above (where only `null` means missing — `false` is a legitimate,
+  // complete answer for a boolean like is_claim_for_child), a signature is only confirmed
+  // present when this is exactly `true`; both `null` and `false` mean "not confirmed."
+  {
+    section: 'Declaration & Signature',
+    field: 'Customer Signature',
+    get: (f) => f.documents_present?.has_customer_signature,
+    isMissing: (value) => value !== true,
+  },
+];
+
+function evaluateMandatoryFieldFlags(fields) {
+  return MANDATORY_FIELDS.filter(({ get, isMissing = (value) => value == null }) => isMissing(get(fields)))
+    .map(({ section, field }) => ({ code: 'MISSING_MANDATORY_FIELD', section, field }));
+}
+
 function evaluateDocumentChecks(extractedFields) {
   const issues = EVALUATORS.map((evaluate) => evaluate(extractedFields)).filter(Boolean);
   const details = issues.map((issue) => ({ issue, ...reasonForIssue(issue, extractedFields) }));
-  return { issues, passed: issues.length === 0, details };
+  const flags = evaluateMandatoryFieldFlags(extractedFields);
+  return { issues, passed: issues.length === 0, details, flags };
 }
 
 module.exports = { ISSUES, evaluateDocumentChecks };
