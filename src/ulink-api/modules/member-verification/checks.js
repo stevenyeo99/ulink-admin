@@ -43,6 +43,12 @@ function compareBankName(extractedValue, iasValue) {
   return a === b || a.includes(b) || b.includes(a);
 }
 
+// SOP §6.1 (Member Active Status) decision, 2026-09-14: checked a real IAS sample
+// (docs/imp/day1/IAS/ias_get_member_information_response_v2.json) — both
+// memberPlans[0].STATUS and policies[0].STATUS came back null, not a field this system can
+// reliably gate on. Business-confirmed equivalent: the coverage-period range this function
+// already checks (REINST_DATE/EFF_DATE..TERM_DATE/EXP_DATE) is accepted as the active-status
+// check — no separate STATUS-field check is added.
 function checkCoverageActive(plan, treatmentDateYYYYMMDD) {
   if (!plan || !treatmentDateYYYYMMDD) return null;
   const start = iasDateToYYYYMMDD(plan.REINST_DATE) || iasDateToYYYYMMDD(plan.EFF_DATE);

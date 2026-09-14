@@ -1,0 +1,13 @@
+{
+  "description": "Member plan has no coverageLimits data at all — nothing to check against, so no flag (never guesses).",
+  "extractedFields": {
+    "claim": {
+      "claim_benefit_type": "Reimbursement",
+      "type_of_patient": "Outpatient"
+    }
+  },
+  "memberPlansRaw": [{}],
+  "expected": {
+    "eligibilityFlag": null
+  }
+}

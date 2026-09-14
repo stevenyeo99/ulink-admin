@@ -1,0 +1,28 @@
+{
+  "description": "type_of_patient matches a candidate on the member's plan (real coverageLimits shape from docs/imp/day1/IAS/ias_get_member_information_response_v2.json) — no flag.",
+  "extractedFields": {
+    "claim": {
+      "claim_benefit_type": "Reimbursement",
+      "type_of_patient": "Outpatient"
+    }
+  },
+  "memberPlansRaw": [
+    {
+      "coverageLimits": [
+        {
+          "limit_type_code": "H",
+          "limit_type_desc": "Benefit Head",
+          "benefits": [
+            { "benefit_type_code": "OP", "benefit_type_desc": "Outpatient", "benefit_head_code": "RX", "benefit_head_desc": "Prescribed Medicine" }
+          ],
+          "amt_yr": 999999999,
+          "amt_vis": null,
+          "amt_life": null
+        }
+      ]
+    }
+  ],
+  "expected": {
+    "eligibilityFlag": null
+  }
+}

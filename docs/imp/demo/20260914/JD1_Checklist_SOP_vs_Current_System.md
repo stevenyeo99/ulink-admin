@@ -44,21 +44,16 @@ Treatment date consistency across Claim Form ↔ Medical Record ↔ Invoice (`ch
 
 ---
 
-## 4. Member Active Status — explicit flag (SOP §6.1) — ⚠️
+## 4. Member Active Status — explicit flag (SOP §6.1) — ✅ (no new check needed, decision documented)
 
-Currently proxied entirely through `checkCoverageActive` (treatment date within `EFF_DATE`/`TERM_DATE` range). SOP separately calls out checking an explicit active-status flag in IAS/member census.
-
-- [ ] Check `member-verification/iasClient.js` — does the IAS response carry a status field (e.g. `MBR_STATUS`) not currently read?
-- [ ] If yes, add as a hard check in `member-verification/checks.js` alongside `coverageActive`.
-- [ ] If no such field exists in IAS, confirm with business whether coverage-date range is accepted as equivalent — document the decision here.
-
-**Why fourth:** might be a one-field addition to an existing IAS response read, or might be a non-issue (already effectively covered) — cheap to investigate first.
+**Resolved 2026-09-14.** Checked a real IAS sample (`docs/imp/day1/IAS/ias_get_member_information_response_v2.json`): both `memberPlans[0].STATUS` and `policies[0].STATUS` come back `null` — not a field this system can reliably gate on. Business-confirmed: `checkCoverageActive`'s existing coverage-period range (`REINST_DATE`/`EFF_DATE`..`TERM_DATE`/`EXP_DATE`) is accepted as the active-status equivalent. Decision comment added directly above `checkCoverageActive` in `member-verification/checks.js`. No new check, no logic change.
 
 ---
 
-## 5. Treatment Date vs Submission Date (SOP §6.6) — ❌
+## 5. Treatment Date vs Submission Date (SOP §6.6) — ❌ (blocked on business rule)
 
-- [ ] Confirm `claim.date_submitted` (or email received date) is extracted/available — check `synthesize.md` schema.
+`claim.date_submitted` is already extracted. Code is a one-line date-diff once the actual rule is known — **blocked purely on the permitted-submission-period day limit, tracked in `Demo_Clarifications_Needed.md`.**
+
 - [ ] Define "permitted submission period" — need the actual policy/product rule (days-from-treatment limit). Not in SOP doc itself; check with business or existing policy config.
 - [ ] Add as a new check in `member-verification/checks.js`, following `checkCoverageActive`'s null-safe pattern.
 - [ ] Decide outcome: hard block (`MEMBER_REVIEW_REQUIRED`) or soft flag for JD2 — SOP says "flag exceptions for assessment," suggesting soft/informational, not a hard gate like coverage/bank/DOB.
@@ -67,23 +62,19 @@ Currently proxied entirely through `checkCoverageActive` (treatment date within 
 
 ---
 
-## 6. Treatment Type vs Eligible Benefit (SOP §6.4) — ⚠️
+## 6. Treatment Type vs Eligible Benefit (SOP §6.4) — ✅
 
-**Update: data source confirmed, this is cheaper than its position suggests — a re-prioritization candidate.** The benefit-eligibility data already exists on the Case: `member-verification/service.js:91` writes `iasMemberInfoResponse: outcome.iasResponse` from the *same* IAS member-info call `checks.js` already uses for the coverage-date check (§6.2/item-already-solid). `ias-claim-preparation/benefitPicker.js`'s `uniqueBenefitCandidates()` already flattens `iasMemberInfoResponse.memberPlans[0].coverageLimits[].benefits[]` into `{type, typeDesc, head, headDesc}` — it's just currently only consumed downstream (claim submission, picking the exact benefit head per voucher via an LLM call, `benefit-pick.md`).
+**Done 2026-09-14.** `uniqueBenefitCandidates()` extracted from `ias-claim-preparation/benefitPicker.js` (private) to `modules/shared/iasBenefits.js` (shared, unchanged behavior) so both jobs reuse the exact same flattening — no duplication. New `modules/member-verification/benefitEligibility.js`, pure/deterministic, no LLM: compares `claim.type_of_patient` against the member's own plan candidates.
 
-JD1's need is coarser than that: not "which exact head," just "is this treatment type covered at all" — pure Tier-2 deterministic set-membership, **no LLM call needed for the JD1 gate**.
+**Correction made during implementation:** the original plan (and this doc's earlier text) said to compare `claim.claim_benefit_type` too — checked real fixture data and every case has `claim_benefit_type = "Reimbursement"` regardless of treatment type. It's the claim's *payment mechanism* (Reimbursement/Cashless), not a coverage category — comparing it against IAS benefit-type candidates would have false-flagged every single reimbursement claim. Only `type_of_patient` is actually compared; `claim_benefit_type` deliberately excluded, with the reasoning left in the code comment so it isn't "corrected" back in by mistake later.
 
-- [ ] Reuse `uniqueBenefitCandidates(memberPlansRaw)` (or extract it to a shared location — it's currently private to `ias-claim-preparation`) from `member-verification/checks.js`.
-- [ ] Add comparison: does `claim.claim_benefit_type` / `type_of_patient` match any candidate's `type`/`typeDesc`? No new IAS call, no new LLM call.
-- [ ] New reasonCode (e.g. `BENEFIT_NOT_ELIGIBLE`) in `member-verification/checks.js`, output as flag for JD2 (SOP says JD1 doesn't reject, just checks/provides for assessment).
-
-**Why sixth (but reconsider):** originally scoped as "highest unknown" — that unknown is now resolved. This is now cheaper than items 4/5, which still have open policy-rule questions. Worth moving up.
+Returns a non-blocking `BENEFIT_NOT_ELIGIBLE` flag (SOP: JD1 never rejects on this, only flags for JD2), wired into `member-verification/service.js`'s `result.flags` alongside `POSSIBLE_EXCLUSION`, gated behind the hard checks already passing (noise-reduction, not cost — this check has no LLM). Fixture-tested in `tests/memberVerification.test.js`.
 
 ---
 
-## 7. Diagnosis vs Policy Exclusion (SOP §6.3) — ❌
+## 7. Diagnosis vs Policy Exclusion (SOP §6.3) — ✅
 
-**Update: exclusion list located, confirmed prose-based (Tier-4 judgment, not a code lookup) — real ingestion work, not a quick flip like item 6.** Checked both docs in `docs/imp/demo/20260914/samples/`:
+**Correction 2026-09-14: this doc was stale — this item is already built and live**, from earlier the same session as items 13-18 (document-checking's judgment module). `modules/policy-exclusion/{lookup,judge,overrideLookup}.js` implements exactly the RAG-then-judge approach recommended below; wired into `member-verification/service.js`'s `checkExclusions` (`exclusionFlags.js`), gated behind the hard checks passing, output as a non-blocking `POSSIBLE_EXCLUSION` flag with attached policyholder overrides. Kept the investigation notes below for reference since they document the real complications found (prose not codes, not binary, two layers) and how each was actually handled.
 
 - `AYAHealth_Special Conditions and Benefit Clarifications...xlsx` — **not an exclusion list.** Per-policyholder overrides (e.g. HEINEKEN's vaccination-campaign restriction, named-employee maternity waivers, Kachin-staff claim-window extension) and general benefit-interpretation opinions (chronic condition, pre-existing, optical). Relevant as an *override* layer (see below), not the base exclusion source.
 - `AYA SOMPO...Policy Wording_English.pdf` — **this is it.** Section 6 "General Exclusions," 41 clauses (6.1–6.41), plus per-section "Specific Exclusions" scattered through Sections 1–4 (Maternity, Thailand Zone, Optical, Dental, Personal Accident). All written as free-text legal clauses (e.g. *"self-inflicted Injury"*, *"Chronic or end-stage kidney failure which... will require... dialysis"*, *"Cosmetic surgery... unless required as a direct result of an Accident"*) — not ICD-10 codes. `diagnosisPicker.js`'s code output doesn't map onto this directly.
@@ -100,13 +91,11 @@ Three real complications found, not just "list exists now, ship it":
 
 ---
 
-## 8. Available Benefit Balance (SOP §6.5) — ❌
+## 8. Available Benefit Balance (SOP §6.5) — ✅ (placeholder, real integration deferred)
 
-- [ ] Requires live balance data from IAS (or wherever balances are tracked) per member/plan/benefit-type.
-- [ ] Check if `iasClient.js` has an existing endpoint for this, or if it needs a new IAS integration.
-- [ ] Not a pass/fail check — SOP says "provide it for assessment" (informational field for JD2, not a JD1 gate).
+**Done 2026-09-14, as a deliberate placeholder.** User-confirmed decision: show the plan's own filed limit as the "balance" until a real usage-tracked balance API is integrated later — no such live-balance IAS endpoint exists today, so an actual remaining-balance figure isn't available yet. New `modules/member-verification/benefitLimits.js` (`summarizeBenefitLimits`), pure passthrough of `memberPlans[0].coverageLimits[]`'s own annual/per-visit/lifetime amounts — every entry carries a fixed `note` field explicitly stating it's the filed limit, not a usage-adjusted balance, so JD2 can never mistake one for the other. Attached as `result.benefitLimits` on `member-verification`'s result, populated whenever IAS returns data (informational, not gated on the hard checks passing).
 
-**Why last:** most likely needs a new IAS integration point — highest unknown, lowest urgency (informational only, not a gate).
+**Still open:** real balance integration once an IAS endpoint for it exists — tracked here, not urgent.
 
 ---
 

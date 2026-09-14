@@ -1,0 +1,34 @@
+{
+  "description": "coverageLimits present (real shape) — summarized with the fixed placeholder note, straight passthrough of amounts, no computed remaining balance.",
+  "memberPlansRaw": [
+    {
+      "coverageLimits": [
+        {
+          "limit_type_code": "H",
+          "limit_type_desc": "Benefit Head",
+          "benefits": [
+            { "benefit_type_code": "OP", "benefit_type_desc": "Outpatient", "benefit_head_code": "RX", "benefit_head_desc": "Prescribed Medicine" }
+          ],
+          "amt_yr": 999999999,
+          "amt_vis": null,
+          "amt_life": null
+        }
+      ]
+    }
+  ],
+  "expected": {
+    "limits": [
+      {
+        "limitType": "H",
+        "limitTypeDesc": "Benefit Head",
+        "benefits": [
+          { "type": "OP", "typeDesc": "Outpatient", "head": "RX", "headDesc": "Prescribed Medicine" }
+        ],
+        "annualLimit": 999999999,
+        "perVisitLimit": null,
+        "lifetimeLimit": null,
+        "note": "Plan limit as filed — not adjusted for prior usage; real-time balance integration pending."
+      }
+    ]
+  }
+}

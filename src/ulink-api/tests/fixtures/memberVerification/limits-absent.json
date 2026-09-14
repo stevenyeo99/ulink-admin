@@ -1,0 +1,7 @@
+{
+  "description": "No coverageLimits on the plan at all — returns an empty array, not an error.",
+  "memberPlansRaw": [{}],
+  "expected": {
+    "limits": []
+  }
+}

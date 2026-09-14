@@ -35,6 +35,22 @@ const router = express.Router();
  *                     outcome: { type: string }
  *                     reasonCode: { type: string, nullable: true }
  *                     checks: { type: object }
+ *                     flags:
+ *                       type: array
+ *                       description: >
+ *                         Non-blocking JD2-review flags, only populated once the hard checks
+ *                         pass — e.g. POSSIBLE_EXCLUSION (SOP §6.3) or BENEFIT_NOT_ELIGIBLE
+ *                         (SOP §6.4, claimed benefit type not found on the member's own plan).
+ *                       items: { type: object }
+ *                     benefitLimits:
+ *                       type: array
+ *                       description: >
+ *                         SOP §6.5, informational only. The member's plan limits as filed on
+ *                         IAS (annual/per-visit/lifetime) — NOT a usage-adjusted remaining
+ *                         balance (no such integration exists yet); each entry carries its
+ *                         own `note` saying so. Populated whenever the IAS call succeeded,
+ *                         independent of whether the hard checks passed.
+ *                       items: { type: object }
  *                 iasResponse:
  *                   type: object
  *                   description: >

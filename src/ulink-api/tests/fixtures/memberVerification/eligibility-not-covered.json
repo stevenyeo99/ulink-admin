@@ -1,0 +1,28 @@
+{
+  "description": "type_of_patient (Dental) does not match any candidate on a plan that only covers Outpatient — flag fires. claim_benefit_type is deliberately irrelevant here (it's the payment mechanism, e.g. Reimbursement, not a treatment type).",
+  "extractedFields": {
+    "claim": {
+      "claim_benefit_type": "Reimbursement",
+      "type_of_patient": "Dental"
+    }
+  },
+  "memberPlansRaw": [
+    {
+      "coverageLimits": [
+        {
+          "limit_type_code": "H",
+          "limit_type_desc": "Benefit Head",
+          "benefits": [
+            { "benefit_type_code": "OP", "benefit_type_desc": "Outpatient", "benefit_head_code": "RX", "benefit_head_desc": "Prescribed Medicine" }
+          ],
+          "amt_yr": 999999999
+        }
+      ]
+    }
+  ],
+  "expected": {
+    "eligibilityFlag": {
+      "code": "BENEFIT_NOT_ELIGIBLE"
+    }
+  }
+}

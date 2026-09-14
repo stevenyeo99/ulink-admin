@@ -3,6 +3,8 @@ const config = require('../../config');
 const { getMemberInfo } = require('./iasClient');
 const { evaluate } = require('./checks');
 const { checkExclusions } = require('./exclusionFlags');
+const { checkBenefitEligibility } = require('./benefitEligibility');
+const { summarizeBenefitLimits } = require('./benefitLimits');
 const { queueDedupedTask } = require('../shared/emailTaskQueue');
 const { ISSUES } = require('../document-checking/checklist');
 
@@ -41,11 +43,26 @@ async function checkCase(caseRecord) {
   const iasResponse = await getMemberInfo({ memberNrc, meplEffDate });
   const result = evaluate(extractedFields, iasResponse);
 
-  // Only run the exclusion-possibility check (SOP §6.3) once the hard member/policy checks
-  // already pass — a case still failing on e.g. a DOB mismatch will be re-evaluated on a
-  // later run anyway (see run()'s retry loop), so checking exclusions now would just spend
-  // an LLM call on a result JD2 won't see until the case clears those first.
-  result.flags = result.outcome === 'MEMBER_VERIFIED' ? await checkExclusions(extractedFields, caseRecord.recognizedType) : [];
+  // Only run the exclusion-possibility check (SOP §6.3) and benefit-eligibility check (SOP
+  // §6.4) once the hard member/policy checks already pass — a case still failing on e.g. a
+  // DOB mismatch will be re-evaluated on a later run anyway (see run()'s retry loop), so
+  // spending these now would surface a result JD2 won't see until the case clears those
+  // first. checkBenefitEligibility itself is free (no LLM), gated here for the same
+  // noise-reduction reason as exclusions, not cost.
+  if (result.outcome === 'MEMBER_VERIFIED') {
+    const eligibilityFlag = checkBenefitEligibility(extractedFields, iasResponse.payload?.memberPlans);
+    result.flags = [
+      ...(await checkExclusions(extractedFields, caseRecord.recognizedType)),
+      ...(eligibilityFlag ? [eligibilityFlag] : []),
+    ];
+  } else {
+    result.flags = [];
+  }
+
+  // Benefit-limit info (SOP §6.5) is informational for JD2, not a gate — populate it
+  // whenever IAS actually returned plan data, regardless of hard-check pass/fail, since
+  // it's useful context either way (e.g. explaining why a claim looks out of scope).
+  result.benefitLimits = iasResponse.success ? summarizeBenefitLimits(iasResponse.payload?.memberPlans) : [];
 
   return { caseId: caseRecord.id, outcome: result.outcome, result, iasResponse };
 }

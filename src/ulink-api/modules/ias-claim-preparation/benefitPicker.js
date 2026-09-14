@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { synthesizeJson } = require('../claim-recognition/llmClient');
+const { uniqueBenefitCandidates } = require('../shared/iasBenefits');
 
 const SYSTEM_PROMPT = fs.readFileSync(path.join(__dirname, 'prompts', 'benefit-pick.md'), 'utf8');
 
@@ -15,35 +16,6 @@ const SCHEMA = {
 };
 
 const CONFIDENCE_THRESHOLD = 0.5;
-
-/**
- * Flattens memberPlans[0].coverageLimits[].benefits[] (the member's own plan — already
- * stored raw on Case.iasMemberInfoResponse for exactly this reuse) into unique
- * {type, typeDesc, head, headDesc} combos — the same benefit can appear under multiple
- * coverageLimits rows (per-limit-type groupings), so this is deliberately deduped before
- * ever reaching the LLM.
- */
-function uniqueBenefitCandidates(memberPlansRaw) {
-  const plan = memberPlansRaw?.[0];
-  const coverageLimits = plan?.coverageLimits || [];
-  const seen = new Map();
-
-  for (const limit of coverageLimits) {
-    for (const benefit of limit.benefits || []) {
-      if (!benefit.benefit_type_code) continue;
-      const key = `${benefit.benefit_type_code}|${benefit.benefit_head_code || ''}`;
-      if (!seen.has(key)) {
-        seen.set(key, {
-          type: benefit.benefit_type_code,
-          typeDesc: benefit.benefit_type_desc,
-          head: benefit.benefit_head_code,
-          headDesc: benefit.benefit_head_desc,
-        });
-      }
-    }
-  }
-  return [...seen.values()];
-}
 
 /**
  * LLM pick from the member's own plan's valid benefit combos — never a lookup against a
