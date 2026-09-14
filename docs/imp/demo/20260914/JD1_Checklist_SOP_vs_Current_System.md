@@ -9,6 +9,28 @@ Ordered by implementation priority (top = do first). Each item has a checkbox to
 
 ---
 
+## Pipeline → Email Map
+
+Every job doesn't just "arrow into a generic email-sender box" — each queues its own named `EmailTask` type, and each type now has a clear, deliberate audience (customer or internal ops). Added 2026-09-14 alongside the internal-vs-customer corrections below, since that distinction wasn't visible anywhere before.
+
+```mermaid
+flowchart TD
+    A[email-intake] --> B[claim-recognition]
+    B --> C[member-verification]
+    C -->|fail| C1["📧 internal: MEMBER_VERIFY_ISSUE<br/>(hold, SOP §11)"]
+    C -->|pass| D[document-checking]
+    D -->|fail| D1["📧 customer: MISSING_DOCUMENTS"]
+    D -->|both passed| D2["📧 customer: DOCUMENT_COMPLETE_ACK"]
+    D -->|pass| E[ias-claim-preparation]
+    E --> F[ias-claim-creation]
+    F -->|IAS success| F1["📧 internal: CLAIM_APPROVAL_REVIEW<br/>(SOP §13 ready-for-JD2 signal)"]
+    F -->|IAS rejected| F2["📧 internal: CLAIM_SUBMIT_ISSUE<br/>(real IAS reason, SOP §11)"]
+```
+
+`SUBMISSION_NOT_RECOGNIZED` (customer, `email-intake`/routing can't classify the submission at all) isn't shown above — it's a side-exit from the very start of the pipeline, not a stage-to-stage transition.
+
+---
+
 ## 1. Signature & Declaration (SOP §10) — ❌ (deferred by business decision)
 
 **Status 2026-09-14: deliberately not being worked on.** User decision: *"declaration consent we skip first, during demo i will try clarify"* — this is the one remaining open item for document-checking's own scope; everything else below it in this list belongs to other jobs (member-verification) or is now done (see items 2/3).
@@ -110,14 +132,11 @@ SOP: *"Reference fields to review when available: Date Submitted, Submission Cha
 
 ---
 
-## 10. Explicit "Ready for JD2 Handover" Flag (SOP §13) — ❌
+## 10. Explicit "Ready for JD2 Handover" Flag (SOP §13) — ✅ (as a notification, not a stored flag)
 
-SOP's final checklist has this as its own checkbox, separate from the 12 individual Yes/No items. Today readiness is only implicit (no open `ISSUES` on the case) — no dedicated stored flag/timestamp. `pipeline/service.js` only tracks run-execution status (`PENDING/RUNNING/DONE/FAILED/COMPLETED_WITH_ERRORS`), not a business-level "cleared for JD2" state.
+**Done 2026-09-14, via the email-internal-vs-customer correction work.** `ias-claim-creation/service.js` now queues an internal-only `CLAIM_APPROVAL_REVIEW` email (`INTERNAL_REVIEW_EMAIL`) the moment a claim is created in IAS — JD1's automated work is complete at that point, and this is the signal that JD2's manual review/approval starts. It replaced the old customer-facing `CLAIM_CREATED_NOTIFICATION` ("your claim number is X"), which this system could never correctly time anyway: `Case.currentStatus` never advances past `CLAIM_CREATED` (final determination is outside JD1 scope, SOP §14), so there was no way to detect when it was actually safe to tell the customer. Telling the customer their claim number is now a manual step for ops once JD2 has actually reviewed/approved — deliberate, not an oversight.
 
-- [ ] Confirm with business whether implicit (no open issues = ready) is sufficient, or JD2 handover needs an explicit stored flag/timestamp for audit/reporting.
-- [ ] If explicit: add once the rest of this checklist's checks exist — this is a rollup, not new logic.
-
-**Why last:** lowest urgency — likely fine as-is, and it's a rollup of every other item on this list, so it can't usefully be built before them.
+**Not built:** a dedicated stored flag/timestamp on `Case` itself (the email is the signal today, not a queryable field). Revisit only if audit/reporting needs to query "ready for JD2" as case state, not just as a sent-email log.
 
 ---
 

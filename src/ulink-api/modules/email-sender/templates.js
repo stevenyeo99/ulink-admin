@@ -1,26 +1,29 @@
 /**
- * Renders the body for one EmailTask.taskType. Subject is deliberately left null for
- * both — these are replies within an existing thread, so channels/imapSmtpChannel.js
- * defaults to "Re: <original subject>" itself, matching how a human agent's reply stays
- * on the same subject line rather than introducing a new one.
+ * Renders the body for one EmailTask.taskType. Customer-facing renderers leave subject
+ * null — these are replies within an existing customer thread, so
+ * channels/imapSmtpChannel.js defaults to "Re: <original subject>" itself, matching how a
+ * human agent's reply stays on the same subject line rather than introducing a new one.
+ * The internal-only renderers (see below) set an explicit subject instead — they land in
+ * an ops inbox handling many cases, not a single customer thread, so a scannable
+ * case-id-based subject is more useful than "Re: <that case's original subject>".
  *
  * MISSING_DOCUMENTS's wording is copied verbatim from docs/samples/20260820/Canned
  * response for Sample.docx (the ULINK-approved canned responses) where a line has one —
  * not paraphrased, including its own phrasing/quirks. Two of the issue lines it can carry
  * (see modules/document-checking/checklist.js's ISSUES) are NOT from that approved doc —
  * placeholder wording, flag for business sign-off before relying on the exact phrasing.
- * CLAIM_CREATED_NOTIFICATION, CLAIM_SUBMIT_ISSUE, and SUBMISSION_NOT_RECOGNIZED are the
- * same story — no approved canned line exists yet for "your claim number is X", a claim
- * submission rejection, or an unrecognized submission; composed wording, needs sign-off
- * before real customers see it.
+ * SUBMISSION_NOT_RECOGNIZED is the same story — no approved canned line exists yet for an
+ * unrecognized submission; composed wording, needs sign-off before real customers see it.
  *
- * MEMBER_VERIFY_ISSUE is INTERNAL-ONLY (see email-sender/service.js's
- * INTERNAL_ONLY_TASK_TYPES) — SOP §11 frames member-verification's findings ("Member/policy
- * mismatch", "Bank detail issue") as "hold and verify/escalate", never a direct customer
- * request, unlike MISSING_DOCUMENTS. So unlike every other renderer in this file, its
- * content is written for an ops reader, not a customer, and can freely include raw
- * extracted-vs-IAS diagnostic detail — the thing every *other* template here deliberately
- * keeps away from customers (see renderClaimSubmitIssue's comment).
+ * MEMBER_VERIFY_ISSUE, CLAIM_APPROVAL_REVIEW, and CLAIM_SUBMIT_ISSUE are INTERNAL-ONLY (see
+ * email-sender/service.js's INTERNAL_ONLY_TASK_TYPES) — none of these three map to "email
+ * the customer directly" per SOP: member-verification/claim-submission findings are "hold
+ * and verify/escalate" (§11), and claim approval itself happens outside JD1 entirely (§14)
+ * — this system can't even detect when it happens, so CLAIM_APPROVAL_REVIEW is the "ready
+ * for JD2 handover" signal (§13), not a customer notice. Unlike every other renderer here,
+ * their content is written for an ops reader and can freely include raw diagnostic detail
+ * (extracted-vs-IAS values, the real IAS rejection reason) — exactly what every *other*
+ * template in this file deliberately keeps away from customers.
  */
 
 const MISSING_DOCUMENTS_INTRO = `Dear Valued Customer,
@@ -86,20 +89,18 @@ function renderDocumentCompleteAck() {
   return { subject: null, bodyText: DOCUMENT_COMPLETE_ACK_BODY };
 }
 
-const CLAIM_SUBMIT_ISSUE_BODY = `Dear Valued Customer,
+// Internal-only (see this file's header comment) — the real IAS rejection reason is
+// exactly what ops needs to act on, unlike the old customer-facing wording this replaced
+// (which deliberately hid it).
+function renderClaimSubmitIssue(payload) {
+  const { caseId, errorMessage } = payload;
+  return {
+    subject: `Claim submission failed — Case ${caseId}`,
+    bodyText: `IAS rejected this claim submission. Case sits at CLAIM_SUBMIT_FAILED and is NOT retried automatically — needs manual follow-up.
 
-We encountered an issue while submitting your claim and are unable to proceed automatically at this time. Our team will review your case and follow up with you directly.
-
-If you have any questions, kindly contact us at ayahealthinfo@ayasompo.com or call our hotline during office hours.
-
-Thank you and Best Regards,`;
-
-// Deliberately generic — no raw IAS error text (e.g. "Claim already exists") to the
-// customer; that detail stays internal (Case.iasClaimResult / CaseEvent.message, per
-// ias-claim-creation/service.js) for admin follow-up, same as every other outcome here never
-// exposing raw system detail to a customer.
-function renderClaimSubmitIssue() {
-  return { subject: null, bodyText: CLAIM_SUBMIT_ISSUE_BODY };
+Case ID: ${caseId}
+IAS rejection reason: ${errorMessage}`,
+  };
 }
 
 const SUBMISSION_NOT_RECOGNIZED_BODY = `Dear Valued Customer,
@@ -117,29 +118,30 @@ function renderSubmissionNotRecognized() {
   return { subject: null, bodyText: SUBMISSION_NOT_RECOGNIZED_BODY };
 }
 
-function renderClaimCreatedNotification(payload) {
-  const claimNo = payload.claimNo || 'N/A';
+// Internal-only (see this file's header comment) — replaces the old customer-facing
+// CLAIM_CREATED_NOTIFICATION. This is the SOP §13 "ready for JD2 handover" signal: JD1's
+// automated work is done, a human now needs to review/approve before the customer is ever
+// told a claim number (which happens outside this system, manually, once approved).
+function renderClaimApprovalReview(payload) {
+  const { caseId, claimNo } = payload;
   return {
-    subject: null,
-    bodyText: `Dear Valued Customer,
+    subject: `Claim ready for JD2 approval — Case ${caseId} — Claim ${claimNo}`,
+    bodyText: `A claim has been created in IAS and is ready for JD2 review/approval. JD1's automated checks are complete for this case.
 
-We are pleased to inform you that your claim has been successfully created in our system.
+Case ID: ${caseId}
+Claim Number: ${claimNo}
 
-Your Claim Number: ${claimNo}
-
-We will notify you of the outcome in due course. If you have any questions, kindly contact us at ayahealthinfo@ayasompo.com.
-
-Thank you and Best Regards,`,
+Note: the customer has NOT been told their claim number yet — that happens manually once JD2 has reviewed/approved.`,
   };
 }
 
 const RENDERERS = {
   MISSING_DOCUMENTS: renderMissingDocuments,
   DOCUMENT_COMPLETE_ACK: renderDocumentCompleteAck,
-  CLAIM_CREATED_NOTIFICATION: renderClaimCreatedNotification,
   MEMBER_VERIFY_ISSUE: renderMemberVerifyIssue,
   CLAIM_SUBMIT_ISSUE: renderClaimSubmitIssue,
   SUBMISSION_NOT_RECOGNIZED: renderSubmissionNotRecognized,
+  CLAIM_APPROVAL_REVIEW: renderClaimApprovalReview,
 };
 
 function render(taskType, payload) {

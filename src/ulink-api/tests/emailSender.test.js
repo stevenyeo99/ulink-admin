@@ -35,6 +35,33 @@ describe('renderMemberVerifyIssue (internal-only, SOP §11)', () => {
   });
 });
 
+// CLAIM_APPROVAL_REVIEW replaces the old customer-facing CLAIM_CREATED_NOTIFICATION — SOP
+// §13 "ready for JD2 handover" signal, internal-only since this system can't detect JD2's
+// later approval.
+describe('renderClaimApprovalReview (internal-only, SOP §13)', () => {
+  it('renders claim/case detail and explicitly states the customer was not notified', () => {
+    const rendered = render('CLAIM_APPROVAL_REVIEW', { caseId: 'case-123', claimNo: 'CL-999' });
+
+    expect(rendered.subject).toContain('case-123');
+    expect(rendered.subject).toContain('CL-999');
+    expect(rendered.bodyText).not.toContain('Dear Valued Customer');
+    expect(rendered.bodyText).toContain('ready for JD2 review/approval');
+    expect(rendered.bodyText).toContain('customer has NOT been told their claim number');
+  });
+});
+
+// CLAIM_SUBMIT_ISSUE is internal-only for the same reason as MEMBER_VERIFY_ISSUE — the real
+// IAS rejection reason is what ops needs, not the old generic customer wording.
+describe('renderClaimSubmitIssue (internal-only, SOP §11)', () => {
+  it('renders the real IAS rejection reason, not customer-safe wording', () => {
+    const rendered = render('CLAIM_SUBMIT_ISSUE', { caseId: 'case-456', errorMessage: 'Claim already exists' });
+
+    expect(rendered.subject).toContain('case-456');
+    expect(rendered.bodyText).not.toContain('Dear Valued Customer');
+    expect(rendered.bodyText).toContain('Claim already exists');
+  });
+});
+
 describe('resolveRecipient', () => {
   const originalInternalReviewEmail = require('../config').emailSender.internalReviewEmail;
 
@@ -42,10 +69,13 @@ describe('resolveRecipient', () => {
     require('../config').emailSender.internalReviewEmail = originalInternalReviewEmail;
   });
 
-  it('routes MEMBER_VERIFY_ISSUE to the configured internal review address, not the customer', () => {
-    require('../config').emailSender.internalReviewEmail = 'ops@example.com';
-    expect(resolveRecipient('MEMBER_VERIFY_ISSUE', 'customer@example.com')).toBe('ops@example.com');
-  });
+  it.each(['MEMBER_VERIFY_ISSUE', 'CLAIM_APPROVAL_REVIEW', 'CLAIM_SUBMIT_ISSUE'])(
+    'routes %s to the configured internal review address, not the customer',
+    (taskType) => {
+      require('../config').emailSender.internalReviewEmail = 'ops@example.com';
+      expect(resolveRecipient(taskType, 'customer@example.com')).toBe('ops@example.com');
+    }
+  );
 
   it('throws loudly when INTERNAL_REVIEW_EMAIL is unset, rather than silently sending nowhere', () => {
     require('../config').emailSender.internalReviewEmail = null;

@@ -434,13 +434,16 @@ const router = express.Router();
  *       submits Case.iasClaimPayload to the real IAS CL_CLAIM_API
  *       (modules/ias-claim-creation/iasClaimClient.js). On success, sets
  *       Case.currentStatus=CLAIM_CREATED, Case.claimNo (the real assigned claim number),
- *       Case.iasClaimResult, logs a CaseEvent, and queues a CLAIM_CREATED_NOTIFICATION
- *       EmailTask (a new, distinct customer email — DOCUMENT_COMPLETE_ACK at
- *       MEMBER_VERIFIED is unrelated and unaffected, both are sent). On a real business
- *       rejection from IAS (success:false with a reason, e.g. "Claim already exists"), sets
- *       Case.currentStatus=CLAIM_SUBMIT_FAILED, stores the error, and queues a
- *       CLAIM_SUBMIT_ISSUE EmailTask notifying the customer (generic wording — the raw IAS
- *       error stays internal, in Case.iasClaimResult/the CaseEvent, for admin follow-up) —
+ *       Case.iasClaimResult, logs a CaseEvent, and queues an INTERNAL-ONLY
+ *       CLAIM_APPROVAL_REVIEW EmailTask (SOP §13 "ready for JD2 handover" signal, sent to
+ *       INTERNAL_REVIEW_EMAIL — this system can't detect JD2's later approval, so the
+ *       customer's claim-number notice is now a manual step outside this system, not
+ *       automatic; DOCUMENT_COMPLETE_ACK at MEMBER_VERIFIED is unrelated and unaffected,
+ *       still sent to the customer). On a real business rejection from IAS (success:false
+ *       with a reason, e.g. "Claim already exists"), sets
+ *       Case.currentStatus=CLAIM_SUBMIT_FAILED, stores the error, and queues an
+ *       INTERNAL-ONLY CLAIM_SUBMIT_ISSUE EmailTask with the real IAS rejection reason (SOP
+ *       §11: held for internal follow-up, not sent to the customer) —
  *       this is NOT retried, since retrying a definitive rejection would never resolve it;
  *       needs manual follow-up. A technical failure (timeout, network error, missing iasClaimPayload)
  *       leaves the case at CLAIM_PAYLOAD_PREPARED for retry on the next run — this IS
