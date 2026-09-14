@@ -1,8 +1,11 @@
 const { sequelize, Case, EmailThread, EmailMessage, EmailAttachment, CaseEvent } = require('../../db/models');
+const config = require('../../config');
 const { getStorageAdapter } = require('../../storage');
 const { getChannelAdapter } = require('../../channels');
 const { matchOrCreateThread } = require('./threadMatcher');
 const { queueDedupedTask } = require('../shared/emailTaskQueue');
+const { extractEmailBodyLinkedDocumentUrls, fetchLinkedDocument } = require('../claim-recognition/linkedDocuments');
+const logger = require('../../utils/logger');
 
 const BLOCK_NAME = 'email-intake';
 
@@ -104,6 +107,7 @@ async function persistSubmission(submission) {
         ccAddr: submission.cc,
         subject: submission.subject,
         bodyText: submission.bodyText,
+        bodyHtml: submission.bodyHtml,
         status: submission.direction === 'inbound' ? 'received' : null,
         receivedAt: submission.receivedAt,
         rawSizeBytes: submission.rawSizeBytes,
@@ -135,6 +139,58 @@ async function persistSubmission(submission) {
         { transaction }
       );
       storedCount += 1;
+    }
+
+    // Some real submissions have no MIME attachments at all — the claim documents are only
+    // referenced as links in the HTML body (verified against a real sample: a "File
+    // Attachments Link:" section, no embedded files). Not an either/or with the loop
+    // above — an email could have one real attachment plus another linked in the body, so
+    // this always runs when bodyHtml is present, regardless of storedCount so far. Each
+    // successfully fetched link becomes its own EmailAttachment (sourceUrl set, same
+    // "fetched from a link" convention claim-recognition's transcribeLinkedDocuments
+    // already uses for the PDF-embedded-link case) and counts toward storedCount, so the
+    // existing "storedCount > 0 -> advance to READY_FOR_DOCUMENT_READING" logic below
+    // covers this path with no new branching.
+    if (submission.bodyHtml) {
+      const bodyLinkUrls = extractEmailBodyLinkedDocumentUrls(submission.bodyHtml, config.linkedDocuments.allowedHosts);
+      for (let i = 0; i < bodyLinkUrls.length; i += 1) {
+        const url = bodyLinkUrls[i];
+        let fetched;
+        try {
+          fetched = await fetchLinkedDocument(url, {
+            timeoutMs: config.linkedDocuments.timeoutMs,
+            maxBytes: config.linkedDocuments.maxBytes,
+          });
+        } catch (error) {
+          // One bad link must not fail the whole submission — other real attachments and
+          // other body links in the same email still need to be stored.
+          logger.warn('email-intake: failed to fetch body-linked document', { caseId, url, error: error.message });
+          continue;
+        }
+
+        const urlFilename = decodeURIComponent(url.split('/').pop() || '').split('?')[0];
+        const filename = urlFilename || `linked-${i}${fetched.ext}`;
+        const key = attachmentStorageKey({
+          caseId,
+          messageId: emailMessage.id,
+          receivedAt: submission.receivedAt,
+          filename,
+          index: submission.attachments.length + i,
+        });
+        const { storageRef } = await storage.put(key, fetched.buffer);
+        await EmailAttachment.create(
+          {
+            messageId: emailMessage.id,
+            storageRef,
+            originalFilename: filename,
+            contentType: fetched.contentType,
+            sizeBytes: fetched.buffer.length,
+            sourceUrl: url,
+          },
+          { transaction }
+        );
+        storedCount += 1;
+      }
     }
 
     if (storedCount > 0) {

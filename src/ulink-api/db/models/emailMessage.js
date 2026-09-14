@@ -20,6 +20,7 @@ module.exports = (sequelize, DataTypes) => {
       ccAddr: { type: DataTypes.TEXT, allowNull: true },
       subject: { type: DataTypes.TEXT, allowNull: true },
       bodyText: { type: DataTypes.TEXT, allowNull: true },
+      bodyHtml: { type: DataTypes.TEXT, allowNull: true },
       status: { type: DataTypes.STRING, allowNull: true },
       receivedAt: { type: DataTypes.DATE, allowNull: true },
       rawSizeBytes: { type: DataTypes.INTEGER, allowNull: true },

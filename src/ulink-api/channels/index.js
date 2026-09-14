@@ -18,6 +18,10 @@ const freshdeskChannel = require('./freshdeskChannel');
  *     direction: 'inbound' | 'outbound',
  *     messageId, inReplyTo, references,  // email threading headers (null where not applicable)
  *     from, to, cc, subject, bodyText,
+ *     bodyHtml,  // raw HTML body, null when the message has no HTML part — needed to
+ *                // recover links whose href bodyText's plain-text rendering already
+ *                // stripped down to visible text only (see modules/email-intake/service.js's
+ *                // body-linked-document handling)
  *     receivedAt, rawSizeBytes,
  *     attachments: [{ filename, contentType, sizeBytes, content: Buffer }]
  *   }

@@ -19,6 +19,35 @@ const CONTENT_TYPE_EXTENSIONS = {
 };
 
 /**
+ * Shared by both URL sources below: finds every http(s) URL in `text`, keeps only ones
+ * whose host is allowlisted, and dedupes while preserving first-seen order. URL_PATTERN
+ * already stops at `"`/`'`/`<`/`>`, which is what lets extractEmailBodyLinkedDocumentUrls
+ * below pull a clean URL straight out of `href="https://...pdf"` HTML markup with no
+ * separate HTML-specific pattern needed.
+ */
+function filterAllowedUrls(text, allowedHosts) {
+  const found = text.match(URL_PATTERN) || [];
+  const allowed = new Set(allowedHosts.map((host) => host.toLowerCase()));
+  const seen = new Set();
+  const urls = [];
+
+  for (const raw of found) {
+    let parsed;
+    try {
+      parsed = new URL(raw.replace(/[).,;]+$/, '')); // trailing punctuation caught by the regex
+    } catch {
+      continue;
+    }
+    const hostname = parsed.hostname.toLowerCase();
+    if (!allowed.has(hostname) || seen.has(parsed.href)) continue;
+    seen.add(parsed.href);
+    urls.push(parsed.href);
+  }
+
+  return urls;
+}
+
+/**
  * Pulls URLs out of a PDF's own text layer via pdftotext (poppler-utils — already a system
  * dependency here, rasterize.js uses pdftoppm from the same package). Deliberately not
  * sourced from the vision transcript: the PDFs this pipeline sees for this are digitally
@@ -40,25 +69,20 @@ async function extractLinkedDocumentUrls(pdfBuffer, allowedHosts) {
     await fs.promises.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
   }
 
-  const found = stdout.match(URL_PATTERN) || [];
-  const allowed = new Set(allowedHosts.map((host) => host.toLowerCase()));
-  const seen = new Set();
-  const urls = [];
+  return filterAllowedUrls(stdout, allowedHosts);
+}
 
-  for (const raw of found) {
-    let parsed;
-    try {
-      parsed = new URL(raw.replace(/[).,;]+$/, '')); // trailing punctuation caught by the regex
-    } catch {
-      continue;
-    }
-    const hostname = parsed.hostname.toLowerCase();
-    if (!allowed.has(hostname) || seen.has(parsed.href)) continue;
-    seen.add(parsed.href);
-    urls.push(parsed.href);
-  }
-
-  return urls;
+/**
+ * Same idea as extractLinkedDocumentUrls, but for a submission with no MIME attachments at
+ * all — some real claim notifications only list a "File Attachments Link:" section in the
+ * email body instead of embedding the documents (verified against a real sample). Unlike
+ * the PDF case, no pdftotext step is needed — mailparser's HTML body is already text, so
+ * this just runs the same allowlist filter directly on it. Used by
+ * modules/email-intake/service.js, not claim-recognition itself — lives here so both URL
+ * sources share one allowlist/fetch implementation instead of two drifting copies.
+ */
+function extractEmailBodyLinkedDocumentUrls(html, allowedHosts) {
+  return filterAllowedUrls(html, allowedHosts);
 }
 
 /**
@@ -104,4 +128,4 @@ async function fetchLinkedDocument(url, { timeoutMs, maxBytes }) {
   return { buffer: Buffer.from(arrayBuffer), contentType, ext };
 }
 
-module.exports = { extractLinkedDocumentUrls, fetchLinkedDocument };
+module.exports = { extractLinkedDocumentUrls, extractEmailBodyLinkedDocumentUrls, fetchLinkedDocument };

@@ -30,6 +30,7 @@ async function fetchNewSubmissions(onSubmission) {
       cc: joinAddresses(parsed.cc),
       subject: parsed.subject || envelope.subject || null,
       bodyText: parsed.text || null,
+      bodyHtml: parsed.html || null, // mailparser returns `false`, not `null`, when there's no HTML part
       receivedAt: rawMessage.internalDate || new Date(),
       rawSizeBytes: rawMessage.source ? rawMessage.source.length : null,
       attachments: (Array.isArray(parsed.attachments) ? parsed.attachments : [])
