@@ -357,10 +357,47 @@ function evaluateMandatoryFieldFlags(fields) {
     .map(({ section, field }) => ({ code: 'MISSING_MANDATORY_FIELD', section, field }));
 }
 
+// SOP §8's Cross-Document Consistency table, Treatment Date row: JD1 Rule is specifically
+// "Medical Record and Invoice Date Must Match / Be Consistent" — that pairing (not Claim
+// Form) is the SOP's own literal match requirement, now checkable since invoices.items[].date
+// was added (db/migrations/20260914110000-add-invoice-date-and-medical-record-diagnosis.js).
+// Claim Form vs Medical Record is also checked below — a reasonable superset SOP doesn't
+// explicitly forbid, kept from the original version of this check.
+//
+// Deliberately NOT judgment — unlike name matching (which needs script/honorific-aware
+// comparison, hence the future identity-judgment module in this file's domain), dates are
+// already normalized to ISO YYYY-MM-DD strings during extraction (see claim-recognition/
+// prompts/extract-fields.md's date rule), so every comparison here is a plain string
+// compare, Tier-2 code, no LLM call needed at all.
+//
+// Same accident_date -> appointment_date fallback as member-verification/checks.js's own
+// treatment-date resolution (an illness claim has no accident_date; appointment_date is the
+// real visit date) — reused here rather than reinvented, for the same reason it's used
+// there.
+function checkTreatmentDateConsistency(fields) {
+  const flags = [];
+  const claimDate = fields.claim?.accident_date || fields.claim?.appointment_date;
+  const medicalRecordDate = fields.medical_record?.date;
+
+  if (claimDate != null && medicalRecordDate != null && claimDate !== medicalRecordDate) {
+    flags.push({ code: 'TREATMENT_DATE_INCONSISTENT', claimDate, medicalRecordDate });
+  }
+
+  if (medicalRecordDate != null) {
+    (fields.invoices?.items || []).forEach((item, index) => {
+      if (item.date != null && item.date !== medicalRecordDate) {
+        flags.push({ code: 'INVOICE_DATE_INCONSISTENT', voucherIndex: index + 1, medicalRecordDate, invoiceDate: item.date });
+      }
+    });
+  }
+
+  return flags.length > 0 ? flags : null;
+}
+
 function evaluateDocumentChecks(extractedFields) {
   const issues = EVALUATORS.map((evaluate) => evaluate(extractedFields)).filter(Boolean);
   const details = issues.map((issue) => ({ issue, ...reasonForIssue(issue, extractedFields) }));
-  const flags = evaluateMandatoryFieldFlags(extractedFields);
+  const flags = [...evaluateMandatoryFieldFlags(extractedFields), ...(checkTreatmentDateConsistency(extractedFields) || [])];
   return { issues, passed: issues.length === 0, details, flags };
 }
 
