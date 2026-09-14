@@ -83,7 +83,7 @@ export function mergeStatus(steps: PipelineRunStep[]): { nodes: Node<PipelineNod
       targetHandle: edge.targetHandle,
       type: 'pipelineEdge',
       label: edge.label,
-      data: { kind: edge.kind, isActive, isComplete },
+      data: { kind: edge.kind, isActive, isComplete, audience: edge.audience },
       animated: isActive,
     };
   });
