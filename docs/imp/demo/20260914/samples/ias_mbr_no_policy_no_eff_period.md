@@ -4,32 +4,32 @@ staging plan id = 2147
 
 
 1
-tpa case number = AYA-CL-26034880
-tpa CLAIM number = CL/YGN/AYH/26027127
-POCY no = 005381-000-00001
-mbr no = 104290700
-POCY COV = 2025-11-01 00:00:00	2026-10-31 00:00:00
+tpa case number = AYA-CL-26035660
+tpa CLAIM number = CL/YGN/AYH/26029129
+POCY no = 
+mbr no = 
+POCY COV = 
 
 Staging
-Poho no = 000732-000
-Pocy No = 000732-000-00001, Effective Date=11012025
-Mbr no = 098564100
+Poho no = 
+Pocy No = 
+Mbr no = 
 
 checking = 
 
 
 
 2
-tpa case number = AYA-CL-26034912
-tpa CLAIM number = CL/YGN/AYH/26027162
-POCY no = 005952-000-00001
-mbr no = 106428300
-POCY COV = 2026-02-18 00:00:00	2026-12-13 00:00:00
+tpa case number = AYA-CL-26035631
+tpa CLAIM number = CL/YGN/AYH/26029139
+POCY no = 
+mbr no = 
+POCY COV = 
 
 Staging
-Poho no = 000733-000
-Pocy No = 000733-000-00001, Effective Date=12142025
-Mbr no = 098564200
+Poho no = 
+Pocy No = 
+Mbr no = 
 
 checking = 
 
@@ -38,36 +38,32 @@ checking =
 
 
 3
-tpa case number = AYA-CL-26031486
-tpa CLAIM number = CL/YGN/AYH/26024407
-POCY no = 01116300000001
-mbr no = 106403000
-POCY COV = 2026-01-26 00:00:00	2027-01-25 00:00:00
-OP-OV
-OP-OV
-MAN_REJ_CODE_M018	Vitamins / non-prescribed drugs are not covered.
+tpa case number = AYA-CL-26037381
+tpa CLAIM number = CL/YGN/AYH/26028744
+POCY no = 
+mbr no = 
+POCY COV = 
 
 Staging
-Poho no = 000730-000
-Pocy No = 000730-000-00001, Effective Date=01262026
-Mbr no = 098563900
+Poho no = 
+Pocy No = 
+Mbr no = 
 
 checking = 
 
 
 
 4
-tpa case number = AYA-CL-26027251
-tpa CLAIM number = CL/YGN/AYH/26021287
-POCY no = 01092200000001
-mbr no = 106283900
-POCY COV = 2026-01-01 00:00:00	2026-12-31 00:00:00
-VS-SPEC
+tpa case number = AYA-CL-26034500
+tpa CLAIM number = CL/YGN/AYH/26026810
+POCY no = 
+mbr no = 
+POCY COV = 
 
 Staging
-Poho no = 000731-000
-Pocy No = 000731-000-00001, Effective Date=01012026
-Mbr no = 098564000
+Poho no = 
+Pocy No = 
+Mbr no = 
 
 checking = 
 
@@ -75,16 +71,15 @@ checking =
 
 
 5
-tpa case number = AYA-CL-26027251
-tpa CLAIM number = CL/YGN/AYH/26021287
-POCY no = 01092200000001
-mbr no = 106283900
-POCY COV = 2026-01-01 00:00:00	2026-12-31 00:00:00
-VS-SPEC
+tpa case number = AYA-CL-26035807
+tpa CLAIM number = CL/YGN/AYH/26029138
+POCY no = 
+mbr no = 
+POCY COV = 
 
 Staging
-Poho no = 000731-000
-Pocy No = 000731-000-00001, Effective Date=01012026
-Mbr no = 098564000
+Poho no = 
+Pocy No = 
+Mbr no = 
 
 checking = 
