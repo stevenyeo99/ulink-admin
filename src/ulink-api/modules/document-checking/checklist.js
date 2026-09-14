@@ -180,35 +180,80 @@ function checkMissingBankInfo(fields) {
 // synthesize.md, claim-recognition/service.js's normalizeIdentityConsistency) for the record,
 // just not used to gate this check.
 //
-// DEMO-SCOPED SIMPLIFICATION (2026-08-24, superseded 2026-09-14 — see INERT note below):
-// deliberately did NOT also require identity_consistency.delegation_letter_authorizes_payee
-// === true (does the letter's named payee actually match bank.bank_account_name) — that
-// field was still extracted and recorded on the case, just not required to clear this
-// check. Verified against real data: the payee-name handwriting proved far less reliable to
-// extract than presence of the letter itself across repeated real tests (incomplete/jd2,
-// Khin Maung). Real trade-off, not a free simplification: this meant ANY included
-// delegation letter cleared the flag, even one that didn't actually name the bank-account
-// holder as payee — the fraud-prevention half of this check was off for the demo.
+// REVIVED 2026-09-14: was inert since Task 3's removal took away this check's only input
+// (identity_consistency.bank_account_holder_consistent — see
+// db/migrations/20260914100000-remove-identity-consistency.js). No longer lives here as a
+// synchronous EVALUATORS entry — it's now driven by a real judgment call
+// (modules/document-checking/identityJudgment.js's entityMatch, run from service.js) and
+// evaluated in evaluateJudgmentDependentChecks below, alongside the SOP §8 comparisons
+// (patient/provider/hospital name, delegation-payee) that were removed at the same time
+// and never rebuilt until now. Same trigger logic as always: bank-account-holder judged
+// inconsistent AND no delegation letter present.
 //
-// INERT as of 2026-09-14, not fixed by this comment: claim-recognition's Task 3
-// (identity_consistency judgment) was removed (split synthesize.md into route-decision.md
-// + extract-fields.md, no Task 3 replacement there — see
-// db/migrations/20260914100000-remove-identity-consistency.js). identity_consistency no
-// longer exists anywhere in extractedFields, so `fields.identity_consistency?.
-// bank_account_holder_consistent` is always `undefined`, `undefined !== false` is always
-// `true`, and this function now ALWAYS returns null — it never fires, but it also never
-// throws (optional chaining), so nothing crashes. This is a deliberate, visible gap, not a
-// silent regression: identity-judgment work (including bank_account_holder_consistent) is
-// moving to its own dedicated module in this file's domain — once that exists, point the
-// condition below at its output instead of identity_consistency, and this check comes back
-// to life. Left in EVALUATORS (not removed) so reviving it is a one-line change, not a
-// rebuild.
-function checkDelegationLetterRequired(fields) {
-  if (fields.identity_consistency?.bank_account_holder_consistent !== false) return null;
+// DEMO-SCOPED SIMPLIFICATION, still true: does not also require
+// delegation_letter_authorizes_payee (does the letter's named payee actually match
+// bank.bank_account_name) — any included delegation letter clears this, even one that
+// doesn't name the bank-account holder as payee. That's item 14 (delegation-payee
+// consistency, now built as its own flag below) — informational for now, not yet required
+// to clear this gate. Tighten by requiring judgments.delegationPayee?.consistent === true
+// too once that flag has been validated against enough real cases.
 
-  const authorized = fields.delegation_letter?.present === true;
+// Static per-code descriptions for the SOP §7/§8/§9/§10 entity-consistency flags — same
+// {code, desc, reason, confidence} shape as every other flag in this file.
+const IDENTITY_FLAG_DESCRIPTIONS = {
+  DELEGATION_PAYEE_INCONSISTENT: "The delegation letter's named payee does not appear to match the bank account holder name.",
+  PATIENT_NAME_INCONSISTENT: 'The claimant name on the claim form does not appear to match the patient name on the medical record.',
+  PROVIDER_NAME_INCONSISTENT: 'The doctor name on the claim form does not appear to match the doctor name on the medical record.',
+  HOSPITAL_NAME_INCONSISTENT: 'The hospital/clinic name on the claim form does not appear to match the hospital/clinic name on the medical record.',
+  DIAGNOSIS_TREATMENT_INCONSISTENT: "The medical record does not appear to support the claim form's stated diagnosis/treatment.",
+};
 
-  return authorized ? null : ISSUES.DELEGATION_LETTER_REQUIRED;
+/**
+ * Pure — no I/O, same as evaluateDocumentChecks below, just takes judgment results as data
+ * (computed by entityMatch, run from service.js) instead of computing them itself. Keeps
+ * this file's whole no-I/O invariant intact and every check here testable with synthetic
+ * `judgments` input via the existing fixture harness (tests/documentChecking.test.js) —
+ * no LLM call needed to test this function's logic, only to test entityMatch itself.
+ *
+ * `judgments` shape: { bankAccountHolder, delegationPayee, patientName, providerName,
+ * hospitalName, diagnosisTreatment }, each either null (judgment didn't run / couldn't
+ * determine) or { consistent, confidence, reason } from entityMatch/meaningMatch.
+ *
+ * Doctor name and hospital/clinic name are judged as two SEPARATE comparisons
+ * (providerName/hospitalName) rather than bundled the way the old
+ * medical_record_provider_consistent field was — SOP §8's own table lists "Doctor Name"
+ * and "Hospital/Clinic Name" as two separate rows, each with its own requirement, so this
+ * is more faithful to the SOP, not just a refactor.
+ */
+function evaluateJudgmentDependentChecks(extractedFields, judgments = {}) {
+  const issues = [];
+  const details = [];
+  const flags = [];
+
+  if (judgments.bankAccountHolder?.consistent === false) {
+    const authorized = extractedFields.delegation_letter?.present === true;
+    if (!authorized) {
+      issues.push(ISSUES.DELEGATION_LETTER_REQUIRED);
+      details.push({
+        issue: ISSUES.DELEGATION_LETTER_REQUIRED,
+        code: 'DELEGATION_LETTER_REQUIRED',
+        reason: `Bank-account-holder judgment: ${judgments.bankAccountHolder.reason} (confidence ${judgments.bankAccountHolder.confidence}). No delegation letter is present to authorize this payee.`,
+      });
+    }
+  }
+
+  const addFlagIfInconsistent = (code, judgment) => {
+    if (judgment?.consistent === false) {
+      flags.push({ code, desc: IDENTITY_FLAG_DESCRIPTIONS[code], reason: judgment.reason, confidence: judgment.confidence });
+    }
+  };
+  addFlagIfInconsistent('DELEGATION_PAYEE_INCONSISTENT', judgments.delegationPayee);
+  addFlagIfInconsistent('PATIENT_NAME_INCONSISTENT', judgments.patientName);
+  addFlagIfInconsistent('PROVIDER_NAME_INCONSISTENT', judgments.providerName);
+  addFlagIfInconsistent('HOSPITAL_NAME_INCONSISTENT', judgments.hospitalName);
+  addFlagIfInconsistent('DIAGNOSIS_TREATMENT_INCONSISTENT', judgments.diagnosisTreatment);
+
+  return { issues, details, flags };
 }
 
 // identity_consistency.patient_name_consistent and .medical_record_provider_consistent are
@@ -225,6 +270,9 @@ function checkDelegationLetterRequired(fields) {
 // checkIncorrectPatientDetails/checkIncorrectMedicalReport back to EVALUATORS once there's
 // time to revisit reliability (see the two-pass extraction/consistency-judgment split
 // discussed for that work).
+// checkDelegationLetterRequired is deliberately NOT in this list — it moved to
+// evaluateJudgmentDependentChecks below, since it now depends on a real judgment call
+// (entityMatch), which this array's synchronous, no-I/O contract can't accommodate.
 const EVALUATORS = [
   checkIncompleteClaimForm,
   checkMissingVoucher,
@@ -235,7 +283,6 @@ const EVALUATORS = [
   checkVoucherAmountMismatch,
   checkIncompleteMedicalReport,
   checkMissingBankInfo,
-  checkDelegationLetterRequired,
 ];
 
 /**
@@ -292,11 +339,11 @@ function reasonForIssue(issue, fields) {
       return { code: 'INCOMPLETE_MEDICAL_REPORT', reason: 'medical_record.present is true but medical_record.legible is false.' };
     case ISSUES.MISSING_BANK_INFO:
       return { code: 'MISSING_BANK_INFO', reason: 'bank.bank_name, bank.bank_account_name, and bank.bank_account_number are all missing.' };
-    case ISSUES.DELEGATION_LETTER_REQUIRED:
-      return {
-        code: 'DELEGATION_LETTER_REQUIRED',
-        reason: `identity_consistency.bank_account_holder_consistent is false (bank.bank_account_name "${fields.bank.bank_account_name ?? ''}" vs claimant.claimant_name "${fields.claimant.claimant_name ?? ''}") and delegation_letter.present is not true.`,
-      };
+    // DELEGATION_LETTER_REQUIRED is no longer decided in EVALUATORS (see
+    // evaluateJudgmentDependentChecks) — this function is only ever called on issues that
+    // fired from EVALUATORS, so that case can't reach here; its own reason/details are
+    // constructed directly in evaluateJudgmentDependentChecks instead, using the actual
+    // judgment's stated reasoning rather than a hardcoded sentence.
     default:
       return { code: null, reason: null };
   }
@@ -339,8 +386,23 @@ const MANDATORY_FIELDS = [
   { section: 'Claim & Treatment Information', field: 'Claim Benefit Type', get: (f) => f.claim?.claim_benefit_type },
   { section: 'Claim & Treatment Information', field: 'Type of Patient', get: (f) => f.claim?.type_of_patient },
   { section: 'Claim & Treatment Information', field: 'Appointment / Visited Date', get: (f) => f.claim?.appointment_date },
+  // Missed in the original pass (2026-09-14) — SOP §4's row is "Appointment/Visited Date &
+  // Time" as one combined requirement; only the date half was added, confirmed while
+  // rechecking §7/§8 later the same day.
+  { section: 'Claim & Treatment Information', field: 'Appointment / Visited Time', get: (f) => f.claim?.appointment_time },
   { section: 'Claim & Treatment Information', field: 'Hospital / Clinic Name', get: (f) => f.medical?.hospital_or_clinic_name },
   { section: 'Claim & Treatment Information', field: 'Claim Amount', get: (f) => f.claim?.total_claim_amount },
+  // SOP §9 treats Bank Name/Address/Account Holder Name/Account Number as four separate
+  // mandatory confirmations. The existing checkMissingBankInfo (below, blocking) only
+  // fires when all three of bank_name/bank_account_name/bank_account_number are missing
+  // *together*, and never checks bank_address at all — a claim missing just one of the
+  // four passes that check silently. These four flags close that gap the same
+  // non-blocking way as everything else in this list; checkMissingBankInfo is untouched,
+  // still the blocking "all three missing" gate it always was.
+  { section: 'Bank Information', field: 'Bank Name', get: (f) => f.bank?.bank_name },
+  { section: 'Bank Information', field: 'Bank Address / Branch', get: (f) => f.bank?.bank_address },
+  { section: 'Bank Information', field: 'Account Holder Name', get: (f) => f.bank?.bank_account_name },
+  { section: 'Bank Information', field: 'Account Number', get: (f) => f.bank?.bank_account_number },
   // Unlike every field above (where only `null` means missing — `false` is a legitimate,
   // complete answer for a boolean like is_claim_for_child), a signature is only confirmed
   // present when this is exactly `true`; both `null` and `false` mean "not confirmed."
@@ -401,4 +463,4 @@ function evaluateDocumentChecks(extractedFields) {
   return { issues, passed: issues.length === 0, details, flags };
 }
 
-module.exports = { ISSUES, evaluateDocumentChecks };
+module.exports = { ISSUES, evaluateDocumentChecks, evaluateJudgmentDependentChecks };

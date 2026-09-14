@@ -9,42 +9,38 @@ Ordered by implementation priority (top = do first). Each item has a checkbox to
 
 ---
 
-## 1. Signature & Declaration (SOP §10) — ❌
+## 1. Signature & Declaration (SOP §10) — ❌ (deferred by business decision)
 
-- [ ] Check `documents_present.has_customer_signature` is `true` before passing JD1 (field lives on the base extraction schema, `20260822090000-add-claim-recognition.js` — this is the claim form's own signature, unrelated to `delegation_letter`, see item 9 below).
+**Status 2026-09-14: deliberately not being worked on.** User decision: *"declaration consent we skip first, during demo i will try clarify"* — this is the one remaining open item for document-checking's own scope; everything else below it in this list belongs to other jobs (member-verification) or is now done (see items 2/3).
+
+- [ ] Check `documents_present.has_customer_signature` is `true` before passing JD1 (field lives on the base extraction schema, `20260822090000-add-claim-recognition.js` — this is the claim form's own signature, unrelated to `delegation_letter`, see "already solid" section below).
 - [ ] Check declaration/consent checkbox or field is present.
 - [ ] Add `MISSING_SIGNATURE` / `MISSING_DECLARATION` to `document-checking/checklist.js` `ISSUES` + `EVALUATORS`.
 - [ ] Confirm canned-response wording exists for these (business sign-off if not).
-- [ ] Authorized-signer / relationship check (SOP §10's third bullet: "where an authorized person signs on behalf of the claimant, supporting authority/relationship should be checked") has no evaluator today — do not confuse with `delegation_letter` (that's a §9 bank-payee mechanism, see item 9).
+- [ ] Authorized-signer / relationship check (SOP §10's third bullet: "where an authorized person signs on behalf of the claimant, supporting authority/relationship should be checked") has no evaluator today — do not confuse with `delegation_letter` (that's a §9 bank-payee mechanism, see "already solid" section).
 
-**Why first:** zero coverage today, small self-contained addition to an existing file (`checklist.js`), no new module needed.
-
----
-
-## 2. Mandatory E-Claim Field Completeness (SOP §4) — ⚠️
-
-Only diagnosis (`checkIncompleteClaimForm`) is gated today. SOP lists 22 mandatory fields across 6 sections (Submission Info, Policy & Member Info, Claim & Treatment Info, Bank Info, Declaration & Signature).
-
-- [ ] Decide: one generic "required fields present" evaluator over `extractedFields`, or per-field evaluators (mirrors existing style in `checklist.js`).
-- [ ] Case Number, Product Type, Policy Number/Risk Name, Company Name — currently only *used* (e.g. policy match), never checked for *presence* as a standalone completeness gate.
-- [ ] Claimant Name, Is Claim for Child, DOB, NRC/Passport, Phone, Email — same.
-- [ ] Claim Benefit Type, Type of Patient, Appointment/Visited Date, Hospital/Clinic Name — same.
-- [ ] Cross-check against what `member-verification` already treats as hard/soft — don't duplicate gating logic, just add the "is it present at all" check here.
-
-**Why second:** largest gap by field count, but mechanical — same pattern as existing evaluators, no new data source.
+**Why first:** zero coverage today, small self-contained addition to an existing file (`checklist.js`), no new module needed. Blocked on business clarifying declaration/consent field shape before implementation, not on engineering complexity.
 
 ---
 
-## 3. Cross-Document Consistency — re-enable disabled checks (SOP §8) — ⚠️
+## 2. Mandatory E-Claim Field Completeness (SOP §4) — ✅
 
-`identity_consistency.patient_name_consistent` and `.medical_record_provider_consistent` are **extracted but deliberately disabled** in `checklist.js` (`checkIncorrectPatientDetails`, `checkIncorrectMedicalReport` — defined, not in `EVALUATORS`). Disabled 2026-08-22 per in-code comment: too many false positives on known-complete samples.
+**Done 2026-09-14.** All 22 SOP mandatory fields across the 5 non-declaration sections (Submission Info, Policy & Member Info, Claim & Treatment Info, Bank Info) are now covered — the diagnosis field was already a blocking `EVALUATORS` check (`checkIncompleteClaimForm`); every other field was added as a non-blocking `MANDATORY_FIELDS` flag (`checklist.js`), including the four separate Bank Information sub-fields (Name/Address/Account Holder/Account Number — SOP §9 treats these as four separate confirmations, `checkMissingBankInfo` alone only caught all-three-missing) and Appointment/Visited Time (SOP's row is date+time combined, date-only was the initial miss, caught same day). Declaration & Signature section is out of scope here — tracked under item 1 above.
 
-- [ ] Re-test `checkIncorrectPatientDetails` / `checkIncorrectMedicalReport` against current sample set (`docs/samples/20260820/...`) — false-positive rate may have changed since extraction prompt (`synthesize.md`) was last tuned.
-- [ ] If still unreliable: identify what's causing false positives (script/transliteration handling in the LLM judgment?) before re-enabling.
-- [ ] Treatment date consistency across Claim Form ↔ Medical Record ↔ Invoice — **no evaluator exists at all**, not even disabled. Needs new extraction/comparison logic (`medical_record.date` vs `medical.appointment_date` vs invoice date — invoice date isn't currently in `invoices.items` schema, check `synthesize.md`).
-- [ ] ~~Hospital/Clinic name consistency~~ — **correction:** already covered, not a gap. Verified `medical_record_provider_consistent` (`synthesize.md` §54-56) compares `medical.doctor_name`/`hospital_or_clinic_name` against `medical_record.doctor_name`/`hospital_or_clinic_name` together — same disabled evaluator as patient name above, no separate work needed.
+---
 
-**Why third:** two of three sub-checks already built and just need validation + flip-on; the third (treatment date) needs new work.
+## 3. Cross-Document Consistency (SOP §8, items 13-18) — ✅
+
+**Done 2026-09-14.** The old `identity_consistency.patient_name_consistent`/`.medical_record_provider_consistent` fields and their disabled evaluators (`checkIncorrectPatientDetails`, `checkIncorrectMedicalReport`) are gone — removed along with `claim-recognition`'s Task 3 bundled judgment call (root cause of the original false-positive problem: one LLM call doing routing+extraction+judgment together). Replaced with a dedicated module, `modules/document-checking/identityJudgment.js`, isolating each comparison into its own narrow LLM call:
+
+- `entityMatch(a, b)` — "same person/place?" — used for bank-account-holder, delegation-payee, patient name, provider name, hospital name (5 comparisons, items 13-17).
+- `meaningMatch(claimText, recordText)` — "does the medical record support the claim's stated diagnosis/treatment?" (item 18) — a support/relevance judgment, not an entity match, per SOP §8's own wording ("Medical Record must support claim").
+
+All 6 run in parallel (`document-checking/service.js`'s `runJudgments`), gated behind stage-1 (deterministic `EVALUATORS`) already passing — same cost-gating as member-verification's exclusion check. All 6 ship as non-blocking `flags`, not blocking `issues` — shadow-first discipline, not yet promoted to a gate. One real false positive was already caught and fixed during validation (hospital short name "Ar Yu" vs full name "Ar Yu International Hospital" judged as different entities) — regression-covered in `tests/documentChecking.judge.test.js`.
+
+Treatment date consistency across Claim Form ↔ Medical Record ↔ Invoice (`checkTreatmentDateConsistency`) was also added this session as a separate non-blocking check — deterministic (Tier 2), not a judgment call.
+
+**Remaining before these can be trusted as blocking gates:** run each against more real cases via the dev preview endpoint (`/api/dev/document-checking/{caseId}/preview`) and watch for further false positives, same rigor that caught the hospital-name issue — no fixed sample-size threshold set yet, business/engineering judgment call when the time comes.
 
 ---
 
@@ -142,6 +138,6 @@ SOP's final checklist has this as its own checkbox, separate from the 12 individ
 - §6.2 Treatment Date vs Coverage Date — `checkCoverageActive`.
 - §7 Medical Document Verification (presence/legibility) — `checkNoMedicalReport`, `checkIncompleteMedicalReport`, `checkUnclearVoucher`.
 - §8 Amount consistency — `checkVoucherAmountMismatch`.
-- §9 Bank Information — `checkMissingBankInfo` + member-verification hard checks (bank name/account name/number vs IAS). Payee-mismatch sub-case ("account holder name differs from claimant") handled by `checkDelegationLetterRequired`, which is **live** (in `EVALUATORS`) but deliberately loosened: it only checks `delegation_letter.present === true`, not `identity_consistency.delegation_letter_authorizes_payee === true` — so it currently accepts *any* delegation letter, not necessarily one naming the actual payee on record. Code comment (`checklist.js`, `20260824100000-add-delegation-letter.js`) flags this as a fraud-prevention gap to close before relying on it for real claims — cheap flip-on (add one condition), needs a decision on how tolerant to be of "letter present but LLM says it doesn't authorize this payee."
+- §9 Bank Information — `checkMissingBankInfo` + member-verification hard checks (bank name/account name/number vs IAS), plus the four Bank Information completeness flags (item 2). Payee-mismatch sub-case ("account holder name differs from claimant") handled by `checkDelegationLetterRequired`'s logic, now moved into `evaluateJudgmentDependentChecks` (item 3) — **the fraud gap this section used to flag is closed as of 2026-09-14**: the check now fires off the real `bankAccountHolder` entity-match judgment (claimant name vs bank account name), not just "is any delegation letter present." A delegation letter naming the wrong payee no longer silently passes. `delegationPayee` (item 13-17) is a separate, non-blocking flag surfacing when the letter's *named* payee doesn't match the bank account holder — informational for JD2, doesn't gate.
 - §11 Missing/Inconsistent Info handling pattern — `ISSUES` + `MEMBER_REVIEW_REQUIRED` reasonCodes.
 - §14 JD1 doesn't auto-decide — respected throughout, system only flags/escalates.

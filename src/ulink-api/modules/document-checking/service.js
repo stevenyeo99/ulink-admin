@@ -1,6 +1,7 @@
 const { sequelize, Case, CaseEvent } = require('../../db/models');
 const config = require('../../config');
-const { evaluateDocumentChecks } = require('./checklist');
+const { evaluateDocumentChecks, evaluateJudgmentDependentChecks } = require('./checklist');
+const { entityMatch, meaningMatch } = require('./identityJudgment');
 const { queueDedupedTask } = require('../shared/emailTaskQueue');
 
 const BLOCK_NAME = 'document-checking';
@@ -10,17 +11,61 @@ async function logEvent(transaction, { caseId, prevStatus = null, newStatus, rea
 }
 
 /**
- * Pure — no I/O, no LLM. Takes a Case record, returns the outcome without persisting it,
- * so this can be reused identically by the real job and the dev preview endpoint.
+ * The 6 SOP §7/§8/§9/§10 judgment comparisons (items 13-18) — independent of each other,
+ * so run concurrently rather than one at a time. Each call is null-safe (entityMatch and
+ * meaningMatch both return null when either input is null) — a case missing one of these
+ * fields just means that one comparison can't be judged, not a failure.
+ *
+ * diagnosisTreatment (item 18) is a meaningMatch, not entityMatch — "does the medical
+ * record support the claim form's stated diagnosis/treatment", not "same entity" — the
+ * claim-form side combines the two claim-form fields the same way
+ * member-verification/exclusionFlags.js already does for the same fields.
  */
-function checkCase(caseRecord) {
+async function runJudgments(fields) {
+  const claimDiagnosisText = [fields.medical?.detail_of_illness_injury, fields.medical?.full_description_of_treatment]
+    .filter(Boolean)
+    .join(' — ') || null;
+
+  const [bankAccountHolder, delegationPayee, patientName, providerName, hospitalName, diagnosisTreatment] = await Promise.all([
+    entityMatch(fields.claimant?.claimant_name, fields.bank?.bank_account_name),
+    entityMatch(fields.delegation_letter?.authorized_payee_name, fields.bank?.bank_account_name),
+    entityMatch(fields.claimant?.claimant_name, fields.medical_record?.patient_name),
+    entityMatch(fields.medical?.doctor_name, fields.medical_record?.doctor_name),
+    entityMatch(fields.medical?.hospital_or_clinic_name, fields.medical_record?.hospital_or_clinic_name),
+    meaningMatch(claimDiagnosisText, fields.medical_record?.diagnosis_or_treatment),
+  ]);
+  return { bankAccountHolder, delegationPayee, patientName, providerName, hospitalName, diagnosisTreatment };
+}
+
+/**
+ * No longer pure — makes real LLM calls (the 6 judgments), but only once stage 1 (the
+ * deterministic EVALUATORS) already has zero issues. Same cost-gating already used for
+ * member-verification's exclusion check: no reason to spend 6 LLM calls judging
+ * consistency on a case that's already going to be marked INCOMPLETE for a missing
+ * invoice — it'll come back around once the customer replies, and judgment runs then.
+ * Still reusable identically by the real job and the dev preview endpoint, same as before.
+ */
+async function checkCase(caseRecord) {
   if (!caseRecord.extractedFields) {
     throw new Error(`Case ${caseRecord.id} has no extractedFields (reached READY_FOR_DOCUMENT_CHECKING without extraction data)`);
   }
+  const fields = caseRecord.extractedFields;
 
-  const result = evaluateDocumentChecks(caseRecord.extractedFields);
+  const stage1 = evaluateDocumentChecks(fields);
+
+  let result = stage1;
+  if (stage1.issues.length === 0) {
+    const judgments = await runJudgments(fields);
+    const stage2 = evaluateJudgmentDependentChecks(fields, judgments);
+    result = {
+      issues: [...stage1.issues, ...stage2.issues],
+      details: [...stage1.details, ...stage2.details],
+      flags: [...stage1.flags, ...stage2.flags],
+      passed: stage1.issues.length + stage2.issues.length === 0,
+    };
+  }
+
   const outcome = result.passed ? 'DOCUMENT_CHECKED' : 'INCOMPLETE';
-
   return { caseId: caseRecord.id, outcome, result };
 }
 
@@ -96,7 +141,7 @@ async function run() {
   const results = [];
   for (const caseRecord of cases) {
     try {
-      const outcome = checkCase(caseRecord);
+      const outcome = await checkCase(caseRecord);
       await persistOutcome(caseRecord, outcome);
       results.push({ caseId: outcome.caseId, ok: true, outcome: outcome.outcome });
     } catch (error) {

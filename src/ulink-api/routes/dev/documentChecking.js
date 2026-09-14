@@ -9,9 +9,13 @@ const router = express.Router();
  *     tags: [dev]
  *     summary: Preview document checking for one case (dry run, nothing persisted)
  *     description: >
- *       Runs the same checklist evaluators as the real document-checking job for a single
- *       case, but never writes to Case or CaseEvent. Pure code over Case.extractedFields —
- *       no LLM call, instant, unlike the claim-recognition preview.
+ *       Runs the same checklist logic as the real document-checking job for a single case,
+ *       but never writes to Case or CaseEvent. Stage 1 (EVALUATORS + deterministic flags)
+ *       is pure code over Case.extractedFields, no LLM, instant. Stage 2 (the 6 judgment
+ *       calls, items 13-18 — bank-account-holder, delegation-payee, patient name, provider
+ *       name, hospital name, diagnosis/treatment) only runs if stage 1 already has zero
+ *       issues, same cost-gating as the real job — so this can take a few seconds on a
+ *       clean case.
  *     parameters:
  *       - in: path
  *         name: caseId
@@ -30,12 +34,14 @@ const router = express.Router();
  *                 outcome: { type: string, enum: [DOCUMENT_CHECKED, INCOMPLETE] }
  *                 issues: { type: array, items: { type: string } }
  *                 passed: { type: boolean }
+ *                 flags: { type: array, items: { type: object } }
  *             example:
  *               caseId: "3f2a1b7e-uuid"
  *               dryRun: true
  *               outcome: INCOMPLETE
  *               issues: ["Missing detailed breakdown for pharmacy charges in the voucher(s)"]
  *               passed: false
+ *               flags: []
  *       404:
  *         description: Case not found
  *       500:
