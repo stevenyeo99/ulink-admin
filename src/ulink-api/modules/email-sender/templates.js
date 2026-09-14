@@ -9,17 +9,18 @@
  * not paraphrased, including its own phrasing/quirks. Two of the issue lines it can carry
  * (see modules/document-checking/checklist.js's ISSUES) are NOT from that approved doc —
  * placeholder wording, flag for business sign-off before relying on the exact phrasing.
- * CLAIM_CREATED_NOTIFICATION, MEMBER_VERIFY_ISSUE, CLAIM_SUBMIT_ISSUE, and
- * SUBMISSION_NOT_RECOGNIZED are the same story — no approved canned line exists yet for
- * "your claim number is X", a member-verification mismatch, a claim submission rejection,
- * or an unrecognized submission; composed wording, needs sign-off before real customers see
- * it.
+ * CLAIM_CREATED_NOTIFICATION, CLAIM_SUBMIT_ISSUE, and SUBMISSION_NOT_RECOGNIZED are the
+ * same story — no approved canned line exists yet for "your claim number is X", a claim
+ * submission rejection, or an unrecognized submission; composed wording, needs sign-off
+ * before real customers see it.
  *
- * MEMBER_VERIFY_ISSUE is member-verification's own template (its four reasonCodes used to
- * reuse MISSING_DOCUMENTS — same ISSUES.* lines, but framed as "please resubmit documents",
- * which is wrong for a details-mismatch/not-found outcome where nothing is actually
- * missing). Same issue-line source of truth (document-checking/checklist.js's ISSUES), only
- * the surrounding intro/footer differs.
+ * MEMBER_VERIFY_ISSUE is INTERNAL-ONLY (see email-sender/service.js's
+ * INTERNAL_ONLY_TASK_TYPES) — SOP §11 frames member-verification's findings ("Member/policy
+ * mismatch", "Bank detail issue") as "hold and verify/escalate", never a direct customer
+ * request, unlike MISSING_DOCUMENTS. So unlike every other renderer in this file, its
+ * content is written for an ops reader, not a customer, and can freely include raw
+ * extracted-vs-IAS diagnostic detail — the thing every *other* template here deliberately
+ * keeps away from customers (see renderClaimSubmitIssue's comment).
  */
 
 const MISSING_DOCUMENTS_INTRO = `Dear Valued Customer,
@@ -51,19 +52,34 @@ function renderMissingDocuments(payload) {
   return { subject: null, bodyText: `${MISSING_DOCUMENTS_INTRO}${bullets}\n${MISSING_DOCUMENTS_FOOTER}` };
 }
 
-const MEMBER_VERIFY_ISSUE_INTRO = `Dear Valued Customer,
-
-Thank you for your claim submission. We were unable to verify the following against our records:
-`;
-
-const MEMBER_VERIFY_ISSUE_FOOTER = `
-Please reply to this email with the corrected information so we can proceed with your claim. Should you have any questions, kindly contact us at ayahealthinfo@ayasompo.com or call our hotline during office hours.
-Thank you & Best Regards,`;
+/**
+ * Internal-ops notice (see this file's header comment) — SOP §11 action lines quoted
+ * directly so the reader knows what's actually expected, not just that something failed.
+ * Own explicit subject rather than the usual "Re: <customer subject>" default: this lands
+ * in an ops inbox handling many cases, not a single customer thread, so a scannable
+ * case-id + reasonCode subject is more useful than the original email's subject line.
+ */
+const REASON_CODE_TO_SOP_ACTION = {
+  MEMBER_NOT_FOUND: 'Hold the case and verify against IAS/member census or escalate.',
+  COVERAGE_NOT_ACTIVE: 'Flag for eligibility assessment/escalation.',
+  MEMBER_DETAILS_MISMATCH: 'Hold the case and verify against IAS/member census or escalate.',
+  BANK_DETAILS_MISMATCH: 'Hold payment-related verification and clarify required bank information.',
+};
 
 function renderMemberVerifyIssue(payload) {
-  const issues = payload.issues || [];
-  const bullets = issues.map((issue) => `- ${issue}`).join('\n');
-  return { subject: null, bodyText: `${MEMBER_VERIFY_ISSUE_INTRO}${bullets}\n${MEMBER_VERIFY_ISSUE_FOOTER}` };
+  const { caseId, reasonCode, reason } = payload;
+  const sopAction = REASON_CODE_TO_SOP_ACTION[reasonCode] || 'Hold and review.';
+
+  return {
+    subject: `Member verification hold — Case ${caseId} — ${reasonCode}`,
+    bodyText: `Member-verification could not confirm this case against IAS. Do NOT reply to the customer until this is resolved (SOP §11: member/policy and bank findings are held for internal verification, not sent to the customer).
+
+Case ID: ${caseId}
+Reason code: ${reasonCode}
+Detail: ${reason}
+
+SOP-required action: ${sopAction}`,
+  };
 }
 
 function renderDocumentCompleteAck() {

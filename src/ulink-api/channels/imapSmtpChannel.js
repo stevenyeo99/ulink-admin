@@ -85,7 +85,7 @@ async function sendReply(submission, reply) {
 
   const info = await getTransporter().sendMail({
     from: config.smtp.fromAddr,
-    to: submission.from,
+    to: reply.to || submission.from,
     cc: reply.cc || undefined,
     subject: reply.subject || (submission.subject ? `Re: ${submission.subject}` : undefined),
     text: reply.bodyText,

@@ -82,6 +82,12 @@ module.exports = {
     // After this many failed attempts, a task is marked FAILED instead of retried
     // on the next run.
     maxAttempts: parseInt(process.env.EMAIL_SENDER_MAX_ATTEMPTS, 10) || 5,
+    // SOP §11: member-verification findings ("Member/policy mismatch", "Bank detail
+    // issue") are "hold and verify/escalate" internally, never a direct customer email —
+    // MEMBER_VERIFY_ISSUE goes here instead of the case's own sender. No default: an
+    // unset value fails loudly (see email-sender/service.js) rather than silently
+    // emailing nobody.
+    internalReviewEmail: process.env.INTERNAL_REVIEW_EMAIL || null,
   },
 
   memberVerification: {

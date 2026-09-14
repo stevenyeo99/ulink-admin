@@ -6,7 +6,6 @@ const { checkExclusions } = require('./exclusionFlags');
 const { checkBenefitEligibility } = require('./benefitEligibility');
 const { summarizeBenefitLimits } = require('./benefitLimits');
 const { queueDedupedTask } = require('../shared/emailTaskQueue');
-const { ISSUES } = require('../document-checking/checklist');
 
 const BLOCK_NAME = 'member-verification';
 
@@ -68,28 +67,20 @@ async function checkCase(caseRecord) {
 }
 
 /**
- * Maps each MEMBER_REVIEW_REQUIRED reasonCode to the ISSUES line it queues on its own
- * MEMBER_VERIFY_ISSUE email/task (email-sender/templates.js) — not document-checking's
- * MISSING_DOCUMENTS, which frames things as "please resubmit documents" and doesn't fit a
- * details-mismatch/not-found outcome. No separate internal-review path right now (a
- * deliberate simplification: all four reasonCodes get a customer email for now, not just
- * BANK_DETAILS_MISMATCH). See checklist.js's header comment for which of these lines are
- * approved canned wording vs. placeholder.
+ * MEMBER_VERIFY_ISSUE is internal-only (SOP §11: "hold and verify/escalate", never a
+ * direct customer request — see email-sender/service.js's INTERNAL_ONLY_TASK_TYPES and
+ * templates.js's renderMemberVerifyIssue), unlike document-checking's MISSING_DOCUMENTS.
+ * So the payload carries the real diagnostic detail (reasonCode + the human-readable
+ * `reason` checks.js's evaluate() already computed) for an ops reader, not a customer-safe
+ * ISSUES.* line. dedupeKey is the reasonCode itself — a re-check that finds the exact same
+ * problem doesn't requeue a duplicate notice.
  */
-const REASON_CODE_TO_ISSUE = {
-  MEMBER_NOT_FOUND: ISSUES.MEMBER_NOT_VERIFIED,
-  COVERAGE_NOT_ACTIVE: ISSUES.POLICY_NOT_ACTIVE_ON_TREATMENT_DATE,
-  MEMBER_DETAILS_MISMATCH: ISSUES.INCORRECT_PATIENT_DETAILS,
-  BANK_DETAILS_MISMATCH: ISSUES.INCORRECT_BANK_DETAILS,
-};
-
-async function queueReviewRequiredEmail(transaction, caseId, reasonCode) {
-  const issue = REASON_CODE_TO_ISSUE[reasonCode];
+async function queueReviewRequiredEmail(transaction, caseId, result) {
   await queueDedupedTask(transaction, {
     caseId,
     taskType: 'MEMBER_VERIFY_ISSUE',
-    dedupeKey: issue,
-    payload: { issues: [issue] },
+    dedupeKey: result.reasonCode,
+    payload: { caseId, reasonCode: result.reasonCode, reason: result.reason },
   });
 }
 
@@ -128,7 +119,7 @@ async function persistOutcome(caseRecord, outcome) {
     // nothing to acknowledge yet. document-checking queues DOCUMENT_COMPLETE_ACK once it
     // also passes (see its own service.js persistOutcome).
     if (outcome.outcome !== 'MEMBER_VERIFIED') {
-      await queueReviewRequiredEmail(transaction, caseRecord.id, outcome.result.reasonCode);
+      await queueReviewRequiredEmail(transaction, caseRecord.id, outcome.result);
     }
   });
 }

@@ -299,10 +299,12 @@ const router = express.Router();
  *       Case.iasMemberInfoResponse (the raw IAS response verbatim, kept for the
  *       ias-claim-creation job and audit — see docs/imp/day1/jobs-registry.md), and logs a
  *       CaseEvent. On MEMBER_REVIEW_REQUIRED (any reasonCode — MEMBER_NOT_FOUND,
- *       COVERAGE_NOT_ACTIVE, MEMBER_DETAILS_MISMATCH, or BANK_DETAILS_MISMATCH), queues a
- *       customer-facing MEMBER_VERIFY_ISSUE EmailTask flagging the one line that reasonCode
- *       maps to (modules/member-verification/service.js's REASON_CODE_TO_ISSUE) — deduped
- *       so a re-check finding the same outcome doesn't re-queue. A technical failure (IAS
+ *       COVERAGE_NOT_ACTIVE, MEMBER_DETAILS_MISMATCH, or BANK_DETAILS_MISMATCH), queues an
+ *       INTERNAL-ONLY MEMBER_VERIFY_ISSUE EmailTask (SOP §11: these findings are held for
+ *       internal verification/escalation, never sent to the customer — sent to
+ *       INTERNAL_REVIEW_EMAIL, see modules/email-sender/service.js) with the reasonCode and
+ *       diagnostic detail — deduped so a re-check finding the same outcome doesn't
+ *       re-queue. A technical failure (IAS
  *       timeout/error, missing required fields) leaves the case at its current status for
  *       retry on the next run, same pattern as document-checking. Same lock/release pattern
  *       as the other jobs.

@@ -18,6 +18,26 @@ async function logEvent(transaction, { caseId, newStatus, reasonCode = null, mes
   await CaseEvent.create({ caseId, blockName: BLOCK_NAME, newStatus, reasonCode, message }, { transaction });
 }
 
+// SOP §11: member-verification's findings ("Member/policy mismatch", "Bank detail
+// issue") are "hold and verify/escalate", never a direct customer request — unlike
+// MISSING_DOCUMENTS, which SOP frames as "request [documents] from customer". So
+// MEMBER_VERIFY_ISSUE goes to internal ops, not the case's own sender.
+const INTERNAL_ONLY_TASK_TYPES = new Set(['MEMBER_VERIFY_ISSUE']);
+
+/**
+ * Fails loudly (task marked FAILED, retried per config.emailSender.maxAttempts) rather
+ * than silently emailing nobody if INTERNAL_REVIEW_EMAIL isn't configured — a missing
+ * config value for an internal-only task type is a deploy misconfiguration, not something
+ * to swallow.
+ */
+function resolveRecipient(taskType, customerAddr) {
+  if (!INTERNAL_ONLY_TASK_TYPES.has(taskType)) return customerAddr;
+  if (!config.emailSender.internalReviewEmail) {
+    throw new Error(`INTERNAL_REVIEW_EMAIL is not configured — required to send a ${taskType} notice`);
+  }
+  return config.emailSender.internalReviewEmail;
+}
+
 /**
  * The most recent inbound message across all of a case's threads — gives us the
  * recipient (its `from`) and the threading headers (`messageId`/`references`) for the
@@ -64,8 +84,9 @@ async function sendTask(task) {
   const rendered = render(task.taskType, task.payload);
   const subject = rendered.subject || (lastInbound.subject ? `Re: ${lastInbound.subject}` : null);
   const cc = await findCcEmail(task.caseId);
+  const to = resolveRecipient(task.taskType, lastInbound.fromAddr);
 
-  const { messageId } = await getChannelAdapter().sendReply(submission, { subject, bodyText: rendered.bodyText, cc });
+  const { messageId } = await getChannelAdapter().sendReply(submission, { subject, bodyText: rendered.bodyText, cc, to });
 
   await sequelize.transaction(async (transaction) => {
     const referencesHeader = [lastInbound.referencesHeader, lastInbound.messageId].filter(Boolean).join(' ') || null;
@@ -79,7 +100,7 @@ async function sendTask(task) {
         inReplyTo: lastInbound.messageId,
         referencesHeader,
         fromAddr: config.smtp.fromAddr,
-        toAddr: lastInbound.fromAddr,
+        toAddr: to,
         ccAddr: cc,
         subject,
         bodyText: rendered.bodyText,
@@ -123,4 +144,4 @@ async function run() {
   return { processed, errors };
 }
 
-module.exports = { run, sendTask };
+module.exports = { run, sendTask, resolveRecipient };
