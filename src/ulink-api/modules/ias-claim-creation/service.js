@@ -77,7 +77,12 @@ async function persistOutcome(caseRecord, outcome) {
         newStatus: 'CLAIM_CREATED',
         message: `Claim created, claimNo=${claimNo ?? 'null'}`,
       });
-      await queueClaimApprovalReviewEmail(transaction, caseRecord.id, claimNo);
+      // STP claims are already approved through straight-through processing; only non-STP
+      // claims need an internal review/approval notification. Null preserves the safe
+      // non-STP behavior for older cases created before isStp was populated.
+      if (caseRecord.isStp !== true) {
+        await queueClaimApprovalReviewEmail(transaction, caseRecord.id, claimNo);
+      }
     } else {
       // A real business rejection from IAS (e.g. "Claim already exists"), not a technical
       // failure — do NOT retry (retrying "already exists" forever would never resolve).

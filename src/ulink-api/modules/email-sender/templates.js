@@ -143,7 +143,9 @@ function renderClaimApprovalReview(payload) {
 
 Claim Number: ${claimNo}
 
-Please review and approve the claim before communicating the claim number to the customer.`,
+Please review and approve the claim before communicating the claim number to the customer.
+
+${SIGN_OFF}`,
   };
 }
 
