@@ -23,6 +23,7 @@ async function previewCase(req, res) {
       dryRun: true,
       folder: plan.folder,
       barcode: plan.barcode,
+      completedAt: plan.completedAt.toISOString(),
       files: plan.files.map(({ attachment, destFilename }) => ({ originalFilename: attachment.originalFilename, destFilename })),
     });
   } catch (error) {

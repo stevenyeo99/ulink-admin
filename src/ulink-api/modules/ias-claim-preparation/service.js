@@ -3,6 +3,7 @@ const config = require('../../config');
 const { pickDiagnosis } = require('./diagnosisPicker');
 const { pickBenefit } = require('./benefitPicker');
 const { buildPayload } = require('./payloadBuilder');
+const { isStp } = require('./stpEligibility');
 
 const BLOCK_NAME = 'ias-claim-preparation';
 
@@ -58,6 +59,12 @@ async function checkCase(caseRecord) {
     lines.push({ subtotal: extractedFields.claim?.total_claim_amount, benefit });
   }
 
+  // Same currency payloadBuilder.js hardcodes for every line (PresentedCurrency: 'MMK') —
+  // no multi-currency support anywhere in this system yet, so this is the only currency an
+  // STP limit could ever be checked against today.
+  const presentedAmt = lines.reduce((sum, line) => sum + (line.subtotal ?? 0), 0);
+  const stp = await isStp({ routeKey: caseRecord.recognizedType, currency: 'MMK', presentedAmt });
+
   const payload = buildPayload({
     extractedFields,
     iasMemberInfoResponse,
@@ -66,16 +73,18 @@ async function checkCase(caseRecord) {
     lines,
     receivedAt: caseRecord.createdAt,
     barcode: caseRecord.consoleBarcode,
+    isStp: stp,
+    docCompleteDate: caseRecord.consoleUploadResult?.completedAt,
   });
 
-  return { caseId: caseRecord.id, payload, diagnosis, lines };
+  return { caseId: caseRecord.id, payload, diagnosis, lines, isStp: stp };
 }
 
 async function persistOutcome(caseRecord, outcome) {
   return sequelize.transaction(async (transaction) => {
     const prevStatus = caseRecord.currentStatus;
     await Case.update(
-      { currentStatus: 'CLAIM_PAYLOAD_PREPARED', iasClaimPayload: outcome.payload },
+      { currentStatus: 'CLAIM_PAYLOAD_PREPARED', iasClaimPayload: outcome.payload, isStp: outcome.isStp },
       { where: { id: caseRecord.id }, transaction }
     );
     const benefitSummary = outcome.lines
@@ -85,7 +94,7 @@ async function persistOutcome(caseRecord, outcome) {
       caseId: caseRecord.id,
       prevStatus,
       newStatus: 'CLAIM_PAYLOAD_PREPARED',
-      message: `Claim payload prepared (${outcome.lines.length} line(s); diagnosis=${outcome.diagnosis?.diagCode ?? 'null'}; benefits=[${benefitSummary}])`,
+      message: `Claim payload prepared (${outcome.lines.length} line(s); diagnosis=${outcome.diagnosis?.diagCode ?? 'null'}; benefits=[${benefitSummary}]; isStp=${outcome.isStp})`,
     });
   });
 }

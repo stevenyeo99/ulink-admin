@@ -11,6 +11,7 @@ const emailSenderService = require('../email-sender/service');
 const consoleUploadService = require('../console-upload/service');
 const iasClaimPreparationService = require('../ias-claim-preparation/service');
 const iasClaimCreationService = require('../ias-claim-creation/service');
+const iasClaimStpService = require('../ias-claim-stp/service');
 
 // Fixed order — later steps read the Case.currentStatus earlier steps write, per
 // docs/imp/day1/jobs-registry.md's "Orchestrator" section. Each block keeps its own
@@ -47,6 +48,12 @@ const STEPS = [
   ['console-upload', consoleUploadService],
   ['ias-claim-preparation', iasClaimPreparationService],
   ['ias-claim-creation', iasClaimCreationService],
+  // Added 2026-09-15 — for STP (Case.isStp) claims only: polls IAS claim-status for the
+  // settlement report, downloads it once ready, emails it to the customer.
+  // CLAIM_CREATED -> CSR_SENT; see modules/ias-claim-stp/service.js. Runs before this last
+  // email-sender pass so a CSR_REPORT task queued in the same run still sends immediately,
+  // same reasoning as ias-claim-creation's own CLAIM_CREATED_NOTIFICATION task above.
+  ['ias-claim-stp', iasClaimStpService],
   ['email-sender', emailSenderService],
 ];
 

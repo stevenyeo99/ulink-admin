@@ -60,6 +60,9 @@ export const BLOCKS: BlockMeta[] = [
   { id: 'console-upload', label: 'Console Upload', description: 'Copies docs to console folder, generates barcode', x: 0, y: 760 },
   { id: 'ias-claim-preparation', label: 'Claim Preparation', description: 'ICD-10 pick, benefit pick, payload build', x: 0, y: 950 },
   { id: 'ias-claim-creation', label: 'Claim Creation', description: 'Submits to IAS, assigns claim number', x: 0, y: 1140 },
+  // Added 2026-09-15 — isStp claims only: polls IAS claim-status for the settlement report
+  // (CSR), downloads it once ready, emails it to the customer. CLAIM_CREATED -> CSR_SENT.
+  { id: 'ias-claim-stp', label: 'Claim STP', description: 'Downloads CSR, emails customer (STP claims only)', x: 0, y: 1330 },
 ];
 
 export const EDGES: StaticEdge[] = [
@@ -69,6 +72,7 @@ export const EDGES: StaticEdge[] = [
   { id: 'e-checking-upload', source: 'document-checking', target: 'console-upload', sourceHandle: 'source-bottom', targetHandle: 'target-top', kind: 'main' },
   { id: 'e-upload-preparation', source: 'console-upload', target: 'ias-claim-preparation', sourceHandle: 'source-bottom', targetHandle: 'target-top', kind: 'main' },
   { id: 'e-preparation-creation', source: 'ias-claim-preparation', target: 'ias-claim-creation', sourceHandle: 'source-bottom', targetHandle: 'target-top', kind: 'main' },
+  { id: 'e-creation-stp', source: 'ias-claim-creation', target: 'ias-claim-stp', sourceHandle: 'source-bottom', targetHandle: 'target-top', kind: 'main' },
 ];
 
 // One badge per producer, drawn directly beside it (same y, an x-offset to the right — a
@@ -109,6 +113,16 @@ export const EMAIL_BADGES: EmailBadgeMeta[] = [
     audience: 'internal',
     x: 300,
     y: 1140,
+  },
+  // CSR_REPORT is customer-facing (the settlement report itself, with the PDF attached) —
+  // unlike ias-claim-creation's internal-only emails above.
+  {
+    id: 'email-badge-ias-claim-stp',
+    producer: 'ias-claim-stp',
+    label: 'CSR_REPORT',
+    audience: 'customer',
+    x: 300,
+    y: 1330,
   },
 ];
 

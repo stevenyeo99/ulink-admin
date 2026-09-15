@@ -78,7 +78,10 @@ function getTransporter() {
  * using its `messageId`/`references`/`from` for threading headers and reply
  * recipient. Returns the new outbound message's Message-ID so the caller can
  * persist it on the outbound EmailMessage row. `reply.cc` is optional — a plain
- * comma-separated address string, passed straight through to nodemailer.
+ * comma-separated address string, passed straight through to nodemailer. `reply.attachments`
+ * is optional — nodemailer's own attachment shape ({filename, path} or {filename, content}),
+ * passed straight through; nodemailer reads a `path`-based attachment itself, no bytes need
+ * to pass through this function.
  */
 async function sendReply(submission, reply) {
   const references = [submission.references, submission.messageId].filter(Boolean).join(' ');
@@ -89,6 +92,7 @@ async function sendReply(submission, reply) {
     cc: reply.cc || undefined,
     subject: reply.subject || (submission.subject ? `Re: ${submission.subject}` : undefined),
     text: reply.bodyText,
+    attachments: reply.attachments || undefined,
     inReplyTo: submission.messageId || undefined,
     references: references || undefined,
   });

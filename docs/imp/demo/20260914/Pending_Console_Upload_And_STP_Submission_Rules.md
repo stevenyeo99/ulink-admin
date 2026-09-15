@@ -1,42 +1,53 @@
 # Pending: Console Document Upload + Barcode, and STP Submission Validation Flags
 
-**Status: PENDING — not implemented.** Deliberately deferred: build only after
-document-checking (JD1) is verified against real cases — current work in progress is
-`docs/imp/demo/20260914/samples/1` through `/5` (see `JD1_Checklist_SOP_vs_Current_System.md`).
-Revisit this file once that verification is signed off.
+Item 1 below is **done** (built 2026-09-15, ahead of this doc's original "defer until JD1
+samples 1-5 are verified" plan — that verification thread never reached a signed-off
+conclusion before item 1 was greenlit and built; noted here rather than silently dropped).
+Item 2 is still genuinely pending.
 
 ---
 
-## 1. New job: document upload to console + barcode on clean-case submission
+## 1. Console upload job + barcode — DONE (2026-09-15)
 
-**What:** when a case is "clean" (passes document-checking), a new job should (a) upload
-the case's documents to `ulink-console`, (b) generate a barcode, (c) apply/attach that
-barcode as part of submitting the claim.
+**What was built**, differs from this doc's original open questions in a few places (see
+below) — treat this section as the actual spec, not the "what/still open" draft above it:
 
-**Already sketched:** `docs/imp/demo/20260914/samples/console proto/demo_barcode_logic.md`
-has a draft barcode format — `VS + YY(base36) + MM(base36) + DD(base36) + "1" + 4 random
-digits` (e.g. `VSQ9E1XXXX`), explicitly generated **at submission time, not upload time**.
-Reuse that format rather than re-deriving one.
+- **New standalone job**, not folded into `ias-claim-creation`: `modules/console-upload/service.js`,
+  registered as its own pipeline stage (`POST /api/jobs/console-upload/run`, dev preview at
+  `POST /api/dev/console-upload/{caseId}/preview`). Introduces a new status,
+  `DOCUMENTS_UPLOADED`, between `document-checking`'s `MEMBER_VERIFIED` and
+  `ias-claim-preparation` (which now reads `DOCUMENTS_UPLOADED` instead of `MEMBER_VERIFIED`).
+- **Gate**: `Case.currentStatus === 'MEMBER_VERIFIED'` **and**
+  `Case.recognizedType === 'ayas_member_claim'` — narrower than this doc's original "any
+  clean case" framing: scoped explicitly to the AYAS reimbursement route, not every case
+  that passes document-checking.
+- **What gets copied**: every inbound attachment on the case
+  (`modules/shared/gatherAttachments.js`, extracted from `claim-recognition` so both share
+  the exact same query). **Copy, not move** — the original stays in `STORAGE_ROOT`
+  untouched, for reprocessing. Plain files, no zip (no zip library in this project's
+  dependencies; a shared ops folder is more useful browsable than something that needs
+  extracting).
+- **Destination**: a new, separate root — `CONSOLE_UPLOAD_ROOT` (`.env`:
+  `/mnt/c/client/ulink/console`) — not `STORAGE_ROOT`, which is this app's own private
+  attachment store.
+- **Folder naming** (not specified anywhere before this build): `yyyy/MM/dd/{ddMMyyyy}{claimantName}-AYAS-{caseId}/`.
+  The date is **when this job actually runs** (`new Date()` at upload time) — not the
+  original email-receipt date, not the OCR-extracted `claim.date_submitted`.
+- **Barcode**: format reused verbatim from `docs/imp/demo/20260914/samples/console proto/demo_barcode_logic.md`
+  (`VS` + yy + mm(base36) + dd(base36) + `"1"` + 4 random digits), generated at the same
+  `new Date()` as the folder date so the two can never disagree across a midnight boundary.
+  Stored on `Case.consoleBarcode`.
+- **Where the barcode gets applied — this doc's original guess was wrong**: it does NOT go
+  through `ias-claim-creation`. It's wired into `ias-claim-preparation/payloadBuilder.js`'s
+  `CL_CLAIM_API` payload as a top-level `barcode` field, since console-upload now runs
+  before `ias-claim-preparation` in the pipeline (`Case.consoleBarcode` is guaranteed to
+  exist by the time that job builds the payload).
+- **Payload field name**: literal `"barcode"` — still **provisional**, not IAS-confirmed.
+  You're having IAS dev add support for it server-side; the key name may need to change
+  once they confirm what they actually accept.
 
-**Existing pipeline anchor:** `ias-claim-creation` (`modules/ias-claim-creation/service.js`)
-is the job that currently calls the real IAS `CL_CLAIM_API` once a case reaches
-`CLAIM_PAYLOAD_PREPARED` — "submit claim api" most likely refers to this step, but needs
-confirming, not assuming.
-
-**Confirmed 2026-09-15:** once the console upload job exists, the generated barcode gets
-included in the `CL_CLAIM_API` payload (`payloadBuilder.js` — no such field exists there
-today, needs adding once the job that generates the barcode exists).
-
-**Still open before implementation:**
-- Is "document upload to console" a new standalone job/status step, or folded into the
-  existing `ias-claim-creation` job? (Sequencing matters: the barcode must exist before
-  `payloadBuilder.js` builds the payload, so whichever job generates it has to run first.)
-- Exact payload field name/shape for the barcode on `CL_CLAIM_API` — not in the real sample
-  (`docs/imp/day1/IAS/ias_claim_submission_api.json`) today, so this is a new field IAS needs
-  to confirm it accepts, not an existing one being populated.
-- "if clean case" — confirm this means `Case.documentCheckResult.passed === true` (zero
-  JD1 document-checking issues). `member-verification` already gates upstream of that in
-  the pipeline, so it should already be implied, but worth confirming explicitly.
+**Migration**: `ulink_cases` gained `console_upload_result` (JSONB — folder + file list) and
+`console_barcode` (TEXT).
 
 ---
 
@@ -58,6 +69,17 @@ vs `N`, with the reasoning recorded the same way the existing comment does.
 voucher subtotals `document-checking/checklist.js`'s `checkVoucherAmountMismatch` already
 computes) — not a per-line/per-item comparison.
 
-**Still blocking:** the actual threshold amount was not specified — "below the amount" has
-no number attached yet. This can't be implemented as more than a placeholder until that
-figure is confirmed by business.
+**Built 2026-09-15, with a DEMO threshold, not a confirmed production one:**
+- New table `ulink_stp_limits` (`route_key`, `currency`, `amount_limit`), seeded with one row:
+  `ayas_member_claim` / `MMK` / **50,000** — chosen by analyzing the existing complete
+  sample cases to get a believable STP/non-STP mix for a demo (day1/complete/1=23,000,
+  20260826/complete/2=32,500 → STP; day1/complete/2=54,690, 20260826/complete/1=145,000 →
+  non-STP), not from any business-confirmed limit. **Update this row's `amount_limit` once
+  the real figure is confirmed** — no code change needed, just the seeded value.
+- New `Case.isStp` (boolean, nullable — null means "not evaluated yet"), computed by
+  `modules/ias-claim-preparation/stpEligibility.js` from the summed line `PresentedAmt`
+  against the matching `ulink_stp_limits` row. No matching route/currency row → defaults to
+  `false` (falls back to the existing manual-review path), never guessed `true`.
+- `payloadBuilder.js`'s `isValidation`/`isCSR` are now `"Y"`/`"Y"` when `Case.isStp` is true,
+  `"N"`/`"N"` otherwise — the earlier `'N'`/`'N'` fix (see above) is preserved as the
+  non-STP default, not reverted; `"Y"` only appears for cases that actually qualify.

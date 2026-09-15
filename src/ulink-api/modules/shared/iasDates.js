@@ -47,4 +47,17 @@ function dateToMMDDYYYY(date) {
   return `${mm}${dd}${yyyy}`;
 }
 
-module.exports = { toYYYYMMDD, iasDateToYYYYMMDD, isoToMMDDYYYY, dateToMMDDYYYY };
+// Same as dateToMMDDYYYY but YYYYMMDD order — CL_CLAIM_API's docCompleteDate field wants
+// this order specifically, unlike every other CL_CLAIM_API date field (confirmed 2026-09-15,
+// not a guess: the other request dates are MMDDYYYY, this one field is not).
+function dateToYYYYMMDD(date) {
+  if (!date) return null;
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return null;
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const yyyy = String(d.getFullYear());
+  return `${yyyy}${mm}${dd}`;
+}
+
+module.exports = { toYYYYMMDD, iasDateToYYYYMMDD, isoToMMDDYYYY, dateToMMDDYYYY, dateToYYYYMMDD };

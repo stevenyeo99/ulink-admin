@@ -12,6 +12,7 @@ const CASE_EVENT_STATUS = {
   MEMBER_VERIFY_ISSUE: 'MEMBER_VERIFY_ISSUE_EMAIL_SENT',
   CLAIM_SUBMIT_ISSUE: 'CLAIM_SUBMIT_ISSUE_EMAIL_SENT',
   SUBMISSION_NOT_RECOGNIZED: 'SUBMISSION_NOT_RECOGNIZED_EMAIL_SENT',
+  CSR_REPORT: 'CSR_REPORT_EMAIL_SENT',
 };
 
 async function logEvent(transaction, { caseId, newStatus, reasonCode = null, message = null }) {
@@ -89,7 +90,13 @@ async function sendTask(task) {
   const cc = await findCcEmail(task.caseId);
   const to = resolveRecipient(task.taskType, lastInbound.fromAddr);
 
-  const { messageId } = await getChannelAdapter().sendReply(submission, { subject, bodyText: rendered.bodyText, cc, to });
+  const { messageId } = await getChannelAdapter().sendReply(submission, {
+    subject,
+    bodyText: rendered.bodyText,
+    cc,
+    to,
+    attachments: rendered.attachments,
+  });
 
   await sequelize.transaction(async (transaction) => {
     const referencesHeader = [lastInbound.referencesHeader, lastInbound.messageId].filter(Boolean).join(' ') || null;

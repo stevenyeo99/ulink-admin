@@ -9,6 +9,7 @@ const memberVerificationService = require('../../modules/member-verification/ser
 const consoleUploadService = require('../../modules/console-upload/service');
 const iasClaimPreparationService = require('../../modules/ias-claim-preparation/service');
 const iasClaimCreationService = require('../../modules/ias-claim-creation/service');
+const iasClaimStpService = require('../../modules/ias-claim-stp/service');
 
 const router = express.Router();
 
@@ -567,6 +568,71 @@ const router = express.Router();
  *               block: ias-claim-creation
  *               released: true
  *               wasLocked: true
+ *
+ * /api/jobs/ias-claim-stp/run:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Start the ias-claim-stp job (fire-and-forget)
+ *     description: >
+ *       Acquires the job lock and returns immediately. In the background, for each case at
+ *       currentStatus=CLAIM_CREATED AND isStp=true (up to CSR_UPLOAD_BATCH_LIMIT per run —
+ *       STP claims only, not every created claim): calls the IAS claim-status API looking
+ *       for a results[] row with SCMA_OID_CL_STATUS=CL_STATUS_FC and a non-empty
+ *       FILENAME/PATH (the settlement report). If none exists yet, that's a normal wait
+ *       state — the case is left at CLAIM_CREATED for the next run, not treated as an
+ *       error. Once found, downloads the file and writes it under
+ *       CSR_UPLOAD_ROOT/yyyy/MM/dd/{claimNo}/CSR/, queues a customer-facing CSR_REPORT
+ *       EmailTask with the PDF attached, and moves the case to CSR_SENT. A technical
+ *       failure (IAS timeout/error, disk I/O error) leaves the case at CLAIM_CREATED for
+ *       retry, same pattern as every other job. Same lock/release pattern as the other
+ *       jobs.
+ *     requestBody:
+ *       required: false
+ *       description: No body needed — trigger only.
+ *     responses:
+ *       200:
+ *         description: Started, or skipped because a prior run is still in progress
+ *         content:
+ *           application/json:
+ *             schema:
+ *               oneOf:
+ *                 - type: object
+ *                   properties:
+ *                     block: { type: string }
+ *                     started: { type: boolean }
+ *                 - type: object
+ *                   properties:
+ *                     block: { type: string }
+ *                     skipped: { type: boolean }
+ *                     reason: { type: string }
+ *             examples:
+ *               started:
+ *                 value: { block: ias-claim-stp, started: true }
+ *               skipped:
+ *                 value: { block: ias-claim-stp, skipped: true, reason: already_running }
+ *
+ * /api/jobs/ias-claim-stp/release:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Manually clear a stuck ias-claim-stp lock
+ *     requestBody:
+ *       required: false
+ *       description: No body needed.
+ *     responses:
+ *       200:
+ *         description: Lock cleared
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 block: { type: string }
+ *                 released: { type: boolean }
+ *                 wasLocked: { type: boolean }
+ *             example:
+ *               block: ias-claim-stp
+ *               released: true
+ *               wasLocked: true
  */
 router.use('/email-intake', createJobRouter('email-intake', emailIntakeService));
 router.use('/claim-recognition', createJobRouter('claim-recognition', claimRecognitionService));
@@ -576,5 +642,6 @@ router.use('/member-verification', createJobRouter('member-verification', member
 router.use('/console-upload', createJobRouter('console-upload', consoleUploadService));
 router.use('/ias-claim-preparation', createJobRouter('ias-claim-preparation', iasClaimPreparationService));
 router.use('/ias-claim-creation', createJobRouter('ias-claim-creation', iasClaimCreationService));
+router.use('/ias-claim-stp', createJobRouter('ias-claim-stp', iasClaimStpService));
 
 module.exports = router;

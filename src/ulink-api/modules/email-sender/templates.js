@@ -15,6 +15,12 @@
  * SUBMISSION_NOT_RECOGNIZED is the same story — no approved canned line exists yet for an
  * unrecognized submission; composed wording, needs sign-off before real customers see it.
  *
+ * CSR_REPORT is the same story as SUBMISSION_NOT_RECOGNIZED — no approved canned line
+ * exists yet for handing over a settlement report; composed wording, needs sign-off before
+ * real customers see it. Unlike every other renderer here, it carries an attachment (the
+ * downloaded CSR PDF, path-based — nodemailer reads the file itself, see
+ * modules/ias-claim-stp/service.js for where that file gets written).
+ *
  * MEMBER_VERIFY_ISSUE, CLAIM_APPROVAL_REVIEW, and CLAIM_SUBMIT_ISSUE are INTERNAL-ONLY (see
  * email-sender/service.js's INTERNAL_ONLY_TASK_TYPES) — none of these three map to "email
  * the customer directly" per SOP: member-verification/claim-submission findings are "hold
@@ -25,6 +31,8 @@
  * (extracted-vs-IAS values, the real IAS rejection reason) — exactly what every *other*
  * template in this file deliberately keeps away from customers.
  */
+
+const path = require('path');
 
 // Shared sign-off for every customer-facing template below — these are automated replies,
 // not a human agent's, so the signer is the bot, not a person's name.
@@ -140,6 +148,23 @@ Note: the customer has NOT been told their claim number yet — that happens man
   };
 }
 
+// Composed wording, no approved canned line exists for this yet — see this file's header
+// comment. Customer-facing, carries the downloaded CSR as a path-based attachment.
+function renderCsrReport(payload) {
+  const { csrFilePath, claimNo } = payload;
+  return {
+    subject: null,
+    bodyText: `Dear Valued Customer,
+
+Your claim (Claim Number: ${claimNo}) has been processed and the Claim Settlement Report is attached for your reference.
+
+If you have any questions, kindly contact us at ayahealthinfo@ayasompo.com or call our hotline during office hours.
+
+${SIGN_OFF}`,
+    attachments: [{ filename: path.basename(csrFilePath), path: csrFilePath }],
+  };
+}
+
 const RENDERERS = {
   MISSING_DOCUMENTS: renderMissingDocuments,
   DOCUMENT_COMPLETE_ACK: renderDocumentCompleteAck,
@@ -147,6 +172,7 @@ const RENDERERS = {
   CLAIM_SUBMIT_ISSUE: renderClaimSubmitIssue,
   SUBMISSION_NOT_RECOGNIZED: renderSubmissionNotRecognized,
   CLAIM_APPROVAL_REVIEW: renderClaimApprovalReview,
+  CSR_REPORT: renderCsrReport,
 };
 
 function render(taskType, payload) {

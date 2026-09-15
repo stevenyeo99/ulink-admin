@@ -15,7 +15,8 @@ export type BlockName =
   | 'email-sender'
   | 'console-upload'
   | 'ias-claim-preparation'
-  | 'ias-claim-creation';
+  | 'ias-claim-creation'
+  | 'ias-claim-stp';
 
 export interface PipelineRunStep {
   id: string;

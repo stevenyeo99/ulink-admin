@@ -64,7 +64,7 @@ async function planUpload(caseRecord) {
     destFilename: `${index}-${sanitize(attachment.originalFilename)}`,
   }));
 
-  return { caseId: caseRecord.id, folder, barcode: generateBarcode(now), files };
+  return { caseId: caseRecord.id, folder, barcode: generateBarcode(now), files, completedAt: now };
 }
 
 // Deliberately a small dedicated write here rather than parametrizing storage/
@@ -91,6 +91,7 @@ async function uploadCase(caseRecord) {
     caseId: plan.caseId,
     folder: plan.folder,
     barcode: plan.barcode,
+    completedAt: plan.completedAt,
     files: plan.files.map(({ attachment, destFilename }) => ({ originalFilename: attachment.originalFilename, destFilename })),
   };
 }
@@ -102,7 +103,10 @@ async function persistOutcome(caseRecord, outcome) {
       {
         currentStatus: 'DOCUMENTS_UPLOADED',
         consoleBarcode: outcome.barcode,
-        consoleUploadResult: { folder: outcome.folder, files: outcome.files },
+        // completedAt: the moment documents were confirmed complete and archived (this job
+        // only ever runs immediately after document-checking passes) — read back by
+        // ias-claim-preparation/service.js for the CL_CLAIM_API payload's docCompleteDate.
+        consoleUploadResult: { folder: outcome.folder, files: outcome.files, completedAt: outcome.completedAt.toISOString() },
       },
       { where: { id: caseRecord.id }, transaction }
     );

@@ -27,6 +27,7 @@ const devIcd10Router = require('./routes/dev/icd10');
 const devIasClaimPreparationRouter = require('./routes/dev/iasClaimPreparation');
 const devIasClaimCreationRouter = require('./routes/dev/iasClaimCreation');
 const devConsoleUploadRouter = require('./routes/dev/consoleUpload');
+const devIasClaimStpRouter = require('./routes/dev/iasClaimStp');
 
 const app = express();
 
@@ -69,6 +70,7 @@ app.use('/api/dev/icd10', devIcd10Router);
 app.use('/api/dev/ias-claim-preparation', devIasClaimPreparationRouter);
 app.use('/api/dev/ias-claim-creation', devIasClaimCreationRouter);
 app.use('/api/dev/console-upload', devConsoleUploadRouter);
+app.use('/api/dev/ias-claim-stp', devIasClaimStpRouter);
 
 // Swagger UI needs inline script/style, which the global helmet CSP blocks —
 // relax it for this path only, everything else keeps the strict default.
