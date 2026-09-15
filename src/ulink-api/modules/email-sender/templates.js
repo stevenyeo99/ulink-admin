@@ -136,15 +136,14 @@ function renderSubmissionNotRecognized() {
 // automated work is done, a human now needs to review/approve before the customer is ever
 // told a claim number (which happens outside this system, manually, once approved).
 function renderClaimApprovalReview(payload) {
-  const { caseId, claimNo } = payload;
+  const { claimNo } = payload;
   return {
-    subject: `Claim ready for JD2 approval — Case ${caseId} — Claim ${claimNo}`,
-    bodyText: `A claim has been created in IAS and is ready for JD2 review/approval. JD1's automated checks are complete for this case.
+    subject: `Claim ready for review — Claim ${claimNo}`,
+    bodyText: `A claim has been created in IAS and is ready for review and approval. The automated document and claim checks are complete.
 
-Case ID: ${caseId}
 Claim Number: ${claimNo}
 
-Note: the customer has NOT been told their claim number yet — that happens manually once JD2 has reviewed/approved.`,
+Please review and approve the claim before communicating the claim number to the customer.`,
   };
 }
 
