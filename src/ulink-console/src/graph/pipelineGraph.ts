@@ -1,4 +1,4 @@
-import type { BlockName } from '../types/pipeline';
+import type { BlockName, EmailSenderBlockName } from '../types/pipeline';
 import type { Audience } from './audienceStyle';
 
 export interface BlockMeta {
@@ -16,6 +16,7 @@ export interface BlockMeta {
 export interface EmailBadgeMeta {
   id: string;
   producer: BlockName;
+  blockName: EmailSenderBlockName;
   label: string;
   audience: Audience;
   x: number;
@@ -88,6 +89,7 @@ export const EMAIL_BADGES: EmailBadgeMeta[] = [
   {
     id: 'email-badge-member-verification',
     producer: 'member-verification',
+    blockName: 'email-sender-member-verification',
     label: 'MEMBER_VERIFY_ISSUE',
     audience: 'internal',
     x: 300,
@@ -96,6 +98,7 @@ export const EMAIL_BADGES: EmailBadgeMeta[] = [
   {
     id: 'email-badge-document-checking',
     producer: 'document-checking',
+    blockName: 'email-sender-document-checking',
     label: 'MISSING_DOCUMENTS · DOCUMENT_COMPLETE_ACK',
     audience: 'customer',
     x: 300,
@@ -109,6 +112,7 @@ export const EMAIL_BADGES: EmailBadgeMeta[] = [
   {
     id: 'email-badge-ias-claim-creation',
     producer: 'ias-claim-creation',
+    blockName: 'email-sender-claim-approval-review',
     label: 'CLAIM_APPROVAL_REVIEW · CLAIM_SUBMIT_ISSUE',
     audience: 'internal',
     x: 300,
@@ -119,6 +123,7 @@ export const EMAIL_BADGES: EmailBadgeMeta[] = [
   {
     id: 'email-badge-ias-claim-stp',
     producer: 'ias-claim-stp',
+    blockName: 'email-sender-csr-report',
     label: 'CSR_REPORT',
     audience: 'customer',
     x: 300,

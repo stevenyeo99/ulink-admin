@@ -77,10 +77,6 @@ export function mergeStatus(steps: PipelineRunStep[]): { nodes: Node[]; edges: E
     };
   });
 
-  // One real job (email-sender), shown at 3 points in the graph — same steps/status on every
-  // badge, not 3 independent lookups, so they can never disagree with each other.
-  const emailSenderSteps = stepsByBlock.get('email-sender') ?? [];
-  const emailSenderStatus = representativeStatus(emailSenderSteps);
   const badgeNodes: Node<EmailBadgeNodeData>[] = EMAIL_BADGES.map((badge) => ({
     id: badge.id,
     type: 'emailBadgeNode',
@@ -90,8 +86,8 @@ export function mergeStatus(steps: PipelineRunStep[]): { nodes: Node[]; edges: E
     data: {
       label: badge.label,
       audience: badge.audience,
-      status: emailSenderStatus,
-      steps: emailSenderSteps,
+      status: representativeStatus(stepsByBlock.get(badge.blockName) ?? []),
+      steps: stepsByBlock.get(badge.blockName) ?? [],
     },
   }));
 

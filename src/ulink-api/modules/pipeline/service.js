@@ -26,21 +26,15 @@ const iasClaimStpService = require('../ias-claim-stp/service');
 // passed" — only which job sets it changed. ias-claim-preparation itself now reads
 // DOCUMENTS_UPLOADED instead (console-upload sits in between as of 2026-09-15 — see below).
 //
-// email-sender appears twice, deliberately, not a duplicate/typo: it's a shared consumer
-// of ulink_email_tasks queued by THREE different producers, not two — member-verification
-// and document-checking queue theirs earlier in this same run (caught by the first
-// email-sender call), but ias-claim-creation (the last step) queues its own
-// CLAIM_CREATED_NOTIFICATION task on success, after the first email-sender call has
-// already run. Without a second call at the end, that notification would sit PENDING and
-// unsent until the next pipeline run picks it up. Both calls run the exact same
-// idempotent service.run() (queries PENDING tasks, no state of its own) — the second call
-// is simply a no-op on runs where ias-claim-creation didn't queue anything new.
+// Email tasks are split into four visible steps so the console can show which category is
+// loading. Each step still uses the same idempotent sender, filtered to its own task types.
 const STEPS = [
   ['email-intake', emailIntakeService],
   ['claim-recognition', claimRecognitionService],
   ['member-verification', memberVerificationService],
   ['document-checking', documentCheckingService],
-  ['email-sender', emailSenderService],
+  ['email-sender-member-verification', () => emailSenderService.run({ taskTypes: ['MEMBER_VERIFY_ISSUE'] })],
+  ['email-sender-document-checking', () => emailSenderService.run({ taskTypes: ['MISSING_DOCUMENTS', 'DOCUMENT_COMPLETE_ACK'] })],
   // Added 2026-09-15 — copies a cleared AYAS-reimbursement case's documents to the shared
   // console folder and generates its barcode (Case.consoleBarcode) before ias-claim-
   // preparation needs it. MEMBER_VERIFIED -> DOCUMENTS_UPLOADED; see
@@ -48,13 +42,14 @@ const STEPS = [
   ['console-upload', consoleUploadService],
   ['ias-claim-preparation', iasClaimPreparationService],
   ['ias-claim-creation', iasClaimCreationService],
+  ['email-sender-claim-approval-review', () => emailSenderService.run({ taskTypes: ['CLAIM_APPROVAL_REVIEW', 'CLAIM_SUBMIT_ISSUE'] })],
   // Added 2026-09-15 — for STP (Case.isStp) claims only: polls IAS claim-status for the
   // settlement report, downloads it once ready, emails it to the customer.
   // CLAIM_CREATED -> CSR_SENT; see modules/ias-claim-stp/service.js. Runs before this last
   // email-sender pass so a CSR_REPORT task queued in the same run still sends immediately,
   // same reasoning as ias-claim-creation's own CLAIM_CREATED_NOTIFICATION task above.
   ['ias-claim-stp', iasClaimStpService],
-  ['email-sender', emailSenderService],
+  ['email-sender-csr-report', () => emailSenderService.run({ taskTypes: ['CSR_REPORT'] })],
 ];
 
 function withTimeout(promise, ms, blockName) {

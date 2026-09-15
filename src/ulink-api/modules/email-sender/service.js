@@ -129,9 +129,12 @@ async function sendTask(task) {
   });
 }
 
-async function run() {
+async function run({ taskTypes } = {}) {
   const tasks = await EmailTask.findAll({
-    where: { status: 'PENDING' },
+    where: {
+      status: 'PENDING',
+      ...(taskTypes ? { taskType: { [Sequelize.Op.in]: taskTypes } } : {}),
+    },
     limit: config.emailSender.batchLimit,
     order: [['createdAt', 'ASC']],
   });

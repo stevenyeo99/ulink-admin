@@ -18,6 +18,12 @@ export type BlockName =
   | 'ias-claim-creation'
   | 'ias-claim-stp';
 
+export type EmailSenderBlockName =
+  | 'email-sender-member-verification'
+  | 'email-sender-document-checking'
+  | 'email-sender-claim-approval-review'
+  | 'email-sender-csr-report';
+
 export interface PipelineRunStep {
   id: string;
   pipelineRunId: string;
