@@ -26,6 +26,11 @@
  * template in this file deliberately keeps away from customers.
  */
 
+// Shared sign-off for every customer-facing template below — these are automated replies,
+// not a human agent's, so the signer is the bot, not a person's name.
+const SIGN_OFF = `Thank you & Best Regards,
+ULINK AI Bot`;
+
 const MISSING_DOCUMENTS_INTRO = `Dear Valued Customer,
 
 Please be informed that in order to process the claim that have submitted, the following information needs to be completed:
@@ -35,7 +40,7 @@ const MISSING_DOCUMENTS_FOOTER = `
 Please re-submit the required document(s) in order to start the claims process. Should you have any questions, kindly contact us at ayahealthinfo@ayasompo.com or call our hotline during office hours.
 Please be note that claim might be rejected in event that they do not meet the requirements regardless of requesting for the additional documents.
 Please note that if all the necessary documents supporting your claim have been satisfactorily submitted, we will notify you of the claim outcomes in 2-7 business days for small claims and 7-10 business days for large claims on average.
-Thank you & Best Regards,`;
+${SIGN_OFF}`;
 
 const DOCUMENT_COMPLETE_ACK_BODY = `Dear Valued Customer,
 
@@ -47,7 +52,7 @@ Please note that if all the necessary documents supporting your claim have been 
 
 If you have any questions, kindly contact us at ayahealthinfo@ayasompo.com.
 
-Thank you and Best Regards,`;
+${SIGN_OFF}`;
 
 function renderMissingDocuments(payload) {
   const issues = payload.issues || [];
@@ -109,7 +114,7 @@ Thank you for reaching out. We were unable to recognize this submission as a cla
 
 Kindly contact our customer service team directly at ayahealthinfo@ayasompo.com or call our hotline during office hours so we can assist you further.
 
-Thank you and Best Regards,`;
+${SIGN_OFF}`;
 
 // Deliberately generic — this fires when the submission didn't match any known claim
 // route at all (Case.currentStatus=NOT_RECOGNIZED), so there's no specific issue list to
