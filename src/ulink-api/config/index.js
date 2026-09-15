@@ -7,9 +7,6 @@ function parseBool(value, fallback) {
   return ['true', '1', 'yes', 'y'].includes(String(value).trim().toLowerCase());
 }
 
-const configuredReasoningEffort = process.env.LLM_REASONING_EFFORT;
-const reasoningEffort = ['xhigh', 'medium', 'low'].includes(configuredReasoningEffort) ? configuredReasoningEffort : 'low';
-
 module.exports = {
   env,
   isProduction: env === 'production',
@@ -37,9 +34,9 @@ module.exports = {
     baseUrl: process.env.LLM_URL || process.env.LM_URL,
     visionModel: process.env.MODEL,
     assistantModel: process.env.MODEL_ASSISTANT || process.env.MODEL,
-    // Qwen's server adapter accepts only xhigh, medium, and low. Document-checking's
-    // judgment calls override this shared default to medium.
-    reasoningEffort,
+    // Pass through the value supported by the selected model/server, e.g. low or off.
+    reasoningEffort: process.env.LLM_REASONING_EFFORT || 'low',
+    documentCheckingReasoningEffort: process.env.DOCUMENT_CHECKING_REASONING_EFFORT || 'medium',
     timeoutMs: parseInt(process.env.LLM_TIMEOUT_MS, 10) || 120000,
     maxImages: parseInt(process.env.LLM_MAX_IMAGES, 10) || 6,
     maxRequestBytes: parseInt(process.env.LLM_MAX_REQUEST_BYTES, 10) || 25 * 1000 * 1000,

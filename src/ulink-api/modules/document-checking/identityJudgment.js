@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const config = require('../../config');
 const { synthesizeJson } = require('../claim-recognition/llmClient');
 
 const ENTITY_MATCH_PROMPT = fs.readFileSync(path.join(__dirname, 'prompts', 'entity-match.md'), 'utf8');
@@ -24,7 +25,12 @@ const SCHEMA = {
 const CONFIDENCE_THRESHOLD = 0.5;
 
 async function judge(systemPrompt, userText) {
-  const result = await synthesizeJson({ systemPrompt, userText, jsonSchema: SCHEMA, reasoningEffort: 'medium' });
+  const result = await synthesizeJson({
+    systemPrompt,
+    userText,
+    jsonSchema: SCHEMA,
+    reasoningEffort: config.llm.documentCheckingReasoningEffort,
+  });
   if (result.confidence < CONFIDENCE_THRESHOLD) return null;
   return { consistent: result.consistent, confidence: result.confidence, reason: result.reason };
 }

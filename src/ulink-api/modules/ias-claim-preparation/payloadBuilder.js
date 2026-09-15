@@ -1,4 +1,4 @@
-const { isoToMMDDYYYY, dateToMMDDYYYY, dateToYYYYMMDD } = require('../shared/iasDates');
+const { isoToMMDDYYYY, dateToMMDDYYYY } = require('../shared/iasDates');
 
 /**
  * Pure — no I/O. Builds the CL_CLAIM_API request shape (verified against the real sample
@@ -26,8 +26,8 @@ const { isoToMMDDYYYY, dateToMMDDYYYY, dateToYYYYMMDD } = require('../shared/ias
  *     modules/pipeline/service.js's STEPS order), so this is null only on an older/
  *     reprocessed case that predates console-upload.
  *   - docCompleteDate: also from console-upload — the moment its documents were archived
- *     (Case.consoleUploadResult.completedAt). **YYYYMMDD**, unlike every other date field
- *     in this payload (all MMDDYYYY) — confirmed, not a guess.
+ *     (Case.consoleUploadResult.completedAt). **MMDDYYYY**, like the other date fields
+ *     in this payload — required by IAS.
  *   - claimStatus: fixed "CL_STATUS_RA" on every submission, unconditional — NOT tied to
  *     isStp (confirmed explicitly; unlike isValidation/isCSR, this one doesn't vary by STP
  *     eligibility).
@@ -103,7 +103,7 @@ function buildPayload({ extractedFields, iasMemberInfoResponse, route, diagnosis
     // See this file's header comment — barcode/docCompleteDate/claimStatus are all
     // provisional, pending IAS confirmation.
     barcode: barcode ?? null,
-    docCompleteDate: dateToYYYYMMDD(docCompleteDate),
+    docCompleteDate: dateToMMDDYYYY(docCompleteDate),
     claimStatus: 'CL_STATUS_RA',
     Items: items,
   };

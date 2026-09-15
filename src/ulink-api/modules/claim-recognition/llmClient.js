@@ -83,24 +83,34 @@ async function postChatCompletion(body) {
  * into one request was verified to risk multi-minute hangs even at otherwise-safe image
  * sizes (Day-1 testing against the real sample documents).
  *
- * reasoning_effort is hardcoded to 'low' here, not read from config — this is literal
+ * reasoning_effort uses the shared raw .env setting here — this is literal
  * OCR (Tier 1: read what's on the page), never genuine judgment, so it has no principled
  * use for reasoning at all. Previously read config.llm.reasoningEffort (a single value
  * shared with every other LLM call in the system, including genuine judgment calls) —
  * confirmed via real LM Studio response logs (2026-09-14) that setting that shared value
- * to anything but 'low' lets the model spend its entire max_tokens budget on
+ * a reasoning setting can let the model spend its entire max_tokens budget on
  * reasoning_content before writing any actual transcription, producing `content: ""`
  * ("LLM returned an empty page transcription") on harder pages — the reasoning pass is
  * unbounded on hard vision content (e.g. handwriting) and doesn't reliably leave room for
- * the answer itself. Hardcoding this call specifically to 'low' keeps OCR from inheriting
- * a higher reasoning setting tuned for a genuine judgment call elsewhere.
+ * the answer itself. Configure the exact value supported by the selected model in .env.
+ *
+ * Bounded retry (2026-09-15) on empty content specifically: verified via the request/
+ * response logging (postChatCompletion) that this model is NOT reliably deterministic in
+ * practice even at temperature 0 — a page that transcribed fine before can come back
+ * `finish_reason: "length"` with the whole max_tokens budget burned on reasoning_content
+ * and `content: ""` on a later run of the exact same image. A same-request retry has a real
+ * chance of landing a different (successful) generation. Does not touch synthesizeJson —
+ * that call's own failure mode (invalid JSON) already has its own repair path
+ * (extractJson below), a different problem.
  */
+const TRANSCRIBE_MAX_ATTEMPTS = 3;
+
 async function transcribePage({ imageBuffer, instruction }) {
   if (imageBuffer.length > config.llm.maxRequestBytes) {
     throw new Error(`Page image exceeds LLM_MAX_REQUEST_BYTES (${imageBuffer.length} bytes)`);
   }
 
-  const data = await postChatCompletion({
+  const request = {
     model: config.llm.visionModel,
     messages: [
       {
@@ -113,14 +123,19 @@ async function transcribePage({ imageBuffer, instruction }) {
     ],
     temperature: 0,
     max_tokens: config.claimRecognition.maxTokensPerPage,
-    reasoning_effort: 'low',
-  });
+    reasoning_effort: config.llm.reasoningEffort,
+  };
 
-  const content = data?.choices?.[0]?.message?.content;
-  if (typeof content !== 'string' || !content.trim()) {
-    throw new Error('LLM returned an empty page transcription');
+  for (let attempt = 1; attempt <= TRANSCRIBE_MAX_ATTEMPTS; attempt += 1) {
+    const data = await postChatCompletion(request);
+    const content = data?.choices?.[0]?.message?.content;
+    if (typeof content === 'string' && content.trim()) {
+      return content.trim();
+    }
+    logger.warn('transcribePage got empty content, retrying', { attempt, maxAttempts: TRANSCRIBE_MAX_ATTEMPTS });
   }
-  return content.trim();
+
+  throw new Error(`LLM returned an empty page transcription after ${TRANSCRIBE_MAX_ATTEMPTS} attempts`);
 }
 
 /**
@@ -132,7 +147,7 @@ async function transcribePage({ imageBuffer, instruction }) {
  * `reasoningEffort` defaults to config.llm.reasoningEffort (the shared setting, unchanged
  * for every existing caller — modules/policy-exclusion/judge.js,
  * modules/ias-claim-preparation's diagnosisPicker/benefitPicker) but claim-recognition's
- * own callers (decideRoute/extractFields — see service.js) pass 'low' explicitly: neither
+ * own callers (decideRoute/extractFields — see service.js) use the shared setting: neither
  * is a genuine judgment call (Task 3/identity_consistency was removed), so there's no
  * principled reason for them to spend budget on reasoning, same logic as transcribePage
  * above. Judgment-type callers keep using the shared config value for now — that's a
