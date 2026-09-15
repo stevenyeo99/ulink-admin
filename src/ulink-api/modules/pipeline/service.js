@@ -33,8 +33,8 @@ const STEPS = [
   ['claim-recognition', claimRecognitionService],
   ['member-verification', memberVerificationService],
   ['document-checking', documentCheckingService],
-  ['email-sender-member-verification', () => emailSenderService.run({ taskTypes: ['MEMBER_VERIFY_ISSUE'] })],
-  ['email-sender-document-checking', () => emailSenderService.run({ taskTypes: ['MISSING_DOCUMENTS', 'DOCUMENT_COMPLETE_ACK'] })],
+  ['email-sender-member-verification', { run: () => emailSenderService.run({ taskTypes: ['MEMBER_VERIFY_ISSUE'] }) }],
+  ['email-sender-document-checking', { run: () => emailSenderService.run({ taskTypes: ['MISSING_DOCUMENTS', 'DOCUMENT_COMPLETE_ACK'] }) }],
   // Added 2026-09-15 — copies a cleared AYAS-reimbursement case's documents to the shared
   // console folder and generates its barcode (Case.consoleBarcode) before ias-claim-
   // preparation needs it. MEMBER_VERIFIED -> DOCUMENTS_UPLOADED; see
@@ -42,14 +42,14 @@ const STEPS = [
   ['console-upload', consoleUploadService],
   ['ias-claim-preparation', iasClaimPreparationService],
   ['ias-claim-creation', iasClaimCreationService],
-  ['email-sender-claim-approval-review', () => emailSenderService.run({ taskTypes: ['CLAIM_APPROVAL_REVIEW', 'CLAIM_SUBMIT_ISSUE'] })],
+  ['email-sender-claim-approval-review', { run: () => emailSenderService.run({ taskTypes: ['CLAIM_APPROVAL_REVIEW', 'CLAIM_SUBMIT_ISSUE'] }) }],
   // Added 2026-09-15 — for STP (Case.isStp) claims only: polls IAS claim-status for the
   // settlement report, downloads it once ready, emails it to the customer.
   // CLAIM_CREATED -> CSR_SENT; see modules/ias-claim-stp/service.js. Runs before this last
   // email-sender pass so a CSR_REPORT task queued in the same run still sends immediately,
   // same reasoning as ias-claim-creation's own CLAIM_CREATED_NOTIFICATION task above.
   ['ias-claim-stp', iasClaimStpService],
-  ['email-sender-csr-report', () => emailSenderService.run({ taskTypes: ['CSR_REPORT'] })],
+  ['email-sender-csr-report', { run: () => emailSenderService.run({ taskTypes: ['CSR_REPORT'] }) }],
 ];
 
 function withTimeout(promise, ms, blockName) {
@@ -107,7 +107,7 @@ async function startRun() {
   return PipelineRun.create({ status: 'RUNNING', startedAt: new Date() });
 }
 
-/** Runs all 7 steps in order against an already-created PipelineRun, then finalizes it. */
+/** Runs all pipeline steps in order against an already-created PipelineRun, then finalizes it. */
 async function executeSteps(pipelineRun) {
   try {
     let sequence = 0;
