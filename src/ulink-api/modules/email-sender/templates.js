@@ -64,8 +64,14 @@ ${SIGN_OFF}`;
 
 function renderMissingDocuments(payload) {
   const issues = payload.issues || [];
-  const bullets = issues.map((issue) => `- ${issue}`).join('\n');
-  return { subject: null, bodyText: `${MISSING_DOCUMENTS_INTRO}${bullets}\n${MISSING_DOCUMENTS_FOOTER}` };
+  const bullets = issues
+    .map((issue) => String(issue).trim())
+    .filter(Boolean)
+    .map((issue) => `- ${issue}`)
+    .join('\n');
+  const intro = MISSING_DOCUMENTS_INTRO.trimEnd();
+  const footer = MISSING_DOCUMENTS_FOOTER.trim();
+  return { subject: null, bodyText: `${intro}\n${bullets}\n\n${footer}` };
 }
 
 /**
