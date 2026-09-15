@@ -1,9 +1,23 @@
 import type { BlockName } from '../types/pipeline';
+import type { Audience } from './audienceStyle';
 
 export interface BlockMeta {
   id: BlockName;
   label: string;
   description: string;
+  x: number;
+  y: number;
+}
+
+// A small "mail sent" chip drawn directly under the one real producer it reports, instead of
+// email-sender's own box (see EMAIL_BADGES below for why there's no separate email-sender
+// BlockMeta/node anymore). `id` is intentionally NOT a BlockName — this isn't a second job,
+// just 3 views of the one real email-sender job's status, attached at 3 points in the graph.
+export interface EmailBadgeMeta {
+  id: string;
+  producer: BlockName;
+  label: string;
+  audience: Audience;
   x: number;
   y: number;
 }
@@ -14,22 +28,26 @@ export interface StaticEdge {
   target: BlockName;
   sourceHandle: 'source-right' | 'source-bottom';
   targetHandle: 'target-left' | 'target-top';
-  /** 'main' = the Case.currentStatus chain each job filters on. 'branch' = email-sender's
-   * shared-consumer relationship to its three producers (see jobs-registry.md) — it queues
-   * from all three, doesn't gate any of them. */
-  kind: 'main' | 'branch';
-  label?: string;
-  /** Who the email(s) this edge represents actually go to — customer-facing vs. internal
-   * ops (SOP §11/§13: several findings are held/escalated internally, never sent to the
-   * customer directly; see modules/email-sender/service.js's INTERNAL_ONLY_TASK_TYPES).
-   * Only meaningful on 'branch' edges. */
-  audience?: 'customer' | 'internal';
+  /** 'main' = the Case.currentStatus chain each job filters on. */
+  kind: 'main';
 }
 
-// Positions describe the real architecture (jobs-registry.md), not just the linear STEPS
-// array in modules/pipeline/service.js: email-sender is a shared consumer fed by two
-// producers, drawn as a branch below the main Case.currentStatus chain rather than inline
-// with it.
+// Short vertical drop from a producer straight down to its own EMAIL_BADGES chip — see
+// EmailBadgeMeta above. Separate type from StaticEdge because the target is a badge id, not
+// a real BlockName.
+export interface EmailBadgeEdge {
+  id: string;
+  source: BlockName;
+  target: string;
+  sourceHandle: 'source-bottom';
+  targetHandle: 'target-top';
+  kind: 'branch';
+}
+
+// Positions describe the real architecture (jobs-registry.md): email-sender is a shared
+// consumer fed by three producers, not a 4th step in this chain — so it's not a BlockMeta at
+// all anymore (see EMAIL_BADGES below). The 6 entries here are exactly the main
+// Case.currentStatus chain.
 export const BLOCKS: BlockMeta[] = [
   { id: 'email-intake', label: 'Email Intake', description: 'Reads unseen IMAP mail, stores attachments', x: 0, y: 160 },
   { id: 'claim-recognition', label: 'Claim Recognition', description: 'Vision + LLM extraction, route decision', x: 300, y: 160 },
@@ -37,39 +55,42 @@ export const BLOCKS: BlockMeta[] = [
   { id: 'document-checking', label: 'Document Checking', description: 'Deterministic completeness checklist', x: 900, y: 160 },
   { id: 'ias-claim-preparation', label: 'Claim Preparation', description: 'ICD-10 pick, benefit pick, payload build', x: 1200, y: 160 },
   { id: 'ias-claim-creation', label: 'Claim Creation', description: 'Submits to IAS, assigns claim number', x: 1500, y: 160 },
-  { id: 'email-sender', label: 'Email Sender', description: 'Sends queued customer + internal emails', x: 750, y: 400 },
 ];
 
-// Branch edge labels name the actual EmailTask.taskType(s) each producer queues (see
-// modules/email-sender/templates.js's RENDERERS) — not a vague "on <status>" description —
-// so it's visible at a glance which specific email fires and, via `audience`, who receives
-// it. Each producer here is uniformly one audience today (no producer mixes customer and
-// internal emails), so one edge per producer is enough — no need for parallel edges.
 export const EDGES: StaticEdge[] = [
   { id: 'e-intake-recognition', source: 'email-intake', target: 'claim-recognition', sourceHandle: 'source-right', targetHandle: 'target-left', kind: 'main' },
   { id: 'e-recognition-verification', source: 'claim-recognition', target: 'member-verification', sourceHandle: 'source-right', targetHandle: 'target-left', kind: 'main' },
   { id: 'e-verification-checking', source: 'member-verification', target: 'document-checking', sourceHandle: 'source-right', targetHandle: 'target-left', kind: 'main' },
   { id: 'e-checking-preparation', source: 'document-checking', target: 'ias-claim-preparation', sourceHandle: 'source-right', targetHandle: 'target-left', kind: 'main' },
   { id: 'e-preparation-creation', source: 'ias-claim-preparation', target: 'ias-claim-creation', sourceHandle: 'source-right', targetHandle: 'target-left', kind: 'main' },
+];
+
+// One badge per producer, drawn directly under it (same x, a short y-offset — a plain
+// vertical drop, never crossing the main chain above). Previously these were one shared
+// "email-sender" box at a distant fixed position with 3 long edges converging into it
+// (the ias-claim-creation edge in particular had to travel back left, under the whole main
+// chain, to reach it) — confusing which producer a given email actually came from. Labels
+// name the actual EmailTask.taskType(s) each producer queues (see
+// modules/email-sender/templates.js's RENDERERS), and `audience` is who receives it
+// (SOP §11/§13: several findings are held/escalated internally, never sent to the customer
+// directly — see modules/email-sender/service.js's INTERNAL_ONLY_TASK_TYPES). Each producer
+// here is uniformly one audience today, so one badge per producer is enough.
+export const EMAIL_BADGES: EmailBadgeMeta[] = [
   {
-    id: 'e-verification-sender',
-    source: 'member-verification',
-    target: 'email-sender',
-    sourceHandle: 'source-bottom',
-    targetHandle: 'target-top',
-    kind: 'branch',
+    id: 'email-badge-member-verification',
+    producer: 'member-verification',
     label: 'MEMBER_VERIFY_ISSUE',
     audience: 'internal',
+    x: 600,
+    y: 300,
   },
   {
-    id: 'e-checking-sender',
-    source: 'document-checking',
-    target: 'email-sender',
-    sourceHandle: 'source-bottom',
-    targetHandle: 'target-top',
-    kind: 'branch',
+    id: 'email-badge-document-checking',
+    producer: 'document-checking',
     label: 'MISSING_DOCUMENTS · DOCUMENT_COMPLETE_ACK',
     audience: 'customer',
+    x: 900,
+    y: 300,
   },
   // ias-claim-creation's emails are internal-only, not the customer-facing
   // CLAIM_CREATED_NOTIFICATION this used to be — that taskType was removed (2026-09-14):
@@ -77,13 +98,20 @@ export const EDGES: StaticEdge[] = [
   // is now a manual step for ops, not automatic. CLAIM_APPROVAL_REVIEW is the SOP §13
   // "ready for JD2 handover" signal instead.
   {
-    id: 'e-creation-sender',
-    source: 'ias-claim-creation',
-    target: 'email-sender',
-    sourceHandle: 'source-bottom',
-    targetHandle: 'target-top',
-    kind: 'branch',
+    id: 'email-badge-ias-claim-creation',
+    producer: 'ias-claim-creation',
     label: 'CLAIM_APPROVAL_REVIEW · CLAIM_SUBMIT_ISSUE',
     audience: 'internal',
+    x: 1500,
+    y: 300,
   },
 ];
+
+export const EMAIL_BADGE_EDGES: EmailBadgeEdge[] = EMAIL_BADGES.map((badge) => ({
+  id: `e-${badge.producer}-${badge.id}`,
+  source: badge.producer,
+  target: badge.id,
+  sourceHandle: 'source-bottom',
+  targetHandle: 'target-top',
+  kind: 'branch',
+}));

@@ -1,5 +1,6 @@
 import type { Edge, Node } from '@xyflow/react';
-import { BLOCKS, EDGES } from './pipelineGraph';
+import { BLOCKS, EDGES, EMAIL_BADGES, EMAIL_BADGE_EDGES } from './pipelineGraph';
+import type { Audience } from './audienceStyle';
 import type { PipelineRunStep, StepStatus } from '../types/pipeline';
 
 export type NodeStatus = 'IDLE' | StepStatus;
@@ -11,6 +12,15 @@ export interface PipelineNodeData extends Record<string, unknown> {
   /** Usually one entry. email-sender runs twice per pipeline execution (see
    * modules/pipeline/service.js's STEPS comment) — a block can legitimately have more than
    * one PipelineRunStep row in the same run, so this is always an array, oldest first. */
+  steps: PipelineRunStep[];
+}
+
+export interface EmailBadgeNodeData extends Record<string, unknown> {
+  label: string;
+  audience: Audience;
+  status: NodeStatus;
+  /** Same shared email-sender steps as every other badge — see EMAIL_BADGES' doc comment in
+   * pipelineGraph.ts: one real job, shown at 3 points in the graph. */
   steps: PipelineRunStep[];
 }
 
@@ -37,7 +47,7 @@ function representativeStatus(steps: PipelineRunStep[]): NodeStatus {
  * from the graph layout itself and from WorkflowCanvas's rendering so the "what does the
  * data mean" logic has exactly one place to live.
  */
-export function mergeStatus(steps: PipelineRunStep[]): { nodes: Node<PipelineNodeData>[]; edges: Edge[] } {
+export function mergeStatus(steps: PipelineRunStep[]): { nodes: Node[]; edges: Edge[] } {
   const stepsByBlock = new Map<string, PipelineRunStep[]>();
   for (const step of steps) {
     const existing = stepsByBlock.get(step.blockName);
@@ -45,7 +55,7 @@ export function mergeStatus(steps: PipelineRunStep[]): { nodes: Node<PipelineNod
     else stepsByBlock.set(step.blockName, [step]);
   }
 
-  const nodes: Node<PipelineNodeData>[] = BLOCKS.map((block) => {
+  const blockNodes: Node<PipelineNodeData>[] = BLOCKS.map((block) => {
     const blockSteps = stepsByBlock.get(block.id) ?? [];
     return {
       id: block.id,
@@ -67,9 +77,29 @@ export function mergeStatus(steps: PipelineRunStep[]): { nodes: Node<PipelineNod
     };
   });
 
-  const statusOf = (id: string): NodeStatus => nodes.find((n) => n.id === id)?.data.status ?? 'IDLE';
+  // One real job (email-sender), shown at 3 points in the graph — same steps/status on every
+  // badge, not 3 independent lookups, so they can never disagree with each other.
+  const emailSenderSteps = stepsByBlock.get('email-sender') ?? [];
+  const emailSenderStatus = representativeStatus(emailSenderSteps);
+  const badgeNodes: Node<EmailBadgeNodeData>[] = EMAIL_BADGES.map((badge) => ({
+    id: badge.id,
+    type: 'emailBadgeNode',
+    position: { x: badge.x, y: badge.y },
+    width: 220,
+    height: 64,
+    data: {
+      label: badge.label,
+      audience: badge.audience,
+      status: emailSenderStatus,
+      steps: emailSenderSteps,
+    },
+  }));
 
-  const edges: Edge[] = EDGES.map((edge) => {
+  const nodes: Node[] = [...blockNodes, ...badgeNodes];
+
+  const statusOf = (id: string): NodeStatus => (nodes.find((n) => n.id === id)?.data as { status?: NodeStatus } | undefined)?.status ?? 'IDLE';
+
+  const edges: Edge[] = [...EDGES, ...EMAIL_BADGE_EDGES].map((edge) => {
     const sourceStatus = statusOf(edge.source);
     const targetStatus = statusOf(edge.target);
     const isActive = targetStatus === 'RUNNING';
@@ -82,8 +112,7 @@ export function mergeStatus(steps: PipelineRunStep[]): { nodes: Node<PipelineNod
       sourceHandle: edge.sourceHandle,
       targetHandle: edge.targetHandle,
       type: 'pipelineEdge',
-      label: edge.label,
-      data: { kind: edge.kind, isActive, isComplete, audience: edge.audience },
+      data: { kind: edge.kind, isActive, isComplete },
       animated: isActive,
     };
   });
