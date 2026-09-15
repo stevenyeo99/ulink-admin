@@ -65,6 +65,7 @@ async function checkCase(caseRecord) {
     diagnosis,
     lines,
     receivedAt: caseRecord.createdAt,
+    barcode: caseRecord.consoleBarcode,
   });
 
   return { caseId: caseRecord.id, payload, diagnosis, lines };
@@ -90,8 +91,12 @@ async function persistOutcome(caseRecord, outcome) {
 }
 
 async function run() {
+  // Reads DOCUMENTS_UPLOADED, not MEMBER_VERIFIED, as of 2026-09-15 — console-upload
+  // (modules/console-upload/service.js) now sits between document-checking and this job, so
+  // the barcode it generates (Case.consoleBarcode) is guaranteed to exist before
+  // payloadBuilder.js needs it. See modules/pipeline/service.js's STEPS order.
   const cases = await Case.findAll({
-    where: { currentStatus: 'MEMBER_VERIFIED' },
+    where: { currentStatus: 'DOCUMENTS_UPLOADED' },
     limit: config.iasClaimPreparation.batchLimit,
     order: [['createdAt', 'ASC']],
   });
@@ -104,7 +109,7 @@ async function run() {
       results.push({ caseId: outcome.caseId, ok: true });
     } catch (error) {
       // Technical failure (LLM/lookup error, missing prerequisite data) — case is left at
-      // MEMBER_VERIFIED for retry, same per-case try/catch pattern as every other job. A
+      // DOCUMENTS_UPLOADED for retry, same per-case try/catch pattern as every other job. A
       // diagnosis/benefit pick that legitimately comes back null is NOT a failure — that
       // path already succeeds via persistOutcome with those fields left null in the payload.
       results.push({ caseId: caseRecord.id, ok: false, error: error.message });

@@ -4,6 +4,7 @@ const { getStorageAdapter } = require('../../storage');
 const { getChannelAdapter } = require('../../channels');
 const { matchOrCreateThread } = require('./threadMatcher');
 const { queueDedupedTask } = require('../shared/emailTaskQueue');
+const { datePathSegments } = require('../shared/datePathSegments');
 const { extractEmailBodyLinkedDocumentUrls, fetchLinkedDocument } = require('../claim-recognition/linkedDocuments');
 const logger = require('../../utils/logger');
 
@@ -41,14 +42,6 @@ const NO_ATTACHMENT_REMINDER_STATUSES = ['INCOMPLETE'];
 
 async function logEvent(transaction, { caseId, prevStatus = null, newStatus, reasonCode = null, message = null }) {
   await CaseEvent.create({ caseId, blockName: BLOCK_NAME, prevStatus, newStatus, reasonCode, message }, { transaction });
-}
-
-function datePathSegments(date) {
-  const d = date instanceof Date ? date : new Date(date);
-  const yyyy = d.getUTCFullYear();
-  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-  const dd = String(d.getUTCDate()).padStart(2, '0');
-  return `${yyyy}/${mm}/${dd}`;
 }
 
 /**

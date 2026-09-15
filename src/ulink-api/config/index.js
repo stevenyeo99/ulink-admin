@@ -76,6 +76,16 @@ module.exports = {
     batchLimit: parseInt(process.env.DOCUMENT_CHECKING_BATCH_LIMIT, 10) || 50,
   },
 
+  consoleUpload: {
+    // Separate from storage.root (STORAGE_ROOT) on purpose — that's this app's own private
+    // attachment store; this is a dedicated shared folder the console/ops side browses
+    // directly.
+    root: process.env.CONSOLE_UPLOAD_ROOT || './data/console-upload',
+    // Real disk I/O (reads every attachment, writes a copy) per case — keep modest, same
+    // reasoning as memberVerification's batch size.
+    batchLimit: parseInt(process.env.CONSOLE_UPLOAD_BATCH_LIMIT, 10) || 20,
+  },
+
   emailSender: {
     // Pure DB + one SMTP call per task — no LLM involved.
     batchLimit: parseInt(process.env.EMAIL_SENDER_BATCH_LIMIT, 10) || 20,

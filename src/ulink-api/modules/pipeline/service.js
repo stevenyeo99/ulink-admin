@@ -8,6 +8,7 @@ const claimRecognitionService = require('../claim-recognition/service');
 const documentCheckingService = require('../document-checking/service');
 const memberVerificationService = require('../member-verification/service');
 const emailSenderService = require('../email-sender/service');
+const consoleUploadService = require('../console-upload/service');
 const iasClaimPreparationService = require('../ias-claim-preparation/service');
 const iasClaimCreationService = require('../ias-claim-creation/service');
 
@@ -20,8 +21,9 @@ const iasClaimCreationService = require('../ias-claim-creation/service');
 // modules' own service.js comments for the currentStatus values each reads/writes:
 // member-verification now takes RECOGNIZED and hands off via READY_FOR_DOCUMENT_CHECKING;
 // document-checking now takes that and is the one that writes the final MEMBER_VERIFIED
-// gate ias-claim-preparation reads. MEMBER_VERIFIED as a literal string is unchanged and
-// still means "both checks passed" — only which job sets it changed.
+// gate. MEMBER_VERIFIED as a literal string is unchanged and still means "both checks
+// passed" — only which job sets it changed. ias-claim-preparation itself now reads
+// DOCUMENTS_UPLOADED instead (console-upload sits in between as of 2026-09-15 — see below).
 //
 // email-sender appears twice, deliberately, not a duplicate/typo: it's a shared consumer
 // of ulink_email_tasks queued by THREE different producers, not two — member-verification
@@ -38,6 +40,11 @@ const STEPS = [
   ['member-verification', memberVerificationService],
   ['document-checking', documentCheckingService],
   ['email-sender', emailSenderService],
+  // Added 2026-09-15 — copies a cleared AYAS-reimbursement case's documents to the shared
+  // console folder and generates its barcode (Case.consoleBarcode) before ias-claim-
+  // preparation needs it. MEMBER_VERIFIED -> DOCUMENTS_UPLOADED; see
+  // modules/console-upload/service.js.
+  ['console-upload', consoleUploadService],
   ['ias-claim-preparation', iasClaimPreparationService],
   ['ias-claim-creation', iasClaimCreationService],
   ['email-sender', emailSenderService],

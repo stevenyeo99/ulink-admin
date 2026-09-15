@@ -12,6 +12,9 @@ module.exports = (sequelize, DataTypes) => {
       iasClaimPayload: { type: DataTypes.JSONB, allowNull: true },
       claimNo: { type: DataTypes.TEXT, allowNull: true },
       iasClaimResult: { type: DataTypes.JSONB, allowNull: true },
+      consoleUploadResult: { type: DataTypes.JSONB, allowNull: true },
+      consoleBarcode: { type: DataTypes.TEXT, allowNull: true },
+      isStp: { type: DataTypes.BOOLEAN, allowNull: true },
     },
     { tableName: 'ulink_cases' }
   );

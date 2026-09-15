@@ -13,6 +13,7 @@ export type BlockName =
   | 'document-checking'
   | 'member-verification'
   | 'email-sender'
+  | 'console-upload'
   | 'ias-claim-preparation'
   | 'ias-claim-creation';
 

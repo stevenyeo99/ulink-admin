@@ -6,6 +6,7 @@ const claimRecognitionService = require('../../modules/claim-recognition/service
 const documentCheckingService = require('../../modules/document-checking/service');
 const emailSenderService = require('../../modules/email-sender/service');
 const memberVerificationService = require('../../modules/member-verification/service');
+const consoleUploadService = require('../../modules/console-upload/service');
 const iasClaimPreparationService = require('../../modules/ias-claim-preparation/service');
 const iasClaimCreationService = require('../../modules/ias-claim-creation/service');
 
@@ -356,6 +357,75 @@ const router = express.Router();
  *               released: true
  *               wasLocked: true
  *
+ * /api/jobs/console-upload/run:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Start the console-upload job (fire-and-forget)
+ *     description: >
+ *       Acquires the job lock and returns immediately. In the background, for each case at
+ *       currentStatus=MEMBER_VERIFIED AND recognizedType='ayas_member_claim' (up to
+ *       CONSOLE_UPLOAD_BATCH_LIMIT per run — the AYAS reimbursement route only, not every
+ *       cleared case): gathers every inbound attachment on the case
+ *       (modules/shared/gatherAttachments.js), copies each one (original stays in
+ *       STORAGE_ROOT untouched) into CONSOLE_UPLOAD_ROOT under
+ *       yyyy/MM/dd/{ddMMyyyy}{claimantName}-AYAS-{caseId}/ (today's date at upload time, not
+ *       the original email-receipt date), and generates a barcode
+ *       (docs/imp/demo/20260914/samples/console proto/demo_barcode_logic.md's format).
+ *       Updates Case.currentStatus to DOCUMENTS_UPLOADED, sets Case.consoleBarcode and
+ *       Case.consoleUploadResult (folder + file list), and logs a CaseEvent. A technical
+ *       failure (disk I/O error) leaves the case at MEMBER_VERIFIED for retry on the next
+ *       run, same pattern as every other job. Runs between document-checking/email-sender
+ *       and ias-claim-preparation — the latter now reads DOCUMENTS_UPLOADED instead of
+ *       MEMBER_VERIFIED, so the barcode is guaranteed to exist by the time it builds the
+ *       CL_CLAIM_API payload. Same lock/release pattern as the other jobs.
+ *     requestBody:
+ *       required: false
+ *       description: No body needed — trigger only.
+ *     responses:
+ *       200:
+ *         description: Started, or skipped because a prior run is still in progress
+ *         content:
+ *           application/json:
+ *             schema:
+ *               oneOf:
+ *                 - type: object
+ *                   properties:
+ *                     block: { type: string }
+ *                     started: { type: boolean }
+ *                 - type: object
+ *                   properties:
+ *                     block: { type: string }
+ *                     skipped: { type: boolean }
+ *                     reason: { type: string }
+ *             examples:
+ *               started:
+ *                 value: { block: console-upload, started: true }
+ *               skipped:
+ *                 value: { block: console-upload, skipped: true, reason: already_running }
+ *
+ * /api/jobs/console-upload/release:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Manually clear a stuck console-upload lock
+ *     requestBody:
+ *       required: false
+ *       description: No body needed.
+ *     responses:
+ *       200:
+ *         description: Lock cleared
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 block: { type: string }
+ *                 released: { type: boolean }
+ *                 wasLocked: { type: boolean }
+ *             example:
+ *               block: console-upload
+ *               released: true
+ *               wasLocked: true
+ *
  * /api/jobs/ias-claim-preparation/run:
  *   post:
  *     tags: [jobs]
@@ -503,6 +573,7 @@ router.use('/claim-recognition', createJobRouter('claim-recognition', claimRecog
 router.use('/document-checking', createJobRouter('document-checking', documentCheckingService));
 router.use('/email-sender', createJobRouter('email-sender', emailSenderService));
 router.use('/member-verification', createJobRouter('member-verification', memberVerificationService));
+router.use('/console-upload', createJobRouter('console-upload', consoleUploadService));
 router.use('/ias-claim-preparation', createJobRouter('ias-claim-preparation', iasClaimPreparationService));
 router.use('/ias-claim-creation', createJobRouter('ias-claim-creation', iasClaimCreationService));
 
