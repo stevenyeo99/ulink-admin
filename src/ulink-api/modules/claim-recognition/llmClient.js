@@ -1,4 +1,6 @@
+const crypto = require('crypto');
 const config = require('../../config');
+const logger = require('../../utils/logger');
 
 const CHAT_ENDPOINT = '/v1/chat/completions';
 
@@ -6,13 +8,45 @@ function buildImageDataUrl(buffer) {
   return `data:image/jpeg;base64,${buffer.toString('base64')}`;
 }
 
+// Request bodies can embed megabytes of base64 image data (transcribePage) — logged raw,
+// that would flood the log files on every single page. Every other field (messages'
+// text content, model, reasoning_effort, schema, etc.) is logged as-is.
+function redactImagesForLogging(body) {
+  return {
+    ...body,
+    messages: body.messages?.map((message) => ({
+      ...message,
+      content: Array.isArray(message.content)
+        ? message.content.map((part) =>
+            part.type === 'image_url'
+              ? { type: 'image_url', image_url: { url: `[image data, ${part.image_url.url.length} chars]` } }
+              : part
+          )
+        : message.content,
+    })),
+  };
+}
+
+/**
+ * postChatCompletion is the one place every LLM chat call in this codebase goes through
+ * (transcribePage/synthesizeJson below, and every caller of those — document-checking's
+ * identityJudgment, ias-claim-preparation's diagnosisPicker/benefitPicker, policy-
+ * exclusion/judge) — logging here once covers all of them. `callId` ties a request's debug
+ * line to its response's, since some callers (identityJudgment's Promise.all) fire several
+ * calls concurrently and their log lines can interleave. debug level: on by default outside
+ * production (config.logLevel), opt-in via LOG_LEVEL=debug in production.
+ */
 async function postChatCompletion(body) {
   if (!config.llm.baseUrl) {
     throw new Error('LLM_URL is required for claim-recognition');
   }
 
+  const callId = crypto.randomUUID();
+  logger.debug('LLM request', { callId, payload: redactImagesForLogging(body) });
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.llm.timeoutMs);
+  const startedAt = Date.now();
 
   let response;
   try {
@@ -24,8 +58,10 @@ async function postChatCompletion(body) {
     });
   } catch (error) {
     if (error.name === 'AbortError') {
+      logger.debug('LLM response', { callId, durationMs: Date.now() - startedAt, error: 'timed out' });
       throw new Error(`LLM request timed out after ${config.llm.timeoutMs}ms`);
     }
+    logger.debug('LLM response', { callId, durationMs: Date.now() - startedAt, error: error.message });
     throw error;
   } finally {
     clearTimeout(timer);
@@ -33,10 +69,13 @@ async function postChatCompletion(body) {
 
   if (!response.ok) {
     const text = await response.text().catch(() => '');
+    logger.debug('LLM response', { callId, durationMs: Date.now() - startedAt, status: response.status, body: text.slice(0, 2000) });
     throw new Error(`LLM request failed (${response.status} ${response.statusText}): ${text.slice(0, 500)}`);
   }
 
-  return response.json();
+  const data = await response.json();
+  logger.debug('LLM response', { callId, durationMs: Date.now() - startedAt, payload: data });
+  return data;
 }
 
 /**
