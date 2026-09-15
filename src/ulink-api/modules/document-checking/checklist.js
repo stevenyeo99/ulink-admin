@@ -273,6 +273,13 @@ function issueForFlag(flag) {
   return IDENTITY_FLAG_ISSUES[flag.code] || null;
 }
 
+function reasonForFlag(flag) {
+  if (flag.code === 'MISSING_MANDATORY_FIELD') return `${flag.field} is missing or could not be confirmed in the submitted documents.`;
+  if (flag.code === 'TREATMENT_DATE_INCONSISTENT') return `Claim date ${flag.claimDate} does not match medical-record date ${flag.medicalRecordDate}.`;
+  if (flag.code === 'INVOICE_DATE_INCONSISTENT') return `Invoice #${flag.voucherIndex} date ${flag.invoiceDate} does not match medical-record date ${flag.medicalRecordDate}.`;
+  return flag.reason || null;
+}
+
 // identity_consistency.patient_name_consistent and .medical_record_provider_consistent are
 // deliberately not evaluated right now — checkIncorrectPatientDetails and
 // checkIncorrectMedicalReport are defined above but left out of this list. Deadline-driven
@@ -481,7 +488,7 @@ function evaluateDocumentChecks(extractedFields) {
   ])];
   const details = [
     ...issues.map((issue) => ({ issue, ...reasonForIssue(issue, extractedFields) })),
-    ...flags.map((flag) => ({ issue: issueForFlag(flag), code: flag.code, reason: flag.reason })),
+    ...flags.map((flag) => ({ issue: issueForFlag(flag), code: flag.code, reason: reasonForFlag(flag) })),
   ];
   return { issues, passed: issues.length === 0, details, flags };
 }

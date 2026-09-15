@@ -86,7 +86,7 @@ async function queueMissingDocumentsEmail(transaction, caseId, result) {
     payload: {
       issues: result.issues.map((issue) => {
         const detail = result.details.find((candidate) => candidate.issue === issue && candidate.reason);
-        return detail?.reason ? `${issue} (${detail.reason})` : issue;
+        return detail?.reason ? `${issue}\n  Reason: ${detail.reason}` : issue;
       }),
     },
   });
