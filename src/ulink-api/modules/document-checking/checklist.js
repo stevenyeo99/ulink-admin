@@ -244,7 +244,9 @@ function evaluateJudgmentDependentChecks(extractedFields, judgments = {}) {
 
   const addFlagIfInconsistent = (code, judgment) => {
     if (judgment?.consistent === false) {
-      flags.push({ code, desc: IDENTITY_FLAG_DESCRIPTIONS[code], reason: judgment.reason, confidence: judgment.confidence });
+      const flag = { code, desc: IDENTITY_FLAG_DESCRIPTIONS[code], reason: judgment.reason, confidence: judgment.confidence };
+      flags.push(flag);
+      details.push({ issue: IDENTITY_FLAG_ISSUES[code], code, reason: flag.reason });
     }
   };
   addFlagIfInconsistent('DELEGATION_PAYEE_INCONSISTENT', judgments.delegationPayee);
@@ -253,7 +255,22 @@ function evaluateJudgmentDependentChecks(extractedFields, judgments = {}) {
   addFlagIfInconsistent('HOSPITAL_NAME_INCONSISTENT', judgments.hospitalName);
   addFlagIfInconsistent('DIAGNOSIS_TREATMENT_INCONSISTENT', judgments.diagnosisTreatment);
 
-  return { issues, details, flags };
+  return { issues: [...new Set([...issues, ...flags.map(issueForFlag).filter(Boolean)])], details, flags };
+}
+
+const IDENTITY_FLAG_ISSUES = {
+  DELEGATION_PAYEE_INCONSISTENT: 'The delegation letter payee does not match the bank account holder. Please provide clarification or an updated delegation letter.',
+  PATIENT_NAME_INCONSISTENT: 'The patient name is not consistent between the claim form and medical record. Please provide clarification or supporting documentation.',
+  PROVIDER_NAME_INCONSISTENT: 'The doctor name is not consistent between the claim form and medical record. Please provide clarification or supporting documentation.',
+  HOSPITAL_NAME_INCONSISTENT: 'The hospital or clinic name is not consistent between the claim form and medical record. Please provide clarification or supporting documentation.',
+  DIAGNOSIS_TREATMENT_INCONSISTENT: 'The medical record does not clearly support the diagnosis or treatment stated on the claim form. Please provide clarification or supporting documentation.',
+};
+
+function issueForFlag(flag) {
+  if (flag.code === 'MISSING_MANDATORY_FIELD') return `Please provide the missing ${flag.field.toLowerCase()}.`;
+  if (flag.code === 'TREATMENT_DATE_INCONSISTENT') return 'The treatment date is not consistent across the submitted documents. Please provide clarification or corrected documents.';
+  if (flag.code === 'INVOICE_DATE_INCONSISTENT') return 'The invoice date is not consistent with the medical record date. Please provide clarification or a corrected invoice.';
+  return IDENTITY_FLAG_ISSUES[flag.code] || null;
 }
 
 // identity_consistency.patient_name_consistent and .medical_record_provider_consistent are
@@ -457,9 +474,15 @@ function checkTreatmentDateConsistency(fields) {
 }
 
 function evaluateDocumentChecks(extractedFields) {
-  const issues = EVALUATORS.map((evaluate) => evaluate(extractedFields)).filter(Boolean);
-  const details = issues.map((issue) => ({ issue, ...reasonForIssue(issue, extractedFields) }));
   const flags = [...evaluateMandatoryFieldFlags(extractedFields), ...(checkTreatmentDateConsistency(extractedFields) || [])];
+  const issues = [...new Set([
+    ...EVALUATORS.map((evaluate) => evaluate(extractedFields)).filter(Boolean),
+    ...flags.map(issueForFlag).filter(Boolean),
+  ])];
+  const details = [
+    ...issues.map((issue) => ({ issue, ...reasonForIssue(issue, extractedFields) })),
+    ...flags.map((flag) => ({ issue: issueForFlag(flag), code: flag.code, reason: flag.reason })),
+  ];
   return { issues, passed: issues.length === 0, details, flags };
 }
 

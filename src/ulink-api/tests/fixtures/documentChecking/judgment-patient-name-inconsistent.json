@@ -95,7 +95,9 @@
     }
   },
   "expected": {
-    "issues": [],
+    "issues": [
+      "The patient name is not consistent between the claim form and medical record. Please provide clarification or supporting documentation."
+    ],
     "flagCodes": [
       "PATIENT_NAME_INCONSISTENT"
     ]

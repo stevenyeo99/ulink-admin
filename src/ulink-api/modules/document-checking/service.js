@@ -83,7 +83,12 @@ async function queueMissingDocumentsEmail(transaction, caseId, result) {
     caseId,
     taskType: 'MISSING_DOCUMENTS',
     dedupeKey: issuesDedupeKey(result.issues),
-    payload: { issues: result.issues },
+    payload: {
+      issues: result.issues.map((issue) => {
+        const detail = result.details.find((candidate) => candidate.issue === issue && candidate.reason);
+        return detail?.reason ? `${issue} (${detail.reason})` : issue;
+      }),
+    },
   });
 }
 

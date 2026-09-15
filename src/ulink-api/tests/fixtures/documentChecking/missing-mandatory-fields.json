@@ -88,8 +88,13 @@
     }
   },
   "expected": {
-    "passed": true,
-    "issues": [],
+    "passed": false,
+    "issues": [
+      "Please provide the missing phone number.",
+      "Please provide the missing email.",
+      "Please provide the missing claim amount.",
+      "Please provide the missing customer signature."
+    ],
     "flagCodes": [
       "MISSING_MANDATORY_FIELD",
       "MISSING_MANDATORY_FIELD",

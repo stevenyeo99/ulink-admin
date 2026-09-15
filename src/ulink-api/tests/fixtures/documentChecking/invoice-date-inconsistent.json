@@ -90,8 +90,10 @@
     }
   },
   "expected": {
-    "passed": true,
-    "issues": [],
+    "passed": false,
+    "issues": [
+      "The invoice date is not consistent with the medical record date. Please provide clarification or a corrected invoice."
+    ],
     "flagCodes": [
       "INVOICE_DATE_INCONSISTENT"
     ],

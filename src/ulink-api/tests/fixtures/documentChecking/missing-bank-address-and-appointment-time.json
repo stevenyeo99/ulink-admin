@@ -88,8 +88,11 @@
     }
   },
   "expected": {
-    "passed": true,
-    "issues": [],
+    "passed": false,
+    "issues": [
+      "Please provide the missing appointment / visited time.",
+      "Please provide the missing bank address / branch."
+    ],
     "flagCodes": [
       "MISSING_MANDATORY_FIELD",
       "MISSING_MANDATORY_FIELD"
