@@ -13,24 +13,35 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.createTable('ulink_stp_limits', {
-      id: {
-        type: Sequelize.UUID,
-        primaryKey: true,
-        defaultValue: Sequelize.literal('gen_random_uuid()'),
-      },
-      routeKey: { type: Sequelize.TEXT, allowNull: false, field: 'route_key' },
-      currency: { type: Sequelize.TEXT, allowNull: false },
-      amountLimit: { type: Sequelize.DECIMAL, allowNull: false, field: 'amount_limit' },
-      createdAt: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.NOW, field: 'created_at' },
-      updatedAt: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.NOW, field: 'updated_at' },
-    });
+    if (!(await queryInterface.tableExists('ulink_stp_limits'))) {
+      await queryInterface.createTable('ulink_stp_limits', {
+        id: {
+          type: Sequelize.UUID,
+          primaryKey: true,
+          defaultValue: Sequelize.literal('gen_random_uuid()'),
+        },
+        routeKey: { type: Sequelize.TEXT, allowNull: false, field: 'route_key' },
+        currency: { type: Sequelize.TEXT, allowNull: false },
+        amountLimit: { type: Sequelize.DECIMAL, allowNull: false, field: 'amount_limit' },
+        createdAt: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.NOW, field: 'created_at' },
+        updatedAt: { type: Sequelize.DATE, allowNull: false, defaultValue: Sequelize.NOW, field: 'updated_at' },
+      });
+    }
 
-    await queryInterface.addIndex('ulink_stp_limits', ['route_key', 'currency'], { unique: true });
+    await queryInterface.sequelize.query(
+      'CREATE UNIQUE INDEX IF NOT EXISTS "ulink_stp_limits_route_key_currency" ON "ulink_stp_limits" ("route_key", "currency")'
+    );
 
+    const now = new Date();
     await queryInterface.bulkInsert('ulink_stp_limits', [
-      { route_key: 'ayas_member_claim', currency: 'MMK', amount_limit: 50000 },
-    ]);
+      {
+        route_key: 'ayas_member_claim',
+        currency: 'MMK',
+        amount_limit: 50000,
+        created_at: now,
+        updated_at: now,
+      },
+    ], { ignoreDuplicates: true });
   },
 
   async down(queryInterface) {
