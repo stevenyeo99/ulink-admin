@@ -361,7 +361,7 @@ async function applyMedicalRecordFallback(fields, transcriptChunks) {
       systemPrompt: MEDICAL_RECORD_FALLBACK_PROMPT,
       userText,
       jsonSchema: MEDICAL_RECORD_FALLBACK_SCHEMA,
-      reasoningEffort: 'none', // literal re-extraction, same as decideRoute/extractFields below — not judgment
+      reasoningEffort: 'low', // literal re-extraction, same as decideRoute/extractFields below — not judgment
     });
   } catch {
     return fields; // fallback call itself failing is no worse than the status quo
@@ -428,7 +428,7 @@ async function decideRoute(transcriptChunks, emailContext, routes) {
     transcriptChunks.join('\n\n'),
   ].join('\n');
 
-  const parsed = await synthesizeJson({ systemPrompt: ROUTE_DECISION_PROMPT, userText, jsonSchema: responseSchema, reasoningEffort: 'none' });
+  const parsed = await synthesizeJson({ systemPrompt: ROUTE_DECISION_PROMPT, userText, jsonSchema: responseSchema, reasoningEffort: 'low' });
 
   const validate = ajv.compile(responseSchema);
   if (!validate(parsed)) {
@@ -449,7 +449,7 @@ async function extractFields(transcriptChunks, matchedRoute) {
   const responseSchema = matchedRoute.extractionSchema;
   const userText = ['Page transcripts:', transcriptChunks.join('\n\n')].join('\n');
 
-  const parsed = await synthesizeJson({ systemPrompt: EXTRACT_FIELDS_PROMPT, userText, jsonSchema: responseSchema, reasoningEffort: 'none' });
+  const parsed = await synthesizeJson({ systemPrompt: EXTRACT_FIELDS_PROMPT, userText, jsonSchema: responseSchema, reasoningEffort: 'low' });
 
   const validate = ajv.compile(responseSchema);
   if (!validate(parsed)) {

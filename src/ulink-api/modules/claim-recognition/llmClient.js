@@ -44,18 +44,17 @@ async function postChatCompletion(body) {
  * into one request was verified to risk multi-minute hangs even at otherwise-safe image
  * sizes (Day-1 testing against the real sample documents).
  *
- * reasoning_effort is hardcoded to 'none' here, not read from config — this is literal
+ * reasoning_effort is hardcoded to 'low' here, not read from config — this is literal
  * OCR (Tier 1: read what's on the page), never genuine judgment, so it has no principled
  * use for reasoning at all. Previously read config.llm.reasoningEffort (a single value
  * shared with every other LLM call in the system, including genuine judgment calls) —
  * confirmed via real LM Studio response logs (2026-09-14) that setting that shared value
- * to anything but 'none' lets the model spend its entire max_tokens budget on
+ * to anything but 'low' lets the model spend its entire max_tokens budget on
  * reasoning_content before writing any actual transcription, producing `content: ""`
  * ("LLM returned an empty page transcription") on harder pages — the reasoning pass is
  * unbounded on hard vision content (e.g. handwriting) and doesn't reliably leave room for
- * the answer itself. Hardcoding this call specifically to 'none' means a reasoning_effort
- * tuned for a genuine judgment call elsewhere (see modules/policy-exclusion/judge.js) can
- * never again accidentally break OCR.
+ * the answer itself. Hardcoding this call specifically to 'low' keeps OCR from inheriting
+ * a higher reasoning setting tuned for a genuine judgment call elsewhere.
  */
 async function transcribePage({ imageBuffer, instruction }) {
   if (imageBuffer.length > config.llm.maxRequestBytes) {
@@ -75,7 +74,7 @@ async function transcribePage({ imageBuffer, instruction }) {
     ],
     temperature: 0,
     max_tokens: config.claimRecognition.maxTokensPerPage,
-    reasoning_effort: 'none',
+    reasoning_effort: 'low',
   });
 
   const content = data?.choices?.[0]?.message?.content;
@@ -94,7 +93,7 @@ async function transcribePage({ imageBuffer, instruction }) {
  * `reasoningEffort` defaults to config.llm.reasoningEffort (the shared setting, unchanged
  * for every existing caller — modules/policy-exclusion/judge.js,
  * modules/ias-claim-preparation's diagnosisPicker/benefitPicker) but claim-recognition's
- * own callers (decideRoute/extractFields — see service.js) pass 'none' explicitly: neither
+ * own callers (decideRoute/extractFields — see service.js) pass 'low' explicitly: neither
  * is a genuine judgment call (Task 3/identity_consistency was removed), so there's no
  * principled reason for them to spend budget on reasoning, same logic as transcribePage
  * above. Judgment-type callers keep using the shared config value for now — that's a

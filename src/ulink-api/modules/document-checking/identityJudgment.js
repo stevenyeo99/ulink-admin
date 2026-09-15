@@ -24,7 +24,7 @@ const SCHEMA = {
 const CONFIDENCE_THRESHOLD = 0.5;
 
 async function judge(systemPrompt, userText) {
-  const result = await synthesizeJson({ systemPrompt, userText, jsonSchema: SCHEMA });
+  const result = await synthesizeJson({ systemPrompt, userText, jsonSchema: SCHEMA, reasoningEffort: 'medium' });
   if (result.confidence < CONFIDENCE_THRESHOLD) return null;
   return { consistent: result.consistent, confidence: result.confidence, reason: result.reason };
 }

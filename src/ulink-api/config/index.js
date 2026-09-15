@@ -7,6 +7,9 @@ function parseBool(value, fallback) {
   return ['true', '1', 'yes', 'y'].includes(String(value).trim().toLowerCase());
 }
 
+const configuredReasoningEffort = process.env.LLM_REASONING_EFFORT;
+const reasoningEffort = ['xhigh', 'medium', 'low'].includes(configuredReasoningEffort) ? configuredReasoningEffort : 'low';
+
 module.exports = {
   env,
   isProduction: env === 'production',
@@ -34,12 +37,9 @@ module.exports = {
     baseUrl: process.env.LLM_URL || process.env.LM_URL,
     visionModel: process.env.MODEL,
     assistantModel: process.env.MODEL_ASSISTANT || process.env.MODEL,
-    // 'none' is a hard-won default, not a style choice: this model runs an unbounded
-    // "thinking" pass on hard vision content (e.g. handwriting) that never converges
-    // even with a large max_tokens budget (verified against the real sample docs).
-    // 'none' eliminates that hang entirely with no accuracy cost on the typed content
-    // this pipeline actually relies on. See modules/claim-recognition.
-    reasoningEffort: process.env.LLM_REASONING_EFFORT || 'none',
+    // Qwen's server adapter accepts only xhigh, medium, and low. Document-checking's
+    // judgment calls override this shared default to medium.
+    reasoningEffort,
     timeoutMs: parseInt(process.env.LLM_TIMEOUT_MS, 10) || 120000,
     maxImages: parseInt(process.env.LLM_MAX_IMAGES, 10) || 6,
     maxRequestBytes: parseInt(process.env.LLM_MAX_REQUEST_BYTES, 10) || 25 * 1000 * 1000,
@@ -66,7 +66,7 @@ module.exports = {
     // 100 DPI verified reliable + fast in Day-1 testing; 200 DPI caused multi-minute hangs.
     rasterDpi: parseInt(process.env.CLAIM_RECOGNITION_RASTER_DPI, 10) || 100,
     // Per-page vision call budget. Typed pages converge well under this; this is a safety
-    // cap, not a target — reasoningEffort:'none' is what actually prevents runaway usage.
+    // cap, not a target — the claim-recognition calls use the supported low setting.
     maxTokensPerPage: parseInt(process.env.CLAIM_RECOGNITION_MAX_TOKENS_PER_PAGE, 10) || 800,
   },
 
