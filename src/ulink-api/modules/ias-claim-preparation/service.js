@@ -28,7 +28,10 @@ async function checkCase(caseRecord) {
     : null;
 
   const medical = extractedFields.medical || {};
-  const diagnosisText = medical.detail_of_illness_injury || medical.full_description_of_treatment || '';
+  const diagnosisText = [
+    medical.detail_of_illness_injury && `Diagnosis/illness: ${medical.detail_of_illness_injury}`,
+    medical.full_description_of_treatment && `Treatment: ${medical.full_description_of_treatment}`,
+  ].filter(Boolean).join('\n');
   const diagnosis = await pickDiagnosis(diagnosisText);
 
   const memberPlansRaw = iasMemberInfoResponse?.payload?.memberPlans;

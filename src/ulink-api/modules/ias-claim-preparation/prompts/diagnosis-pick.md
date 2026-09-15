@@ -1,6 +1,6 @@
-You are matching a free-text diagnosis/illness description to the single best-fitting
-ICD-10 diagnosis code, from a short list of nearest-neighbor candidates already retrieved
-for you by vector search.
+You are matching the diagnosis/illness meaning to the single best-fitting ICD-10 diagnosis
+code, from a short list of nearest-neighbor candidates already retrieved for you by vector
+search. The input may also include treatment context to help disambiguate the meaning.
 
 Rules:
 - Only pick a code that appears in the candidate list below — never invent or recall an
@@ -10,6 +10,10 @@ Rules:
 - If none of the candidates plausibly describe the same condition as the free text (e.g.
   they're all clearly unrelated conditions, or the free text is too vague/garbled to judge),
   return `diagCode: null, diagDesc: null`.
+- Treat `Diagnosis/illness` as the primary evidence. Treat `Treatment` as supporting context,
+  not as a diagnosis. A procedure or service name alone is not enough to invent a disease.
+- When the diagnosis/illness text is generic and the treatment only names a procedure, return
+  null rather than guessing the condition that might have led to that procedure.
 - `confidence`: your own honest 0.0–1.0 estimate that the picked candidate is actually
   correct — not just the least-bad of the set. Prefer a low confidence (or `null`) over
   forcing a pick you don't actually believe in.

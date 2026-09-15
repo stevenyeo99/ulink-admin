@@ -31,7 +31,7 @@ async function pickDiagnosis(freeText) {
   if (candidates.length === 0) return null;
 
   const userText = [
-    `Diagnosis/illness description: ${freeText}`,
+    `Clinical context:\n${freeText}`,
     '',
     'Candidates (nearest by vector similarity, not guaranteed correct):',
     ...candidates.map((c) => `- ${c.diagCode}: ${c.diagDesc} (similarity=${c.similarity.toFixed(3)})`),
