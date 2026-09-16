@@ -351,6 +351,19 @@ function gatherAttachmentChunks(transcriptChunks, headingIndex) {
 // judge all gate at 0.5).
 const MEDICAL_RECORD_LOW_CONFIDENCE_THRESHOLD = 0.5;
 
+// A second, independent trigger alongside the confidence number itself — verified against
+// real data (2026-09-16, case a5fbb7dd-7359-415c-94c5-5e9716df922b, same underlying document
+// as case c9430f24) that the model can name the exact confusion extract-fields.md warns
+// against directly in its own presence_reason text ("Medical record header/invoice from Pun
+// Hlaing Clinic...") while still reporting presence_confidence: 1 — the confidence number
+// alone isn't a reliable enough signal on its own. The model contradicting itself in words is
+// a stronger, more specific tell than the number it also happened to report.
+const BILL_LIKE_DOCUMENT_PATTERN = /\b(invoice|bill|receipt)\b/i;
+
+function mentionsBillLikeDocument(reason) {
+  return typeof reason === 'string' && BILL_LIKE_DOCUMENT_PATTERN.test(reason);
+}
+
 /**
  * Three rescue paths, all re-asking with a single, narrow, text-only call (cheap — no
  * re-rasterization, no new vision call) scoped to already-computed transcript chunks, not the
@@ -369,10 +382,16 @@ const MEDICAL_RECORD_LOW_CONFIDENCE_THRESHOLD = 0.5;
  *    original — confirms legible AND finds a patient_name — otherwise the original illegible
  *    result is kept rather than risking a same-or-worse re-ask silently overwriting it.
  *
- * 3. Present but low presence_confidence (< MEDICAL_RECORD_LOW_CONFIDENCE_THRESHOLD): the
- *    false-positive counterpart of #1 — the primary call itself isn't sure this is really a
- *    medical record (see extract-fields.md's own presence_confidence instructions, added
- *    specifically to catch a bill/invoice being misread as one). Was previously "fixed" with
+ * 3. Present but low presence_confidence (< MEDICAL_RECORD_LOW_CONFIDENCE_THRESHOLD), OR the
+ *    primary call's own presence_reason names a bill/invoice/receipt (see
+ *    mentionsBillLikeDocument above) even though it reported present:true — the second half
+ *    added after presence_confidence alone proved unreliable: verified against real data
+ *    (case a5fbb7dd-..., same document as c9430f24) that the model can describe the evidence
+ *    as "Medical record header/invoice from..." in its own words while still scoring
+ *    confidence 1. Both are the false-positive counterpart of #1 — the primary call isn't
+ *    (or shouldn't be) sure this is really a medical record (see extract-fields.md's own
+ *    presence_confidence instructions, added specifically to catch a bill/invoice being
+ *    misread as one). Was previously "fixed" with
  *    a blunt code-level guard (invalidateCopiedMedicalRecord, an exact-text match between
  *    diagnosis_or_treatment and the claim form's own illness text) that forced present:false
  *    outright — reverted 2026-09-16 after it produced a real false positive of its own (case
@@ -399,7 +418,8 @@ async function applyMedicalRecordFallback(fields, transcriptChunks) {
   const presentButLowConfidence =
     record.present === true &&
     record.legible !== false &&
-    (record.presence_confidence ?? 1) < MEDICAL_RECORD_LOW_CONFIDENCE_THRESHOLD;
+    ((record.presence_confidence ?? 1) < MEDICAL_RECORD_LOW_CONFIDENCE_THRESHOLD ||
+      mentionsBillLikeDocument(record.presence_reason));
   if (!missingEntirely && !presentButIllegible && !presentButLowConfidence) return fields;
 
   const headingIndex = transcriptChunks.findIndex((chunk) => MEDICAL_RECORD_HEADING_PATTERN.test(chunk));
@@ -706,4 +726,5 @@ module.exports = {
   extractFields,
   transcribePages,
   dedupeInvoiceItems,
+  mentionsBillLikeDocument,
 };
