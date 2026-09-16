@@ -300,18 +300,53 @@ function evaluateJudgmentDependentChecks(extractedFields, judgments = {}) {
   // Same internal-only checklist contract as buildEvaluatorChecklist above — `passed` is
   // `null` (not true/false) when the judgment didn't run at all (fields missing on one
   // side), so the console can distinguish "checked, fine" from "couldn't be checked",
-  // rather than collapsing both into a false "passed".
+  // rather than collapsing both into a false "passed". confidence/note surface the SAME
+  // entityMatch/meaningMatch output (identityJudgment.js) already used to decide `passed` —
+  // previously computed and then discarded once `consistent` was read; purely additive,
+  // no LLM call added and no change to what fires/passes.
   const checklist = [
     {
       code: 'DELEGATION_LETTER_REQUIRED',
       label: JUDGMENT_CHECKLIST_LABELS.DELEGATION_LETTER_REQUIRED,
       passed: judgments.bankAccountHolder?.consistent == null ? null : !issues.includes(ISSUES.DELEGATION_LETTER_REQUIRED),
+      confidence: judgments.bankAccountHolder?.confidence ?? null,
+      note: judgments.bankAccountHolder?.reason ?? null,
     },
-    { code: 'DELEGATION_PAYEE_INCONSISTENT', label: JUDGMENT_CHECKLIST_LABELS.DELEGATION_PAYEE_INCONSISTENT, passed: judgments.delegationPayee == null ? null : judgments.delegationPayee.consistent !== false },
-    { code: 'PATIENT_NAME_INCONSISTENT', label: JUDGMENT_CHECKLIST_LABELS.PATIENT_NAME_INCONSISTENT, passed: judgments.patientName == null ? null : judgments.patientName.consistent !== false },
-    { code: 'PROVIDER_NAME_INCONSISTENT', label: JUDGMENT_CHECKLIST_LABELS.PROVIDER_NAME_INCONSISTENT, passed: judgments.providerName == null ? null : judgments.providerName.consistent !== false },
-    { code: 'HOSPITAL_NAME_INCONSISTENT', label: JUDGMENT_CHECKLIST_LABELS.HOSPITAL_NAME_INCONSISTENT, passed: judgments.hospitalName == null ? null : judgments.hospitalName.consistent !== false },
-    { code: 'DIAGNOSIS_TREATMENT_INCONSISTENT', label: JUDGMENT_CHECKLIST_LABELS.DIAGNOSIS_TREATMENT_INCONSISTENT, passed: judgments.diagnosisTreatment == null ? null : judgments.diagnosisTreatment.consistent !== false },
+    {
+      code: 'DELEGATION_PAYEE_INCONSISTENT',
+      label: JUDGMENT_CHECKLIST_LABELS.DELEGATION_PAYEE_INCONSISTENT,
+      passed: judgments.delegationPayee == null ? null : judgments.delegationPayee.consistent !== false,
+      confidence: judgments.delegationPayee?.confidence ?? null,
+      note: judgments.delegationPayee?.reason ?? null,
+    },
+    {
+      code: 'PATIENT_NAME_INCONSISTENT',
+      label: JUDGMENT_CHECKLIST_LABELS.PATIENT_NAME_INCONSISTENT,
+      passed: judgments.patientName == null ? null : judgments.patientName.consistent !== false,
+      confidence: judgments.patientName?.confidence ?? null,
+      note: judgments.patientName?.reason ?? null,
+    },
+    {
+      code: 'PROVIDER_NAME_INCONSISTENT',
+      label: JUDGMENT_CHECKLIST_LABELS.PROVIDER_NAME_INCONSISTENT,
+      passed: judgments.providerName == null ? null : judgments.providerName.consistent !== false,
+      confidence: judgments.providerName?.confidence ?? null,
+      note: judgments.providerName?.reason ?? null,
+    },
+    {
+      code: 'HOSPITAL_NAME_INCONSISTENT',
+      label: JUDGMENT_CHECKLIST_LABELS.HOSPITAL_NAME_INCONSISTENT,
+      passed: judgments.hospitalName == null ? null : judgments.hospitalName.consistent !== false,
+      confidence: judgments.hospitalName?.confidence ?? null,
+      note: judgments.hospitalName?.reason ?? null,
+    },
+    {
+      code: 'DIAGNOSIS_TREATMENT_INCONSISTENT',
+      label: JUDGMENT_CHECKLIST_LABELS.DIAGNOSIS_TREATMENT_INCONSISTENT,
+      passed: judgments.diagnosisTreatment == null ? null : judgments.diagnosisTreatment.consistent !== false,
+      confidence: judgments.diagnosisTreatment?.confidence ?? null,
+      note: judgments.diagnosisTreatment?.reason ?? null,
+    },
   ];
 
   return { issues: [...new Set([...issues, ...flags.map(issueForFlag).filter(Boolean)])], details, flags, checklist };
@@ -588,18 +623,67 @@ function buildMandatoryFieldChecklist(extractedFields) {
   }));
 }
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+function daysBetween(isoA, isoB) {
+  const a = new Date(isoA);
+  const b = new Date(isoB);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return null;
+  return Math.round(Math.abs(a.getTime() - b.getTime()) / MS_PER_DAY);
+}
+
+// Deterministic, code-only confidence for the two date-consistency checklist items below —
+// same reasoning as voucherAmountAgreement above: "how much do these two independently
+// extracted dates agree" is a more useful signal than a flat pass/fail. A 1-day gap is far
+// more likely a data-entry slip (off-by-one, timezone rounding at midnight) than a genuinely
+// different visit; a 60-day gap is not. Confidence decays to 0 by
+// DATE_CONFIDENCE_FLOOR_DAYS apart — a deliberately simple straight-line falloff, not a
+// claim about real-world date-error distributions.
+const DATE_CONFIDENCE_FLOOR_DAYS = 14;
+
+function dateAgreement(dateA, dateB, labelA, labelB) {
+  if (dateA == null || dateB == null) return null;
+  if (dateA === dateB) return { confidence: 1, note: `${labelA} and ${labelB} both ${dateA}.` };
+  const days = daysBetween(dateA, dateB);
+  if (days == null) return null;
+  return {
+    confidence: Math.max(0, 1 - days / DATE_CONFIDENCE_FLOOR_DAYS),
+    note: `${labelA} (${dateA}) differs from ${labelB} (${dateB}) by ${days} day(s).`,
+  };
+}
+
 function buildDateConsistencyChecklist(extractedFields) {
   const dateFlags = checkTreatmentDateConsistency(extractedFields) || [];
+  const claimDate = extractedFields.claim?.accident_date || extractedFields.claim?.appointment_date;
+  const medicalRecordDate = extractedFields.medical_record?.date;
+  const treatmentAgreement = dateAgreement(claimDate, medicalRecordDate, 'Claim date', 'Medical record date');
+
+  // A case can have more than one voucher, each with its own date — report the worst
+  // (lowest-confidence) agreement found, same "one representative reason" approach the
+  // issues[] line already takes for this check (one INVOICE_DATE_INCONSISTENT issue text
+  // covers every mismatched voucher, not one line each).
+  const invoiceAgreements = (extractedFields.invoices?.items || [])
+    .map((item, index) => dateAgreement(item.date, medicalRecordDate, `Voucher ${index + 1} date`, 'Medical record date'))
+    .filter((agreement) => agreement != null);
+  const worstInvoiceAgreement =
+    invoiceAgreements.length === 0
+      ? null
+      : invoiceAgreements.reduce((worst, agreement) => (agreement.confidence < worst.confidence ? agreement : worst));
+
   return [
     {
       code: 'TREATMENT_DATE_INCONSISTENT',
       label: 'Treatment date is consistent with medical record date',
       passed: !dateFlags.some((flag) => flag.code === 'TREATMENT_DATE_INCONSISTENT'),
+      confidence: treatmentAgreement?.confidence ?? null,
+      note: treatmentAgreement?.note ?? null,
     },
     {
       code: 'INVOICE_DATE_INCONSISTENT',
       label: 'Invoice date(s) are consistent with medical record date',
       passed: !dateFlags.some((flag) => flag.code === 'INVOICE_DATE_INCONSISTENT'),
+      confidence: worstInvoiceAgreement?.confidence ?? null,
+      note: worstInvoiceAgreement?.note ?? null,
     },
   ];
 }
