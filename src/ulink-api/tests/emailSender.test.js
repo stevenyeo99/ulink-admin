@@ -16,7 +16,8 @@ describe('renderMemberVerifyIssue (internal-only, SOP §11)', () => {
     expect(rendered.subject).toContain('case-123');
     expect(rendered.subject).toContain('BANK_DETAILS_MISMATCH');
     expect(rendered.bodyText).not.toContain('Dear Valued Customer');
-    expect(rendered.bodyText).toContain('Do NOT reply to the customer');
+    expect(rendered.bodyText).not.toContain('case-123'); // Case ID lives in the subject only, not repeated in the body
+    expect(rendered.bodyText).toContain('hold off replying to the customer');
     expect(rendered.bodyText).toContain('Bank account number "123" does not match IAS record "456".');
     expect(rendered.bodyText).toContain('Hold payment-related verification');
   });

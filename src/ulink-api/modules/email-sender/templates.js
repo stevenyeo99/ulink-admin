@@ -39,6 +39,12 @@ const path = require('path');
 const SIGN_OFF = `Thank you & Best Regards,
 ULINK AI Bot`;
 
+// Shared subject prefix for the three internal-only renderers below (never the
+// customer-facing ones, which set subject: null so imapSmtpChannel.js's own
+// "Re: <original subject>" default applies instead) — so ops can tell at a glance, before
+// opening it, that a message in their inbox came from this system rather than a colleague.
+const INTERNAL_SUBJECT_PREFIX = '(ULINK AI) ';
+
 const MISSING_DOCUMENTS_INTRO = `Dear Valued Customer,
 
 Please be informed that in order to process the claim that have submitted, the following information needs to be completed:
@@ -94,17 +100,23 @@ const REASON_CODE_TO_SOP_ACTION = {
 
 function renderMemberVerifyIssue(payload) {
   const { caseId, reasonCode, reason } = payload;
-  const sopAction = REASON_CODE_TO_SOP_ACTION[reasonCode] || 'Hold and review.';
+  const requiredAction = REASON_CODE_TO_SOP_ACTION[reasonCode] || 'Hold and review.';
 
+  // Case ID is deliberately kept in the subject only, not repeated in the body — the
+  // subject is what a reviewer scans in an ops inbox handling many cases; the body reads
+  // as a friendly heads-up rather than a data dump (2026-09-16, at user's request).
   return {
-    subject: `Member verification hold — Case ${caseId} — ${reasonCode}`,
-    bodyText: `Member-verification could not confirm this case against IAS. Do NOT reply to the customer until this is resolved (SOP §11: member/policy and bank findings are held for internal verification, not sent to the customer).
+    subject: `${INTERNAL_SUBJECT_PREFIX}Member verification hold — Case ${caseId} — ${reasonCode}`,
+    bodyText: `Hi team,
 
-Case ID: ${caseId}
+We weren't able to confirm this case's member/bank details against IAS yet, so please hold off replying to the customer until it's sorted out — member and bank findings need internal verification first.
+
 Reason code: ${reasonCode}
 Detail: ${reason}
 
-SOP-required action: ${sopAction}`,
+Required action: ${requiredAction}
+
+${SIGN_OFF}`,
   };
 }
 
@@ -118,7 +130,7 @@ function renderDocumentCompleteAck() {
 function renderClaimSubmitIssue(payload) {
   const { caseId, errorMessage } = payload;
   return {
-    subject: `Claim submission failed — Case ${caseId}`,
+    subject: `${INTERNAL_SUBJECT_PREFIX}Claim submission failed — Case ${caseId}`,
     bodyText: `IAS rejected this claim submission. Case sits at CLAIM_SUBMIT_FAILED and is NOT retried automatically — needs manual follow-up.
 
 Case ID: ${caseId}
@@ -148,7 +160,7 @@ function renderSubmissionNotRecognized() {
 function renderClaimApprovalReview(payload) {
   const { claimNo } = payload;
   return {
-    subject: `Claim ready for review — Claim ${claimNo}`,
+    subject: `${INTERNAL_SUBJECT_PREFIX}Claim ready for review — Claim ${claimNo}`,
     bodyText: `A claim has been created in IAS and is ready for review and approval. The automated document and claim checks are complete.
 
 Claim Number: ${claimNo}
