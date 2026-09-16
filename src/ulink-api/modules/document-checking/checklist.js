@@ -111,6 +111,38 @@ function checkVoucherAmountMismatch(fields) {
   return voucherTotal !== claimedAmount ? ISSUES.VOUCHER_AMOUNT_MISMATCH : null;
 }
 
+/**
+ * Deterministic, code-only confidence for the checklist display — no LLM call, no schema
+ * change, computed purely from the same two numbers checkVoucherAmountMismatch above already
+ * compares. `confidence` here isn't "is this check sure of its own pass/fail" (it always is,
+ * it's an arithmetic comparison) — it's "how much do these two independently-arrived-at
+ * numbers agree", which is the useful signal for a reviewer: a 1% gap reads very differently
+ * than a 50% one. Verified against real data (2026-09-16, case
+ * 90a3c71e-9dc3-4003-bc63-2271cc1c607e): a single-digit OCR misread (176,000 read as 196,000)
+ * produced exactly this shape of small, single-voucher-sized gap — much more likely a
+ * transcription error than a genuinely missing/extra voucher, which a reviewer skimming a
+ * confidence score can triage faster than re-deriving the arithmetic themselves.
+ */
+function voucherAmountAgreement(fields) {
+  if (fields.invoices?.present !== true) return null;
+  const subtotals = (fields.invoices.items || []).map((item) => item.subtotal).filter((amount) => amount != null);
+  if (subtotals.length === 0) return null;
+  const voucherTotal = subtotals.reduce((sum, amount) => sum + amount, 0);
+  const claimedAmount = fields.claim?.total_claim_amount;
+  if (claimedAmount == null) return null;
+
+  if (voucherTotal === claimedAmount) {
+    return { confidence: 1, note: `Voucher total (${voucherTotal.toLocaleString()}) matches the claimed amount exactly.` };
+  }
+
+  const diff = Math.abs(voucherTotal - claimedAmount);
+  const relativeDiff = diff / Math.max(voucherTotal, claimedAmount, 1);
+  return {
+    confidence: Math.max(0, 1 - relativeDiff),
+    note: `Voucher total (${voucherTotal.toLocaleString()}) differs from the claimed amount (${claimedAmount.toLocaleString()}) by ${diff.toLocaleString()} (${(relativeDiff * 100).toFixed(1)}%).`,
+  };
+}
+
 // Disabled (not in EVALUATORS) — see the block comment above EVALUATORS. Kept defined so
 // re-enabling later is a one-line change, not a rewrite.
 function checkIncorrectPatientDetails(fields) {
@@ -520,20 +552,30 @@ function checkTreatmentDateConsistency(fields) {
 // surfaced here only for the two checklist items whose pass/fail IS that same presence
 // determination, so the console can show *why*, not just pass/fail. No equivalent score
 // exists for any other EVALUATORS entry.
-const PRESENCE_SOURCE = {
-  NO_MEDICAL_REPORT: (fields) => fields.medical_record,
-  MISSING_VOUCHER: (fields) => fields.invoices,
+// One {confidence, note} shape for every checklist item that has one, regardless of where the
+// number actually comes from — the model's own self-reported presence_confidence for the two
+// presence checks, or a purely deterministic agreement score (voucherAmountAgreement) for the
+// amount check. The checklist/console side doesn't need to know which.
+function presenceConfidence(source) {
+  if (source?.presence_confidence == null) return null;
+  return { confidence: source.presence_confidence, note: source.presence_reason ?? null };
+}
+
+const CHECKLIST_CONFIDENCE = {
+  NO_MEDICAL_REPORT: (fields) => presenceConfidence(fields.medical_record),
+  MISSING_VOUCHER: (fields) => presenceConfidence(fields.invoices),
+  VOUCHER_AMOUNT_MISMATCH: voucherAmountAgreement,
 };
 
 function buildEvaluatorChecklist(extractedFields) {
   return EVALUATORS.map(({ code, check }) => {
-    const source = PRESENCE_SOURCE[code]?.(extractedFields);
+    const extra = CHECKLIST_CONFIDENCE[code]?.(extractedFields) ?? null;
     return {
       code,
       label: ISSUES[code],
       passed: check(extractedFields) == null,
-      confidence: source?.presence_confidence ?? null,
-      note: source?.presence_reason ?? null,
+      confidence: extra?.confidence ?? null,
+      note: extra?.note ?? null,
     };
   });
 }
