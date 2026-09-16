@@ -43,6 +43,35 @@ function compareBankName(extractedValue, iasValue) {
   return a === b || a.includes(b) || b.includes(a);
 }
 
+// Burmese and generic English honorific prefixes that legitimately vary between what a
+// customer writes and IAS's own stored name (e.g. "U Thiha" vs IAS's own "Thiha" — same
+// account holder), stripped as a single leading token before comparing account-holder
+// names. Deliberately NOT containment (unlike compareBankName above) — a plain substring
+// match on a person's name is a real false-positive risk (e.g. "Thiha" would wrongly match
+// "Nay Thiha Aung", a genuinely different person), so this stays an exact compare, just on
+// the honorific-stripped form.
+const HONORIFIC_PREFIXES = new Set(['u', 'daw', 'ko', 'ma', 'saya', 'sayama', 'mr', 'mrs', 'ms', 'dr']);
+
+function stripHonorific(value) {
+  const normalized = norm(value);
+  if (normalized == null) return null;
+  const [first, ...rest] = normalized.split(' ');
+  return rest.length > 0 && HONORIFIC_PREFIXES.has(first.replace(/\.$/, '')) ? rest.join(' ') : normalized;
+}
+
+/**
+ * Verified against real data (2026-09-16): "U Thiha" (extracted) vs IAS's "Thiha", same
+ * account holder, hit this exact false positive twice in a row — see the
+ * BANK_DETAILS_MISMATCH thread. Was plain compare() until this fix; see git history for the
+ * "Known limitation, accepted as-is" comment this replaced.
+ */
+function compareAccountHolderName(extractedValue, iasValue) {
+  const a = stripHonorific(extractedValue);
+  const b = stripHonorific(iasValue);
+  if (a == null || b == null) return null;
+  return a === b;
+}
+
 // SOP §6.1 (Member Active Status) decision, 2026-09-14: checked a real IAS sample
 // (docs/imp/day1/IAS/ias_get_member_information_response_v2.json) — both
 // memberPlans[0].STATUS and policies[0].STATUS came back null, not a field this system can
@@ -84,15 +113,14 @@ function evaluate(extractedFields, iasResponse) {
     coverageActive,
     dobMatch: compare(toYYYYMMDD(extractedFields.claimant?.claimant_dob), iasDateToYYYYMMDD(member.DOB)),
     bankNameMatch: compareBankName(extractedFields.bank?.bank_name, member.BANK_NAME),
-    // Known limitation, accepted as-is per the settled Hard-tier design: this is a plain
-    // normalized string compare, unlike JD1's identity_consistency (LLM-judged
-    // specifically to handle Burmese-vs-Latin-script/transliteration name variants — see
-    // checklist.js/synthesize.md). A person whose name is legitimately the same but
-    // written in a different script/spelling than IAS's own record will false-positive
-    // here as a mismatch. Accepted for now since a real mismatch (a genuinely different
-    // payee, e.g. the jd2 delegation-letter case) is the far more likely real-world
-    // trigger; revisit if false positives show up in practice.
-    bankAccountNameMatch: compare(extractedFields.bank?.bank_account_name, member.CL_PAY_ACCT_NAME),
+    // Honorific-tolerant compare (see compareAccountHolderName above) — still an exact
+    // match once a leading title is stripped, so a genuinely different payee's name still
+    // fails this. Remaining known gap: a non-honorific script/transliteration difference
+    // (not covered by HONORIFIC_PREFIXES) still false-positives here; revisit with an
+    // LLM-judged comparison (document-checking/identityJudgment.js's entityMatch) only if
+    // that shows up in practice — deliberately not reached for yet on this payment-safety
+    // gate, see the BANK_DETAILS_MISMATCH advisory thread this fix came out of.
+    bankAccountNameMatch: compareAccountHolderName(extractedFields.bank?.bank_account_name, member.CL_PAY_ACCT_NAME),
     bankAccountNumberMatch: compare(extractedFields.bank?.bank_account_number, member.CL_PAY_ACCT_NO),
     policyNoMatch: compare(extractedFields.policy?.policy_no, policy?.POCY_REF_NO),
   };
