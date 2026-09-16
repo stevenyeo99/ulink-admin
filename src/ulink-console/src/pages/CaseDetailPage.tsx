@@ -8,6 +8,7 @@ import { CaseStatusPill } from '../components/cases/CaseStatusPill';
 import { EmailThreadSection } from '../components/cases/EmailThreadSection';
 import { JsonViewer } from '../components/panel/JsonViewer';
 import { ChecklistTable } from '../components/panel/ChecklistTable';
+import { ConfidenceSummary } from '../components/panel/ConfidenceSummary';
 import { Button } from '../components/common/Button';
 import type { ChecklistItem } from '../types/case';
 
@@ -90,6 +91,8 @@ export function CaseDetailPage() {
           </div>
         </div>
       </div>
+
+      <ConfidenceSummary caseRecord={caseRecord} />
 
       <section className="mb-6 rounded-xl2 border border-slate-900/5 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Email Thread</h2>

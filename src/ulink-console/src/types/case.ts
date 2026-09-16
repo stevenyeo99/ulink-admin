@@ -53,6 +53,17 @@ export interface MemberVerifyResult {
   [key: string]: unknown;
 }
 
+export interface ClaimPickMeta {
+  pick: Record<string, unknown> | null;
+  confidence: number | null;
+  candidates: unknown[];
+}
+
+export interface ClaimPrepMeta {
+  diagnosis: ClaimPickMeta & { text: string | null };
+  lines: (ClaimPickMeta & { voucherType: string | null; subtotal: number | null })[];
+}
+
 export interface EmailAttachment {
   id: string;
   messageId: string;
@@ -92,7 +103,7 @@ export interface CaseDetail {
   memberVerifyResult: MemberVerifyResult | null;
   iasMemberInfoResponse: unknown;
   iasClaimPayload: unknown;
-  claimPrepMeta: unknown;
+  claimPrepMeta: ClaimPrepMeta | null;
   iasClaimResult: unknown;
   claimNo: string | null;
   createdAt: string;
