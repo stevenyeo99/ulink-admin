@@ -62,6 +62,7 @@ async function checkCase(caseRecord) {
       details: [...stage1.details, ...stage2.details],
       flags: [...stage1.flags, ...stage2.flags],
       passed: stage1.issues.length + stage2.issues.length === 0,
+      checklist: [...stage1.checklist, ...stage2.checklist],
     };
   }
 

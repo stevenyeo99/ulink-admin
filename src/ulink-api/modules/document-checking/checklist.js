@@ -255,7 +255,24 @@ function evaluateJudgmentDependentChecks(extractedFields, judgments = {}) {
   addFlagIfInconsistent('HOSPITAL_NAME_INCONSISTENT', judgments.hospitalName);
   addFlagIfInconsistent('DIAGNOSIS_TREATMENT_INCONSISTENT', judgments.diagnosisTreatment);
 
-  return { issues: [...new Set([...issues, ...flags.map(issueForFlag).filter(Boolean)])], details, flags };
+  // Same internal-only checklist contract as buildEvaluatorChecklist above — `passed` is
+  // `null` (not true/false) when the judgment didn't run at all (fields missing on one
+  // side), so the console can distinguish "checked, fine" from "couldn't be checked",
+  // rather than collapsing both into a false "passed".
+  const checklist = [
+    {
+      code: 'DELEGATION_LETTER_REQUIRED',
+      label: 'Bank account holder matches claimant, or a delegation letter is provided',
+      passed: judgments.bankAccountHolder?.consistent == null ? null : !issues.includes(ISSUES.DELEGATION_LETTER_REQUIRED),
+    },
+    { code: 'DELEGATION_PAYEE_INCONSISTENT', label: IDENTITY_FLAG_DESCRIPTIONS.DELEGATION_PAYEE_INCONSISTENT, passed: judgments.delegationPayee == null ? null : judgments.delegationPayee.consistent !== false },
+    { code: 'PATIENT_NAME_INCONSISTENT', label: IDENTITY_FLAG_DESCRIPTIONS.PATIENT_NAME_INCONSISTENT, passed: judgments.patientName == null ? null : judgments.patientName.consistent !== false },
+    { code: 'PROVIDER_NAME_INCONSISTENT', label: IDENTITY_FLAG_DESCRIPTIONS.PROVIDER_NAME_INCONSISTENT, passed: judgments.providerName == null ? null : judgments.providerName.consistent !== false },
+    { code: 'HOSPITAL_NAME_INCONSISTENT', label: IDENTITY_FLAG_DESCRIPTIONS.HOSPITAL_NAME_INCONSISTENT, passed: judgments.hospitalName == null ? null : judgments.hospitalName.consistent !== false },
+    { code: 'DIAGNOSIS_TREATMENT_INCONSISTENT', label: IDENTITY_FLAG_DESCRIPTIONS.DIAGNOSIS_TREATMENT_INCONSISTENT, passed: judgments.diagnosisTreatment == null ? null : judgments.diagnosisTreatment.consistent !== false },
+  ];
+
+  return { issues: [...new Set([...issues, ...flags.map(issueForFlag).filter(Boolean)])], details, flags, checklist };
 }
 
 const IDENTITY_FLAG_ISSUES = {
@@ -298,15 +315,15 @@ function reasonForFlag(flag) {
 // evaluateJudgmentDependentChecks below, since it now depends on a real judgment call
 // (entityMatch), which this array's synchronous, no-I/O contract can't accommodate.
 const EVALUATORS = [
-  checkIncompleteClaimForm,
-  checkMissingVoucher,
-  checkNoMedicalReport,
-  checkUnclearVoucher,
-  checkIncorrectVoucher,
-  checkMissingVoucherBreakdown,
-  checkVoucherAmountMismatch,
-  checkIncompleteMedicalReport,
-  checkMissingBankInfo,
+  { code: 'INCOMPLETE_CLAIM_FORM', check: checkIncompleteClaimForm },
+  { code: 'MISSING_VOUCHER', check: checkMissingVoucher },
+  { code: 'NO_MEDICAL_REPORT', check: checkNoMedicalReport },
+  { code: 'UNCLEAR_VOUCHER', check: checkUnclearVoucher },
+  { code: 'INCORRECT_VOUCHER', check: checkIncorrectVoucher },
+  { code: 'MISSING_VOUCHER_BREAKDOWN', check: checkMissingVoucherBreakdown },
+  { code: 'VOUCHER_AMOUNT_MISMATCH', check: checkVoucherAmountMismatch },
+  { code: 'INCOMPLETE_MEDICAL_REPORT', check: checkIncompleteMedicalReport },
+  { code: 'MISSING_BANK_INFO', check: checkMissingBankInfo },
 ];
 
 /**
@@ -480,17 +497,58 @@ function checkTreatmentDateConsistency(fields) {
   return flags.length > 0 ? flags : null;
 }
 
+// Full checklist for the internal console (SOP items covered by EVALUATORS + the
+// mandatory-field table + the date-consistency checks) — every item that was actually
+// evaluated, pass or fail, not just the ones that fired. Deliberately NOT read by anything
+// customer-facing: modules/document-checking/service.js's email payload only ever reads
+// `issues`/`details`, and this key is additive to that same result object, so it can't leak
+// into the MISSING_DOCUMENTS email. Internal wording only — reuses ISSUES.* verbatim as the
+// label since that's already the one source of truth for what each check is about; an
+// internal reader seeing "Missing voucher(s): passed" is unambiguous.
+function buildEvaluatorChecklist(extractedFields) {
+  return EVALUATORS.map(({ code, check }) => ({ code, label: ISSUES[code], passed: check(extractedFields) == null }));
+}
+
+function buildMandatoryFieldChecklist(extractedFields) {
+  return MANDATORY_FIELDS.map(({ section, field, get, isMissing = (value) => value == null }) => ({
+    code: 'MISSING_MANDATORY_FIELD',
+    label: `${section}: ${field}`,
+    passed: !isMissing(get(extractedFields)),
+  }));
+}
+
+function buildDateConsistencyChecklist(extractedFields) {
+  const dateFlags = checkTreatmentDateConsistency(extractedFields) || [];
+  return [
+    {
+      code: 'TREATMENT_DATE_INCONSISTENT',
+      label: 'Treatment date is consistent with medical record date',
+      passed: !dateFlags.some((flag) => flag.code === 'TREATMENT_DATE_INCONSISTENT'),
+    },
+    {
+      code: 'INVOICE_DATE_INCONSISTENT',
+      label: 'Invoice date(s) are consistent with medical record date',
+      passed: !dateFlags.some((flag) => flag.code === 'INVOICE_DATE_INCONSISTENT'),
+    },
+  ];
+}
+
 function evaluateDocumentChecks(extractedFields) {
   const flags = [...evaluateMandatoryFieldFlags(extractedFields), ...(checkTreatmentDateConsistency(extractedFields) || [])];
   const issues = [...new Set([
-    ...EVALUATORS.map((evaluate) => evaluate(extractedFields)).filter(Boolean),
+    ...EVALUATORS.map(({ check }) => check(extractedFields)).filter(Boolean),
     ...flags.map(issueForFlag).filter(Boolean),
   ])];
   const details = [
     ...issues.map((issue) => ({ issue, ...reasonForIssue(issue, extractedFields) })),
     ...flags.map((flag) => ({ issue: issueForFlag(flag), code: flag.code, reason: reasonForFlag(flag) })),
   ];
-  return { issues, passed: issues.length === 0, details, flags };
+  const checklist = [
+    ...buildEvaluatorChecklist(extractedFields),
+    ...buildMandatoryFieldChecklist(extractedFields),
+    ...buildDateConsistencyChecklist(extractedFields),
+  ];
+  return { issues, passed: issues.length === 0, details, flags, checklist };
 }
 
 module.exports = { ISSUES, evaluateDocumentChecks, evaluateJudgmentDependentChecks };

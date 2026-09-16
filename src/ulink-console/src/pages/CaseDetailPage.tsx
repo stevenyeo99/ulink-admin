@@ -7,9 +7,22 @@ import { getCase, overrideCase, resetCase } from '../api/casesApi';
 import { CaseStatusPill } from '../components/cases/CaseStatusPill';
 import { EmailThreadSection } from '../components/cases/EmailThreadSection';
 import { JsonViewer } from '../components/panel/JsonViewer';
+import { ChecklistTable } from '../components/panel/ChecklistTable';
 import { Button } from '../components/common/Button';
+import type { ChecklistItem } from '../types/case';
 
 const REVIEWABLE_STATUSES = ['INCOMPLETE', 'MEMBER_REVIEW_REQUIRED'];
+
+// Labels for member-verification's checks.hard object (modules/member-verification/checks.js)
+// — that module is deliberately pure/no-I/O, so display wording belongs here, not there.
+const HARD_CHECK_LABELS: Record<string, string> = {
+  coverageActive: 'Treatment date falls within the active coverage period',
+  dobMatch: 'Claimant date of birth matches IAS record',
+  bankNameMatch: 'Bank name matches IAS record',
+  bankAccountNameMatch: 'Bank account holder name matches IAS record',
+  bankAccountNumberMatch: 'Bank account number matches IAS record',
+  policyNoMatch: 'Policy number matches IAS record',
+};
 
 function formatTimestamp(iso: string): string {
   return new Date(iso).toLocaleString();
@@ -90,12 +103,44 @@ export function CaseDetailPage() {
 
       <section className="mb-6 rounded-xl2 border border-slate-900/5 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Document Check Result</h2>
-        <JsonViewer value={caseRecord.documentCheckResult} />
+        {caseRecord.documentCheckResult?.checklist ? (
+          <ChecklistTable
+            items={caseRecord.documentCheckResult.checklist}
+            reasonByCode={Object.fromEntries(
+              (caseRecord.documentCheckResult.details ?? [])
+                .filter((detail) => detail.code && detail.reason)
+                .map((detail) => [detail.code as string, detail.reason as string])
+            )}
+          />
+        ) : (
+          <p className="text-sm italic text-slate-400">Not checked yet</p>
+        )}
+        <details className="mt-3">
+          <summary className="cursor-pointer text-xs text-slate-400">Raw result</summary>
+          <JsonViewer value={caseRecord.documentCheckResult} />
+        </details>
       </section>
 
       <section className="mb-6 rounded-xl2 border border-slate-900/5 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Member Verify Result</h2>
-        <JsonViewer value={caseRecord.memberVerifyResult} />
+        {caseRecord.memberVerifyResult?.checks ? (
+          <>
+            <ChecklistTable
+              items={Object.entries(caseRecord.memberVerifyResult.checks.hard).map(
+                ([code, passed]): ChecklistItem => ({ code, label: HARD_CHECK_LABELS[code] ?? code, passed })
+              )}
+            />
+            {caseRecord.memberVerifyResult.reason && (
+              <p className="mt-3 text-xs text-slate-500">{caseRecord.memberVerifyResult.reason}</p>
+            )}
+          </>
+        ) : (
+          <p className="text-sm italic text-slate-400">Not checked yet</p>
+        )}
+        <details className="mt-3">
+          <summary className="cursor-pointer text-xs text-slate-400">Raw result</summary>
+          <JsonViewer value={caseRecord.memberVerifyResult} />
+        </details>
       </section>
 
       <section className="mb-6 rounded-xl2 border border-slate-900/5 bg-white/80 p-5 shadow-glass backdrop-blur-xl">

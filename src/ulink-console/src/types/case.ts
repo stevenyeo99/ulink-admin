@@ -16,13 +16,38 @@ export interface ListCasesResponse {
   offset: number;
 }
 
+export interface ChecklistItem {
+  code?: string;
+  label: string;
+  passed: boolean | null;
+}
+
+export interface DocumentCheckDetail {
+  issue: string;
+  code: string | null;
+  reason: string | null;
+}
+
 export interface DocumentCheckResult {
   issues: string[];
   passed: boolean;
+  details?: DocumentCheckDetail[];
+  checklist?: ChecklistItem[];
+}
+
+export interface MemberVerifyHardChecks {
+  coverageActive: boolean | null;
+  dobMatch: boolean | null;
+  bankNameMatch: boolean | null;
+  bankAccountNameMatch: boolean | null;
+  bankAccountNumberMatch: boolean | null;
+  policyNoMatch: boolean | null;
 }
 
 export interface MemberVerifyResult {
   reasonCode?: string | null;
+  reason?: string | null;
+  checks?: { hard: MemberVerifyHardChecks; soft: Record<string, { extracted: unknown; ias: unknown }> };
   [key: string]: unknown;
 }
 
