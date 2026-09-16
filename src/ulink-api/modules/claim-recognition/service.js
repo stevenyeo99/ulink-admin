@@ -202,11 +202,28 @@ function mergeInvoiceItemPair(a, b) {
   return {
     subtotal: a.subtotal,
     voucher_type: a.voucher_type,
+    // Previously dropped entirely (neither a.date nor b.date was ever read here) — silently
+    // lost the date on every merge, duplicate or not, breaking document-checking's own
+    // INVOICE_DATE_INCONSISTENT check for any case that ever went through this merge.
+    date: a.date ?? b.date,
     legible: preferAffirmative(a.legible, b.legible),
     has_itemized_breakdown: preferAffirmative(a.has_itemized_breakdown, b.has_itemized_breakdown),
     has_vitamin_or_supplement: preferAffirmative(a.has_vitamin_or_supplement, b.has_vitamin_or_supplement),
     has_clinic_stamp_or_doctor_signature: preferAffirmative(a.has_clinic_stamp_or_doctor_signature, b.has_clinic_stamp_or_doctor_signature),
   };
+}
+
+// Two non-null dates that actually disagree is real, specific evidence of two separate
+// physical visits, not two reads of the same voucher — a duplicate-scan situation only ever
+// produces the SAME date twice, or a date missing on one of the two passes (same read-
+// confidence variance already documented for legible/stamp/breakdown above), never two
+// different specific dates. Verified against real data 2026-09-16 (case
+// 41f3ca63-d6eb-47e0-8c1a-36a5ed1c5ffe): two genuinely separate 57,000 consultation
+// vouchers, 21-Aug and 28-Aug, same flat package price both visits, wrongly collapsed into
+// one by subtotal+voucher_type alone — losing an entire real 57,000 voucher (and both its
+// date and the fact it was ever submitted at all) from the claim total.
+function invoiceItemDatesConflict(a, b) {
+  return a.date != null && b.date != null && a.date !== b.date;
 }
 
 /**
@@ -220,38 +237,45 @@ function mergeInvoiceItemPair(a, b) {
  * same complete/1 voucher came back with matching subtotal/voucher_type (23000/pharmacy) but
  * disagreeing legible (true vs null) and has_clinic_stamp_or_doctor_signature (true vs
  * false), because one of the two read passes simply caught the stamp/legibility and the
- * other didn't. Grouping now keys on just subtotal + voucher_type — the two fields
- * describing what the voucher actually IS, stable across re-reads of the same physical
- * document, unlike legible/has_clinic_stamp_or_doctor_signature/has_itemized_breakdown/
+ * other didn't. Grouping keys on subtotal + voucher_type — the two fields describing what
+ * the voucher actually IS, stable across re-reads of the same physical document, unlike
+ * legible/has_clinic_stamp_or_doctor_signature/has_itemized_breakdown/
  * has_vitamin_or_supplement, which are read-confidence judgments that can genuinely vary
  * between two passes over the same image. Items with a null subtotal are left ungrouped —
  * not enough signal to safely treat as a duplicate of anything.
  *
- * Two genuinely separate physical vouchers happening to share the exact same subtotal AND
- * the same voucher_type is possible but unlikely enough, relative to the confirmed real
- * failure mode above, not to be worth the added complexity of a stricter key right now.
- * This directly affects downstream amount checks (document-checking's
- * VOUCHER_AMOUNT_MISMATCH) and claim payload construction (ias-claim-preparation would
- * otherwise double the real claim amount).
+ * Fix 3 (2026-09-16): "two genuinely separate vouchers sharing the exact same subtotal and
+ * voucher_type" was assumed unlikely enough not to guard against — that assumption is now
+ * disproven by real data (see invoiceItemDatesConflict's own comment: two same-priced
+ * consultation packages, one week apart). A same-key pair is now only merged when their
+ * dates don't actively conflict; two same-key items with clearly different dates are kept
+ * as separate entries instead. This directly affects downstream amount checks
+ * (document-checking's VOUCHER_AMOUNT_MISMATCH) and claim payload construction
+ * (ias-claim-preparation would otherwise silently drop a real voucher from the claim total).
  */
 function dedupeInvoiceItems(fields) {
   const items = fields.invoices?.items;
   if (!Array.isArray(items) || items.length < 2) return fields;
 
-  const groups = new Map();
-  const ungrouped = [];
-
+  const deduped = [];
   for (const item of items) {
     if (item.subtotal == null) {
-      ungrouped.push(item);
+      deduped.push(item);
       continue;
     }
-    const key = `${item.subtotal}|${item.voucher_type}`;
-    const existing = groups.get(key);
-    groups.set(key, existing ? mergeInvoiceItemPair(existing, item) : item);
+    const matchIndex = deduped.findIndex(
+      (existing) =>
+        existing.subtotal === item.subtotal &&
+        existing.voucher_type === item.voucher_type &&
+        !invoiceItemDatesConflict(existing, item)
+    );
+    if (matchIndex === -1) {
+      deduped.push(item);
+    } else {
+      deduped[matchIndex] = mergeInvoiceItemPair(deduped[matchIndex], item);
+    }
   }
 
-  const deduped = [...groups.values(), ...ungrouped];
   if (deduped.length === items.length) return fields;
   return { ...fields, invoices: { ...fields.invoices, items: deduped } };
 }
@@ -681,4 +705,5 @@ module.exports = {
   decideRoute,
   extractFields,
   transcribePages,
+  dedupeInvoiceItems,
 };
