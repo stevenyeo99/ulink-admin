@@ -1,6 +1,6 @@
 const { sequelize, Case, CaseEvent } = require('../../db/models');
 const config = require('../../config');
-const { evaluateDocumentChecks, evaluateJudgmentDependentChecks, pendingJudgmentChecklist } = require('./checklist');
+const { evaluateDocumentChecks, evaluateJudgmentDependentChecks } = require('./checklist');
 const { entityMatch, meaningMatch } = require('./identityJudgment');
 const { queueDedupedTask } = require('../shared/emailTaskQueue');
 
@@ -38,12 +38,19 @@ async function runJudgments(fields) {
 }
 
 /**
- * No longer pure — makes real LLM calls (the 6 judgments), but only once stage 1 (the
- * deterministic EVALUATORS) already has zero issues. Same cost-gating already used for
- * member-verification's exclusion check: no reason to spend 6 LLM calls judging
- * consistency on a case that's already going to be marked INCOMPLETE for a missing
- * invoice — it'll come back around once the customer replies, and judgment runs then.
- * Still reusable identically by the real job and the dev preview endpoint, same as before.
+ * Not pure — makes real LLM calls (the 6 judgments) — always, regardless of whether stage 1
+ * (the deterministic EVALUATORS) already found an issue. Previously gated on stage1.issues
+ * being empty, on the assumption that a case already going to be marked INCOMPLETE didn't
+ * need judgment run yet — reverted 2026-09-16 (case e5498fa0-28d3-46da-9d61-a4adb16b92f2 /
+ * 6685636e-9fec-4df5-bb36-ac9eb1af53ba) after checking the real reference reply for this
+ * exact submission (docs/imp/demo/20260914/samples/3/3_email_real_user_check_reply.md): the
+ * actual human reviewer sent BOTH "Need medical record" and the delegation-letter request in
+ * one email, not staged across two round trips. Cost impact is small in practice —
+ * entityMatch/meaningMatch are null-safe (see runJudgments above) and most of the 5
+ * name/diagnosis judgments short-circuit to null for free whenever medical_record isn't
+ * present, since their inputs are null too; only bankAccountHolder (medical_record-independent)
+ * reliably costs a real call on an otherwise-incomplete case, which is exactly the one this
+ * fix needs to run. Still reusable identically by the real job and the dev preview endpoint.
  */
 async function checkCase(caseRecord) {
   if (!caseRecord.extractedFields) {
@@ -52,25 +59,15 @@ async function checkCase(caseRecord) {
   const fields = caseRecord.extractedFields;
 
   const stage1 = evaluateDocumentChecks(fields);
-
-  let result;
-  if (stage1.issues.length === 0) {
-    const judgments = await runJudgments(fields);
-    const stage2 = evaluateJudgmentDependentChecks(fields, judgments);
-    result = {
-      issues: [...stage1.issues, ...stage2.issues],
-      details: [...stage1.details, ...stage2.details],
-      flags: [...stage1.flags, ...stage2.flags],
-      passed: stage1.issues.length + stage2.issues.length === 0,
-      checklist: [...stage1.checklist, ...stage2.checklist],
-    };
-  } else {
-    // Stage 2 (the LLM judgment calls, including delegation-letter) is skipped entirely
-    // above — see this function's own comment on why. Without a placeholder, those items
-    // (delegation letter included) just vanish from the checklist the console renders,
-    // which reads as "the system isn't checking this" rather than "not evaluated yet".
-    result = { ...stage1, checklist: [...stage1.checklist, ...pendingJudgmentChecklist()] };
-  }
+  const judgments = await runJudgments(fields);
+  const stage2 = evaluateJudgmentDependentChecks(fields, judgments);
+  const result = {
+    issues: [...stage1.issues, ...stage2.issues],
+    details: [...stage1.details, ...stage2.details],
+    flags: [...stage1.flags, ...stage2.flags],
+    passed: stage1.issues.length + stage2.issues.length === 0,
+    checklist: [...stage1.checklist, ...stage2.checklist],
+  };
 
   const outcome = result.passed ? 'DOCUMENT_CHECKED' : 'INCOMPLETE';
   return { caseId: caseRecord.id, outcome, result };

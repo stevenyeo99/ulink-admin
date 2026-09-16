@@ -285,24 +285,6 @@ function evaluateJudgmentDependentChecks(extractedFields, judgments = {}) {
   return { issues: [...new Set([...issues, ...flags.map(issueForFlag).filter(Boolean)])], details, flags, checklist };
 }
 
-/**
- * Placeholder rows for the same SOP §7/§8/§9/§10 items evaluateJudgmentDependentChecks
- * produces — used by document-checking/service.js's checkCase when stage 1 already found an
- * issue and stage 2 (the LLM judgment calls) is deliberately skipped entirely for cost
- * reasons (see that function's own comment). Without this, those items just vanish from the
- * checklist the console renders, which reads as "the system silently isn't checking this" —
- * indistinguishable from a real gap. `passed: null` uses the same tri-state contract as every
- * other not-yet-determined item in this file.
- */
-function pendingJudgmentChecklist() {
-  return Object.entries(JUDGMENT_CHECKLIST_LABELS).map(([code, label]) => ({
-    code,
-    label,
-    passed: null,
-    note: 'Not yet evaluated — runs once the checks above pass.',
-  }));
-}
-
 const IDENTITY_FLAG_ISSUES = {
   DELEGATION_PAYEE_INCONSISTENT: 'The delegation letter payee does not match the bank account holder. Please provide clarification or an updated delegation letter.',
   PATIENT_NAME_INCONSISTENT: 'The patient name is not consistent between the claim form and medical record. Please provide clarification or supporting documentation.',
@@ -598,4 +580,4 @@ function evaluateDocumentChecks(extractedFields) {
   return { issues, passed: issues.length === 0, details, flags, checklist };
 }
 
-module.exports = { ISSUES, evaluateDocumentChecks, evaluateJudgmentDependentChecks, pendingJudgmentChecklist };
+module.exports = { ISSUES, evaluateDocumentChecks, evaluateJudgmentDependentChecks };

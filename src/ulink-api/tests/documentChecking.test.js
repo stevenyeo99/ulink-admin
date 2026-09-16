@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { evaluateDocumentChecks, evaluateJudgmentDependentChecks, pendingJudgmentChecklist } = require('../modules/document-checking/checklist');
+const { evaluateDocumentChecks, evaluateJudgmentDependentChecks } = require('../modules/document-checking/checklist');
 
 // Regression harness for document-checking's SOP checklist implementation (see
 // JD1_Checklist_SOP_vs_Current_System.md item 3). Each fixture's `extractedFields` and
@@ -43,24 +43,5 @@ describe('document-checking regression fixtures (judgment-dependent)', () => {
 
     expect(result.issues).toEqual(fixture.expected.issues);
     expect(result.flags.map((f) => f.code)).toEqual(fixture.expected.flagCodes);
-  });
-});
-
-// Regression for the 2026-09-16 fix (case e5498fa0-28d3-46da-9d61-a4adb16b92f2): when stage 1
-// already has an issue, service.js skips stage 2 (the LLM judgment calls, delegation letter
-// included) entirely for cost reasons — this placeholder list is what fills that gap so
-// those items don't just vanish from the checklist the console renders.
-describe('pendingJudgmentChecklist', () => {
-  it('lists every judgment-dependent code as not-yet-evaluated (passed: null)', () => {
-    const items = pendingJudgmentChecklist();
-    expect(items.map((i) => i.code)).toEqual([
-      'DELEGATION_LETTER_REQUIRED',
-      'DELEGATION_PAYEE_INCONSISTENT',
-      'PATIENT_NAME_INCONSISTENT',
-      'PROVIDER_NAME_INCONSISTENT',
-      'HOSPITAL_NAME_INCONSISTENT',
-      'DIAGNOSIS_TREATMENT_INCONSISTENT',
-    ]);
-    expect(items.every((i) => i.passed === null && i.label && i.note)).toBe(true);
   });
 });
