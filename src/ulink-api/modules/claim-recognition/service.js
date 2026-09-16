@@ -184,6 +184,62 @@ function normalizeDelegationLetter(fields) {
   };
 }
 
+function normalizeText(value) {
+  if (value == null) return null;
+  const trimmed = String(value).trim().toLowerCase().replace(/\s+/g, ' ');
+  return trimmed === '' ? null : trimmed;
+}
+
+/**
+ * Deterministic backstop for a specific, verified failure mode (2026-09-16, case
+ * c9430f24-d487-4a96-881a-6e501d410918): the model marked medical_record.present: true
+ * against a document that was actually just a bill/invoice — no real clinical record was
+ * ever submitted — and filled diagnosis_or_treatment by copying the claim form's own
+ * detail_of_illness_injury/full_description_of_treatment text, directly against this
+ * field's own schema description ("not copied from the claim form... even if they happen to
+ * say the same thing" — see the ClaimRoute extraction schema / extract-fields.md's own rule
+ * for this field). An exact match after normalization is a strong, specific tell: a
+ * customer's own free-text claim narrative and a clinic's independently-written clinical
+ * note essentially never come out byte-identical by coincidence — same reasoning
+ * dedupeInvoiceItems below already relies on (an identical subtotal is evidence of one
+ * voucher counted twice, not two genuinely separate ones).
+ *
+ * Whole record reset to "not confirmed present", same shape/reasoning as
+ * normalizeDelegationLetter above — once diagnosis_or_treatment is known to be fabricated,
+ * nothing else on this object (hospital name, doctor name, date) can be trusted as genuinely
+ * read off a real document either; those same fields were legitimately readable off the
+ * *invoice's own letterhead* in the case this was verified against, which is exactly how the
+ * model talked itself into `present: true` in the first place.
+ *
+ * Runs before applyMedicalRecordFallback (see extractFields below) so a forced-false result
+ * still gets that same missing-entirely rescue pass, in case a real medical record exists
+ * elsewhere in the same submission that the main call simply missed.
+ */
+function invalidateCopiedMedicalRecord(fields) {
+  const record = fields.medical_record;
+  if (record?.present !== true || !record.diagnosis_or_treatment) return fields;
+
+  const recordText = normalizeText(record.diagnosis_or_treatment);
+  const formTexts = [
+    normalizeText(fields.medical?.detail_of_illness_injury),
+    normalizeText(fields.medical?.full_description_of_treatment),
+  ];
+  if (!formTexts.includes(recordText)) return fields;
+
+  return {
+    ...fields,
+    medical_record: {
+      present: false,
+      legible: null,
+      patient_name: null,
+      doctor_name: null,
+      hospital_or_clinic_name: null,
+      date: null,
+      diagnosis_or_treatment: null,
+    },
+  };
+}
+
 // true is the strongest claim either way (a positive read confirming the thing IS there),
 // while false/null both just mean "this particular read didn't confirm it" — a genuine
 // duplicate-scan situation (see dedupeInvoiceItems below) means one of the two reads simply
@@ -456,6 +512,7 @@ async function extractFields(transcriptChunks, matchedRoute) {
   }
 
   let extractedFields = normalizeClaimantDob(normalizeDelegationLetter(dedupeInvoiceItems(parsed)), transcriptChunks);
+  extractedFields = invalidateCopiedMedicalRecord(extractedFields);
   extractedFields = await applyMedicalRecordFallback(extractedFields, transcriptChunks);
   return { extractedFields, schemaValidationError: null };
 }
@@ -634,4 +691,12 @@ async function run() {
   return { processed, errors };
 }
 
-module.exports = { run, recognizeCase, recognizeFromPdfPaths, decideRoute, extractFields, transcribePages };
+module.exports = {
+  run,
+  recognizeCase,
+  recognizeFromPdfPaths,
+  decideRoute,
+  extractFields,
+  transcribePages,
+  invalidateCopiedMedicalRecord,
+};
