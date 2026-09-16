@@ -186,64 +186,6 @@ function normalizeDelegationLetter(fields) {
   };
 }
 
-function normalizeText(value) {
-  if (value == null) return null;
-  const trimmed = String(value).trim().toLowerCase().replace(/\s+/g, ' ');
-  return trimmed === '' ? null : trimmed;
-}
-
-/**
- * Deterministic backstop for a specific, verified failure mode (2026-09-16, case
- * c9430f24-d487-4a96-881a-6e501d410918): the model marked medical_record.present: true
- * against a document that was actually just a bill/invoice — no real clinical record was
- * ever submitted — and filled diagnosis_or_treatment by copying the claim form's own
- * detail_of_illness_injury/full_description_of_treatment text, directly against this
- * field's own schema description ("not copied from the claim form... even if they happen to
- * say the same thing" — see the ClaimRoute extraction schema / extract-fields.md's own rule
- * for this field). An exact match after normalization is a strong, specific tell: a
- * customer's own free-text claim narrative and a clinic's independently-written clinical
- * note essentially never come out byte-identical by coincidence — same reasoning
- * dedupeInvoiceItems below already relies on (an identical subtotal is evidence of one
- * voucher counted twice, not two genuinely separate ones).
- *
- * Whole record reset to "not confirmed present", same shape/reasoning as
- * normalizeDelegationLetter above — once diagnosis_or_treatment is known to be fabricated,
- * nothing else on this object (hospital name, doctor name, date) can be trusted as genuinely
- * read off a real document either; those same fields were legitimately readable off the
- * *invoice's own letterhead* in the case this was verified against, which is exactly how the
- * model talked itself into `present: true` in the first place.
- *
- * Runs before applyMedicalRecordFallback (see extractFields below) so a forced-false result
- * still gets that same missing-entirely rescue pass, in case a real medical record exists
- * elsewhere in the same submission that the main call simply missed.
- */
-function invalidateCopiedMedicalRecord(fields) {
-  const record = fields.medical_record;
-  if (record?.present !== true || !record.diagnosis_or_treatment) return fields;
-
-  const recordText = normalizeText(record.diagnosis_or_treatment);
-  const formTexts = [
-    normalizeText(fields.medical?.detail_of_illness_injury),
-    normalizeText(fields.medical?.full_description_of_treatment),
-  ];
-  if (!formTexts.includes(recordText)) return fields;
-
-  return {
-    ...fields,
-    medical_record: {
-      present: false,
-      legible: null,
-      patient_name: null,
-      doctor_name: null,
-      hospital_or_clinic_name: null,
-      date: null,
-      diagnosis_or_treatment: null,
-      presence_confidence: 0,
-      presence_reason: `Diagnosis text was copied verbatim from the claim form's own illness/treatment description ("${record.diagnosis_or_treatment}") rather than read off an independent medical record — treated as the same document already counted elsewhere (e.g. the invoice), not a real medical record.`,
-    },
-  };
-}
-
 // true is the strongest claim either way (a positive read confirming the thing IS there),
 // while false/null both just mean "this particular read didn't confirm it" — a genuine
 // duplicate-scan situation (see dedupeInvoiceItems below) means one of the two reads simply
@@ -378,8 +320,15 @@ function gatherAttachmentChunks(transcriptChunks, headingIndex) {
   );
 }
 
+// Below this, treat the primary call's own present:true as too shaky to trust outright and
+// worth a narrower second look — same threshold every other confidence-gated judge in this
+// codebase uses (member-verification/checks.js's compare() is the one deterministic
+// exception; identityJudgment.js, ias-claim-preparation's pickers, and policy-exclusion's
+// judge all gate at 0.5).
+const MEDICAL_RECORD_LOW_CONFIDENCE_THRESHOLD = 0.5;
+
 /**
- * Two rescue paths, both re-asking with a single, narrow, text-only call (cheap — no
+ * Three rescue paths, all re-asking with a single, narrow, text-only call (cheap — no
  * re-rasterization, no new vision call) scoped to already-computed transcript chunks, not the
  * whole-case merge the main synthesis call already did:
  *
@@ -396,17 +345,38 @@ function gatherAttachmentChunks(transcriptChunks, headingIndex) {
  *    original — confirms legible AND finds a patient_name — otherwise the original illegible
  *    result is kept rather than risking a same-or-worse re-ask silently overwriting it.
  *
- * Both only trigger when the page transcripts themselves contain this template's own fixed
- * label text — a deterministic contradiction/gap, not a guess. If a rescue still can't
- * confirm a real, legible record, the original result is left as-is — no escalation path;
- * the existing INCOMPLETE/resubmit-request flow is the safety net, not a new manual-review
- * state (confirmed: no manual review at this stage of the project).
+ * 3. Present but low presence_confidence (< MEDICAL_RECORD_LOW_CONFIDENCE_THRESHOLD): the
+ *    false-positive counterpart of #1 — the primary call itself isn't sure this is really a
+ *    medical record (see extract-fields.md's own presence_confidence instructions, added
+ *    specifically to catch a bill/invoice being misread as one). Was previously "fixed" with
+ *    a blunt code-level guard (invalidateCopiedMedicalRecord, an exact-text match between
+ *    diagnosis_or_treatment and the claim form's own illness text) that forced present:false
+ *    outright — reverted 2026-09-16 after it produced a real false positive of its own (case
+ *    90a3c71e-9dc3-4003-bc63-2271cc1c607e / Shin Minn Thi): a genuine, independently-written
+ *    clinical note whose diagnosis ("Renal Colic") legitimately matched the claim form's own
+ *    stated illness — an expected, common coincidence for a short diagnosis label, not
+ *    evidence of copying. A single blind string-match can't tell those two situations apart;
+ *    asking the model again, narrowly, using the SAME fallback prompt that already explicitly
+ *    says "not a voucher/bill" (medical-record-fallback.md), can. Unlike #1/#2, this path
+ *    trusts the re-ask's answer either way it comes out (including present: false) — the
+ *    whole point of asking again here is to resolve the primary call's own stated doubt, not
+ *    to only accept an improvement.
+ *
+ * All three only trigger when the page transcripts themselves contain this template's own
+ * fixed label text — a deterministic contradiction/gap, not a guess. If a rescue still can't
+ * confirm a real, legible record, the original result is left as-is (paths #1/#2) — no
+ * escalation path; the existing INCOMPLETE/resubmit-request flow is the safety net, not a new
+ * manual-review state (confirmed: no manual review at this stage of the project).
  */
 async function applyMedicalRecordFallback(fields, transcriptChunks) {
   const record = fields.medical_record || {};
   const missingEntirely = record.present !== true;
   const presentButIllegible = record.present === true && record.legible === false;
-  if (!missingEntirely && !presentButIllegible) return fields;
+  const presentButLowConfidence =
+    record.present === true &&
+    record.legible !== false &&
+    (record.presence_confidence ?? 1) < MEDICAL_RECORD_LOW_CONFIDENCE_THRESHOLD;
+  if (!missingEntirely && !presentButIllegible && !presentButLowConfidence) return fields;
 
   const headingIndex = transcriptChunks.findIndex((chunk) => MEDICAL_RECORD_HEADING_PATTERN.test(chunk));
   if (headingIndex === -1) return fields;
@@ -435,6 +405,10 @@ async function applyMedicalRecordFallback(fields, transcriptChunks) {
   if (presentButIllegible) {
     const improved = fallback?.present === true && fallback?.legible === true && fallback?.patient_name;
     return improved ? { ...fields, medical_record: merged } : fields;
+  }
+
+  if (presentButLowConfidence) {
+    return { ...fields, medical_record: merged };
   }
 
   if (fallback?.present !== true) return fields;
@@ -521,9 +495,8 @@ async function extractFields(transcriptChunks, matchedRoute) {
     return { extractedFields: null, schemaValidationError: ajv.errorsText(validate.errors) };
   }
 
-  let extractedFields = normalizeClaimantDob(normalizeDelegationLetter(dedupeInvoiceItems(parsed)), transcriptChunks);
-  extractedFields = invalidateCopiedMedicalRecord(extractedFields);
-  extractedFields = await applyMedicalRecordFallback(extractedFields, transcriptChunks);
+  const normalizedFields = normalizeClaimantDob(normalizeDelegationLetter(dedupeInvoiceItems(parsed)), transcriptChunks);
+  const extractedFields = await applyMedicalRecordFallback(normalizedFields, transcriptChunks);
   return { extractedFields, schemaValidationError: null };
 }
 
@@ -708,5 +681,4 @@ module.exports = {
   decideRoute,
   extractFields,
   transcribePages,
-  invalidateCopiedMedicalRecord,
 };
