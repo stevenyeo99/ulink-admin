@@ -358,7 +358,12 @@ const MEDICAL_RECORD_LOW_CONFIDENCE_THRESHOLD = 0.5;
 // Hlaing Clinic...") while still reporting presence_confidence: 1 — the confidence number
 // alone isn't a reliable enough signal on its own. The model contradicting itself in words is
 // a stronger, more specific tell than the number it also happened to report.
-const BILL_LIKE_DOCUMENT_PATTERN = /\b(invoice|bill|receipt)\b/i;
+// `s?` on each word — verified against real data (2026-09-16, case
+// ee12e90e-fb8a-48b3-a626-4b254fd9e94a, same underlying document as a5fbb7dd/c9430f24): the
+// model's presence_reason said "the attached invoices serve as the proof..." (plural), which
+// the original singular-only \binvoice\b missed entirely — "invoices" has no word boundary
+// right after "invoice" (the "s" is still a word character), so it silently didn't match.
+const BILL_LIKE_DOCUMENT_PATTERN = /\b(invoices?|bills?|receipts?)\b/i;
 
 function mentionsBillLikeDocument(reason) {
   return typeof reason === 'string' && BILL_LIKE_DOCUMENT_PATTERN.test(reason);

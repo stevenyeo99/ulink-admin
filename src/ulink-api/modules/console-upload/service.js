@@ -25,15 +25,28 @@ function sanitize(value) {
 
 /**
  * Format drafted in docs/imp/demo/20260914/samples/console proto/demo_barcode_logic.md:
- * VS + yy + mm(base36) + dd(base36) + "1" (fixed project code) + 4 random digits. Takes the
- * date parts from the same `now` used for the destination folder (UTC, same as
+ * VS + yy(base36) + mm(base36) + dd(base36) + "1" (fixed project code) + 4 random digits —
+ * a fixed 10 characters. Previously kept the year as 2 decimal digits (11 characters total),
+ * which quietly diverged from the doc's own worked example ("VSQ9E1XXXX" for 14 Sep 2026)
+ * and from routes/dev/consoleUpload.js's own OpenAPI example ("VSQ9F1XXXX") — both already
+ * assumed the year is base36'd too. Fixed 2026-09-16 to match every other reference to this
+ * format in the codebase.
+ *
+ * ponytail: yy(base36) is only guaranteed to stay a single character (and this function only
+ * guaranteed 10 characters total) for yy 00-35, i.e. through 2035 — base36(36) is "10", two
+ * characters. Not worth guarding against yet for a barcode whose case is always resolvable
+ * by caseId regardless of collision; revisit if a fixed-width barcode format is ever a real
+ * downstream requirement (e.g. a physical label template) rather than just documentation
+ * consistency.
+ *
+ * Takes the date parts from the same `now` used for the destination folder (UTC, same as
  * datePathSegments) rather than re-reading local time separately, so the barcode and the
  * folder it's filed under can never disagree across a midnight boundary.
  */
 function generateBarcode(now) {
   return [
     'VS',
-    String(now.getUTCFullYear()).slice(-2),
+    (now.getUTCFullYear() % 100).toString(36).toUpperCase(),
     String(now.getUTCMonth() + 1).toString(36).toUpperCase(),
     now.getUTCDate().toString(36).toUpperCase(),
     '1',

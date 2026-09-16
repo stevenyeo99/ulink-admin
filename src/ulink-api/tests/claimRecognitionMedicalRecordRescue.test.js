@@ -15,6 +15,11 @@ describe('mentionsBillLikeDocument', () => {
     expect(mentionsBillLikeDocument('Only a payment receipt is shown, no diagnosis.')).toBe(true);
   });
 
+  it('flags plural forms too (case ee12e90e-fb8a-48b3-a626-4b254fd9e94a: singular-only regex missed "invoices")', () => {
+    expect(mentionsBillLikeDocument('The attached invoices serve as the proof of visit/treatment.')).toBe(true);
+    expect(mentionsBillLikeDocument('Two bills and a receipts folder were found.')).toBe(true);
+  });
+
   it('does not flag a genuine clinical-note description', () => {
     expect(mentionsBillLikeDocument("Doctor's handwritten clinical note with a diagnosis and clinic stamp.")).toBe(false);
   });

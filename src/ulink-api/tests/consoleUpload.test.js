@@ -26,9 +26,17 @@ describe('sanitize', () => {
 });
 
 describe('generateBarcode', () => {
-  it('matches the drafted VS + yy + mm(base36) + dd(base36) + "1" + 4-digit format', () => {
+  it('matches the drafted VS + yy(base36) + mm(base36) + dd(base36) + "1" + 4-digit format', () => {
     const barcode = generateBarcode(new Date('2026-09-15T00:00:00Z'));
-    expect(barcode).toMatch(/^VS\d{2}[0-9A-Z][0-9A-Z]1\d{4}$/);
-    expect(barcode.slice(0, 4)).toBe('VS26'); // "VS" + yy=26
+    expect(barcode).toMatch(/^VS[0-9A-Z][0-9A-Z][0-9A-Z]1\d{4}$/);
+    expect(barcode).toHaveLength(10);
+    expect(barcode.slice(0, 6)).toBe('VSQ9F1'); // "VS" + yy=26->Q + mm=9->9 + dd=15->F + project code 1
+  });
+
+  // Matches the doc's own worked example (demo_barcode_logic.md: "VSQ9E1XXXX" for 14 Sep 2026)
+  // and routes/dev/consoleUpload.js's OpenAPI example ("VSQ9F1XXXX") verbatim.
+  it('matches the doc-drafted example for 14 Sep 2026', () => {
+    const barcode = generateBarcode(new Date('2026-09-14T00:00:00Z'));
+    expect(barcode.slice(0, 6)).toBe('VSQ9E1');
   });
 });
