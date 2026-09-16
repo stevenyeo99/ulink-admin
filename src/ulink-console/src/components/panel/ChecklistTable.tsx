@@ -10,12 +10,24 @@ function ChecklistRow({ item, reason }: { item: ChecklistItem; reason?: string |
   const color =
     item.passed === true ? 'text-ulink-teal-dark' : item.passed === false ? 'text-red-600' : 'text-slate-300';
 
+  // item.note (the model's own presence_confidence/presence_reason, when this item is one of
+  // the two presence checks it exists for) is shown whether the check passed or failed — the
+  // whole point is "here's why the system believes this," not just a failure explanation —
+  // and takes priority over the generic fallback `reason` (document-checking's own
+  // reasonForIssue text) when both exist, since it's the more specific, model-stated reason.
+  const note = item.note ?? (item.passed === false ? reason : undefined);
+
   return (
     <li className="flex items-start gap-2 py-1.5 text-sm">
       <Icon size={15} className={clsx('mt-0.5 shrink-0', color)} />
       <div>
-        <p className="text-slate-700">{item.label}</p>
-        {item.passed === false && reason && <p className="mt-0.5 text-xs text-slate-500">{reason}</p>}
+        <p className="text-slate-700">
+          {item.label}
+          {item.confidence != null && (
+            <span className="ml-2 text-xs font-medium text-slate-400">{Math.round(item.confidence * 100)}% confidence</span>
+          )}
+        </p>
+        {note && <p className="mt-0.5 text-xs text-slate-500">{note}</p>}
       </div>
     </li>
   );

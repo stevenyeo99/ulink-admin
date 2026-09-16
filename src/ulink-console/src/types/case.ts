@@ -20,6 +20,8 @@ export interface ChecklistItem {
   code?: string;
   label: string;
   passed: boolean | null;
+  confidence?: number | null;
+  note?: string | null;
 }
 
 export interface DocumentCheckDetail {

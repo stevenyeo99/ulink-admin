@@ -20,7 +20,7 @@ describe('invalidateCopiedMedicalRecord', () => {
 
   it('resets a medical_record whose diagnosis is copied from the claim form (case-insensitive)', () => {
     const result = invalidateCopiedMedicalRecord(fields);
-    expect(result.medical_record).toEqual({
+    expect(result.medical_record).toMatchObject({
       present: false,
       legible: null,
       patient_name: null,
@@ -28,7 +28,9 @@ describe('invalidateCopiedMedicalRecord', () => {
       hospital_or_clinic_name: null,
       date: null,
       diagnosis_or_treatment: null,
+      presence_confidence: 0,
     });
+    expect(result.medical_record.presence_reason).toContain('copied verbatim');
   });
 
   it('leaves a medical_record with its own independent diagnosis text untouched', () => {

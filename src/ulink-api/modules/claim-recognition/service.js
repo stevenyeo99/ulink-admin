@@ -35,7 +35,7 @@ const OWN_PAGE_CHUNK_PATTERN = /^\[(.+?) - page \d+\]/;
 
 const MEDICAL_RECORD_FALLBACK_SCHEMA = {
   type: 'object',
-  required: ['present', 'legible', 'patient_name', 'doctor_name', 'hospital_or_clinic_name', 'date'],
+  required: ['present', 'legible', 'patient_name', 'doctor_name', 'hospital_or_clinic_name', 'date', 'presence_confidence', 'presence_reason'],
   properties: {
     present: { type: 'boolean' },
     legible: { type: ['boolean', 'null'] },
@@ -43,6 +43,8 @@ const MEDICAL_RECORD_FALLBACK_SCHEMA = {
     doctor_name: { type: ['string', 'null'] },
     hospital_or_clinic_name: { type: ['string', 'null'] },
     date: { type: ['string', 'null'] },
+    presence_confidence: { type: 'number' },
+    presence_reason: { type: ['string', 'null'] },
   },
 };
 
@@ -236,6 +238,8 @@ function invalidateCopiedMedicalRecord(fields) {
       hospital_or_clinic_name: null,
       date: null,
       diagnosis_or_treatment: null,
+      presence_confidence: 0,
+      presence_reason: `Diagnosis text was copied verbatim from the claim form's own illness/treatment description ("${record.diagnosis_or_treatment}") rather than read off an independent medical record — treated as the same document already counted elsewhere (e.g. the invoice), not a real medical record.`,
     },
   };
 }
@@ -422,13 +426,19 @@ async function applyMedicalRecordFallback(fields, transcriptChunks) {
     return fields; // fallback call itself failing is no worse than the status quo
   }
 
+  // Preserve diagnosis_or_treatment across the merge — MEDICAL_RECORD_FALLBACK_SCHEMA never
+  // asks about it (it's not needed to answer "is a record here/legible", the one thing this
+  // rescue call exists for), so a wholesale `fallback` replace would silently drop it even
+  // when the original record.diagnosis_or_treatment was genuinely read off a real document.
+  const merged = { ...fallback, diagnosis_or_treatment: record.diagnosis_or_treatment ?? null };
+
   if (presentButIllegible) {
     const improved = fallback?.present === true && fallback?.legible === true && fallback?.patient_name;
-    return improved ? { ...fields, medical_record: fallback } : fields;
+    return improved ? { ...fields, medical_record: merged } : fields;
   }
 
   if (fallback?.present !== true) return fields;
-  return { ...fields, medical_record: fallback };
+  return { ...fields, medical_record: merged };
 }
 
 /**

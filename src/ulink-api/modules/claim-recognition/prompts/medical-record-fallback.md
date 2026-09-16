@@ -22,5 +22,10 @@ Return fields:
   pre-printed letterhead often lists generic credentials (e.g. "M.B.,B.S, M.Med Sc, MRCP...")
   as boilerplate with no name attached -- that is not a doctor's name. Use null for anything
   not actually present in the transcript, not a best guess.
+- `presence_confidence` / `presence_reason`: explain and score the `present` call above -- one
+  short sentence on what you actually saw, and a 0.0-1.0 confidence. A bill/invoice/receipt
+  that happens to name a patient, doctor, or clinic in its own letterhead is NOT a medical
+  record just because it names those people -- if that is the strongest evidence you have for
+  `present: true`, that must pull this score down, not up.
 
 Return ONLY JSON matching the provided schema.

@@ -505,8 +505,27 @@ function checkTreatmentDateConsistency(fields) {
 // into the MISSING_DOCUMENTS email. Internal wording only — reuses ISSUES.* verbatim as the
 // label since that's already the one source of truth for what each check is about; an
 // internal reader seeing "Missing voucher(s): passed" is unambiguous.
+// Confidence/reason live on medical_record/invoices themselves (see extract-fields.md's
+// presence_confidence/presence_reason, and invalidateCopiedMedicalRecord's own override) —
+// surfaced here only for the two checklist items whose pass/fail IS that same presence
+// determination, so the console can show *why*, not just pass/fail. No equivalent score
+// exists for any other EVALUATORS entry.
+const PRESENCE_SOURCE = {
+  NO_MEDICAL_REPORT: (fields) => fields.medical_record,
+  MISSING_VOUCHER: (fields) => fields.invoices,
+};
+
 function buildEvaluatorChecklist(extractedFields) {
-  return EVALUATORS.map(({ code, check }) => ({ code, label: ISSUES[code], passed: check(extractedFields) == null }));
+  return EVALUATORS.map(({ code, check }) => {
+    const source = PRESENCE_SOURCE[code]?.(extractedFields);
+    return {
+      code,
+      label: ISSUES[code],
+      passed: check(extractedFields) == null,
+      confidence: source?.presence_confidence ?? null,
+      note: source?.presence_reason ?? null,
+    };
+  });
 }
 
 function buildMandatoryFieldChecklist(extractedFields) {
