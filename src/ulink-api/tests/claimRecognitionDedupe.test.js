@@ -49,4 +49,21 @@ describe('dedupeInvoiceItems', () => {
     expect(result.invoices.items).toHaveLength(1);
     expect(result.invoices.items[0].date).toBe('2026-08-21');
   });
+
+  // Case b54cf47f-...: the same physical Pun Hlaing invoice, read once from each of two
+  // source PDFs, came back "2024-07-25" and "2026-07-25" — same day-of-month and month, only
+  // the year differs (a single year-digit misread), still a real duplicate.
+  it('still collapses a duplicate-scan pair whose dates only differ by year (same day/month)', () => {
+    const fields = {
+      invoices: {
+        present: true,
+        items: [
+          { subtotal: 59500, voucher_type: 'pharmacy', date: '2024-07-25', legible: true },
+          { subtotal: 59500, voucher_type: 'pharmacy', date: '2026-07-25', legible: true },
+        ],
+      },
+    };
+    const result = dedupeInvoiceItems(fields);
+    expect(result.invoices.items).toHaveLength(1);
+  });
 });

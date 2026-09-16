@@ -216,14 +216,24 @@ function mergeInvoiceItemPair(a, b) {
 // Two non-null dates that actually disagree is real, specific evidence of two separate
 // physical visits, not two reads of the same voucher — a duplicate-scan situation only ever
 // produces the SAME date twice, or a date missing on one of the two passes (same read-
-// confidence variance already documented for legible/stamp/breakdown above), never two
-// different specific dates. Verified against real data 2026-09-16 (case
-// 41f3ca63-d6eb-47e0-8c1a-36a5ed1c5ffe): two genuinely separate 57,000 consultation
-// vouchers, 21-Aug and 28-Aug, same flat package price both visits, wrongly collapsed into
-// one by subtotal+voucher_type alone — losing an entire real 57,000 voucher (and both its
-// date and the fact it was ever submitted at all) from the claim total.
+// confidence variance already documented for legible/stamp/breakdown above). Verified against
+// real data 2026-09-16 (case 41f3ca63-d6eb-47e0-8c1a-36a5ed1c5ffe): two genuinely separate
+// 57,000 consultation vouchers, 21-Aug and 28-Aug, same flat package price both visits,
+// wrongly collapsed into one by subtotal+voucher_type alone.
+//
+// Exception, added same day after a second real case (b54cf47f-...): the SAME physical
+// voucher, read once from each of two source PDFs, came back "2024-07-25" and "2026-07-25" —
+// identical day-of-month and month, only the year differs. Treating that as a real conflict
+// wrongly kept it split, double-counting one real voucher. A same-day-of-month, same-month,
+// different-year pair is a specific, narrow OCR failure (a single year-digit misread — the
+// same failure class as this session's other digit-misread findings), not two real visits;
+// two genuinely separate visits essentially never land on the exact same day-of-month in a
+// different year, unlike differing by days/weeks within the same year (the 21-Aug/28-Aug
+// case above, still correctly treated as a real conflict).
 function invoiceItemDatesConflict(a, b) {
-  return a.date != null && b.date != null && a.date !== b.date;
+  if (a.date == null || b.date == null || a.date === b.date) return false;
+  const sameDayAndMonth = a.date.length === 10 && b.date.length === 10 && a.date.slice(5) === b.date.slice(5);
+  return !sameDayAndMonth;
 }
 
 /**

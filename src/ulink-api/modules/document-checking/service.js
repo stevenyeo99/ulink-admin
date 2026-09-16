@@ -1,7 +1,7 @@
 const { sequelize, Case, CaseEvent } = require('../../db/models');
 const config = require('../../config');
 const { evaluateDocumentChecks, evaluateJudgmentDependentChecks } = require('./checklist');
-const { entityMatch, meaningMatch } = require('./identityJudgment');
+const { entityMatch } = require('./identityJudgment');
 const { queueDedupedTask } = require('../shared/emailTaskQueue');
 
 const BLOCK_NAME = 'document-checking';
@@ -20,20 +20,35 @@ async function logEvent(transaction, { caseId, prevStatus = null, newStatus, rea
  * record support the claim form's stated diagnosis/treatment", not "same entity" — the
  * claim-form side combines the two claim-form fields the same way
  * member-verification/exclusionFlags.js already does for the same fields.
+ *
+ * providerName and diagnosisTreatment are deliberately NOT called (left null below) — the
+ * same deadline-driven call checklist.js's own comment already documents for
+ * patientName/providerName under the old identity_consistency scheme (2026-08-22): "produced
+ * enough false positives on known-complete samples (complete/1, complete/2) that it's not
+ * worth the remaining time to harden before ship." Re-verified 2026-09-16 against those exact
+ * same two samples under the current entityMatch-based implementation, reproducing the same
+ * failure: Moe Thida (DAY1/complete/2) and Hsu Myat Pyae (20260826/complete/2) both flagged
+ * providerName inconsistent on real, complete claims (confidence 0.85-0.9, genuinely
+ * different-sounding names — not a low-confidence near-miss), and Moe Thida also flagged
+ * diagnosisTreatment inconsistent the same run. The revival on 2026-09-14 was never
+ * re-validated against this same sample set before shipping. Re-enable both only after a
+ * proper accuracy pass against real samples, same condition the original disabling comment
+ * set (see checklist.js's own "Re-enable... once there's time to revisit reliability").
+ * patientName and hospitalName are left running — narrower evidence against them so far.
  */
 async function runJudgments(fields) {
   const claimDiagnosisText = [fields.medical?.detail_of_illness_injury, fields.medical?.full_description_of_treatment]
     .filter(Boolean)
     .join(' — ') || null;
 
-  const [bankAccountHolder, delegationPayee, patientName, providerName, hospitalName, diagnosisTreatment] = await Promise.all([
+  const [bankAccountHolder, delegationPayee, patientName, hospitalName] = await Promise.all([
     entityMatch(fields.claimant?.claimant_name, fields.bank?.bank_account_name),
     entityMatch(fields.delegation_letter?.authorized_payee_name, fields.bank?.bank_account_name),
     entityMatch(fields.claimant?.claimant_name, fields.medical_record?.patient_name),
-    entityMatch(fields.medical?.doctor_name, fields.medical_record?.doctor_name),
     entityMatch(fields.medical?.hospital_or_clinic_name, fields.medical_record?.hospital_or_clinic_name),
-    meaningMatch(claimDiagnosisText, fields.medical_record?.diagnosis_or_treatment),
   ]);
+  const providerName = null;
+  const diagnosisTreatment = null;
   return { bankAccountHolder, delegationPayee, patientName, providerName, hospitalName, diagnosisTreatment };
 }
 
@@ -46,11 +61,13 @@ async function runJudgments(fields) {
  * exact submission (docs/imp/demo/20260914/samples/3/3_email_real_user_check_reply.md): the
  * actual human reviewer sent BOTH "Need medical record" and the delegation-letter request in
  * one email, not staged across two round trips. Cost impact is small in practice —
- * entityMatch/meaningMatch are null-safe (see runJudgments above) and most of the 5
- * name/diagnosis judgments short-circuit to null for free whenever medical_record isn't
- * present, since their inputs are null too; only bankAccountHolder (medical_record-independent)
- * reliably costs a real call on an otherwise-incomplete case, which is exactly the one this
- * fix needs to run. Still reusable identically by the real job and the dev preview endpoint.
+ * entityMatch is null-safe (see runJudgments above, which as of 2026-09-16 only actually
+ * calls it for patientName/hospitalName — providerName/diagnosisTreatment are disabled, see
+ * that function's own comment) and those two short-circuit to null for free whenever
+ * medical_record isn't present, since their inputs are null too; only bankAccountHolder
+ * (medical_record-independent) reliably costs a real call on an otherwise-incomplete case,
+ * which is exactly the one this fix needs to run. Still reusable identically by the real job
+ * and the dev preview endpoint.
  */
 async function checkCase(caseRecord) {
   if (!caseRecord.extractedFields) {
