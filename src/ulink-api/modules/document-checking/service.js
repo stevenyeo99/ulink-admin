@@ -1,6 +1,6 @@
 const { sequelize, Case, CaseEvent } = require('../../db/models');
 const config = require('../../config');
-const { evaluateDocumentChecks, evaluateJudgmentDependentChecks } = require('./checklist');
+const { evaluateDocumentChecks, evaluateJudgmentDependentChecks, pendingJudgmentChecklist } = require('./checklist');
 const { entityMatch, meaningMatch } = require('./identityJudgment');
 const { queueDedupedTask } = require('../shared/emailTaskQueue');
 
@@ -53,7 +53,7 @@ async function checkCase(caseRecord) {
 
   const stage1 = evaluateDocumentChecks(fields);
 
-  let result = stage1;
+  let result;
   if (stage1.issues.length === 0) {
     const judgments = await runJudgments(fields);
     const stage2 = evaluateJudgmentDependentChecks(fields, judgments);
@@ -64,6 +64,12 @@ async function checkCase(caseRecord) {
       passed: stage1.issues.length + stage2.issues.length === 0,
       checklist: [...stage1.checklist, ...stage2.checklist],
     };
+  } else {
+    // Stage 2 (the LLM judgment calls, including delegation-letter) is skipped entirely
+    // above — see this function's own comment on why. Without a placeholder, those items
+    // (delegation letter included) just vanish from the checklist the console renders,
+    // which reads as "the system isn't checking this" rather than "not evaluated yet".
+    result = { ...stage1, checklist: [...stage1.checklist, ...pendingJudgmentChecklist()] };
   }
 
   const outcome = result.passed ? 'DOCUMENT_CHECKED' : 'INCOMPLETE';

@@ -208,6 +208,16 @@ const IDENTITY_FLAG_DESCRIPTIONS = {
   DIAGNOSIS_TREATMENT_INCONSISTENT: "The medical record does not appear to support the claim form's stated diagnosis/treatment.",
 };
 
+// Single source of {code, label} for every judgment-dependent checklist item — used both by
+// evaluateJudgmentDependentChecks below (when judgments actually ran) and by
+// pendingJudgmentChecklist (when they didn't — see that function's own comment). Keeping one
+// map means the console's list of "what SOP §7/§8/§9/§10 checks exist" can't drift out of
+// sync between the real and placeholder cases.
+const JUDGMENT_CHECKLIST_LABELS = {
+  DELEGATION_LETTER_REQUIRED: 'Bank account holder matches claimant, or a delegation letter is provided',
+  ...IDENTITY_FLAG_DESCRIPTIONS,
+};
+
 /**
  * Pure — no I/O, same as evaluateDocumentChecks below, just takes judgment results as data
  * (computed by entityMatch, run from service.js) instead of computing them itself. Keeps
@@ -262,17 +272,35 @@ function evaluateJudgmentDependentChecks(extractedFields, judgments = {}) {
   const checklist = [
     {
       code: 'DELEGATION_LETTER_REQUIRED',
-      label: 'Bank account holder matches claimant, or a delegation letter is provided',
+      label: JUDGMENT_CHECKLIST_LABELS.DELEGATION_LETTER_REQUIRED,
       passed: judgments.bankAccountHolder?.consistent == null ? null : !issues.includes(ISSUES.DELEGATION_LETTER_REQUIRED),
     },
-    { code: 'DELEGATION_PAYEE_INCONSISTENT', label: IDENTITY_FLAG_DESCRIPTIONS.DELEGATION_PAYEE_INCONSISTENT, passed: judgments.delegationPayee == null ? null : judgments.delegationPayee.consistent !== false },
-    { code: 'PATIENT_NAME_INCONSISTENT', label: IDENTITY_FLAG_DESCRIPTIONS.PATIENT_NAME_INCONSISTENT, passed: judgments.patientName == null ? null : judgments.patientName.consistent !== false },
-    { code: 'PROVIDER_NAME_INCONSISTENT', label: IDENTITY_FLAG_DESCRIPTIONS.PROVIDER_NAME_INCONSISTENT, passed: judgments.providerName == null ? null : judgments.providerName.consistent !== false },
-    { code: 'HOSPITAL_NAME_INCONSISTENT', label: IDENTITY_FLAG_DESCRIPTIONS.HOSPITAL_NAME_INCONSISTENT, passed: judgments.hospitalName == null ? null : judgments.hospitalName.consistent !== false },
-    { code: 'DIAGNOSIS_TREATMENT_INCONSISTENT', label: IDENTITY_FLAG_DESCRIPTIONS.DIAGNOSIS_TREATMENT_INCONSISTENT, passed: judgments.diagnosisTreatment == null ? null : judgments.diagnosisTreatment.consistent !== false },
+    { code: 'DELEGATION_PAYEE_INCONSISTENT', label: JUDGMENT_CHECKLIST_LABELS.DELEGATION_PAYEE_INCONSISTENT, passed: judgments.delegationPayee == null ? null : judgments.delegationPayee.consistent !== false },
+    { code: 'PATIENT_NAME_INCONSISTENT', label: JUDGMENT_CHECKLIST_LABELS.PATIENT_NAME_INCONSISTENT, passed: judgments.patientName == null ? null : judgments.patientName.consistent !== false },
+    { code: 'PROVIDER_NAME_INCONSISTENT', label: JUDGMENT_CHECKLIST_LABELS.PROVIDER_NAME_INCONSISTENT, passed: judgments.providerName == null ? null : judgments.providerName.consistent !== false },
+    { code: 'HOSPITAL_NAME_INCONSISTENT', label: JUDGMENT_CHECKLIST_LABELS.HOSPITAL_NAME_INCONSISTENT, passed: judgments.hospitalName == null ? null : judgments.hospitalName.consistent !== false },
+    { code: 'DIAGNOSIS_TREATMENT_INCONSISTENT', label: JUDGMENT_CHECKLIST_LABELS.DIAGNOSIS_TREATMENT_INCONSISTENT, passed: judgments.diagnosisTreatment == null ? null : judgments.diagnosisTreatment.consistent !== false },
   ];
 
   return { issues: [...new Set([...issues, ...flags.map(issueForFlag).filter(Boolean)])], details, flags, checklist };
+}
+
+/**
+ * Placeholder rows for the same SOP §7/§8/§9/§10 items evaluateJudgmentDependentChecks
+ * produces — used by document-checking/service.js's checkCase when stage 1 already found an
+ * issue and stage 2 (the LLM judgment calls) is deliberately skipped entirely for cost
+ * reasons (see that function's own comment). Without this, those items just vanish from the
+ * checklist the console renders, which reads as "the system silently isn't checking this" —
+ * indistinguishable from a real gap. `passed: null` uses the same tri-state contract as every
+ * other not-yet-determined item in this file.
+ */
+function pendingJudgmentChecklist() {
+  return Object.entries(JUDGMENT_CHECKLIST_LABELS).map(([code, label]) => ({
+    code,
+    label,
+    passed: null,
+    note: 'Not yet evaluated — runs once the checks above pass.',
+  }));
 }
 
 const IDENTITY_FLAG_ISSUES = {
@@ -570,4 +598,4 @@ function evaluateDocumentChecks(extractedFields) {
   return { issues, passed: issues.length === 0, details, flags, checklist };
 }
 
-module.exports = { ISSUES, evaluateDocumentChecks, evaluateJudgmentDependentChecks };
+module.exports = { ISSUES, evaluateDocumentChecks, evaluateJudgmentDependentChecks, pendingJudgmentChecklist };
