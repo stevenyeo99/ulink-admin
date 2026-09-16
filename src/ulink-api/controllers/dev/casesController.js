@@ -8,7 +8,14 @@ const BLOCK_NAME = 'dev-reset';
 // leaves stale data from a prior run sitting around implying work that hasn't actually
 // happened yet (previously this stopped at documentCheckResult, missing everything
 // member-verification/ias-claim-preparation/ias-claim-creation had written).
-const DOWNSTREAM_FIELDS = ['memberVerifyResult', 'iasMemberInfoResponse', 'iasClaimPayload', 'claimNo', 'iasClaimResult'];
+const DOWNSTREAM_FIELDS = [
+  'memberVerifyResult',
+  'iasMemberInfoResponse',
+  'iasClaimPayload',
+  'claimPrepMeta',
+  'claimNo',
+  'iasClaimResult',
+];
 
 /**
  * Which fields get cleared when resetting TO a given status — everything that status's

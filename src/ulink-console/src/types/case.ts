@@ -90,6 +90,7 @@ export interface CaseDetail {
   memberVerifyResult: MemberVerifyResult | null;
   iasMemberInfoResponse: unknown;
   iasClaimPayload: unknown;
+  claimPrepMeta: unknown;
   iasClaimResult: unknown;
   claimNo: string | null;
   createdAt: string;

@@ -32,7 +32,7 @@ async function checkCase(caseRecord) {
     medical.detail_of_illness_injury && `Diagnosis/illness: ${medical.detail_of_illness_injury}`,
     medical.full_description_of_treatment && `Treatment: ${medical.full_description_of_treatment}`,
   ].filter(Boolean).join('\n');
-  const diagnosis = await pickDiagnosis(diagnosisText);
+  const diagnosisPick = await pickDiagnosis(diagnosisText);
 
   const memberPlansRaw = iasMemberInfoResponse?.payload?.memberPlans;
   const benefitContext = {
@@ -49,17 +49,20 @@ async function checkCase(caseRecord) {
   // already uses for this local LLM server.
   const invoiceItems = extractedFields.invoices?.items || [];
   const lines = [];
+  const lineMeta = [];
   if (invoiceItems.length > 0) {
     for (const item of invoiceItems) {
-      const benefit = await pickBenefit({ ...benefitContext, voucherType: item.voucher_type }, memberPlansRaw);
-      lines.push({ subtotal: item.subtotal, benefit });
+      const benefitPick = await pickBenefit({ ...benefitContext, voucherType: item.voucher_type }, memberPlansRaw);
+      lines.push({ subtotal: item.subtotal, benefit: benefitPick.pick });
+      lineMeta.push({ voucherType: item.voucher_type ?? null, subtotal: item.subtotal ?? null, ...benefitPick });
     }
   } else {
     // Shouldn't reach this job in practice (document-checking would have flagged a missing
     // voucher first) — defensive fallback so a case somehow lacking itemized invoices still
     // produces one usable line instead of an empty Items[] array.
-    const benefit = await pickBenefit({ ...benefitContext, voucherType: null }, memberPlansRaw);
-    lines.push({ subtotal: extractedFields.claim?.total_claim_amount, benefit });
+    const benefitPick = await pickBenefit({ ...benefitContext, voucherType: null }, memberPlansRaw);
+    lines.push({ subtotal: extractedFields.claim?.total_claim_amount, benefit: benefitPick.pick });
+    lineMeta.push({ voucherType: null, subtotal: extractedFields.claim?.total_claim_amount ?? null, ...benefitPick });
   }
 
   // Same currency payloadBuilder.js hardcodes for every line (PresentedCurrency: 'MMK') —
@@ -72,7 +75,7 @@ async function checkCase(caseRecord) {
     extractedFields,
     iasMemberInfoResponse,
     route,
-    diagnosis,
+    diagnosis: diagnosisPick.pick,
     lines,
     receivedAt: caseRecord.createdAt,
     barcode: caseRecord.consoleBarcode,
@@ -80,14 +83,27 @@ async function checkCase(caseRecord) {
     docCompleteDate: caseRecord.consoleUploadResult?.completedAt,
   });
 
-  return { caseId: caseRecord.id, payload, diagnosis, lines, isStp: stp };
+  // Internal-only diagnostic record of *why* each pick landed where it did — confidence
+  // score plus the candidate list the LLM was actually shown — never merged into `payload`,
+  // which is the literal IAS-bound submission (see payloadBuilder.js's header comment).
+  const claimPrepMeta = {
+    diagnosis: { text: diagnosisText || null, ...diagnosisPick },
+    lines: lineMeta,
+  };
+
+  return { caseId: caseRecord.id, payload, diagnosis: diagnosisPick.pick, lines, isStp: stp, claimPrepMeta };
 }
 
 async function persistOutcome(caseRecord, outcome) {
   return sequelize.transaction(async (transaction) => {
     const prevStatus = caseRecord.currentStatus;
     await Case.update(
-      { currentStatus: 'CLAIM_PAYLOAD_PREPARED', iasClaimPayload: outcome.payload, isStp: outcome.isStp },
+      {
+        currentStatus: 'CLAIM_PAYLOAD_PREPARED',
+        iasClaimPayload: outcome.payload,
+        claimPrepMeta: outcome.claimPrepMeta,
+        isStp: outcome.isStp,
+      },
       { where: { id: caseRecord.id }, transaction }
     );
     const benefitSummary = outcome.lines

@@ -154,6 +154,17 @@ export function CaseDetailPage() {
       </section>
 
       <section className="mb-6 rounded-xl2 border border-slate-900/5 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
+        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          Diagnosis / Benefit Pick Reasoning
+        </h2>
+        <p className="mb-3 text-xs text-slate-500">
+          Confidence and candidates considered for the DiagnosisCode/BenefitType/BenefitHead above — internal only,
+          not part of the IAS submission.
+        </p>
+        <JsonViewer value={caseRecord.claimPrepMeta} />
+      </section>
+
+      <section className="mb-6 rounded-xl2 border border-slate-900/5 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">IAS Claim Result</h2>
         <JsonViewer value={caseRecord.iasClaimResult} />
       </section>

@@ -25,6 +25,7 @@ async function previewCase(req, res) {
       diagnosis: outcome.diagnosis,
       lines: outcome.lines,
       payload: outcome.payload,
+      claimPrepMeta: outcome.claimPrepMeta,
     });
   } catch (error) {
     logger.error('ias-claim-preparation preview failed', { caseId, error: error.message, stack: error.stack });

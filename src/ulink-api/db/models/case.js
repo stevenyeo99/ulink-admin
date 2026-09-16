@@ -10,6 +10,7 @@ module.exports = (sequelize, DataTypes) => {
       memberVerifyResult: { type: DataTypes.JSONB, allowNull: true },
       iasMemberInfoResponse: { type: DataTypes.JSONB, allowNull: true },
       iasClaimPayload: { type: DataTypes.JSONB, allowNull: true },
+      claimPrepMeta: { type: DataTypes.JSONB, allowNull: true },
       claimNo: { type: DataTypes.TEXT, allowNull: true },
       iasClaimResult: { type: DataTypes.JSONB, allowNull: true },
       consoleUploadResult: { type: DataTypes.JSONB, allowNull: true },

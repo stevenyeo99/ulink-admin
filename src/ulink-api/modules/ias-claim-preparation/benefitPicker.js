@@ -20,8 +20,9 @@ const CONFIDENCE_THRESHOLD = 0.5;
 /**
  * LLM pick from the member's own plan's valid benefit combos — never a lookup against a
  * generic/global benefit-code table, since only pairs this specific plan covers are ever
- * valid to submit. Returns null (never a guess) if there are no candidates or confidence
- * is too low.
+ * valid to submit. `pick` is null (never a guess) if there are no candidates or confidence
+ * is too low — but `confidence` and `candidates` are still returned in every case (see
+ * diagnosisPicker.js's pickDiagnosis, same contract) so the caller can persist why.
  *
  * Called once per invoice-item line (not once per case) — `voucherType` (from that specific
  * voucher's own extractedFields.invoices.items[].voucher_type) is the strongest signal when
@@ -32,7 +33,7 @@ async function pickBenefit(
   memberPlansRaw
 ) {
   const candidates = uniqueBenefitCandidates(memberPlansRaw);
-  if (candidates.length === 0) return null;
+  if (candidates.length === 0) return { pick: null, confidence: null, candidates: [] };
 
   const userText = [
     `Voucher type (this specific line, strongest signal if not null/other): ${voucherType || 'null'}`,
@@ -46,9 +47,12 @@ async function pickBenefit(
   ].join('\n');
 
   const result = await synthesizeJson({ systemPrompt: SYSTEM_PROMPT, userText, jsonSchema: SCHEMA });
-  if (!result.benefitType || result.confidence < CONFIDENCE_THRESHOLD) return null;
+  const pick =
+    result.benefitType && result.confidence >= CONFIDENCE_THRESHOLD
+      ? { benefitType: result.benefitType, benefitHead: result.benefitHead }
+      : null;
 
-  return { benefitType: result.benefitType, benefitHead: result.benefitHead };
+  return { pick, confidence: result.confidence, candidates };
 }
 
 module.exports = { pickBenefit };
