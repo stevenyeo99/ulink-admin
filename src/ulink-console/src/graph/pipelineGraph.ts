@@ -157,3 +157,21 @@ export const API_EDGES: StaticEdge[] = [
   { id: 'e-api-recognition-member', source: 'api-claim-recognition', target: 'api-member-verification', sourceHandle: 'source-bottom', targetHandle: 'target-top', kind: 'main' },
   { id: 'e-api-member-documents', source: 'api-member-verification', target: 'api-document-checking', sourceHandle: 'source-bottom', targetHandle: 'target-top', kind: 'main' },
 ];
+
+// Same presentation as the email tab: a badge beside each job that asks for an email, showing the
+// one api-email-sender step that sends them all (the email pipeline splits its sender per
+// category; the API pipeline runs it once, so every API badge shows that same step).
+export const API_EMAIL_BADGES: EmailBadgeMeta[] = [
+  { id: 'api-email-badge-material-download', producer: 'api-material-download', blockName: 'api-email-sender', label: 'MISSING_DOCUMENTS (no images)', audience: 'customer', x: 300, y: 190 },
+  { id: 'api-email-badge-member-verification', producer: 'api-member-verification', blockName: 'api-email-sender', label: 'MEMBER_VERIFY_ISSUE', audience: 'internal', x: 300, y: 570 },
+  { id: 'api-email-badge-document-checking', producer: 'api-document-checking', blockName: 'api-email-sender', label: 'MISSING_DOCUMENTS · DOCUMENT_COMPLETE_ACK', audience: 'customer', x: 300, y: 760 },
+];
+
+export const API_EMAIL_BADGE_EDGES: EmailBadgeEdge[] = API_EMAIL_BADGES.map((badge) => ({
+  id: `e-${badge.producer}-${badge.id}`,
+  source: badge.producer,
+  target: badge.id,
+  sourceHandle: 'source-right',
+  targetHandle: 'target-left',
+  kind: 'branch',
+}));

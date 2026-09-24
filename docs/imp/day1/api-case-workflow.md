@@ -143,6 +143,7 @@ POST /api/jobs/api-pipeline/run        cron: every 30 minutes; lock 'api-pipelin
   3. api-claim-recognition
   4. api-member-verification
   5. api-document-checking
+  6. api-email-sender          (API emails only; not the email pipeline's email-sender)
 ```
 
 Endpoints: `/api/jobs/api-pipeline/run`, `/release`, `/runs`, `/runs/:id` — they only ever see `pipeline='API'`
@@ -346,19 +347,37 @@ STP claims: fetch the settlement report like `ias-claim-stp`. Non-STP: manual ap
 
 ## 7. Email
 
-### 7.1 Outgoing (Phase 4)
+### 7.1 Outgoing (Phase 6c, built 2026-09-24)
 
-| Email | Sent when | To | How |
+| Email | Asked for by (output `email`) | To | Template |
 |---|---|---|---|
-| Missing documents | `api-document-checking` → `API_INCOMPLETE` | Customer (a fixed personal address for now; the IAS member-info email later) | A **new** email the first time; a reply in the same thread after that |
-| Member issue | `api-member-verification` → `API_MEMBER_REVIEW_REQUIRED` | Internal (same recipient as email cases) | New email / reply in thread |
-| Revision done | `api-claim-revision` → `API_CLAIM_REVISED` | Internal | New email |
+| No console images | `api-material-download` → `API_NO_DOCUMENTS` | Customer | `MISSING_DOCUMENTS` (one placeholder line) |
+| Member issue | `api-member-verification` → `API_MEMBER_REVIEW_REQUIRED` | Internal (`INTERNAL_REVIEW_EMAIL`, same as email cases) | `MEMBER_VERIFY_ISSUE` |
+| Missing documents | `api-document-checking` → `API_INCOMPLETE` | Customer | `MISSING_DOCUMENTS` |
+| Documents complete | `api-document-checking` → `API_DOCUMENTS_VERIFIED` | Customer | `DOCUMENT_COMPLETE_ACK` |
 
-- The jobs only **queue** an `EmailTask`. The shared `email-sender` sends it.
-- **Every API email's subject contains the `tpaCaseNumber`.** This is how a reply can still be matched when the
-  reply headers are missing.
-- The first email creates the case's `ulink_email_threads` row and stores our outgoing `Message-ID` in
-  `ulink_email_messages`. Replies are matched against that id.
+- **Customer address:** `API_CASE_CUSTOMER_EMAIL` (for now `steven.yeo@dynrtech.com`); later the IAS member-info email.
+  CC: the `ayas_member_claim` route's `cc_email`, same as email cases.
+- **Who asks, who sends.** A job puts the full request in its output — `email: { taskType, audience, payload,
+  dedupeKey }`, the same payload and dedupe key the email flow queues. `api-email-sender`
+  (`modules/api-email-sender/service.js`, `POST /api/jobs/api-email-sender/run`, last API pipeline step) sends every
+  request it hasn't handled yet and records its own step row (`input.sourceStepId` → the requesting step).
+- **Not the email pipeline's sender.** `email-sender` sends every `PENDING` `ulink_email_tasks` row by replying in the
+  case's inbound thread, which API cases don't have. `api-email-sender` never uses `ulink_email_tasks`, so neither
+  sender sees the other's emails. It reuses the same templates (same wording) and the same channel adapter.
+- **Thread:** the first email is a new email and creates the case's `ulink_email_threads` row (our `Message-ID` as
+  `first_message_id`); later ones reply to the latest message in that thread. Every message is stored in
+  `ulink_email_messages`, which is what reply matching (7.2) uses.
+- **Subject** always ends with `(Ref: <tpaCaseNumber>)`. Customer: `AYA Sompo claim <clNo> — Additional documents
+  required (Ref: …)`; internal: the template's own subject plus the ref.
+- **Dedupe:** same rule as the email flow — if the last email of the same type for the case had the same dedupe key,
+  it is skipped (recorded as `skipped`).
+- **Failure** (SMTP, missing config): a `FAILED` row with the error; retried next run.
+- **Console:** badges beside Material Download, Member Verification and Document Checking on the API tab, like the
+  email tab; all show the one `api-email-sender` step.
+
+Until reply routing (Phase 4) is built, a customer reply to an API email is matched to the API case by the existing
+header matching and stored, but not reprocessed (API statuses aren't in email-intake's awaiting list).
 
 ### 7.2 Incoming: which case does an email belong to? (Phase 4)
 

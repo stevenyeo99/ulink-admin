@@ -12,6 +12,17 @@ const { checkCase } = require('../document-checking/service');
 // (API_READY_FOR_DOCUMENT_CHECKING), same order as email. Its input is the OCR output, not the
 // member check's: the checklist only needs the extracted fields.
 
+// The customer email the email flow sends for each outcome, with the same payload and dedupe key
+// (document-checking's queueMissingDocumentsEmail / queueCompleteAckEmail). Sent by api-email-sender.
+function emailFor(result) {
+  if (result.passed) return { taskType: 'DOCUMENT_COMPLETE_ACK', audience: 'customer', payload: {}, dedupeKey: null };
+  const issues = result.issues.map((issue) => {
+    const detail = result.details.find((candidate) => candidate.issue === issue && candidate.reason);
+    return detail?.reason ? `${issue}\n  Reason: ${detail.reason}` : issue;
+  });
+  return { taskType: 'MISSING_DOCUMENTS', audience: 'customer', payload: { issues }, dedupeKey: [...result.issues].sort().join('|') };
+}
+
 const OUTCOME_TO_STATUS = {
   DOCUMENT_CHECKED: 'API_DOCUMENTS_VERIFIED',
   INCOMPLETE: 'API_INCOMPLETE',
@@ -27,8 +38,7 @@ async function processCase({ caseRecord, input }) {
     output: {
       outcome,
       documentCheckResult: result,
-      // The customer email the email flow sends for this outcome. Sent once API emails exist.
-      email: { taskType: nextStatus === 'API_INCOMPLETE' ? 'MISSING_DOCUMENTS' : 'DOCUMENT_COMPLETE_ACK', audience: 'customer' },
+      email: emailFor(result),
     },
     nextStatus,
     message: result.passed ? 'Documents complete' : `Documents incomplete: ${result.issues.join('; ')}`,

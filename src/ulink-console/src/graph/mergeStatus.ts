@@ -1,12 +1,12 @@
 import type { Edge, Node } from '@xyflow/react';
-import { API_BLOCKS, API_EDGES, BLOCKS, EDGES, EMAIL_BADGES, EMAIL_BADGE_EDGES } from './pipelineGraph';
+import { API_BLOCKS, API_EDGES, API_EMAIL_BADGES, API_EMAIL_BADGE_EDGES, BLOCKS, EDGES, EMAIL_BADGES, EMAIL_BADGE_EDGES } from './pipelineGraph';
 import type { Audience } from './audienceStyle';
 import type { PipelineRunStep, Source, StepStatus } from '../types/pipeline';
 
-// Each workflow's own static layout. Email is unchanged; API has no email badges yet.
+// Each workflow's own static layout. Email is unchanged.
 const LAYOUTS = {
   EMAIL: { blocks: BLOCKS, edges: EDGES, badges: EMAIL_BADGES, badgeEdges: EMAIL_BADGE_EDGES },
-  API: { blocks: API_BLOCKS, edges: API_EDGES, badges: [], badgeEdges: [] },
+  API: { blocks: API_BLOCKS, edges: API_EDGES, badges: API_EMAIL_BADGES, badgeEdges: API_EMAIL_BADGE_EDGES },
 } as const;
 
 export type NodeStatus = 'IDLE' | StepStatus;

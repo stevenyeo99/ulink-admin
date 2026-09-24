@@ -38,7 +38,7 @@ describe('api-member-verification', () => {
     const result = await memberJob.process({ caseRecord: recognized, input });
     expect(result).toMatchObject({
       nextStatus: 'API_MEMBER_REVIEW_REQUIRED',
-      output: { email: { taskType: 'MEMBER_VERIFY_ISSUE', audience: 'internal' } },
+      output: { email: { taskType: 'MEMBER_VERIFY_ISSUE', audience: 'internal', payload: { caseId: 'case-1', reasonCode: 'MEMBER_NOT_FOUND' }, dedupeKey: 'MEMBER_NOT_FOUND' } },
     });
   });
 
@@ -73,12 +73,24 @@ describe('api-document-checking', () => {
   });
 
   it('marks missing documents incomplete, with the customer email the email flow would send', async () => {
-    documentEmail.checkCase.mockResolvedValue({ outcome: 'INCOMPLETE', result: { passed: false, issues: ['No Medical Report(s)'] } });
+    documentEmail.checkCase.mockResolvedValue({
+      outcome: 'INCOMPLETE',
+      result: { passed: false, issues: ['No Medical Report(s)', 'Missing voucher(s)'], details: [{ issue: 'Missing voucher(s)', reason: 'No voucher page found' }] },
+    });
     const result = await documentJob.process({ caseRecord: ready, input });
     expect(result).toMatchObject({
       nextStatus: 'API_INCOMPLETE',
       message: expect.stringContaining('No Medical Report(s)'),
-      output: { documentCheckResult: { issues: ['No Medical Report(s)'] }, email: { taskType: 'MISSING_DOCUMENTS', audience: 'customer' } },
+      output: {
+        documentCheckResult: { issues: ['No Medical Report(s)', 'Missing voucher(s)'] },
+        // Same payload and dedupe key as the email flow's MISSING_DOCUMENTS task.
+        email: {
+          taskType: 'MISSING_DOCUMENTS',
+          audience: 'customer',
+          payload: { issues: ['No Medical Report(s)', 'Missing voucher(s)\n  Reason: No voucher page found'] },
+          dedupeKey: 'Missing voucher(s)|No Medical Report(s)',
+        },
+      },
     });
   });
 });

@@ -28,8 +28,16 @@ async function processCase({ caseRecord, input }) {
     outcome,
     memberVerifyResult: result,
     iasMemberInfoResponse: iasResponse,
-    // The email the email flow sends for this outcome (internal-only). Sent once API emails exist.
-    email: nextStatus === 'API_MEMBER_REVIEW_REQUIRED' ? { taskType: 'MEMBER_VERIFY_ISSUE', audience: 'internal' } : null,
+    // The email the email flow sends for this outcome, same payload and dedupe key
+    // (member-verification's queueReviewRequiredEmail). Sent by api-email-sender.
+    email: nextStatus === 'API_MEMBER_REVIEW_REQUIRED'
+      ? {
+        taskType: 'MEMBER_VERIFY_ISSUE',
+        audience: 'internal',
+        payload: { caseId: caseRecord.id, reasonCode: result.reasonCode, reason: result.reason },
+        dedupeKey: result.reasonCode,
+      }
+      : null,
   };
 
   // A re-check that still finds a problem changes nothing: the case keeps waiting.

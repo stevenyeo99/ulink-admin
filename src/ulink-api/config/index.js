@@ -73,6 +73,14 @@ module.exports = {
     batchLimit: parseInt(process.env.DOCUMENT_CHECKING_BATCH_LIMIT, 10) || 50,
   },
 
+  apiEmail: {
+    // Where API cases' customer emails go for now — API claims carry no customer address yet;
+    // later this comes from the IAS member-info email. Internal emails use
+    // emailSender.internalReviewEmail, same as email cases.
+    customerEmail: process.env.API_CASE_CUSTOMER_EMAIL || null,
+    batchLimit: parseInt(process.env.API_EMAIL_BATCH_LIMIT, 10) || 20,
+  },
+
   apiMaterialDownload: {
     // ulink-console-middleware base URL — API cases' console images come from its zip endpoint.
     middlewareUrl: process.env.CONSOLE_MIDDLEWARE_URL,

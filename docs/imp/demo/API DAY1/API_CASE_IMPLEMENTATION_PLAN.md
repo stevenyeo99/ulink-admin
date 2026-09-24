@@ -1,6 +1,6 @@
 # API Case Implementation Plan
 
-Status: Phase 0, 1, 2, 2c, 3, 5, 6a and 6b built (2026-09-24); next: 6c + 4 (API emails and replies)  
+Status: Phase 0, 1, 2, 2c, 3, 5 and 6 built (2026-09-24); next: Phase 4 (reply routing)  
 Scope: `ulink-admin/src/ulink-api` + `ulink-admin/src/ulink-console`  
 Date: 2026-09-24
 
@@ -166,9 +166,9 @@ no route decision — always `ayas_member_claim` (D14). Schema mismatch → `API
 - **6a/6b — BUILT 2026-09-24.** Both jobs call the email modules' own `checkCase` (unchanged) with the OCR output.
   The member check re-checks `API_MEMBER_REVIEW_REQUIRED` every run (S14). Each output records the email the email
   flow would send (`email: { taskType, audience }`).
-- **6c — next, together with Phase 4.** Send those emails: the first API email is a new email (not a reply) with the
-  `tpaCaseNumber` in the subject; the customer address is a fixed address for now (Q9). Changes shared email code
-  (`email-sender`, channel adapter), so it's built with reply routing and tested against the email flow.
+- **6c — BUILT 2026-09-24.** `api-email-sender`: its own sender (never `ulink_email_tasks`), same templates and
+  channel adapter; first email starts the case thread, subject carries the `tpaCaseNumber`, same dedupe rule. No
+  email-side code changed. Customer address `API_CASE_CUSTOMER_EMAIL` = steven.yeo@dynrtech.com (Q9).
 
 - Same order as the email workflow: member check first, then documents.
 - Reuse `member-verification/checks.js`, `member-verification/iasClient.js` and `document-checking/checklist.js`.
@@ -258,4 +258,4 @@ sent (Phase 6).
 | Q6 | STP / non-STP meaning for API cases | Phase 9 |
 | Q7 | ~~S4 grace period~~ 2 hours after `crtDate` (`API_MATERIAL_GRACE_MINUTES`), confirmed 2026-09-24 | Phase 2c |
 | Q8 | S13 reminder / close timings (N and M days) | Phase 6 |
-| Q9 | The fixed customer email address for API emails (until the member-info email is used) | Phase 6c |
+| Q9 | ~~Fixed customer email address~~ steven.yeo@dynrtech.com (`API_CASE_CUSTOMER_EMAIL`), confirmed 2026-09-24 | Phase 6c |

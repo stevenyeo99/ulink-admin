@@ -15,6 +15,7 @@ const apiMaterialDownloadService = require('../../modules/api-material-download/
 const apiClaimRecognitionService = require('../../modules/api-claim-recognition/service');
 const apiMemberVerificationService = require('../../modules/api-member-verification/service');
 const apiDocumentCheckingService = require('../../modules/api-document-checking/service');
+const apiEmailSenderService = require('../../modules/api-email-sender/service');
 
 const router = express.Router();
 
@@ -794,5 +795,32 @@ router.use('/api-claim-recognition', createJobRouter('api-claim-recognition', ap
  */
 router.use('/api-member-verification', createJobRouter('api-member-verification', apiMemberVerificationService));
 router.use('/api-document-checking', createJobRouter('api-document-checking', apiDocumentCheckingService));
+
+/**
+ * @openapi
+ * /api/jobs/api-email-sender/run:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Start the api-email-sender job (fire-and-forget) — sends API case emails
+ *     description: >
+ *       Sends every email an API case job asked for in its output (member issue → internal,
+ *       missing documents / acknowledgement → API_CASE_CUSTOMER_EMAIL), with the email flow's own
+ *       templates. The first email starts the case's thread; the subject carries the
+ *       tpaCaseNumber. Separate from email-sender (never touches ulink_email_tasks). A repeat of
+ *       the last email of the same type is skipped. Real SMTP. See
+ *       docs/imp/day1/api-case-workflow.md section 7.1.
+ *     responses:
+ *       200:
+ *         description: Started, or skipped because a prior run is still in progress
+ *
+ * /api/jobs/api-email-sender/release:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Manually clear a stuck api-email-sender lock
+ *     responses:
+ *       200:
+ *         description: Lock cleared
+ */
+router.use('/api-email-sender', createJobRouter('api-email-sender', apiEmailSenderService));
 
 module.exports = router;

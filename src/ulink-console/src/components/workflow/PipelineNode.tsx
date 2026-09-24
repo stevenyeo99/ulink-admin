@@ -20,6 +20,7 @@ const ICONS: Record<BlockName, LucideIcon> = {
   'api-claim-recognition': ScanSearch,
   'api-member-verification': UserCheck,
   'api-document-checking': ClipboardCheck,
+  'api-email-sender': SendHorizonal,
 };
 
 const handleClass = '!h-0 !w-0 !min-w-0 !border-0 !bg-transparent';

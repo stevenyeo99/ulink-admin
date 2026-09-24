@@ -92,6 +92,16 @@ function withinGrace(crtDate, now = new Date()) {
 
 const docKey = (barcodeId, filename) => `${barcodeId}/${filename}`;
 
+// Customer email for a claim with no console images at all (S4) — the email flow's
+// MISSING_DOCUMENTS template with one line. Placeholder wording, not from the approved
+// canned-response set yet.
+const NO_DOCUMENTS_EMAIL = {
+  taskType: 'MISSING_DOCUMENTS',
+  audience: 'customer',
+  payload: { issues: ['We did not receive any claim documents. Please send your claim form, medical report(s) and voucher(s).'] },
+  dedupeKey: 'NO_DOCUMENTS',
+};
+
 async function processCase({ caseRecord, input }) {
   const claim = input['api-claim-intake'];
   const scanId = scanIdFor(claim.tpaCaseNumber);
@@ -103,7 +113,7 @@ async function processCase({ caseRecord, input }) {
       return { wait: true, output: { scanId, reason: `No images in the console yet; waiting up to ${config.apiMaterialDownload.graceMinutes} min after the claim was created` } };
     }
     return {
-      output: { scanId, fileCount: 0, documents: [] },
+      output: { scanId, fileCount: 0, documents: [], email: NO_DOCUMENTS_EMAIL },
       nextStatus: 'API_NO_DOCUMENTS',
       message: `No images in the console for ${scanId}; the customer will be asked for documents`,
     };

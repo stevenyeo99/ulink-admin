@@ -25,13 +25,16 @@ export type BlockName =
   | 'api-material-download'
   | 'api-claim-recognition'
   | 'api-member-verification'
-  | 'api-document-checking';
+  | 'api-document-checking'
+  | 'api-email-sender';
 
 export type EmailSenderBlockName =
   | 'email-sender-member-verification'
   | 'email-sender-document-checking'
   | 'email-sender-claim-approval-review'
-  | 'email-sender-csr-report';
+  | 'email-sender-csr-report'
+  // API workflow: one sender step for every API email (modules/api-email-sender)
+  | 'api-email-sender';
 
 export interface PipelineRunStep {
   id: string;
