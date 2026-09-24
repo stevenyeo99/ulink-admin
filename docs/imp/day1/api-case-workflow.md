@@ -105,8 +105,10 @@ stateDiagram-v2
   API_RECOGNIZED --> API_MEMBER_REVIEW_REQUIRED: member issue
   API_READY_FOR_DOCUMENT_CHECKING --> API_DOCUMENTS_VERIFIED: docs ok
   API_READY_FOR_DOCUMENT_CHECKING --> API_INCOMPLETE: docs missing
+  API_INCOMPLETE --> API_CLAIM_PAYLOAD_PREPARED: api-claim-preparation (isSuspense=Y)
+  API_CLAIM_PAYLOAD_PREPARED --> API_CLAIM_SUSPENDED: revised with suspense
+  API_CLAIM_SUSPENDED --> API_REPLY_RECEIVED: reply with new attachments
   API_MEMBER_REVIEW_REQUIRED --> API_REPLY_RECEIVED: reply with attachment
-  API_INCOMPLETE --> API_REPLY_RECEIVED: reply with attachment
   API_DOCUMENTS_VERIFIED --> API_CLAIM_PAYLOAD_PREPARED: api-claim-preparation
   API_CLAIM_PAYLOAD_PREPARED --> API_CLAIM_REVISED: api-claim-revision
   API_CLAIM_PAYLOAD_PREPARED --> API_CLAIM_REVISION_FAILED: IAS rejects
@@ -123,10 +125,11 @@ stateDiagram-v2
 | `API_MANUAL_REVIEW` | Extraction didn't fit the `ayas_member_claim` schema; waits for an operator | `api-claim-recognition` | operator | 5 |
 | `API_MEMBER_REVIEW_REQUIRED` | Member/coverage issue (internal email: 6c). Re-checked every run; **also waits for a reply** | `api-member-verification` | `api-member-verification` (re-check), `email-intake` (reply) | 6 |
 | `API_READY_FOR_DOCUMENT_CHECKING` | Member check passed | `api-member-verification` | `api-document-checking` | 6 |
-| `API_INCOMPLETE` | Documents missing (customer email: 6c). **Waits for a reply** | `api-document-checking` | `email-intake` (on reply) | 6 |
+| `API_INCOMPLETE` | Documents missing; customer emailed. Continues to preparation (suspense) | `api-document-checking` | `api-claim-preparation` | 6 |
 | `API_DOCUMENTS_VERIFIED` | Both checks passed | `api-document-checking` | `api-claim-preparation` | 6 |
 | `API_CLAIM_PAYLOAD_PREPARED` | Revision payload built | `api-claim-preparation` | `api-claim-revision` | 7 |
-| `API_CLAIM_REVISED` | IAS accepted the revision | `api-claim-revision` | `api-claim-stp` | 8 |
+| `API_CLAIM_SUSPENDED` | Revised in IAS with suspense (documents missing). **Waits for a reply** | `api-claim-revision` | `api-reply-intake` | 8 |
+| `API_CLAIM_REVISED` | IAS accepted the revision, documents complete | `api-claim-revision` | `api-claim-stp` | 8 |
 | `API_CLAIM_REVISION_FAILED` | IAS rejected the revision (business answer; not retried) | `api-claim-revision` | operator | 8 |
 | `API_CSR_SENT` | Settlement report sent (STP only) | `api-claim-stp` | end | 9 |
 
@@ -145,7 +148,9 @@ POST /api/jobs/api-pipeline/run        cron: every 30 minutes; lock 'api-pipelin
   5. api-claim-recognition
   6. api-member-verification
   7. api-document-checking
-  8. api-email-sender          (API emails only; not the email pipeline's email-sender)
+  8. api-claim-preparation
+  9. api-claim-revision
+ 10. api-email-sender          (API emails only; not the email pipeline's email-sender)
 ```
 
 Endpoints: `/api/jobs/api-pipeline/run`, `/release`, `/runs`, `/runs/:id` — they only ever see `pipeline='API'`
@@ -155,8 +160,6 @@ and only sees `EMAIL` runs. The console shows each on its own tab (`?source=api`
 Still to come, inserted before `api-email-sender` as each phase is built:
 
 ```
-  api-claim-preparation        (Phase 7)
-  api-claim-revision           (Phase 8)
   api-claim-stp                (Phase 9)
 ```
 
@@ -325,16 +328,65 @@ order as email: member check first, then documents. Tests: `tests/apiChecks.test
 Verified on the sample scan: download → OCR → member verified (IAS) → documents incomplete ("Incomplete medical
 report(s)", missing case number, missing claimant DOB), about a minute end to end.
 
-### 6.6 `api-claim-preparation` (Phase 7)
+### 6.6 `api-claim-preparation` (Phase 7, built 2026-09-24)
 
-Reuses the diagnosis/benefit pickers and STP eligibility. Builds the claim revision payload. Writes
-`ias_claim_payload`, `claim_prep_meta`.
+| | |
+|---|---|
+| Module | `modules/api-claim-preparation/service.js` — a runner job. Tests: `tests/apiClaimPreparation.test.js` |
+| Job | `POST /api/jobs/api-claim-preparation/run` |
+| Input status | `API_DOCUMENTS_VERIFIED` **and** `API_INCOMPLETE` — unlike email cases, missing documents don't stop an API case |
+| Input | intake (`clNo`, `tpaCaseNumber`), material download (`documents`), OCR (`extractedFields`), member check (`iasMemberInfoResponse`), document check (`outcome`, `checkedAt`) |
+| Output | `{ payload, documentsComplete, diagnosis, lines, isStp, claimPrepMeta }` — `payload` is the IAS claim revision body |
+| Next | `API_CLAIM_PAYLOAD_PREPARED` |
 
-### 6.7 `api-claim-revision` (Phase 8)
+It calls the email flow's own `checkCase` in `ias-claim-preparation` (unchanged): ICD-10 diagnosis pick, one
+benefit pick per voucher, STP eligibility, and the `CL_CLAIM_API` payload. That function reads a few case fields;
+they come from the earlier outputs:
 
-Sends the revision to IAS: updates barcode, diagnosis and benefit, sets pend codes (`IAS_CL_PEND_CODE`) when needed,
-and validates. A business rejection → `API_CLAIM_REVISION_FAILED`, not retried. A technical failure → stays at
-`API_CLAIM_PAYLOAD_PREPARED` and is retried. Waiting for the IAS sample.
+| `checkCase` field | API source |
+|---|---|
+| `extractedFields`, `recognizedType` | OCR output |
+| `iasMemberInfoResponse` | member check output |
+| `createdAt` → `ReceivedDate` | the API case's creation time |
+| `consoleBarcode` → `barcode` | the earliest console submission's barcode |
+| `consoleUploadResult.completedAt` → `docCompleteDate` | when the document check passed; `null` while documents are missing |
+
+Then the payload becomes the **IAS claim revision body** (`docs/imp/demo/API DAY1/IAS_CLAIM_REVISION.md`; a test
+compares the fields):
+
+- `claimNo` = the IAS claim; `TpaCaseNumber` = IAS's value (not the OCR-read one).
+- **Barcodes:** the console submissions earliest first — `barcode` = 1st, `suppBarcode1`–`suppBarcode5` = 2nd–6th,
+  `null` when unused; more than six are left out.
+- **Flags** (confirmed 2026-09-24; `isSuspense`: IAS sets the suspense on `Y`, lifts it on `N`, does nothing on null):
+
+  | Case | `isValidation` | `isCSR` | `isSuspense` |
+  |---|---|---|---|
+  | Documents missing (any amount, even STP) | Y | N | Y |
+  | Documents complete, STP | Y | Y | N |
+  | Documents complete, non-STP | N | N | N |
+
+### 6.7 `api-claim-revision` (Phase 8, built 2026-09-24)
+
+| | |
+|---|---|
+| Module | `modules/api-claim-revision/` (`iasClient.js`, `service.js`) — a runner job. Tests: `tests/apiClaimRevision.test.js` |
+| Job | `POST /api/jobs/api-claim-revision/run` — **real IAS write** |
+| Calls | `POST {IAS_URL}{CL_CLAIM_REVISION_API}` (`/api/claim_revision`) with the prepared payload |
+| Input | `{ 'api-claim-preparation': { payload, documentsComplete, isStp } }` |
+| Output | `{ response, isSuspense, isStp, email }` |
+
+IAS answers like claim submission; handled like the email flow's `ias-claim-creation`:
+
+| IAS answer | Status | Email (internal, via `api-email-sender`) |
+|---|---|---|
+| `success: true`, documents complete | `API_CLAIM_REVISED` | non-STP: `CLAIM_APPROVAL_REVIEW` (hand-off to JD2) |
+| `success: true`, documents missing (`isSuspense=Y`) | `API_CLAIM_SUSPENDED` — waits for the customer (the `MISSING_DOCUMENTS` email already went out) | — |
+| `success: false` | `API_CLAIM_REVISION_FAILED`, not retried | `CLAIM_SUBMIT_ISSUE` |
+| network error / timeout / non-2xx | stays, retried next run | — |
+
+**Suspense round trip:** a customer reply with new documents on an `API_CLAIM_SUSPENDED` case restarts it
+(`api-reply-intake` → OCR → member → document check → preparation → revision). Once the documents pass, the next
+revision sends `isSuspense=N` and IAS lifts the suspense. Revising the same `claimNo` again is safe (confirmed).
 
 ### 6.8 `api-claim-stp` (Phase 9)
 

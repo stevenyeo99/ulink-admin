@@ -22,6 +22,8 @@ const ICONS: Record<BlockName, LucideIcon> = {
   'api-document-checking': ClipboardCheck,
   'api-email-sender': SendHorizonal,
   'api-reply-intake': Reply,
+  'api-claim-preparation': FileText,
+  'api-claim-revision': ShieldCheck,
 };
 
 const handleClass = '!h-0 !w-0 !min-w-0 !border-0 !bg-transparent';

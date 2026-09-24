@@ -146,6 +146,8 @@ module.exports = {
     baseUrl: process.env.IAS_URL,
     getMemberInfoApi: process.env.GET_MEMBER_INFO_API,
     claimApi: process.env.CL_CLAIM_API,
+    // API cases: revise the claim IAS already created (same body as claimApi, plus claimNo).
+    claimRevisionApi: process.env.CL_CLAIM_REVISION_API,
     claimStatusApi: process.env.CL_CLAIM_STATUS_API,
     downloadFileApi: process.env.CL_DOWNLOAD_FILE_API,
     // API cases: claims created in IAS through its API, listed by date (api-claim-intake).

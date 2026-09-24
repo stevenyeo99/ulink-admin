@@ -1,6 +1,6 @@
 # API Case Implementation Plan
 
-Status: Phase 0, 1, 2, 2c, 3, 4, 5 and 6 built (2026-09-24); next: Phase 7 (claim preparation)  
+Status: Phase 0–8 built (2026-09-24); next: Phase 9 (STP / non-STP after revision)  
 Scope: `ulink-admin/src/ulink-api` + `ulink-admin/src/ulink-console`  
 Date: 2026-09-24
 
@@ -178,12 +178,18 @@ no route decision — always `ayas_member_claim` (D14). Schema mismatch → `API
 - Reuse `member-verification/checks.js`, `member-verification/iasClient.js` and `document-checking/checklist.js`.
 - Member-check issue: **internal** email. Missing documents: **customer** email (fixed address for now).
 
-## Phase 7: `api-claim-preparation` job
+## Phase 7: `api-claim-preparation` job — BUILT 2026-09-24
+
+Same payload as email (calls `ias-claim-preparation`'s `checkCase`, unchanged) plus `claimNo`; `TpaCaseNumber` from IAS (D16).
 
 - Reuses the diagnosis/benefit pickers and STP eligibility. The payload is for claim revision (shape confirmed in
   Phase 8).
 
-## Phase 8: `api-claim-revision` job
+## Phase 8: `api-claim-revision` job — BUILT 2026-09-24
+
+`POST /api/claim_revision` (IAS_CLAIM_REVISION.md), answered like claim submission. Incomplete documents no longer
+stop an API case: preparation + revision run with `isSuspense=Y` (`API_CLAIM_SUSPENDED`), the customer is emailed,
+and their reply leads to a new revision with `isSuspense=N` (D17–D19). Not yet run against IAS (real write).
 
 - Waiting for the IAS claim revision API sample.
 - Always revision, never create: `clNo` already exists in IAS.
@@ -252,6 +258,10 @@ sent (Phase 6).
 | D13 | Console images are case-level records (`ulink_case_documents`) in the same storage as email attachments; an existing document is skipped | 2026-09-24 |
 | D14 | API claims are always AYAS member claims: API OCR skips the route decision and extracts with `ayas_member_claim` | 2026-09-24 |
 | D15 | OCR that can't produce valid fields → `API_MANUAL_REVIEW` (operator) now; a customer email for it may come with Phase 6 | 2026-09-24 |
+| D16 | Claim revision payload = the email flow's CL_CLAIM_API payload plus `claimNo`, `POST /api/claim_revision` (IAS_CLAIM_REVISION.md, 2026-09-24); `TpaCaseNumber` taken from IAS | 2026-09-24 |
+| D17 | API cases continue to preparation + revision even when documents fail; the revision then carries `isSuspense=Y` (IAS: Y sets, N lifts, null ignores) | 2026-09-24 |
+| D18 | Flags: documents missing → isValidation=Y, isCSR=N, isSuspense=Y (even STP); complete + STP → Y/Y/N; complete + non-STP → N/N/N | 2026-09-24 |
+| D19 | Barcodes: first 6 console submissions, earliest first → barcode, suppBarcode1–5; unused null | 2026-09-24 |
 
 ## Open questions
 

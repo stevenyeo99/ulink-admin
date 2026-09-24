@@ -38,6 +38,8 @@ async function processCase({ caseRecord, input }) {
     output: {
       outcome,
       documentCheckResult: result,
+      // When documents were found complete — claim preparation's docCompleteDate.
+      checkedAt: new Date().toISOString(),
       email: emailFor(result),
     },
     nextStatus,

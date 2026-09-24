@@ -20,7 +20,10 @@ const BUCKET_MAP: Record<string, StatusBucket> = {
   // API cases: an operator has to look (same as email MANUAL_REVIEW)
   API_MANUAL_REVIEW: 'Failed',
   API_MEMBER_REVIEW_REQUIRED: 'Needs Review',
-  API_INCOMPLETE: 'Needs Review',
+  API_INCOMPLETE: 'In Progress',
+  API_CLAIM_SUSPENDED: 'Needs Review',
+  API_CLAIM_REVISED: 'Succeeded',
+  API_CLAIM_REVISION_FAILED: 'Failed',
 };
 
 export function bucketOf(status: string): StatusBucket {
@@ -53,6 +56,10 @@ const LABELS: Record<string, string> = {
   API_DOCUMENTS_VERIFIED: 'Documents Verified',
   API_INCOMPLETE: 'Incomplete',
   API_REPLY_RECEIVED: 'Reply Received',
+  API_CLAIM_PAYLOAD_PREPARED: 'Claim Prepared',
+  API_CLAIM_SUSPENDED: 'Suspended (awaiting documents)',
+  API_CLAIM_REVISED: 'Claim Revised',
+  API_CLAIM_REVISION_FAILED: 'Revision Failed',
   CLAIM_SUBMIT_FAILED: 'Claim Submit Failed',
 };
 

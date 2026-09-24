@@ -19,6 +19,8 @@ const apiMemberVerificationService = require('../api-member-verification/service
 const apiDocumentCheckingService = require('../api-document-checking/service');
 const apiEmailSenderService = require('../api-email-sender/service');
 const apiReplyIntakeService = require('../api-reply-intake/service');
+const apiClaimPreparationService = require('../api-claim-preparation/service');
+const apiClaimRevisionService = require('../api-claim-revision/service');
 
 // Fixed order — later steps read the Case.currentStatus earlier steps write, per
 // docs/imp/day1/jobs-registry.md's "Orchestrator" section. Each block keeps its own
@@ -74,6 +76,8 @@ const API_STEPS = [
   ['api-claim-recognition', apiClaimRecognitionService],
   ['api-member-verification', apiMemberVerificationService],
   ['api-document-checking', apiDocumentCheckingService],
+  ['api-claim-preparation', apiClaimPreparationService],
+  ['api-claim-revision', apiClaimRevisionService],
   // Sends what the jobs above asked for (own sender — never the email pipeline's email-sender).
   ['api-email-sender', apiEmailSenderService],
 ];

@@ -53,6 +53,10 @@ const KNOWN_STATUSES = [
   'API_DOCUMENTS_VERIFIED',
   'API_INCOMPLETE',
   'API_REPLY_RECEIVED',
+  'API_CLAIM_PAYLOAD_PREPARED',
+  'API_CLAIM_SUSPENDED',
+  'API_CLAIM_REVISED',
+  'API_CLAIM_REVISION_FAILED',
 ];
 
 // One-line summary for the list view — the specific thing a reviewer would need to glance

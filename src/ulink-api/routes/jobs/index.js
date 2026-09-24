@@ -17,6 +17,8 @@ const apiMemberVerificationService = require('../../modules/api-member-verificat
 const apiDocumentCheckingService = require('../../modules/api-document-checking/service');
 const apiEmailSenderService = require('../../modules/api-email-sender/service');
 const apiReplyIntakeService = require('../../modules/api-reply-intake/service');
+const apiClaimPreparationService = require('../../modules/api-claim-preparation/service');
+const apiClaimRevisionService = require('../../modules/api-claim-revision/service');
 
 const router = express.Router();
 
@@ -849,5 +851,57 @@ router.use('/api-email-sender', createJobRouter('api-email-sender', apiEmailSend
  *         description: Lock cleared
  */
 router.use('/api-reply-intake', createJobRouter('api-reply-intake', apiReplyIntakeService));
+
+/**
+ * @openapi
+ * /api/jobs/api-claim-preparation/run:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Start the api-claim-preparation job (fire-and-forget) — API case workflow
+ *     description: >
+ *       For API_DOCUMENTS_VERIFIED and API_INCOMPLETE cases, runs the email flow's own claim preparation (diagnosis
+ *       and benefit picks, STP eligibility, CL_CLAIM_API payload) on the earlier jobs' outputs,
+ *       and adds the claim's claimNo, IAS's TpaCaseNumber, barcode + suppBarcode1-5 and the API flags
+ *       (isValidation / isCSR / isSuspense) — the IAS claim revision body. API_CLAIM_PAYLOAD_PREPARED. Real LLM
+ *       calls, no IAS write. See docs/imp/day1/api-case-workflow.md section 6.6.
+ *     responses:
+ *       200:
+ *         description: Started, or skipped because a prior run is still in progress
+ *
+ * /api/jobs/api-claim-preparation/release:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Manually clear a stuck api-claim-preparation lock
+ *     responses:
+ *       200:
+ *         description: Lock cleared
+ */
+router.use('/api-claim-preparation', createJobRouter('api-claim-preparation', apiClaimPreparationService));
+
+/**
+ * @openapi
+ * /api/jobs/api-claim-revision/run:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Start the api-claim-revision job (fire-and-forget) — API case workflow
+ *     description: >
+ *       For API_CLAIM_PAYLOAD_PREPARED cases, sends api-claim-preparation's payload to IAS
+ *       POST /api/claim_revision. Success → API_CLAIM_REVISED, or API_CLAIM_SUSPENDED when documents
+ *       were incomplete (isSuspense=Y); IAS success=false → API_CLAIM_REVISION_FAILED (not retried);
+ *       a technical failure is retried next run. REAL IAS WRITE. See
+ *       docs/imp/day1/api-case-workflow.md section 6.7.
+ *     responses:
+ *       200:
+ *         description: Started, or skipped because a prior run is still in progress
+ *
+ * /api/jobs/api-claim-revision/release:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Manually clear a stuck api-claim-revision lock
+ *     responses:
+ *       200:
+ *         description: Lock cleared
+ */
+router.use('/api-claim-revision', createJobRouter('api-claim-revision', apiClaimRevisionService));
 
 module.exports = router;

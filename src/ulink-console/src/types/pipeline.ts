@@ -27,7 +27,9 @@ export type BlockName =
   | 'api-member-verification'
   | 'api-document-checking'
   | 'api-email-sender'
-  | 'api-reply-intake';
+  | 'api-reply-intake'
+  | 'api-claim-preparation'
+  | 'api-claim-revision';
 
 export type EmailSenderBlockName =
   | 'email-sender-member-verification'

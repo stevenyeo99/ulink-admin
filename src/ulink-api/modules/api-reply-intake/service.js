@@ -20,7 +20,8 @@ const { runApiJob } = require('../api-pipeline/runApiJob');
 // re-attach the same files) is not taken again (S21).
 
 const JOB = 'api-reply-intake';
-const REMINDER_STATUSES = ['API_INCOMPLETE', 'API_NO_DOCUMENTS'];
+// Waiting on the customer's documents: a claim revised with suspense, or no console images at all.
+const REMINDER_STATUSES = ['API_CLAIM_SUSPENDED', 'API_NO_DOCUMENTS'];
 
 const sha256 = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
 
@@ -92,7 +93,8 @@ async function processCase({ caseRecord, input }) {
 
 const job = {
   name: JOB,
-  inputStatus: ['API_INCOMPLETE', 'API_MEMBER_REVIEW_REQUIRED', 'API_NO_DOCUMENTS'],
+  // API_INCOMPLETE isn't a waiting status any more: it goes on to preparation and a suspended revision.
+  inputStatus: ['API_CLAIM_SUSPENDED', 'API_MEMBER_REVIEW_REQUIRED', 'API_NO_DOCUMENTS'],
   inputs: [],
   optionalInputs: [JOB],
   batchLimit: config.apiEmail.batchLimit,
