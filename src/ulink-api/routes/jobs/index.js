@@ -16,6 +16,7 @@ const apiClaimRecognitionService = require('../../modules/api-claim-recognition/
 const apiMemberVerificationService = require('../../modules/api-member-verification/service');
 const apiDocumentCheckingService = require('../../modules/api-document-checking/service');
 const apiEmailSenderService = require('../../modules/api-email-sender/service');
+const apiReplyIntakeService = require('../../modules/api-reply-intake/service');
 
 const router = express.Router();
 
@@ -822,5 +823,31 @@ router.use('/api-document-checking', createJobRouter('api-document-checking', ap
  *         description: Lock cleared
  */
 router.use('/api-email-sender', createJobRouter('api-email-sender', apiEmailSenderService));
+
+/**
+ * @openapi
+ * /api/jobs/api-reply-intake/run:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Start the api-reply-intake job (fire-and-forget) — customer replies to API emails
+ *     description: >
+ *       For API cases waiting on the customer (API_INCOMPLETE, API_MEMBER_REVIEW_REQUIRED,
+ *       API_NO_DOCUMENTS), takes replies email-intake stored on the case's thread that no earlier
+ *       round handled. New attachments (by content) → API_REPLY_RECEIVED, and OCR reads them with
+ *       the console images. No new attachment → stays waiting; a missing-documents reminder is
+ *       asked for. See docs/imp/day1/api-case-workflow.md section 7.2.
+ *     responses:
+ *       200:
+ *         description: Started, or skipped because a prior run is still in progress
+ *
+ * /api/jobs/api-reply-intake/release:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Manually clear a stuck api-reply-intake lock
+ *     responses:
+ *       200:
+ *         description: Lock cleared
+ */
+router.use('/api-reply-intake', createJobRouter('api-reply-intake', apiReplyIntakeService));
 
 module.exports = router;

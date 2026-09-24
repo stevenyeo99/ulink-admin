@@ -80,7 +80,7 @@ describe('selectedStatuses guard', () => {
 // email-intake / email-sender — add them to SHARED when they join).
 describe('pipeline step lists', () => {
   const { STEPS, API_STEPS, PIPELINES } = require('../modules/pipeline/service');
-  const SHARED = [];
+  const SHARED = ['email-intake'];
 
   it('keeps the email pipeline free of API jobs, and the same list as before', () => {
     expect(PIPELINES.EMAIL).toBe(STEPS);

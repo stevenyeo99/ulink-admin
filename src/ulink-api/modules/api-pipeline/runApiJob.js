@@ -3,7 +3,8 @@ const { sequelize, Case, CaseEvent, ApiCaseStep } = require('../../db/models');
 /**
  * Runs one API case job over every case waiting at its input status. A job is a plain object:
  *
- *   { name, inputStatus, inputs: ['earlier-job', ...], batchLimit,     (inputStatus: one or several)
+ *   { name, inputStatus, inputs: ['earlier-job', ...], optionalInputs: [...], batchLimit,
+ *     (inputStatus: one or several; optionalInputs: jobs that may not have run for the case yet)
  *     process({ caseRecord, input }) -> { output, nextStatus, message } | { wait: true, output } }
  *
  * `input` is { [earlierJob]: its latest DONE output } — a job only ever receives what the jobs it
@@ -18,12 +19,12 @@ const { sequelize, Case, CaseEvent, ApiCaseStep } = require('../../db/models');
  *   every 30 minutes, so the history shows changes, not polling.
  */
 
-async function loadInputs(caseId, jobs) {
+async function loadInputs(caseId, jobs, optionalJobs = []) {
   const input = {};
-  for (const job of jobs) {
+  for (const job of [...jobs, ...optionalJobs]) {
     const step = await ApiCaseStep.findOne({ where: { caseId, job, status: 'DONE' }, order: [['createdAt', 'DESC']] });
-    if (!step) throw new Error(`No output from ${job} for this case`);
-    input[job] = step.output;
+    if (step) input[job] = step.output;
+    else if (jobs.includes(job)) throw new Error(`No output from ${job} for this case`);
   }
   return input;
 }
@@ -67,7 +68,7 @@ async function runApiJob(job) {
     const startedAt = new Date();
     let input = null;
     try {
-      input = await loadInputs(caseRecord.id, job.inputs);
+      input = await loadInputs(caseRecord.id, job.inputs, job.optionalInputs);
       const result = await job.process({ caseRecord, input });
       if (result.wait) {
         await recordRetryable(caseRecord.id, job.name, 'WAITING', { input, output: result.output, error: null, startedAt, finishedAt: new Date() });

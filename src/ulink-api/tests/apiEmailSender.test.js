@@ -29,7 +29,14 @@ jest.mock('../db/models', () => {
       create: jest.fn(async (row) => { const t = { id: `thread-${state.threads.length + 1}`, ...row }; state.threads.push(t); return t; }),
     },
     EmailMessage: {
-      findOne: jest.fn(async ({ where }) => [...state.messages].reverse().find((m) => m.threadId === where.threadId) ?? null),
+      // Honors the conversation filter: internal = { direction, toAddr }; customer = Op.or of inbound / outbound-to-customer.
+      findOne: jest.fn(async ({ where }) => {
+        const or = where[Sequelize.Op.or];
+        const matches = (m) => m.threadId === where.threadId && (or
+          ? or.some((c) => m.direction === c.direction && (!c.toAddr || m.toAddr === c.toAddr))
+          : m.direction === where.direction && m.toAddr === where.toAddr);
+        return [...state.messages].reverse().find(matches) ?? null;
+      }),
       create: jest.fn(async (row) => state.messages.push(row)),
     },
     ApiCaseStep: {
@@ -79,7 +86,7 @@ it('replies in the same thread afterwards, and sends internal emails to the inte
   await run();
 
   const [submission, reply] = sendReply.mock.calls[1];
-  expect(submission).toEqual({ messageId: state.messages[0].messageId, references: null }); // replies to the first email
+  expect(submission).toEqual({ messageId: null, references: null }); // internal side starts its own chain (S19)
   expect(reply.to).toBe('ops@test');
   expect(reply.subject).toMatch(/Member verification hold .* \(Ref: STEVENEVERHILLC58\)$/);
   expect(state.threads).toHaveLength(1);
@@ -103,4 +110,19 @@ it('records a failure and retries the same request next run', async () => {
   expect(state.steps[0]).toMatchObject({ status: 'FAILED', error: 'SMTP down' });
 
   expect(await run()).toEqual({ sent: 1, skipped: 0, errors: [] });
+});
+
+it('keeps the customer chain separate from internal emails, and follows the customer reply (long thread)', async () => {
+  state.requests.push(request('step-1', missingDocs(['No Medical Report(s)'])));
+  await run();
+  const firstCustomerEmail = state.messages[0].messageId;
+  state.messages.push({ threadId: 'thread-1', direction: 'outbound', toAddr: 'ops@test', messageId: '<internal@test>' });
+  state.messages.push({ threadId: 'thread-1', direction: 'inbound', fromAddr: 'customer@test', messageId: '<reply@cust>', referencesHeader: firstCustomerEmail });
+  state.messages.push({ threadId: 'thread-1', direction: 'outbound', toAddr: 'ops@test', messageId: '<internal-2@test>' });
+  state.requests.push(request('step-2', missingDocs(['Missing voucher(s)'])));
+
+  await run();
+
+  // Replies to the customer's own reply, not to the newer internal email.
+  expect(sendReply.mock.calls[1][0]).toEqual({ messageId: '<reply@cust>', references: firstCustomerEmail });
 });

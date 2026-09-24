@@ -1,4 +1,4 @@
-const { CaseDocument, ClaimRoute } = require('../../db/models');
+const { CaseDocument, ClaimRoute, EmailAttachment } = require('../../db/models');
 const config = require('../../config');
 const { getStorageAdapter } = require('../../storage');
 const { runApiJob } = require('../api-pipeline/runApiJob');
@@ -6,7 +6,8 @@ const { transcribePages, extractFields } = require('../claim-recognition/service
 
 // api-claim-recognition: API case workflow job 3 (docs/imp/day1/api-case-workflow.md section 6.4).
 //
-//   input:  { 'api-material-download': { scanId, fileCount, documents: [{ barcodeId, documentIds }] } }
+//   input:  { 'api-material-download': { scanId, fileCount, documents: [{ barcodeId, documentIds }] },
+//             'api-reply-intake': { attachmentIds } }        (only once the customer has replied)
 //   output: { recognizedType, extractedFields, pageCount, transcripts }   (or reasonCode/message on review)
 //
 // Reads the case's console images with exactly the email flow's OCR: the same page-transcription
@@ -17,6 +18,10 @@ const { transcribePages, extractFields } = require('../claim-recognition/service
 
 const JOB = 'api-claim-recognition';
 const API_ROUTE_KEY = 'ayas_member_claim';
+// A long email thread keeps adding reply attachments, and every page goes into one extraction
+// prompt. Past this, a person should look instead (S21).
+// ponytail: fixed page cap; cache per-page transcripts and trim duplicates if real threads hit it.
+const MAX_PAGES = 60;
 
 async function processCase({ caseRecord, input }) {
   const route = await ClaimRoute.findOne({ where: { routeKey: API_ROUTE_KEY, enabled: true } });
@@ -31,15 +36,35 @@ async function processCase({ caseRecord, input }) {
     throw new Error(`Expected ${documentIds.length} case documents, found ${documents.length}`);
   }
 
-  // Same "[<file> - page N]" chunk labels as email attachments — the medical-record fallback
-  // groups pages by that label. The barcode is part of the name because every console
-  // submission numbers its pages from page-000.jpg.
+  // Every reply attachment received so far (all rounds), read together with the console images.
+  const replyAttachmentIds = input['api-reply-intake']?.attachmentIds || [];
+  const attachments = replyAttachmentIds.length
+    ? await EmailAttachment.findAll({ where: { id: replyAttachmentIds }, order: [['createdAt', 'ASC']] })
+    : [];
+  if (attachments.length !== replyAttachmentIds.length) {
+    throw new Error(`Expected ${replyAttachmentIds.length} reply attachments, found ${attachments.length}`);
+  }
+
   const storage = getStorageAdapter();
   const transcripts = [];
-  for (const doc of documents) {
-    const name = `${doc.barcodeId}/${doc.originalFilename}`;
-    const pages = await transcribePages(await storage.get(doc.storageRef), doc.originalFilename, doc.id);
+  // Same "[<file> - page N]" chunk labels as email attachments — the medical-record fallback
+  // groups pages by that label. The barcode is part of the name because every console
+  // submission numbers its pages from page-000.jpg; reply files get a reply-N prefix.
+  const read = async (name, storageRef, filename, label) => {
+    const pages = await transcribePages(await storage.get(storageRef), filename, label);
     for (const page of pages) transcripts.push(`[${name} - page ${page.pageNumber}]\n${page.text}`);
+  };
+  for (const doc of documents) await read(`${doc.barcodeId}/${doc.originalFilename}`, doc.storageRef, doc.originalFilename, doc.id);
+  for (const [i, att] of attachments.entries()) {
+    await read(`reply-${i + 1}/${att.originalFilename || 'attachment'}`, att.storageRef, att.originalFilename, att.id);
+  }
+
+  if (transcripts.length > MAX_PAGES) {
+    return {
+      output: { recognizedType: API_ROUTE_KEY, reasonCode: 'TOO_MANY_PAGES', message: `${transcripts.length} pages (max ${MAX_PAGES})`, pageCount: transcripts.length },
+      nextStatus: 'API_MANUAL_REVIEW',
+      message: `${transcripts.length} pages across console images and replies — too many to read in one pass; needs an operator`,
+    };
   }
 
   const { extractedFields, schemaValidationError } = await extractFields(transcripts, route);
@@ -59,8 +84,10 @@ async function processCase({ caseRecord, input }) {
 
 const job = {
   name: JOB,
-  inputStatus: 'API_MATERIALS_DOWNLOADED',
+  // A customer reply with new attachments sends the case back here (API_REPLY_RECEIVED).
+  inputStatus: ['API_MATERIALS_DOWNLOADED', 'API_REPLY_RECEIVED'],
   inputs: ['api-material-download'],
+  optionalInputs: ['api-reply-intake'],
   // Same cost profile as the email OCR job (vision call per page + extraction), same batch size.
   batchLimit: config.claimRecognition.batchLimit,
   process: processCase,

@@ -18,6 +18,7 @@ const apiClaimRecognitionService = require('../api-claim-recognition/service');
 const apiMemberVerificationService = require('../api-member-verification/service');
 const apiDocumentCheckingService = require('../api-document-checking/service');
 const apiEmailSenderService = require('../api-email-sender/service');
+const apiReplyIntakeService = require('../api-reply-intake/service');
 
 // Fixed order — later steps read the Case.currentStatus earlier steps write, per
 // docs/imp/day1/jobs-registry.md's "Orchestrator" section. Each block keeps its own
@@ -65,6 +66,11 @@ const STEPS = [
 const API_STEPS = [
   ['api-claim-intake', apiClaimIntakeService],
   ['api-material-download', apiMaterialDownloadService],
+  // The one inbox reader, shared with the email pipeline (same job, same lock — never both at
+  // once). A reply to an API email lands on the API case's thread; api-reply-intake takes it
+  // from there. email-intake itself only ever reprocesses email statuses.
+  ['email-intake', emailIntakeService],
+  ['api-reply-intake', apiReplyIntakeService],
   ['api-claim-recognition', apiClaimRecognitionService],
   ['api-member-verification', apiMemberVerificationService],
   ['api-document-checking', apiDocumentCheckingService],

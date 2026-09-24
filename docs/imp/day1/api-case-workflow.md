@@ -118,7 +118,7 @@ stateDiagram-v2
 | `API_RECEIVED` | New claim from IAS; no images yet | `api-claim-intake` | `api-material-download` | 1 |
 | `API_MATERIALS_DOWNLOADED` | Console images stored as case documents | `api-material-download` | `api-claim-recognition` | 3 |
 | `API_NO_DOCUMENTS` | No console images after the grace period; the customer will be asked | `api-material-download` | document checking (email) | 2c / 6 |
-| `API_REPLY_RECEIVED` | Customer replied with attachments while the case was waiting | `email-intake` | `api-claim-recognition` | 4 |
+| `API_REPLY_RECEIVED` | Customer replied with new attachments while the case was waiting | `api-reply-intake` | `api-claim-recognition` | 4 |
 | `API_RECOGNIZED` | OCR done | `api-claim-recognition` | `api-member-verification` | 5 |
 | `API_MANUAL_REVIEW` | Extraction didn't fit the `ayas_member_claim` schema; waits for an operator | `api-claim-recognition` | operator | 5 |
 | `API_MEMBER_REVIEW_REQUIRED` | Member/coverage issue (internal email: 6c). Re-checked every run; **also waits for a reply** | `api-member-verification` | `api-member-verification` (re-check), `email-intake` (reply) | 6 |
@@ -140,30 +140,24 @@ Statuses from Phase 3 onward are provisional until their phase is built.
 POST /api/jobs/api-pipeline/run        cron: every 30 minutes; lock 'api-pipeline'
   1. api-claim-intake
   2. api-material-download
-  3. api-claim-recognition
-  4. api-member-verification
-  5. api-document-checking
-  6. api-email-sender          (API emails only; not the email pipeline's email-sender)
+  3. email-intake              (shared inbox reader, same job + lock as the email pipeline)
+  4. api-reply-intake
+  5. api-claim-recognition
+  6. api-member-verification
+  7. api-document-checking
+  8. api-email-sender          (API emails only; not the email pipeline's email-sender)
 ```
 
 Endpoints: `/api/jobs/api-pipeline/run`, `/release`, `/runs`, `/runs/:id` — they only ever see `pipeline='API'`
 runs (`ulink_pipeline_runs.pipeline`). The email orchestrator (`/api/jobs/pipeline/*`, lock `pipeline`) is unchanged
 and only sees `EMAIL` runs. The console shows each on its own tab (`?source=api`), and the cases list likewise.
 
-Planned full order, as each phase adds its job:
+Still to come, inserted before `api-email-sender` as each phase is built:
 
 ```
-  1. api-claim-intake
-  2. email-intake              shared with the email pipeline      (Phase 4)
-  3. api-material-download
-  4. api-claim-recognition                                         (Phase 5)
-  5. api-member-verification                                       (Phase 6)
-  6. api-document-checking                                         (Phase 6)
-  7. email-sender              shared                              (Phase 6)
-  8. api-claim-preparation                                         (Phase 7)
-  9. api-claim-revision                                            (Phase 8)
- 10. api-claim-stp                                                 (Phase 9)
- 11. email-sender              shared                              (Phase 9)
+  api-claim-preparation        (Phase 7)
+  api-claim-revision           (Phase 8)
+  api-claim-stp                (Phase 9)
 ```
 
 - **Same runner as the email pipeline.** `modules/pipeline/service.js` gives each step a lock, a timeout and a
@@ -171,8 +165,9 @@ Planned full order, as each phase adds its job:
   `pipeline = 'API'`.
 - **No branching in the orchestrator.** Every step runs every time, and each job only picks up cases in its own
   status. A case that one step moves forward is visible to the next step in the same run.
-- **Shared jobs** (`email-intake`, `email-sender`) run in both pipelines with the **same lock**. If the email
-  pipeline is running one of them, the API pipeline's step is `SKIPPED`, which is normal. The next run catches up.
+- **Shared job** `email-intake` runs in both pipelines with the **same lock**. If the email pipeline is running it,
+  the API pipeline's step is `SKIPPED`, which is normal; the next run catches up. Emails are **not** shared: the API
+  pipeline has its own `api-email-sender` (section 7.1).
 - **Why `email-intake` is a step here:** there is only one inbox, so there must be only one reader. Two readers
   would compete over unread messages. Running the shared reader from both pipelines means API replies are picked up
   on the API schedule too.
@@ -379,43 +374,55 @@ STP claims: fetch the settlement report like `ias-claim-stp`. Non-STP: manual ap
 Until reply routing (Phase 4) is built, a customer reply to an API email is matched to the API case by the existing
 header matching and stored, but not reprocessed (API statuses aren't in email-intake's awaiting list).
 
-### 7.2 Incoming: which case does an email belong to? (Phase 4)
+### 7.2 Incoming: replies to API emails (Phase 4, built 2026-09-24)
 
-There is **one inbox for both kinds of case** and **one reader**, `email-intake`. Neither workflow picks or skips
-emails by type: every unread email is decided exactly once. For each email:
-
-1. Skip it if it is already stored (`ulink_email_messages.source` + `externalId`).
-2. Find its case (below). It belongs to exactly one case, API or email.
-3. Store it and its attachments on that case.
-4. Only then mark it `\Seen`. If step 2 or 3 fails, it stays unread and the next run retries it.
-
-Never mark an email seen before it is stored, and never mark it seen for one case type while leaving it for the
-other: both would lose or duplicate replies.
-
-Finding the case:
+**How an email is known to be API or email.** There is one inbox and one reader, `email-intake` (shared, **code
+unchanged**). It stores each unread email once, on exactly one case, and only then marks it `\Seen`:
 
 ```
-1. In-Reply-To / References header matches an email we sent?
-      → that email's thread → its case
-2. else, subject contains the tpaCaseNumber of an API case?
-      → that API case
-3. else
-      → new email case (existing behavior)
+1. In-Reply-To / References header matches a message we stored  → that message's thread → its case
+2. else                                                          → a new EMAIL case (today's behaviour)
 ```
 
-Then, if the matched case is an **API case**:
+An API case's thread is the one `api-email-sender` started with our first email, so a customer reply lands on the
+API case. The case's `source` then decides what happens:
 
-| API case status | Email has attachments | Result |
-|---|---|---|
-| `API_INCOMPLETE` or `API_MEMBER_REVIEW_REQUIRED` | yes | Store the email and attachments → **`API_REPLY_RECEIVED`** |
-| `API_INCOMPLETE` or `API_MEMBER_REVIEW_REQUIRED` | no | Store the email; status unchanged |
-| any other `API_*` | either | Store and log only; status unchanged |
+- `email-intake` itself only re-processes **email** statuses (`AWAITING_CUSTOMER_STATUSES`), which an API case can
+  never hold (DB check), so it just stores the reply and logs it.
+- **`api-reply-intake`** (API side) takes it from there.
 
-Email cases keep their existing logic (`AWAITING_CUSTOMER_STATUSES` in `modules/email-intake/service.js`). The API
-branch only ever writes `API_*` statuses, so a reply can't move an API case into the email pipeline.
+Long threads are fine: a reply to *any* earlier message matches, because every id in `References` is checked.
 
-**Known gap:** a customer who sends a brand-new email with a different subject becomes a new email case (rule 3).
-An operator has to link it by hand.
+**`api-reply-intake`** (`modules/api-reply-intake/service.js`, `POST /api/jobs/api-reply-intake/run`)
+
+| | |
+|---|---|
+| Input status | `API_INCOMPLETE`, `API_MEMBER_REVIEW_REQUIRED`, `API_NO_DOCUMENTS` (waiting on the customer) |
+| Input | its own previous output (optional) — what earlier rounds handled |
+| Output | `{ handledMessageIds, newMessageIds, attachmentIds, newAttachmentIds, attachmentHashes, email? }` |
+
+| Reply | Result |
+|---|---|
+| Brings attachments not received before (by content hash) | `API_REPLY_RECEIVED` → OCR reads the console images **plus every reply attachment so far** → member check → document check → … |
+| Brings nothing new, documents missing (`API_INCOMPLETE` / `API_NO_DOCUMENTS`) | Stays; asks for the last missing-documents email again (dedupe key `reply:<message id>`, as email cases do) |
+| Brings nothing new, member issue | Stays; recorded only (internal matter) |
+| No new reply | WAITING |
+
+- **Exactly once over many rounds (S20):** handled message ids are carried forward in the output.
+- **Re-attached files (S21):** an attachment with the same content as one already received is skipped.
+- **Replies while the case is busy (S9):** not taken until the case waits again; then they're picked up.
+- **Too many pages (S21):** OCR sends a case with more than 60 pages (console + replies) to `API_MANUAL_REVIEW`
+  (`TOO_MANY_PAGES`).
+- `email-intake` is also a step of the API pipeline (same job, same lock as the email pipeline), so replies are read
+  on the API schedule too.
+
+**Not built yet**
+
+- **Subject fallback (S8):** a brand-new email without reply headers but with `(Ref: <tpaCaseNumber>)` in the subject
+  still becomes a new email case. Needs a small change inside `email-intake`'s thread matching — to be done as a
+  separate, reviewed change.
+- **Reply after the case moved on (S10):** stored on the thread but not acted on; no internal alert yet.
+- Links inside reply PDFs are not followed (the email flow's linked-document fetch isn't used for API replies).
 
 ## 8. Data
 

@@ -146,25 +146,29 @@ export const EMAIL_BADGE_EDGES: EmailBadgeEdge[] = EMAIL_BADGES.map((badge) => (
 export const API_BLOCKS: BlockMeta[] = [
   { id: 'api-claim-intake', label: 'API Claim Intake', description: "Lists today's IAS API claims, one case per claim", x: 0, y: 0 },
   { id: 'api-material-download', label: 'Material Download', description: 'Downloads console images via the middleware zip', x: 0, y: 190 },
-  { id: 'api-claim-recognition', label: 'Claim Recognition', description: 'Same OCR + extraction as email (AYAS member claim)', x: 0, y: 380 },
-  { id: 'api-member-verification', label: 'Member Verification', description: 'Same IAS member lookup + checks as email', x: 0, y: 570 },
-  { id: 'api-document-checking', label: 'Document Checking', description: 'Same completeness checklist as email', x: 0, y: 760 },
+  // Shared with the email tab: the one inbox reader. Replies to API emails land on the API case.
+  { id: 'email-intake', label: 'Email Intake (shared)', description: 'Reads the inbox; replies go to their own case', x: 0, y: 380 },
+  { id: 'api-reply-intake', label: 'Reply Intake', description: 'New customer reply attachments → read again', x: 0, y: 570 },
+  { id: 'api-claim-recognition', label: 'Claim Recognition', description: 'Same OCR + extraction as email (AYAS member claim)', x: 0, y: 760 },
+  { id: 'api-member-verification', label: 'Member Verification', description: 'Same IAS member lookup + checks as email', x: 0, y: 950 },
+  { id: 'api-document-checking', label: 'Document Checking', description: 'Same completeness checklist as email', x: 0, y: 1140 },
 ];
 
-export const API_EDGES: StaticEdge[] = [
-  { id: 'e-api-intake-download', source: 'api-claim-intake', target: 'api-material-download', sourceHandle: 'source-bottom', targetHandle: 'target-top', kind: 'main' },
-  { id: 'e-api-download-recognition', source: 'api-material-download', target: 'api-claim-recognition', sourceHandle: 'source-bottom', targetHandle: 'target-top', kind: 'main' },
-  { id: 'e-api-recognition-member', source: 'api-claim-recognition', target: 'api-member-verification', sourceHandle: 'source-bottom', targetHandle: 'target-top', kind: 'main' },
-  { id: 'e-api-member-documents', source: 'api-member-verification', target: 'api-document-checking', sourceHandle: 'source-bottom', targetHandle: 'target-top', kind: 'main' },
-];
+const apiEdge = (source: BlockName, target: BlockName): StaticEdge => ({
+  id: `e-${source}-${target}`, source, target, sourceHandle: 'source-bottom', targetHandle: 'target-top', kind: 'main',
+});
+
+// The API steps run top to bottom in this order (modules/pipeline/service.js API_STEPS).
+export const API_EDGES: StaticEdge[] = API_BLOCKS.slice(1).map((block, i) => apiEdge(API_BLOCKS[i].id, block.id));
 
 // Same presentation as the email tab: a badge beside each job that asks for an email, showing the
 // one api-email-sender step that sends them all (the email pipeline splits its sender per
 // category; the API pipeline runs it once, so every API badge shows that same step).
 export const API_EMAIL_BADGES: EmailBadgeMeta[] = [
   { id: 'api-email-badge-material-download', producer: 'api-material-download', blockName: 'api-email-sender', label: 'MISSING_DOCUMENTS (no images)', audience: 'customer', x: 300, y: 190 },
-  { id: 'api-email-badge-member-verification', producer: 'api-member-verification', blockName: 'api-email-sender', label: 'MEMBER_VERIFY_ISSUE', audience: 'internal', x: 300, y: 570 },
-  { id: 'api-email-badge-document-checking', producer: 'api-document-checking', blockName: 'api-email-sender', label: 'MISSING_DOCUMENTS · DOCUMENT_COMPLETE_ACK', audience: 'customer', x: 300, y: 760 },
+  { id: 'api-email-badge-reply-intake', producer: 'api-reply-intake', blockName: 'api-email-sender', label: 'MISSING_DOCUMENTS (reminder)', audience: 'customer', x: 300, y: 570 },
+  { id: 'api-email-badge-member-verification', producer: 'api-member-verification', blockName: 'api-email-sender', label: 'MEMBER_VERIFY_ISSUE', audience: 'internal', x: 300, y: 950 },
+  { id: 'api-email-badge-document-checking', producer: 'api-document-checking', blockName: 'api-email-sender', label: 'MISSING_DOCUMENTS · DOCUMENT_COMPLETE_ACK', audience: 'customer', x: 300, y: 1140 },
 ];
 
 export const API_EMAIL_BADGE_EDGES: EmailBadgeEdge[] = API_EMAIL_BADGES.map((badge) => ({

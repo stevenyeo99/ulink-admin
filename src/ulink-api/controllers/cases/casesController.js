@@ -52,6 +52,7 @@ const KNOWN_STATUSES = [
   'API_MEMBER_REVIEW_REQUIRED',
   'API_DOCUMENTS_VERIFIED',
   'API_INCOMPLETE',
+  'API_REPLY_RECEIVED',
 ];
 
 // One-line summary for the list view — the specific thing a reviewer would need to glance

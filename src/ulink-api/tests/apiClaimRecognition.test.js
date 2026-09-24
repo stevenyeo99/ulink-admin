@@ -8,10 +8,11 @@ jest.mock('../storage', () => ({ getStorageAdapter: () => ({ get: jest.fn(async 
 jest.mock('../db/models', () => ({
   ClaimRoute: { findOne: jest.fn() },
   CaseDocument: { findAll: jest.fn() },
+  EmailAttachment: { findAll: jest.fn() },
 }));
 
 const { transcribePages, extractFields } = require('../modules/claim-recognition/service');
-const { ClaimRoute, CaseDocument } = require('../db/models');
+const { ClaimRoute, CaseDocument, EmailAttachment } = require('../db/models');
 const { job } = require('../modules/api-claim-recognition/service');
 
 const route = { routeKey: 'ayas_member_claim', extractionSchema: { type: 'object' } };
@@ -29,8 +30,34 @@ beforeEach(() => {
   transcribePages.mockImplementation(async (_buffer, filename) => [{ pageNumber: 1, text: `text of ${filename}` }]);
 });
 
-it('receives api-material-download output and runs on API_MATERIALS_DOWNLOADED', () => {
-  expect(job).toMatchObject({ inputStatus: 'API_MATERIALS_DOWNLOADED', inputs: ['api-material-download'] });
+it('receives api-material-download output (+ replies once there are any), and runs again after a reply', () => {
+  expect(job).toMatchObject({
+    inputStatus: ['API_MATERIALS_DOWNLOADED', 'API_REPLY_RECEIVED'],
+    inputs: ['api-material-download'],
+    optionalInputs: ['api-reply-intake'],
+  });
+});
+
+it('reads every reply attachment together with the console images', async () => {
+  extractFields.mockResolvedValue({ extractedFields: {}, schemaValidationError: null });
+  EmailAttachment.findAll.mockResolvedValue([{ id: 'a1', originalFilename: 'report.pdf', storageRef: 'mail/report.pdf' }]);
+
+  await job.process({ caseRecord, input: { ...input, 'api-reply-intake': { attachmentIds: ['a1'] } } });
+
+  expect(EmailAttachment.findAll.mock.calls[0][0].where).toEqual({ id: ['a1'] });
+  const [transcripts] = extractFields.mock.calls[0];
+  expect(transcripts).toEqual([
+    '[B1/page-000.jpg - page 1]\ntext of page-000.jpg',
+    '[B1/page-001.jpg - page 1]\ntext of page-001.jpg',
+    '[reply-1/report.pdf - page 1]\ntext of report.pdf',
+  ]);
+});
+
+it('sends a thread with too many pages to manual review instead of one huge extraction (S21)', async () => {
+  transcribePages.mockResolvedValue(Array.from({ length: 31 }, (_, i) => ({ pageNumber: i + 1, text: 'x' })));
+  const result = await job.process({ caseRecord, input });
+  expect(result).toMatchObject({ nextStatus: 'API_MANUAL_REVIEW', output: { reasonCode: 'TOO_MANY_PAGES', pageCount: 62 } });
+  expect(extractFields).not.toHaveBeenCalled();
 });
 
 it("reads every document with the email flow's OCR and extracts with the ayas_member_claim route", async () => {

@@ -110,3 +110,9 @@ it('accepts several input statuses and records the status the case was actually 
   expect(await runApiJob(multi)).toEqual({ processed: 1, waiting: 0, errors: [] });
   expect(models.events[0]).toMatchObject({ prevStatus: 'API_RETRY', newStatus: 'API_B_DONE' });
 });
+
+it('passes an optional input only when that job has output for the case', async () => {
+  const process = jest.fn(async () => ({ output: {}, nextStatus: 'API_B_DONE', message: 'ok' }));
+  await runApiJob({ ...job(process), optionalInputs: ['job-maybe'] });
+  expect(process.mock.calls[0][0].input).toEqual({ 'job-a': { v: 2 } });
+});

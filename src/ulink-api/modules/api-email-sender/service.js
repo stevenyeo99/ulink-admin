@@ -6,7 +6,7 @@ const { render } = require('../email-sender/templates');
 // api-email-sender: sends the emails API case jobs ask for (docs/imp/day1/api-case-workflow.md 7.1).
 //
 //   input:  a DONE step whose output.email is { taskType, audience, payload, dedupeKey }
-//           (api-member-verification, api-document-checking, api-material-download)
+//           (api-material-download, api-member-verification, api-document-checking, api-reply-intake)
 //   output: { to, cc, subject, messageId, threadId }  or  { skipped: 'same as the last one sent' }
 //
 // Separate from the email pipeline's email-sender on purpose: that one sends every PENDING
@@ -20,7 +20,7 @@ const { render } = require('../email-sender/templates');
 // client drops the reply headers.
 
 const JOB = 'api-email-sender';
-const SOURCE_JOBS = ['api-material-download', 'api-member-verification', 'api-document-checking'];
+const SOURCE_JOBS = ['api-material-download', 'api-member-verification', 'api-document-checking', 'api-reply-intake'];
 const API_ROUTE_KEY = 'ayas_member_claim';
 
 // Customer templates have no subject of their own (email cases reply under the customer's
@@ -95,9 +95,16 @@ async function send(request) {
   const cc = route?.ccEmail || null;
   const subject = subjectFor(email, rendered, caseRecord);
 
-  // First API email for the case starts its thread; later ones reply to the latest message in it.
+  // First API email for the case starts its thread; later ones reply to the latest message of the
+  // same conversation — customer emails to the customer's side (their replies and our emails to
+  // them), internal emails to the internal side. Never mixed, so a customer's mail app never gets
+  // a reply to an internal email it never received (S19). Long threads work: each reply extends
+  // the References chain.
   const thread = await EmailThread.findOne({ where: { caseId: caseRecord.id }, order: [['createdAt', 'ASC']] });
-  const last = thread && await EmailMessage.findOne({ where: { threadId: thread.id }, order: [['createdAt', 'DESC']] });
+  const conversation = email.audience === 'internal'
+    ? { direction: 'outbound', toAddr: to }
+    : { [Sequelize.Op.or]: [{ direction: 'inbound' }, { direction: 'outbound', toAddr: to }] };
+  const last = thread && await EmailMessage.findOne({ where: { threadId: thread.id, ...conversation }, order: [['createdAt', 'DESC']] });
 
   const { messageId } = await getChannelAdapter().sendReply(
     { messageId: last?.messageId || null, references: last?.referencesHeader || null },

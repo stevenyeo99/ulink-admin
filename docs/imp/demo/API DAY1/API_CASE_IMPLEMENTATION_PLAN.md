@@ -1,6 +1,6 @@
 # API Case Implementation Plan
 
-Status: Phase 0, 1, 2, 2c, 3, 5 and 6 built (2026-09-24); next: Phase 4 (reply routing)  
+Status: Phase 0, 1, 2, 2c, 3, 4, 5 and 6 built (2026-09-24); next: Phase 7 (claim preparation)  
 Scope: `ulink-admin/src/ulink-api` + `ulink-admin/src/ulink-console`  
 Date: 2026-09-24
 
@@ -111,7 +111,11 @@ Built ahead of Phase 2: one job, and a cron entry can call it directly until the
   - which barcode to use when a scan has several submissions (`-01`, `-02`);
   - how long to wait for missing images before manual review.
 
-## Phase 4: Email routing for API cases (shared plumbing)
+## Phase 4: Email routing for API cases (shared plumbing) — BUILT 2026-09-24 (header matching)
+
+Built as `api-reply-intake` with **no change to email-intake** (option a): replies matched by reply headers land on the
+API case's thread, and the API job acts on them. The outgoing part was built in 6c. Subject fallback (S8) deferred.
+The original design notes below are kept for reference.
 
 **Goal:** API cases can send email, and customer replies come back to the API workflow.
 
@@ -210,7 +214,7 @@ Found while walking through API case edge cases (2026-09-24). ⚠️ = can lose 
 | S6 | Customer uploads more pages to the console while the case waits | Re-check the console each run while waiting; new pages → back to OCR | 6 |
 | S7 | Blurry / unreadable images | Unreadable values come back `unclear`/missing (same prompt as email) and document checking asks for them; a schema mismatch → `API_MANUAL_REVIEW` | 5 ✓ / 6 |
 | S8 | ⚠️ Customer sends a brand-new email without `tpaCaseNumber` | Would become an email case and could create a second IAS claim. Duplicate check: same member + treatment date as an open API case → flag, don't create | 4 |
-| S9 | Reply arrives while the case is processing (not waiting) | Keep it; include its attachments the next time the case is read (OCR reads every reply) | 4 / 5 |
+| S9 | Reply arrives while the case is processing (not waiting) | Keep it; include its attachments the next time the case is read (OCR reads every reply) | 4 ✓ |
 | S10 | Reply after revision already done | Store and alert internally; no reprocessing | 4 |
 | S11 | Customer email address unknown (fixed address for now) | Production blocker — use the member-info email | 6 |
 | S12 | Email bounces | Flag for an operator | 6 |
@@ -219,7 +223,10 @@ Found while walking through API case edge cases (2026-09-24). ⚠️ = can lose 
 | S15 | ⚠️ A person already changed/approved the claim in IAS | Check claim status before revising; only revise at the expected status | 8 |
 | S16 | Revision timeout (outcome unknown) | Check the claim in IAS before resending | 8 |
 | S17 | Revision runs again after a reply | Must be safe to repeat — confirm with the IAS sample | 8 |
-| S18 | Reply with no attachment | Store, keep waiting, send the "no attachment" reminder (as email cases) | 4 |
+| S18 | Reply with no attachment | Store, keep waiting, send the "no attachment" reminder (as email cases) | 4 ✓ |
+| S19 | Long thread: internal and customer emails share one thread, so a customer email may reply to an internal one the customer never received | Customer emails reply to the latest customer-facing message; internal emails keep their own chain | 4 ✓ |
+| S20 | Long thread: every reply must be handled exactly once across many rounds | `api-reply-intake` records the message ids it handled; later rounds take only new ones | 4 ✓ |
+| S21 | Long thread: OCR re-reads console images + all reply attachments every round; re-attached duplicates; prompt size grows | Skip identical attachments (content hash); flag manual review if too large; cache page transcripts when needed | 4 ✓ |
 
 ## Build order
 

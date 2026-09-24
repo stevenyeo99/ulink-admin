@@ -52,6 +52,7 @@ const LABELS: Record<string, string> = {
   API_MEMBER_REVIEW_REQUIRED: 'Member Review',
   API_DOCUMENTS_VERIFIED: 'Documents Verified',
   API_INCOMPLETE: 'Incomplete',
+  API_REPLY_RECEIVED: 'Reply Received',
   CLAIM_SUBMIT_FAILED: 'Claim Submit Failed',
 };
 
