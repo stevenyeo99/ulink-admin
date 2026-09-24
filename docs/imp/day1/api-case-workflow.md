@@ -58,7 +58,8 @@ In words:
 
 1. Every 30 minutes the API orchestrator asks IAS for API claims created today (Myanmar time), and creates one case
    per new `clNo`.
-2. It downloads that claim's page images from the console.
+2. It downloads that claim's page images from the console and stores them as case documents (waiting up to 2 hours
+   if the console has none yet).
 3. OCR reads the images.
 4. Member check, then document check. If either fails, an email goes out and the case waits.
 5. When the customer replies, the reply's attachments are added and the case goes back to OCR with the console
@@ -97,6 +98,7 @@ status, so the email pipeline can't pick it up.
 stateDiagram-v2
   [*] --> API_RECEIVED: api-claim-intake
   API_RECEIVED --> API_MATERIALS_DOWNLOADED: api-material-download
+  API_RECEIVED --> API_NO_DOCUMENTS: no images after grace period
   API_MATERIALS_DOWNLOADED --> API_RECOGNIZED: api-claim-recognition
   API_REPLY_RECEIVED --> API_RECOGNIZED: api-claim-recognition
   API_RECOGNIZED --> API_READY_FOR_DOCUMENT_CHECKING: member ok
@@ -114,7 +116,8 @@ stateDiagram-v2
 | Status | Meaning | Set by | Picked up by | Phase |
 |---|---|---|---|---|
 | `API_RECEIVED` | New claim from IAS; no images yet | `api-claim-intake` | `api-material-download` | 1 |
-| `API_MATERIALS_DOWNLOADED` | Console images saved locally | `api-material-download` | `api-claim-recognition` | 3 |
+| `API_MATERIALS_DOWNLOADED` | Console images stored as case documents | `api-material-download` | `api-claim-recognition` | 3 |
+| `API_NO_DOCUMENTS` | No console images after the grace period; the customer will be asked | `api-material-download` | document checking (email) | 2c / 6 |
 | `API_REPLY_RECEIVED` | Customer replied with attachments while the case was waiting | `email-intake` | `api-claim-recognition` | 4 |
 | `API_RECOGNIZED` | OCR done | `api-claim-recognition` | `api-member-verification` | 5 |
 | `API_NOT_RECOGNIZED` / `API_MANUAL_REVIEW` | OCR couldn't classify the documents | `api-claim-recognition` | operator | 5 |
@@ -173,50 +176,77 @@ Planned full order, as each phase adds its job:
 
 ## 6. Jobs
 
-Each job reads the previous job's output from `ulink_cases` and writes its own. None of them call each other.
+**Each job's input is the previous job's output.** This is the orchestrator's core idea:
 
-### 6.1 `api-claim-intake` (Phase 1)
+```
+job 1  input: IAS list                 → output 1
+job 2  input: { job 1: output 1 }      → output 2
+job 3  input: { job 2: output 2 }      → output 3
+```
+
+- **Contract in code.** A per-case job is a plain object run by `modules/api-pipeline/runApiJob.js`:
+  ```js
+  { name, inputStatus, inputs: ['<earlier job>'], batchLimit,
+    process({ caseRecord, input }) → { output, nextStatus, message } | { wait: true, output } }
+  ```
+  `input` is `{ [earlierJob]: its latest DONE output }` — nothing else. A job that needs several earlier results
+  names several (e.g. claim preparation will take recognition, member check and document check).
+- **Stored per run.** `ulink_api_case_steps` keeps one row per job run per case: `input`, `output`, `error`,
+  `status` (`DONE` / `WAITING` / `FAILED`) and timestamps. It is the single source of every API job's data; the case
+  row only holds identity and status. A re-run adds a row, so history is kept.
+- **The runner owns the rest:** picks `source='API'` cases at `inputStatus`, builds the input, calls `process`,
+  then in **one transaction** saves the `DONE` row, moves the status (only if the case is still at `inputStatus`) and
+  writes the `ulink_case_events` row. `WAITING` (nothing to do yet) and `FAILED` (technical error) leave the case
+  where it is for the next run; repeating the same outcome updates the latest row instead of adding one each run.
+- Jobs never call each other.
+
+### 6.1 `api-claim-intake` (Phase 1, reworked in 2c)
 
 | | |
 |---|---|
 | Module | `modules/api-claim-intake/` (`iasClient.js`, `service.js`) |
-| Status | **Built** 2026-09-24. Job: `POST /api/jobs/api-claim-intake/run` (today). Tests: `tests/apiClaimIntake.test.js` |
+| Job | `POST /api/jobs/api-claim-intake/run`. Tests: `tests/apiClaimIntake.test.js` |
 | Test endpoint | `GET /api/dev/api-claim-intake/preview?dateFrom=YYYY-MM-DD&dateTo=YYYY-MM-DD` (real IAS call, saves nothing) |
 | Calls | `GET {IAS_URL}{GET_CLAIM_API}?dateFrom=YYYY-MM-DD&dateTo=YYYY-MM-DD` |
-| Selects | Nothing from the DB; the input is the IAS list |
-| Writes | New row: `source='API'`, `claim_no`, `tpa_case_number`, `ias_api_claim` (raw IAS row), `current_status='API_RECEIVED'`, plus a `ulink_case_events` row |
-| Returns | `{ fetched, inserted, skippedExisting, skippedInvalid }` |
+| Input | The IAS list (it creates cases, so it doesn't use the per-case runner) |
+| Output (step row per new case) | `{ clNo, tpaCaseNumber, crtDate }` — the input of `api-material-download` |
+| Writes | New case (`source='API'`, `claim_no`, `tpa_case_number`, `API_RECEIVED`), its `DONE` step row, a case event; the `ulink_job_checkpoints` row |
+| Returns | `{ dateFrom, dateTo, fetched, inserted, skippedExisting, skippedInvalid, errors }` |
 
 Logic:
 
-1. Date range defaults to **today in Myanmar time (UTC+6:30)** for both `dateFrom` and `dateTo`
-   (`todayInIasTimezone()` in `modules/shared/iasDates.js`). It is computed in `Asia/Yangon` explicitly because the
-   server runs on WIB (UTC+7), whose date is already tomorrow between 00:00 and 00:30 Myanmar time.
-   **Known gap:** a claim created after the day's last run (e.g. 23:31–23:59) is not picked up automatically. Catch it
-   by running the day again with an explicit range; duplicates are blocked by step 3.
-2. Call IAS. On a timeout, a non-2xx response or `success: false`, write nothing and end the run. The next run
-   retries the same range.
+1. **Date range = from the last successfully listed date up to today**, in Myanmar time (UTC+6:30,
+   `todayInIasTimezone()` — the server runs on WIB, UTC+7). The last date is kept in `ulink_job_checkpoints`
+   (`job='api-claim-intake'`, `value.lastListedDate`). Normally that is today → today; after an outage it reaches
+   back over every missed day (S1). The last day is listed again on purpose, since more claims may have been created
+   on it after that run. A first run lists today only.
+2. Call IAS. On a timeout, a non-2xx response or `success: false`, write nothing (checkpoint unchanged). The next
+   run retries the same range.
 3. Create each claim's case with `Case.findOrCreate` on (`source='API'`, `claim_no`), in one transaction with its
-   `ulink_case_events` row. The unique indexes are the real guard: a clash (e.g. the same `tpaCaseNumber` under a
-   new `clNo`) fails that claim and is reported in `errors`; it is never merged into the existing case. A claim that already exists is left alone: its status stays
-   wherever later jobs moved it.
-4. A row without `clNo` or `tpaCaseNumber` is skipped and logged. The rest of the list is still inserted.
+   step row and case event. The unique indexes are the real guard: a clash (e.g. the same `tpaCaseNumber` under a
+   new `clNo`) fails that claim and is reported in `errors`; it is never merged. A claim that already has a case is
+   left alone.
+4. A row without `clNo` or `tpaCaseNumber` is skipped and reported; the rest still go in.
+5. After IAS answered, the checkpoint moves to today.
+6. An **explicit range** (`run({ dateFrom, dateTo })`, a manual catch-up) is used as given and doesn't move the
+   checkpoint.
 
 ### 6.2 `email-intake` (shared, API behavior from Phase 4)
 
 See section 7.2.
 
-### 6.3 `api-material-download` (Phase 3, built 2026-09-24)
+### 6.3 `api-material-download` (Phase 3, reworked in 2c)
 
 | | |
 |---|---|
-| Module | `modules/api-material-download/` (`middlewareClient.js`, `service.js`) |
-| Job | `POST /api/jobs/api-material-download/run` |
-| Selects | `source='API' AND current_status='API_RECEIVED'`, oldest first, `API_MATERIAL_DOWNLOAD_BATCH_LIMIT` per run |
+| Module | `modules/api-material-download/` (`middlewareClient.js`, `service.js`) — a runner job |
+| Job | `POST /api/jobs/api-material-download/run`. Tests: `tests/apiMaterialDownload.test.js` |
+| Input status | `API_RECEIVED` |
+| Input | `{ 'api-claim-intake': { clNo, tpaCaseNumber, crtDate } }` |
 | Calls | ulink-console-middleware (`CONSOLE_MIDDLEWARE_URL`): `GET /api/files/materials?scanId=…` (all pages), then `POST /api/files/download/zip` |
-| Writes | Files under `API_MATERIAL_DOWNLOAD_ROOT/<scanId>/<barcodeId>/<file>`; `api_materials_result`; a `ulink_case_events` row |
-| Next | `API_MATERIALS_DOWNLOADED` |
-| Tests | `tests/apiMaterialDownload.test.js` |
+| Writes | One `ulink_case_documents` row per image (file through the storage adapter, `STORAGE_ROOT/api/<scanId>/<barcodeId>/<file>`) |
+| Output | `{ scanId, fileCount, documents: [{ barcodeId, scanId, createdAt, expected, documentIds }] }` |
+| Next | `API_MATERIALS_DOWNLOADED`, or `API_NO_DOCUMENTS` |
 
 Logic:
 
@@ -224,23 +254,21 @@ Logic:
 2. **List every page** of the scan's submissions. The middleware's scanId search is a *contains* match
    (`API-X68` also returns `API-X688-01`), so only the exact scanId and its numbered submissions (`API-X68-01`,
    `API-X68-02`) are kept.
-3. **Download all submissions as zips** (at most 100 images per request, the middleware's limit) and unpack them
-   into this app's own folder. The images end up on ulink-api's side even when the middleware runs on another
-   server. The scan's folder is emptied first, so a retry can't leave stale files. Every zip entry must resolve
-   inside the folder, or the case fails.
-4. **Save `api_materials_result`:**
-   ```json
-   { "scanId": "API-AYA-CL-26034880", "folder": "<absolute path>", "fileCount": 7,
-     "barcodes": [ { "barcodeId": "VSQ9N14552", "scanId": "API-AYA-CL-26034880-01", "createdAt": "…",
-                     "expected": 7, "files": ["API-AYA-CL-26034880/VSQ9N14552/page-000.jpg", "…"] } ],
-     "downloadedAt": "…" }
-   ```
-   Every barcode is kept here. `expected` is how many images the console listed; if `files` has fewer, some images
-   failed to download. `console_barcode` is **not** set yet: which barcode claim revision needs is decided in
-   Phase 8.
-5. **No images in the console** is not an error. The case still moves on with `fileCount: 0`. Documents then come
-   from the customer's email reply, and document checking asks for what's missing (same as email cases).
-6. **Middleware down, timeout, or every image failing:** the case stays at `API_RECEIVED` and is retried next run.
+3. **No images in the console:**
+   - within `API_MATERIAL_GRACE_MINUTES` (default 120) after the IAS claim's `crtDate` → **WAITING**, retried next
+     run (the console may still be uploading, S4);
+   - after that → `API_NO_DOCUMENTS` with `fileCount: 0`; the customer will be asked for documents (Phase 6).
+4. **Download** only the submissions still missing pages, as zips (at most 100 images per request). Every zip entry
+   must be exactly `<scanId>/<one of this scan's barcodes>/<safe file name>`, or the case fails.
+5. **Store each image as a case document** through the same storage adapter as email attachments. An image that
+   already exists (same case + barcode + file name) is **skipped**, never replaced. Every barcode is kept, with
+   `expected` = how many images the console listed.
+6. **Partial download** (fewer stored than expected) → **WAITING**; what arrived is kept and only the rest is
+   fetched next run (S5). An image that can never be downloaded keeps the case waiting; the step row shows
+   "x of y images downloaded" for an operator.
+7. **Middleware down / timeout** → **FAILED**, retried next run.
+
+`console_barcode` is not set yet: which barcode claim revision needs is decided in Phase 8.
 
 ### 6.4 `api-claim-recognition` (Phase 5)
 
@@ -324,23 +352,16 @@ branch only ever writes `API_*` statuses, so a reply can't move an API case into
 **Known gap:** a customer who sends a brand-new email with a different subject becomes a new email case (rule 3).
 An operator has to link it by hand.
 
-## 8. Data: columns API cases use on `ulink_cases`
+## 8. Data
 
-| Column | Written by | Read by |
-|---|---|---|
-| `source` | `api-claim-intake` (`'API'`) | every API job, `email-intake`, console tabs |
-| `claim_no` | `api-claim-intake` | `api-claim-revision`, `api-claim-stp`, console |
-| `tpa_case_number` | `api-claim-intake` | `api-material-download`, `email-intake` (subject match), console |
-| `ias_api_claim` | `api-claim-intake` | audit only |
-| `api_materials_result` (incl. every barcode) | `api-material-download` | `api-claim-recognition` |
-| `console_barcode` | decided in Phase 8 (which barcode revision needs) | `api-claim-preparation` |
-| `extracted_fields` | `api-claim-recognition` | member / document checks, preparation |
-| `member_verify_result`, `ias_member_info_response` | `api-member-verification` | preparation |
-| `document_check_result` | `api-document-checking` | email tasks |
-| `ias_claim_payload`, `claim_prep_meta`, `is_stp` | `api-claim-preparation` | `api-claim-revision`, `api-claim-stp` |
-| `ias_claim_revision_result` | `api-claim-revision` | `api-claim-stp`, console |
-
-Every status change is also written to `ulink_case_events`.
+| Where | What | Written by | Read by |
+|---|---|---|---|
+| `ulink_cases` | Identity and status only: `source`, `claim_no`, `tpa_case_number`, `current_status` (later also `console_barcode`) | `api-claim-intake`, the runner (status) | every API job's selection, `email-intake` (subject match), console |
+| `ulink_api_case_steps` | Every job run's `input` / `output` / `error` — **the data passed between jobs** | the runner (intake writes its own) | the runner (next job's input), console, debugging |
+| `ulink_case_documents` | Case-level documents: console images (`origin='CONSOLE'`) | `api-material-download` | OCR (Phase 5), console (`GET /api/cases/:caseId/documents/:id`) |
+| `ulink_email_*` | Emails and reply attachments (message level), same tables as email cases | `email-sender`, `email-intake` (Phase 4/6) | OCR (reply attachments) |
+| `ulink_case_events` | Every status change | the runner, intake | console timeline |
+| `ulink_job_checkpoints` | Per-job state not about one case: intake's `lastListedDate` | `api-claim-intake` | `api-claim-intake` |
 
 ## 9. Failure handling
 
@@ -357,13 +378,16 @@ One case failing never stops the batch: each job handles errors per case.
 
 ## 10. Adding or changing an API job
 
-1. Put the logic in `modules/api-<name>/service.js` with a `run()`. Reuse existing business rules from their modules
-   instead of copying them.
-2. Select with `source = 'API'` **and** the `API_*` status it consumes. Write only `API_*` statuses.
-3. Write the job's output to its own column. Read the previous job's output from its column.
+1. Write the job as a runner job in `modules/api-<name>/service.js`: `{ name, inputStatus, inputs, batchLimit,
+   process }`, exported with `run: () => runApiJob(job)`. `process` only uses its `input` (and the case's identity);
+   reuse existing business rules from their modules instead of copying them.
+2. `inputStatus` is an `API_*` status; `nextStatus` values are `API_*` statuses (the DB check rejects anything else).
+3. Return the output the next job needs — keep it plain JSON; large data (files) goes in its own table/storage with
+   ids in the output, like case documents.
 4. Wire `POST /api/jobs/api-<name>/run` in `routes/jobs/index.js` via `createJobRouter`.
-5. Add it to the API pipeline's step list, then to the console's API graph.
-6. Tests: the happy path, a re-run doing nothing new, and the isolation test still passing.
+5. Add it to `API_STEPS` in `modules/pipeline/service.js`, then to `API_BLOCKS`/`API_EDGES` in the console's
+   `graph/pipelineGraph.ts`; add new statuses to `KNOWN_STATUSES` (casesController) and the console labels.
+6. Tests: `process` with a sample input (happy path, wait, failure), and the isolation tests still passing.
 7. Update sections 4, 6 and 8 of this file.
 
 ## 11. Operating and debugging
@@ -381,6 +405,20 @@ Its history:
 ```sql
 SELECT created_at, block_name, prev_status, new_status, reason_code, message
 FROM ulink_case_events WHERE case_id = '<id>' ORDER BY created_at;
+```
+
+What each job received and produced (the input → output chain):
+
+```sql
+SELECT created_at, job, status, input, output, error
+FROM ulink_api_case_steps WHERE case_id = '<id>' ORDER BY created_at;
+```
+
+Its console images:
+
+```sql
+SELECT barcode_id, scan_id, original_filename, size_bytes, storage_ref
+FROM ulink_case_documents WHERE case_id = '<id>' ORDER BY barcode_id, original_filename;
 ```
 
 - **Run one step by hand:** `POST /api/jobs/<name>/run`.

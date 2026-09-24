@@ -117,7 +117,6 @@ export interface CaseDetail {
   claimNo: string | null;
   source: Source;
   tpaCaseNumber: string | null;
-  apiMaterialsResult: unknown;
   createdAt: string;
   updatedAt: string;
   EmailThreads: EmailThread[];
@@ -134,9 +133,23 @@ export interface CaseEvent {
   createdAt: string;
 }
 
+// A case-level document (ulink_case_documents) — an API case's console image.
+export interface CaseDocument {
+  id: string;
+  caseId: string;
+  origin: 'CONSOLE';
+  barcodeId: string;
+  scanId: string | null;
+  originalFilename: string;
+  contentType: string | null;
+  sizeBytes: number | null;
+  createdAt: string;
+}
+
 export interface GetCaseResponse {
   case: CaseDetail;
   events: CaseEvent[];
+  documents: CaseDocument[];
 }
 
 export interface OverrideCaseResponse {

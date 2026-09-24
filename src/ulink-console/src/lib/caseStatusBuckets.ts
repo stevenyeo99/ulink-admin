@@ -41,6 +41,7 @@ const LABELS: Record<string, string> = {
   // API cases (docs/imp/day1/api-case-workflow.md section 4)
   API_RECEIVED: 'Received from IAS',
   API_MATERIALS_DOWNLOADED: 'Images Downloaded',
+  API_NO_DOCUMENTS: 'No Documents',
   CLAIM_SUBMIT_FAILED: 'Claim Submit Failed',
 };
 

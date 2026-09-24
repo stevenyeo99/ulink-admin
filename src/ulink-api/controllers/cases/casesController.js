@@ -1,4 +1,4 @@
-const { Case, CaseEvent, EmailThread, EmailMessage, EmailAttachment } = require('../../db/models');
+const { Case, CaseEvent, CaseDocument, EmailThread, EmailMessage, EmailAttachment } = require('../../db/models');
 const { getStorageAdapter } = require('../../storage');
 const { resetOneCase } = require('../dev/casesController');
 const logger = require('../../utils/logger');
@@ -45,6 +45,7 @@ const KNOWN_STATUSES = [
   // API cases — add each API_* status as its job ships (docs/imp/day1/api-case-workflow.md).
   'API_RECEIVED',
   'API_MATERIALS_DOWNLOADED',
+  'API_NO_DOCUMENTS',
 ];
 
 // One-line summary for the list view — the specific thing a reviewer would need to glance
@@ -147,8 +148,14 @@ async function getCase(req, res) {
     where: { caseId: caseRecord.id },
     order: [['createdAt', 'ASC']],
   });
+  // Case-level documents (API cases' console images); email cases have none.
+  const documents = await CaseDocument.findAll({
+    where: { caseId: caseRecord.id },
+    attributes: { exclude: ['storageRef'] },
+    order: [['barcodeId', 'ASC'], ['originalFilename', 'ASC']],
+  });
 
-  res.json({ case: caseRecord, events });
+  res.json({ case: caseRecord, events, documents });
 }
 
 /**
@@ -187,6 +194,26 @@ async function getAttachment(req, res) {
   const safeFilename = (attachment.originalFilename || attachmentId).replace(/[\x00-\x1f"]/g, '');
   res.set('Content-Type', attachment.contentType || 'application/octet-stream');
   res.set('Content-Disposition', `${inline ? 'inline' : 'attachment'}; filename="${safeFilename}"`);
+  res.send(bytes);
+}
+
+/**
+ * GET /api/cases/:caseId/documents/:documentId — streams one case document (e.g. an API case's
+ * console image). Same rules as getAttachment: no auth (Day 1), so the document must belong to
+ * :caseId, checked in the query itself.
+ */
+async function getDocument(req, res) {
+  const { caseId, documentId } = req.params;
+  const document = await CaseDocument.findOne({ where: { id: documentId, caseId } });
+  if (!document) {
+    return res.status(404).json({ error: { message: `Document ${documentId} not found on case ${caseId}`, status: 404 } });
+  }
+
+  const bytes = await getStorageAdapter().get(document.storageRef);
+  const inline = /^application\/pdf$|^image\//.test(document.contentType || '');
+  res.set('Content-Type', document.contentType || 'application/octet-stream');
+  // originalFilename is already restricted to [A-Za-z0-9._-] when the document is stored.
+  res.set('Content-Disposition', `${inline ? 'inline' : 'attachment'}; filename="${document.originalFilename}"`);
   res.send(bytes);
 }
 
@@ -266,4 +293,4 @@ async function resetCase(req, res) {
   }
 }
 
-module.exports = { listCases, getCase, getAttachment, overrideCase, resetCase, OVERRIDE_TARGETS, REVIEWABLE_STATUSES };
+module.exports = { listCases, getCase, getAttachment, getDocument, overrideCase, resetCase, OVERRIDE_TARGETS, REVIEWABLE_STATUSES };

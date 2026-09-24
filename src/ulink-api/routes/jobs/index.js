@@ -693,11 +693,12 @@ router.use('/api-claim-intake', createJobRouter('api-claim-intake', apiClaimInta
  *     tags: [jobs]
  *     summary: Start the api-material-download job (fire-and-forget) — API case workflow, step 2
  *     description: >
- *       For each API_RECEIVED case, lists console scan API-{tpaCaseNumber} through
- *       ulink-console-middleware, downloads its images as a zip and unpacks them under
- *       API_MATERIAL_DOWNLOAD_ROOT, then moves the case to API_MATERIALS_DOWNLOADED (also when the
- *       console has no images yet). A middleware failure leaves the case at API_RECEIVED for the
- *       next run. See docs/imp/day1/api-case-workflow.md section 6.3.
+ *       For each API_RECEIVED case, takes api-claim-intake's output, lists console scan
+ *       API-{tpaCaseNumber} through ulink-console-middleware, downloads its images as a zip and
+ *       stores each as a case document (existing ones skipped), then moves the case to
+ *       API_MATERIALS_DOWNLOADED. No images yet: waits API_MATERIAL_GRACE_MINUTES after the claim,
+ *       then API_NO_DOCUMENTS. A partial download or middleware failure leaves the case at
+ *       API_RECEIVED for the next run. See docs/imp/day1/api-case-workflow.md section 6.3.
  *     responses:
  *       200:
  *         description: Started, or skipped because a prior run is still in progress

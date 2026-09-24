@@ -1,5 +1,5 @@
 const express = require('express');
-const { listCases, getCase, getAttachment, overrideCase, resetCase } = require('../controllers/cases/casesController');
+const { listCases, getCase, getAttachment, getDocument, overrideCase, resetCase } = require('../controllers/cases/casesController');
 
 const router = express.Router();
 
@@ -90,6 +90,33 @@ router.get('/:id', getCase);
  *         description: Attachment not found, or doesn't belong to this case
  */
 router.get('/:caseId/attachments/:attachmentId', getAttachment);
+
+/**
+ * @openapi
+ * /api/cases/{caseId}/documents/{documentId}:
+ *   get:
+ *     tags: [cases]
+ *     summary: View one case document (an API case's console image)
+ *     description: >
+ *       Case-level documents (ulink_case_documents) — today, the console images
+ *       api-material-download stored for an API case. Same rules as the attachment endpoint:
+ *       caseId is required and checked against the document's owning case.
+ *     parameters:
+ *       - name: caseId
+ *         in: path
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - name: documentId
+ *         in: path
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: The raw file bytes
+ *       404:
+ *         description: Document not found, or doesn't belong to this case
+ */
+router.get('/:caseId/documents/:documentId', getDocument);
 
 /**
  * @openapi

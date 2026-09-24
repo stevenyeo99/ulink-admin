@@ -33,3 +33,8 @@ export function resetCase(id: string): Promise<ResetCaseResponse> {
 export function getAttachmentUrl(caseId: string, attachmentId: string): string {
   return `${API_BASE_URL}/api/cases/${caseId}/attachments/${attachmentId}`;
 }
+
+// Same idea for a case-level document (an API case's console image).
+export function getDocumentUrl(caseId: string, documentId: string): string {
+  return `${API_BASE_URL}/api/cases/${caseId}/documents/${documentId}`;
+}

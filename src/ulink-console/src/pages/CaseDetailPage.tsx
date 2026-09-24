@@ -5,6 +5,7 @@ import * as AlertDialog from '@radix-ui/react-alert-dialog';
 import { ArrowLeft, Clock } from 'lucide-react';
 import { getCase, overrideCase, resetCase } from '../api/casesApi';
 import { CaseStatusPill } from '../components/cases/CaseStatusPill';
+import { CaseDocumentsSection } from '../components/cases/CaseDocumentsSection';
 import { EmailThreadSection } from '../components/cases/EmailThreadSection';
 import { JsonViewer } from '../components/panel/JsonViewer';
 import { ChecklistTable } from '../components/panel/ChecklistTable';
@@ -65,7 +66,7 @@ export function CaseDetailPage() {
   if (isLoading) return <div className="p-6 text-sm text-slate-400">Loading…</div>;
   if (isError || !data) return <div className="p-6 text-sm text-red-500">Couldn't load this case.</div>;
 
-  const { case: caseRecord, events } = data;
+  const { case: caseRecord, events, documents } = data;
 
   return (
     <div className="mx-auto h-full w-full max-w-6xl overflow-y-auto px-6 py-6">
@@ -99,6 +100,13 @@ export function CaseDetailPage() {
       </div>
 
       <ConfidenceSummary caseRecord={caseRecord} />
+
+      {caseRecord.source === 'API' && (
+        <section className="mb-6 rounded-xl2 border border-slate-900/5 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Console Documents</h2>
+          <CaseDocumentsSection caseId={caseRecord.id} documents={documents} />
+        </section>
+      )}
 
       <section className="mb-6 rounded-xl2 border border-slate-900/5 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Email Thread</h2>

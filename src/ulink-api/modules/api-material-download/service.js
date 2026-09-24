@@ -1,16 +1,23 @@
-const fs = require('fs');
 const path = require('path');
 const JSZip = require('jszip');
-const { sequelize, Case, CaseEvent } = require('../../db/models');
+const { CaseDocument } = require('../../db/models');
 const config = require('../../config');
+const { getStorageAdapter } = require('../../storage');
+const { runApiJob } = require('../api-pipeline/runApiJob');
 const { listMaterials, downloadZip } = require('./middlewareClient');
 
-// api-material-download: API case workflow step 2 (docs/imp/day1/api-case-workflow.md section
-// 6.3). Downloads an API_RECEIVED case's console images through ulink-console-middleware's zip
-// endpoint, unpacks them under API_MATERIAL_DOWNLOAD_ROOT, and hands the case to OCR.
+// api-material-download: API case workflow job 2 (docs/imp/day1/api-case-workflow.md section 6.3).
+//
+//   input:  { 'api-claim-intake': { clNo, tpaCaseNumber, crtDate } }
+//   output: { scanId, fileCount, documents: [{ barcodeId, scanId, createdAt, expected, documentIds }] }
+//
+// Downloads the case's console images through ulink-console-middleware's zip endpoint and stores
+// each one as a case document (ulink_case_documents, same storage adapter as email attachments).
 
-const BLOCK_NAME = 'api-material-download';
+const JOB = 'api-material-download';
 const MAX_MATERIALS_PER_ZIP = 100; // the middleware's own per-request limit
+const SAFE_FILENAME = /^[A-Za-z0-9._-]+$/; // the middleware's own file-name rule
+const CONTENT_TYPES = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.pdf': 'application/pdf' };
 
 function scanIdFor(tpaCaseNumber) {
   return `API-${tpaCaseNumber}`;
@@ -35,121 +42,129 @@ async function listScanItems(scanId) {
   }
 }
 
+const materialCount = (item) => (Array.isArray(item.materials) ? item.materials.length : 0);
+
 // Groups items into zip requests of at most MAX_MATERIALS_PER_ZIP images. Only items with
 // images are sent (the middleware rejects an item with none).
 function zipBatches(items) {
   const batches = [];
   let current = [];
   let count = 0;
-  for (const item of items.filter((i) => Array.isArray(i.materials) && i.materials.length > 0)) {
-    if (current.length > 0 && count + item.materials.length > MAX_MATERIALS_PER_ZIP) {
+  for (const item of items.filter((i) => materialCount(i) > 0)) {
+    if (current.length > 0 && count + materialCount(item) > MAX_MATERIALS_PER_ZIP) {
       batches.push(current);
       current = [];
       count = 0;
     }
     current.push(item);
-    count += item.materials.length;
+    count += materialCount(item);
   }
   if (current.length > 0) batches.push(current);
   return batches;
 }
 
-// Unpacks a zip under root and returns the written paths relative to root. Entry names come
-// from another service, so each one must resolve inside root (no "../" escapes).
-async function extractZip(buffer, root) {
+/**
+ * The zip's files as { barcodeId, filename, bytes }. Entry names come from another service, so
+ * each must be exactly <scanId>/<one of this scan's barcodes>/<safe file name>; anything else
+ * fails the case rather than being stored under a name we didn't expect.
+ */
+async function readZip(buffer, scanId, barcodeIds) {
   const zip = await JSZip.loadAsync(buffer);
-  const written = [];
+  const files = [];
   for (const entry of Object.values(zip.files)) {
     if (entry.dir) continue;
-    const dest = path.resolve(root, entry.name);
-    if (!dest.startsWith(root + path.sep)) {
-      throw new Error(`Zip entry escapes the download folder: ${entry.name}`);
+    const parts = entry.name.split('/');
+    const [top, barcodeId, filename] = parts;
+    if (parts.length !== 3 || top !== scanId || !barcodeIds.has(barcodeId) || !SAFE_FILENAME.test(filename) || /^\.+$/.test(filename)) {
+      throw new Error(`Unexpected entry in the middleware zip: ${entry.name}`);
     }
-    await fs.promises.mkdir(path.dirname(dest), { recursive: true });
-    await fs.promises.writeFile(dest, await entry.async('nodebuffer'));
-    written.push(path.relative(root, dest).split(path.sep).join('/'));
+    files.push({ barcodeId, filename, bytes: await entry.async('nodebuffer') });
   }
-  return written;
+  return files;
 }
 
-/**
- * Downloads one case's images and returns what becomes Case.apiMaterialsResult. The scan's
- * folder is emptied first, so a retry after a half-finished run can't leave stale files. No
- * images in the console is not an error: the case continues with none, and document checking
- * will ask the customer for the missing documents.
- */
-async function downloadCase(caseRecord) {
-  const root = path.resolve(config.apiMaterialDownload.root);
-  const scanId = scanIdFor(caseRecord.tpaCaseNumber);
-  const folder = path.join(root, scanId);
+// Still inside the grace period after the IAS claim was created? crtDate has no offset; it is
+// IAS's own time, Myanmar (UTC+6:30). An unreadable date means no grace.
+function withinGrace(crtDate, now = new Date()) {
+  const created = Date.parse(`${crtDate}+06:30`);
+  return Number.isFinite(created) && now.getTime() < created + config.apiMaterialDownload.graceMinutes * 60000;
+}
 
+const docKey = (barcodeId, filename) => `${barcodeId}/${filename}`;
+
+async function processCase({ caseRecord, input }) {
+  const claim = input['api-claim-intake'];
+  const scanId = scanIdFor(claim.tpaCaseNumber);
   const items = await listScanItems(scanId);
-  await fs.promises.rm(folder, { recursive: true, force: true });
+  const expected = items.reduce((n, item) => n + materialCount(item), 0);
 
-  const files = [];
-  for (const batch of zipBatches(items)) {
-    files.push(...(await extractZip(await downloadZip(scanId, batch), root)));
+  if (expected === 0) {
+    if (withinGrace(claim.crtDate)) {
+      return { wait: true, output: { scanId, reason: `No images in the console yet; waiting up to ${config.apiMaterialDownload.graceMinutes} min after the claim was created` } };
+    }
+    return {
+      output: { scanId, fileCount: 0, documents: [] },
+      nextStatus: 'API_NO_DOCUMENTS',
+      message: `No images in the console for ${scanId}; the customer will be asked for documents`,
+    };
   }
 
-  return {
-    scanId,
-    folder,
-    fileCount: files.length,
-    barcodes: items.map((item) => ({
-      barcodeId: item.barcodeId,
-      scanId: item.scanId,
-      createdAt: item.createdAt,
-      expected: Array.isArray(item.materials) ? item.materials.length : 0,
-      files: files.filter((f) => f.startsWith(`${scanId}/${item.barcodeId}/`)),
-    })),
-    downloadedAt: new Date().toISOString(),
-  };
-}
+  // Existing documents are skipped, never replaced; only submissions still missing pages are
+  // downloaded (a retry after a partial download fetches just those).
+  const stored = await CaseDocument.findAll({ where: { caseId: caseRecord.id } });
+  const have = new Set(stored.map((d) => docKey(d.barcodeId, d.originalFilename)));
+  const storedPerBarcode = (barcodeId) => stored.filter((d) => d.barcodeId === barcodeId).length;
+  const incomplete = items.filter((item) => storedPerBarcode(item.barcodeId) < materialCount(item));
 
-async function persistOutcome(caseRecord, result) {
-  const message = result.fileCount > 0
-    ? `${result.fileCount} image(s) from ${result.barcodes.length} console submission(s) downloaded to ${result.folder}`
-    : `No images in the console for ${result.scanId}; continuing, document checking will ask for them`;
-
-  await sequelize.transaction(async (transaction) => {
-    await Case.update(
-      { currentStatus: 'API_MATERIALS_DOWNLOADED', apiMaterialsResult: result },
-      { where: { id: caseRecord.id }, transaction }
-    );
-    await CaseEvent.create({
-      caseId: caseRecord.id,
-      blockName: BLOCK_NAME,
-      prevStatus: 'API_RECEIVED',
-      newStatus: 'API_MATERIALS_DOWNLOADED',
-      message,
-    }, { transaction });
-  });
-}
-
-async function run() {
-  const cases = await Case.findAll({
-    where: { source: 'API', currentStatus: 'API_RECEIVED' },
-    limit: config.apiMaterialDownload.batchLimit,
-    order: [['createdAt', 'ASC']],
-  });
-
-  const results = [];
-  for (const caseRecord of cases) {
-    try {
-      const result = await downloadCase(caseRecord);
-      await persistOutcome(caseRecord, result);
-      results.push({ caseId: caseRecord.id, ok: true, fileCount: result.fileCount });
-    } catch (error) {
-      // Technical failure (middleware down, timeout, every image failing, disk error): the case
-      // stays at API_RECEIVED and is retried next run, same as every other job.
-      results.push({ caseId: caseRecord.id, ok: false, error: error.message });
+  const storage = getStorageAdapter();
+  const barcodeIds = new Set(items.map((item) => item.barcodeId));
+  const itemByBarcode = new Map(items.map((item) => [item.barcodeId, item]));
+  for (const batch of zipBatches(incomplete)) {
+    for (const file of await readZip(await downloadZip(scanId, batch), scanId, barcodeIds)) {
+      if (have.has(docKey(file.barcodeId, file.filename))) continue;
+      const { storageRef } = await storage.put(`api/${scanId}/${file.barcodeId}/${file.filename}`, file.bytes);
+      stored.push(await CaseDocument.create({
+        caseId: caseRecord.id,
+        origin: 'CONSOLE',
+        barcodeId: file.barcodeId,
+        scanId: itemByBarcode.get(file.barcodeId).scanId,
+        originalFilename: file.filename,
+        contentType: CONTENT_TYPES[path.extname(file.filename).toLowerCase()] || null,
+        sizeBytes: file.bytes.length,
+        storageRef,
+      }));
+      have.add(docKey(file.barcodeId, file.filename));
     }
   }
 
+  const documents = items.map((item) => ({
+    barcodeId: item.barcodeId,
+    scanId: item.scanId,
+    createdAt: item.createdAt,
+    expected: materialCount(item),
+    documentIds: stored.filter((d) => d.barcodeId === item.barcodeId).map((d) => d.id),
+  }));
+  const fileCount = documents.reduce((n, d) => n + d.documentIds.length, 0);
+  const output = { scanId, fileCount, documents };
+
+  // Partial download (some images failed): keep what arrived, retry the rest next run instead of
+  // continuing with missing pages (S5).
+  if (fileCount < expected) {
+    return { wait: true, output: { ...output, reason: `${fileCount} of ${expected} images downloaded; retrying the rest` } };
+  }
   return {
-    processed: results.filter((r) => r.ok).length,
-    errors: results.filter((r) => !r.ok).map((r) => ({ caseId: r.caseId, error: r.error })),
+    output,
+    nextStatus: 'API_MATERIALS_DOWNLOADED',
+    message: `${fileCount} image(s) from ${documents.length} console submission(s) stored`,
   };
 }
 
-module.exports = { run, downloadCase, scanIdFor, belongsToScan, zipBatches, extractZip };
+const job = {
+  name: JOB,
+  inputStatus: 'API_RECEIVED',
+  inputs: ['api-claim-intake'],
+  batchLimit: config.apiMaterialDownload.batchLimit,
+  process: processCase,
+};
+
+module.exports = { run: () => runApiJob(job), job, scanIdFor, belongsToScan, zipBatches, readZip, withinGrace };

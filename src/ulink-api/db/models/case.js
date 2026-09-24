@@ -20,9 +20,6 @@ module.exports = (sequelize, DataTypes) => {
       // lets an API case hold API_* statuses (docs/imp/day1/api-case-workflow.md section 3).
       source: { type: DataTypes.STRING, allowNull: false, defaultValue: 'EMAIL' },
       tpaCaseNumber: { type: DataTypes.TEXT, allowNull: true },
-      iasApiClaim: { type: DataTypes.JSONB, allowNull: true },
-      // api-material-download's output: scanId, folder, and per-barcode downloaded files.
-      apiMaterialsResult: { type: DataTypes.JSONB, allowNull: true },
     },
     { tableName: 'ulink_cases' }
   );
@@ -31,6 +28,8 @@ module.exports = (sequelize, DataTypes) => {
     Case.hasMany(models.EmailThread, { foreignKey: 'caseId' });
     Case.hasMany(models.CaseEvent, { foreignKey: 'caseId' });
     Case.hasMany(models.EmailTask, { foreignKey: 'caseId' });
+    Case.hasMany(models.ApiCaseStep, { foreignKey: 'caseId' });
+    Case.hasMany(models.CaseDocument, { foreignKey: 'caseId' });
   };
 
   return Case;

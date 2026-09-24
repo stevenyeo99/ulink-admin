@@ -1,6 +1,6 @@
 # API Case Implementation Plan
 
-Status: Phase 0, 1, 2 and 3 built (2026-09-24)  
+Status: Phase 0, 1, 2, 2c and 3 built (2026-09-24); next: Phase 5  
 Scope: `ulink-admin/src/ulink-api` + `ulink-admin/src/ulink-console`  
 Date: 2026-09-24
 
@@ -134,6 +134,24 @@ Built ahead of Phase 2: one job, and a cron entry can call it directly until the
   - each email is stored on exactly one case and marked seen only after that store succeeds; a failed store
     leaves it unread for the next run.
 
+## Phase 2c: Job input/output records and case documents — BUILT 2026-09-24
+
+**Goal:** every API job receives the previous job's output explicitly, and console images are stored as records
+like email attachments. Done now, while only 2 jobs exist.
+
+- `ulink_api_case_steps`: one row per job run per case — `job`, `status`, `input`, `output`, `error`, timestamps.
+  A job's input is the latest `DONE` output of the jobs it declares in `inputs`. Re-runs add rows (history).
+- Shared API job runner: selects `source='API'` cases at the job's `inputStatus`, builds the input, calls
+  `process(input)`, then in one transaction saves the step row, moves the status and writes the case event.
+- `ulink_case_documents` (case level, `origin='CONSOLE'`): one row per console image, stored through the same
+  storage adapter as email attachments (`STORAGE_ROOT`, key `api/<scanId>/<barcodeId>/<file>`); unique
+  `(case_id, barcode_id, original_filename)` and an existing document is **skipped**, never replaced. Reply
+  attachments stay in the email tables (message level). `API_MATERIAL_DOWNLOAD_ROOT` is removed.
+- Drop `ulink_cases.ias_api_claim` / `api_materials_result` (empty) — the step table is the single source.
+- Move `api-claim-intake` and `api-material-download` onto the runner, plus the fixes that belong to them (S1, S4,
+  S5 below).
+- Console: `GET /api/cases/:caseId/documents/:id` (ownership-checked, like attachments).
+
 ## Phase 5: `api-claim-recognition` job
 
 - Reads `API_MATERIALS_DOWNLOADED` and `API_REPLY_RECEIVED`.
@@ -168,6 +186,36 @@ Built ahead of Phase 2: one job, and a cron entry can call it directly until the
 
 ---
 
+## Scenarios to handle
+
+Found while walking through API case edge cases (2026-09-24). ⚠️ = can lose a claim or harm data if missed.
+
+| # | Scenario | Handling | Phase |
+|---|---|---|---|
+| S1 | ⚠️ IAS or our server down for a day, or a claim created after the day's last run | Query from the last successful intake date (`ulink_job_checkpoints`); duplicates are blocked anyway | 2c ✓ |
+| S2 | Same `tpaCaseNumber` returned under a new `clNo` | Rejected and reported (built); operator decides | 1 ✓ |
+| S3 | Claim cancelled in IAS after intake | Check claim status before revision; skip if cancelled | 8 |
+| S4 | No console images yet on first download | Grace period 2 h after IAS `crtDate`, staying `API_RECEIVED` (WAITING); then `API_NO_DOCUMENTS` → customer asked for documents (Phase 6) | 2c ✓ / 6 |
+| S5 | Partial download (fewer files than the console lists) | WAITING; keep what arrived, fetch only the rest next run | 2c ✓ |
+| S6 | Customer uploads more pages to the console while the case waits | Re-check the console each run while waiting; new pages → back to OCR | 6 |
+| S7 | Blurry / unreadable images | Low OCR confidence → `API_MANUAL_REVIEW` | 5 |
+| S8 | ⚠️ Customer sends a brand-new email without `tpaCaseNumber` | Would become an email case and could create a second IAS claim. Duplicate check: same member + treatment date as an open API case → flag, don't create | 4 |
+| S9 | Reply arrives while the case is processing (not waiting) | Keep it; include its attachments the next time the case is read (OCR reads every reply) | 4 / 5 |
+| S10 | Reply after revision already done | Store and alert internally; no reprocessing | 4 |
+| S11 | Customer email address unknown (fixed address for now) | Production blocker — use the member-info email | 6 |
+| S12 | Email bounces | Flag for an operator | 6 |
+| S13 | ⚠️ Customer never replies | Reminder after N days, close/escalate after M days | 6 |
+| S14 | ⚠️ Member-check issue fixed by the internal team in IAS (no customer reply will come) | Operator "retry member check" action for API cases | 6 |
+| S15 | ⚠️ A person already changed/approved the claim in IAS | Check claim status before revising; only revise at the expected status | 8 |
+| S16 | Revision timeout (outcome unknown) | Check the claim in IAS before resending | 8 |
+| S17 | Revision runs again after a reply | Must be safe to repeat — confirm with the IAS sample | 8 |
+| S18 | Reply with no attachment | Store, keep waiting, send the "no attachment" reminder (as email cases) | 4 |
+
+## Build order
+
+2c → 5 → 6 → 4 → 7 → 8 → 9. Phase 4 (reply routing) comes after 6 because replies only exist once API emails are
+sent (Phase 6).
+
 ## Decisions log
 
 | # | Decision | Date |
@@ -180,9 +228,11 @@ Built ahead of Phase 2: one job, and a cron entry can call it directly until the
 | D6 | Customer email: fixed personal address for now, member-info email later | 2026-09-24 |
 | D7 | Internal email: same recipient as email cases | 2026-09-24 |
 | D8 | Console gets Email / API tabs for both the pipeline and the case list | 2026-09-24 |
-| D9 | scanId = `API-{tpaCaseNumber}`; images come from the middleware **zip** endpoint, unpacked under ulink-api's own `API_MATERIAL_DOWNLOAD_ROOT` (middleware may move to another server) | 2026-09-24 |
-| D10 | Download every submission of the scan; every barcode is stored in `api_materials_result.barcodes` | 2026-09-24 |
-| D11 | No images in the console: continue anyway; documents come from the customer's reply and document checking asks for them | 2026-09-24 |
+| D9 | scanId = `API-{tpaCaseNumber}`; images come from the middleware **zip** endpoint, stored on ulink-api's side (middleware may move to another server) — storage superseded by D13 | 2026-09-24 |
+| D10 | Download every submission of the scan; every barcode is kept in the job's step output (D12) | 2026-09-24 |
+| D11 | No images in the console: continue anyway (after the S4 grace period); documents come from the customer's reply and document checking asks for them | 2026-09-24 |
+| D12 | Each API job receives the previous jobs' outputs explicitly, stored per run in `ulink_api_case_steps` | 2026-09-24 |
+| D13 | Console images are case-level records (`ulink_case_documents`) in the same storage as email attachments; an existing document is skipped | 2026-09-24 |
 
 ## Open questions
 
@@ -194,3 +244,5 @@ Built ahead of Phase 2: one job, and a cron entry can call it directly until the
 | Q4 | Which barcode goes into `console_barcode` for claim revision | Phase 8 |
 | Q5 | IAS claim revision API sample | Phase 8 |
 | Q6 | STP / non-STP meaning for API cases | Phase 9 |
+| Q7 | ~~S4 grace period~~ 2 hours after `crtDate` (`API_MATERIAL_GRACE_MINUTES`), confirmed 2026-09-24 | Phase 2c |
+| Q8 | S13 reminder / close timings (N and M days) | Phase 6 |
