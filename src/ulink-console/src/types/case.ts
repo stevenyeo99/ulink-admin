@@ -57,6 +57,10 @@ export interface ClaimPickMeta {
   pick: Record<string, unknown> | null;
   confidence: number | null;
   candidates: unknown[];
+  // Present on diagnosis only (diagnosisPicker.js) — true when `pick` is a fallback
+  // (e.g. the R69 "unspecified" ICD-10 code) rather than a real confident AI pick.
+  // benefitPicker.js's per-line picks have no fallback and never set this.
+  defaulted?: boolean;
 }
 
 export interface ClaimPrepMeta {

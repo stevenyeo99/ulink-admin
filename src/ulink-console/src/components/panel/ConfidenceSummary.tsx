@@ -33,10 +33,14 @@ export function collectConfidenceEntries(caseRecord: CaseDetail): ConfidenceEntr
   if (meta?.diagnosis?.confidence != null) {
     entries.push({
       label: 'Diagnosis code pick',
+      // pick is never null (diagnosisPicker.js falls back to R69, a real ICD-10 "unspecified"
+      // code, so a mandatory STP field is never blank) — `defaulted` is the signal this was
+      // a fallback, not a confident AI pick, and must stay visible here rather than reading
+      // as a normal successful pick just because a code is present.
       confidence: meta.diagnosis.confidence,
-      note: meta.diagnosis.pick
-        ? `Picked from ${meta.diagnosis.candidates.length} candidate(s) considered`
-        : 'No candidate met the confidence threshold — left blank rather than guessed',
+      note: meta.diagnosis.defaulted
+        ? `Not confident — defaulted to ${meta.diagnosis.pick?.diagCode ?? 'R69'} (${meta.diagnosis.candidates.length} candidate(s) considered)`
+        : `Picked from ${meta.diagnosis.candidates.length} candidate(s) considered`,
     });
   }
   (meta?.lines ?? []).forEach((line, index) => {

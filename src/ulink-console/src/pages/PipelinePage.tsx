@@ -3,6 +3,7 @@ import { ReactFlowProvider } from '@xyflow/react';
 import { PipelineToolbar } from '../components/layout/PipelineToolbar';
 import { WorkflowCanvas, type SelectedNode } from '../components/workflow/WorkflowCanvas';
 import { NodeDetailPanel } from '../components/panel/NodeDetailPanel';
+import { PipelineCompletionAlert } from '../components/workflow/PipelineCompletionAlert';
 import { usePipelineRun } from '../hooks/usePipelineRun';
 
 export function PipelinePage() {
@@ -11,6 +12,7 @@ export function PipelinePage() {
 
   return (
     <div className="relative flex flex-1 flex-col overflow-hidden">
+      <PipelineCompletionAlert run={run} />
       <PipelineToolbar run={run} isRunning={isRunning} wasSkipped={wasSkipped} isRateLimited={isRateLimited} onRun={trigger} />
       <main className="relative flex-1">
         <ReactFlowProvider>
