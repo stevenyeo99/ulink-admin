@@ -505,6 +505,12 @@ Long threads are fine: a reply to *any* earlier message matches, because every i
 | `ulink_case_events` | Every status change | the runner, intake | console timeline |
 | `ulink_job_checkpoints` | Per-job state not about one case: intake's `lastListedDate` | `api-claim-intake` | `api-claim-intake` |
 
+**Case detail page.** The page reads its sections from case fields (`extractedFields`, `memberVerifyResult`,
+`documentCheckResult`, `iasClaimPayload`, …). For an **API case**, `GET /api/cases/:id` fills those fields from each
+job's latest `DONE` output at read time (`modules/api-pipeline/caseView.js` — one line per field; nothing is written
+to `ulink_cases`) and adds `apiSteps`, shown in the page's **Job Steps** section (each run's input / output / error).
+Email cases take a separate branch and get exactly the response they always had.
+
 ## 9. Failure handling
 
 Same conventions as the email jobs:

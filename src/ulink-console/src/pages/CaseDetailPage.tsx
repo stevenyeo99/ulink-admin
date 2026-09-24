@@ -6,6 +6,7 @@ import { ArrowLeft, Clock } from 'lucide-react';
 import { getCase, overrideCase, resetCase } from '../api/casesApi';
 import { CaseStatusPill } from '../components/cases/CaseStatusPill';
 import { CaseDocumentsSection } from '../components/cases/CaseDocumentsSection';
+import { JobStepsSection } from '../components/cases/JobStepsSection';
 import { EmailThreadSection } from '../components/cases/EmailThreadSection';
 import { JsonViewer } from '../components/panel/JsonViewer';
 import { ChecklistTable } from '../components/panel/ChecklistTable';
@@ -66,7 +67,7 @@ export function CaseDetailPage() {
   if (isLoading) return <div className="p-6 text-sm text-slate-400">Loading…</div>;
   if (isError || !data) return <div className="p-6 text-sm text-red-500">Couldn't load this case.</div>;
 
-  const { case: caseRecord, events, documents } = data;
+  const { case: caseRecord, events, documents, apiSteps } = data;
 
   return (
     <div className="mx-auto h-full w-full max-w-6xl overflow-y-auto px-6 py-6">
@@ -105,6 +106,13 @@ export function CaseDetailPage() {
         <section className="mb-6 rounded-xl2 border border-slate-900/5 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
           <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Console Documents</h2>
           <CaseDocumentsSection caseId={caseRecord.id} documents={documents} />
+        </section>
+      )}
+
+      {caseRecord.source === 'API' && (
+        <section className="mb-6 rounded-xl2 border border-slate-900/5 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Job Steps</h2>
+          <JobStepsSection steps={apiSteps ?? []} />
         </section>
       )}
 

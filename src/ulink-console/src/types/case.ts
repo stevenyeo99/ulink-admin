@@ -146,10 +146,24 @@ export interface CaseDocument {
   createdAt: string;
 }
 
+// One API job run for the case (ulink_api_case_steps): what it received and produced.
+export interface ApiCaseStep {
+  id: string;
+  job: string;
+  status: 'DONE' | 'WAITING' | 'FAILED';
+  input: unknown;
+  output: unknown;
+  error: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+}
+
 export interface GetCaseResponse {
   case: CaseDetail;
   events: CaseEvent[];
   documents: CaseDocument[];
+  /** API cases only. Their CaseDetail fields (extractedFields, …) are filled from these by the API. */
+  apiSteps?: ApiCaseStep[];
 }
 
 export interface OverrideCaseResponse {
