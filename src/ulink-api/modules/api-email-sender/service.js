@@ -7,7 +7,7 @@ const { render } = require('../email-sender/templates');
 //
 //   input:  a DONE step whose output.email is { taskType, audience, payload, dedupeKey }
 //           (api-material-download, api-member-verification, api-document-checking, api-reply-intake,
-//           api-claim-revision)
+//           api-claim-revision, api-claim-stp)
 //   output: { to, cc, subject, messageId, threadId }  or  { skipped: 'same as the last one sent' }
 //
 // Separate from the email pipeline's email-sender on purpose: that one sends every PENDING
@@ -21,7 +21,7 @@ const { render } = require('../email-sender/templates');
 // client drops the reply headers.
 
 const JOB = 'api-email-sender';
-const SOURCE_JOBS = ['api-material-download', 'api-member-verification', 'api-document-checking', 'api-reply-intake', 'api-claim-revision'];
+const SOURCE_JOBS = ['api-material-download', 'api-member-verification', 'api-document-checking', 'api-reply-intake', 'api-claim-revision', 'api-claim-stp'];
 const API_ROUTE_KEY = 'ayas_member_claim';
 
 // Customer templates have no subject of their own (email cases reply under the customer's
@@ -29,6 +29,7 @@ const API_ROUTE_KEY = 'ayas_member_claim';
 const CUSTOMER_SUBJECTS = {
   MISSING_DOCUMENTS: 'Additional documents required',
   DOCUMENT_COMPLETE_ACK: 'Claim documents received',
+  CSR_REPORT: 'Claim settlement report',
 };
 
 function subjectFor(email, rendered, caseRecord) {

@@ -29,7 +29,8 @@ export type BlockName =
   | 'api-email-sender'
   | 'api-reply-intake'
   | 'api-claim-preparation'
-  | 'api-claim-revision';
+  | 'api-claim-revision'
+  | 'api-claim-stp';
 
 export type EmailSenderBlockName =
   | 'email-sender-member-verification'
@@ -65,6 +66,7 @@ export interface RunPipelineResponse {
   block: 'pipeline' | 'api-pipeline';
   started?: boolean;
   runId?: string;
+  steps?: string[];
   skipped?: boolean;
   reason?: string;
 }

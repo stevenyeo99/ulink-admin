@@ -1,6 +1,7 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X } from 'lucide-react';
+import { Play, X } from 'lucide-react';
+import { Button } from '../common/Button';
 import { StatusBadge } from '../workflow/StatusBadge';
 import { JsonViewer } from './JsonViewer';
 import type { PipelineRunStep } from '../../types/pipeline';
@@ -55,9 +56,12 @@ function StepCard({ step, heading }: { step: PipelineRunStep; heading: string | 
 interface NodeDetailPanelProps {
   selected: SelectedNode | null;
   onClose: () => void;
+  /** Runs just this step (a normal pipeline run with one step) — for debugging one job. */
+  onRunStep: (stepName: string) => void;
+  isRunning: boolean;
 }
 
-export function NodeDetailPanel({ selected, onClose }: NodeDetailPanelProps) {
+export function NodeDetailPanel({ selected, onClose, onRunStep, isRunning }: NodeDetailPanelProps) {
   return (
     <Dialog.Root open={selected !== null} onOpenChange={(open) => !open && onClose()}>
       <AnimatePresence>
@@ -89,6 +93,14 @@ export function NodeDetailPanel({ selected, onClose }: NodeDetailPanelProps) {
                       <X size={16} />
                     </button>
                   </Dialog.Close>
+                </div>
+
+                <div className="mb-5 flex items-center gap-3">
+                  <Button onClick={() => onRunStep(selected.stepName)} disabled={isRunning}>
+                    <Play size={14} fill="currentColor" />
+                    {isRunning ? 'Running…' : 'Run this step'}
+                  </Button>
+                  <span className="text-xs text-slate-400">Only this step, for every case waiting at it.</span>
                 </div>
 
                 {selected.steps.length === 0 && <p className="text-sm italic text-slate-400">Hasn't run in this pipeline execution yet.</p>}

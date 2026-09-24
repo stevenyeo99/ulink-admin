@@ -23,6 +23,8 @@ export interface PipelineNodeData extends Record<string, unknown> {
 
 export interface EmailBadgeNodeData extends Record<string, unknown> {
   label: string;
+  /** The pipeline step this badge shows (e.g. email-sender-member-verification) — what "Run this step" runs. */
+  blockName: string;
   audience: Audience;
   status: NodeStatus;
   /** Same shared email-sender steps as every other badge — see EMAIL_BADGES' doc comment in
@@ -92,6 +94,7 @@ export function mergeStatus(steps: PipelineRunStep[], source: Source = 'EMAIL'):
     height: 64,
     data: {
       label: badge.label,
+      blockName: badge.blockName,
       audience: badge.audience,
       status: representativeStatus(stepsByBlock.get(badge.blockName) ?? []),
       steps: stepsByBlock.get(badge.blockName) ?? [],

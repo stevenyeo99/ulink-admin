@@ -1,6 +1,6 @@
 # API Case Implementation Plan
 
-Status: Phase 0–8 built (2026-09-24); next: Phase 9 (STP / non-STP after revision)  
+Status: Phase 0–9 built (2026-09-24) — every planned job exists. Remaining: real IAS/SMTP runs, S8, S10, S13, Phase 2b  
 Scope: `ulink-admin/src/ulink-api` + `ulink-admin/src/ulink-console`  
 Date: 2026-09-24
 
@@ -199,7 +199,10 @@ and their reply leads to a new revision with `isSuspense=N` (D17–D19). Not yet
   - whether revision is safe to call again (a re-run after a reply calls it again);
   - the mapping from checklist issue to pend code.
 
-## Phase 9: `api-claim-stp` job
+## Phase 9: `api-claim-stp` job — BUILT 2026-09-24
+
+Same as the email flow's `ias-claim-stp` (its exported pieces, unchanged). STP revisions go to `API_AWAITING_CSR`;
+non-STP end at `API_CLAIM_REVISED` for JD2 (D20). CSR emailed with the `CSR_REPORT` template via `api-email-sender`.
 
 - STP: fetch the CSR, as `ias-claim-stp` does. Non-STP: manual approval path.
 - To confirm in this phase: what STP / non-STP means for API cases.
@@ -262,6 +265,7 @@ sent (Phase 6).
 | D17 | API cases continue to preparation + revision even when documents fail; the revision then carries `isSuspense=Y` (IAS: Y sets, N lifts, null ignores) | 2026-09-24 |
 | D18 | Flags: documents missing → isValidation=Y, isCSR=N, isSuspense=Y (even STP); complete + STP → Y/Y/N; complete + non-STP → N/N/N | 2026-09-24 |
 | D19 | Barcodes: first 6 console submissions, earliest first → barcode, suppBarcode1–5; unused null | 2026-09-24 |
+| D20 | After revision: STP → `API_AWAITING_CSR` → CSR downloaded and emailed (same as email `ias-claim-stp`); non-STP ends at `API_CLAIM_REVISED` for JD2 | 2026-09-24 |
 
 ## Open questions
 
@@ -272,7 +276,7 @@ sent (Phase 6).
 | Q3 | ~~scanId format~~ `API-{tpaCaseNumber}` (D9) | Phase 3 |
 | Q4 | Which barcode goes into `console_barcode` for claim revision | Phase 8 |
 | Q5 | IAS claim revision API sample | Phase 8 |
-| Q6 | STP / non-STP meaning for API cases | Phase 9 |
+| Q6 | ~~STP / non-STP~~ same as email: STP → CSR to customer; non-STP ends for JD2 (D20) | Phase 9 |
 | Q7 | ~~S4 grace period~~ 2 hours after `crtDate` (`API_MATERIAL_GRACE_MINUTES`), confirmed 2026-09-24 | Phase 2c |
 | Q8 | S13 reminder / close timings (N and M days) | Phase 6 |
 | Q9 | ~~Fixed customer email address~~ steven.yeo@dynrtech.com (`API_CASE_CUSTOMER_EMAIL`), confirmed 2026-09-24 | Phase 6c |

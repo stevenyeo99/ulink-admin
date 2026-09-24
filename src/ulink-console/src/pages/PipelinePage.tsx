@@ -17,7 +17,7 @@ export function PipelinePage() {
 }
 
 function PipelineView({ source, onSourceChange }: { source: Source; onSourceChange: (source: Source) => void }) {
-  const { run, steps, isRunning, wasSkipped, isRateLimited, trigger } = usePipelineRun(source);
+  const { run, steps, isRunning, wasSkipped, isRateLimited, trigger, runSteps } = usePipelineRun(source);
   const [selectedNode, setSelectedNode] = useState<SelectedNode | null>(null);
 
   return (
@@ -32,7 +32,7 @@ function PipelineView({ source, onSourceChange }: { source: Source; onSourceChan
           <WorkflowCanvas steps={steps} source={source} onSelectNode={setSelectedNode} />
         </ReactFlowProvider>
       </main>
-      <NodeDetailPanel selected={selectedNode} onClose={() => setSelectedNode(null)} />
+      <NodeDetailPanel selected={selectedNode} onClose={() => setSelectedNode(null)} onRunStep={(step) => runSteps([step])} isRunning={isRunning} />
     </div>
   );
 }

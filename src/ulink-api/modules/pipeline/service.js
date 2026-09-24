@@ -21,6 +21,7 @@ const apiEmailSenderService = require('../api-email-sender/service');
 const apiReplyIntakeService = require('../api-reply-intake/service');
 const apiClaimPreparationService = require('../api-claim-preparation/service');
 const apiClaimRevisionService = require('../api-claim-revision/service');
+const apiClaimStpService = require('../api-claim-stp/service');
 
 // Fixed order — later steps read the Case.currentStatus earlier steps write, per
 // docs/imp/day1/jobs-registry.md's "Orchestrator" section. Each block keeps its own
@@ -78,6 +79,7 @@ const API_STEPS = [
   ['api-document-checking', apiDocumentCheckingService],
   ['api-claim-preparation', apiClaimPreparationService],
   ['api-claim-revision', apiClaimRevisionService],
+  ['api-claim-stp', apiClaimStpService],
   // Sends what the jobs above asked for (own sender — never the email pipeline's email-sender).
   ['api-email-sender', apiEmailSenderService],
 ];
@@ -139,11 +141,17 @@ async function startRun(pipeline = 'EMAIL') {
   return PipelineRun.create({ pipeline, status: 'RUNNING', startedAt: new Date() });
 }
 
-/** Runs the run's own pipeline steps in order against an already-created PipelineRun, then finalizes it. */
-async function executeSteps(pipelineRun) {
+/**
+ * Runs the run's own pipeline steps in order against an already-created PipelineRun, then
+ * finalizes it. `onlySteps` (step names, validated by the caller against stepNames()) runs just
+ * those, still in pipeline order — the console's "Run this step" for debugging one job. Omitted,
+ * every step runs, exactly as before.
+ */
+async function executeSteps(pipelineRun, onlySteps = null) {
   try {
     let sequence = 0;
-    for (const [blockName, service] of PIPELINES[pipelineRun.pipeline]) {
+    const steps = PIPELINES[pipelineRun.pipeline].filter(([blockName]) => !onlySteps || onlySteps.includes(blockName));
+    for (const [blockName, service] of steps) {
       await runStep(pipelineRun.id, blockName, service, sequence);
       sequence += 1;
     }
@@ -167,4 +175,9 @@ async function run() {
   return executeSteps(pipelineRun);
 }
 
-module.exports = { run, startRun, executeSteps, STEPS, API_STEPS, PIPELINES };
+// The step names a pipeline accepts (e.g. for a single-step run).
+function stepNames(pipeline) {
+  return PIPELINES[pipeline].map(([blockName]) => blockName);
+}
+
+module.exports = { run, startRun, executeSteps, stepNames, STEPS, API_STEPS, PIPELINES };

@@ -30,10 +30,10 @@ it('sends the prepared body as-is and marks a complete claim revised, handing no
   });
 });
 
-it('sends no approval email for an STP claim', async () => {
+it('sends an STP claim on to the settlement report (no approval email)', async () => {
   reviseClaim.mockResolvedValue({ success: true });
   const result = await job.process({ caseRecord, input: inputWith({ isSuspense: 'N', isStp: true }) });
-  expect(result).toMatchObject({ nextStatus: 'API_CLAIM_REVISED', output: { email: null } });
+  expect(result).toMatchObject({ nextStatus: 'API_AWAITING_CSR', output: { email: null } });
 });
 
 it('marks a revision with missing documents suspended (waits for the customer)', async () => {

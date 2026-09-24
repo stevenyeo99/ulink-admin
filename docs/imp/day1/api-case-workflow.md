@@ -112,7 +112,8 @@ stateDiagram-v2
   API_DOCUMENTS_VERIFIED --> API_CLAIM_PAYLOAD_PREPARED: api-claim-preparation
   API_CLAIM_PAYLOAD_PREPARED --> API_CLAIM_REVISED: api-claim-revision
   API_CLAIM_PAYLOAD_PREPARED --> API_CLAIM_REVISION_FAILED: IAS rejects
-  API_CLAIM_REVISED --> API_CSR_SENT: api-claim-stp (STP only)
+  API_CLAIM_PAYLOAD_PREPARED --> API_AWAITING_CSR: revised, STP
+  API_AWAITING_CSR --> API_CSR_SENT: api-claim-stp
 ```
 
 | Status | Meaning | Set by | Picked up by | Phase |
@@ -129,7 +130,8 @@ stateDiagram-v2
 | `API_DOCUMENTS_VERIFIED` | Both checks passed | `api-document-checking` | `api-claim-preparation` | 6 |
 | `API_CLAIM_PAYLOAD_PREPARED` | Revision payload built | `api-claim-preparation` | `api-claim-revision` | 7 |
 | `API_CLAIM_SUSPENDED` | Revised in IAS with suspense (documents missing). **Waits for a reply** | `api-claim-revision` | `api-reply-intake` | 8 |
-| `API_CLAIM_REVISED` | IAS accepted the revision, documents complete | `api-claim-revision` | `api-claim-stp` | 8 |
+| `API_CLAIM_REVISED` | IAS accepted the revision, documents complete, non-STP — JD2 approves in IAS (end) | `api-claim-revision` | — | 8 |
+| `API_AWAITING_CSR` | Revised, STP; waiting for the settlement report | `api-claim-revision` | `api-claim-stp` | 9 |
 | `API_CLAIM_REVISION_FAILED` | IAS rejected the revision (business answer; not retried) | `api-claim-revision` | operator | 8 |
 | `API_CSR_SENT` | Settlement report sent (STP only) | `api-claim-stp` | end | 9 |
 
@@ -150,18 +152,15 @@ POST /api/jobs/api-pipeline/run        cron: every 30 minutes; lock 'api-pipelin
   7. api-document-checking
   8. api-claim-preparation
   9. api-claim-revision
- 10. api-email-sender          (API emails only; not the email pipeline's email-sender)
+ 10. api-claim-stp
+ 11. api-email-sender          (API emails only; not the email pipeline's email-sender)
 ```
 
 Endpoints: `/api/jobs/api-pipeline/run`, `/release`, `/runs`, `/runs/:id` — they only ever see `pipeline='API'`
 runs (`ulink_pipeline_runs.pipeline`). The email orchestrator (`/api/jobs/pipeline/*`, lock `pipeline`) is unchanged
 and only sees `EMAIL` runs. The console shows each on its own tab (`?source=api`), and the cases list likewise.
 
-Still to come, inserted before `api-email-sender` as each phase is built:
-
-```
-  api-claim-stp                (Phase 9)
-```
+Every planned job is built.
 
 - **Same runner as the email pipeline.** `modules/pipeline/service.js` gives each step a lock, a timeout and a
   `ulink_pipeline_run_steps` row. The API pipeline passes its own step list; runs are stored with
@@ -379,7 +378,8 @@ IAS answers like claim submission; handled like the email flow's `ias-claim-crea
 
 | IAS answer | Status | Email (internal, via `api-email-sender`) |
 |---|---|---|
-| `success: true`, documents complete | `API_CLAIM_REVISED` | non-STP: `CLAIM_APPROVAL_REVIEW` (hand-off to JD2) |
+| `success: true`, documents complete, non-STP | `API_CLAIM_REVISED` | `CLAIM_APPROVAL_REVIEW` (hand-off to JD2) |
+| `success: true`, documents complete, STP | `API_AWAITING_CSR` | — (`CSR_REPORT` to the customer later) |
 | `success: true`, documents missing (`isSuspense=Y`) | `API_CLAIM_SUSPENDED` — waits for the customer (the `MISSING_DOCUMENTS` email already went out) | — |
 | `success: false` | `API_CLAIM_REVISION_FAILED`, not retried | `CLAIM_SUBMIT_ISSUE` |
 | network error / timeout / non-2xx | stays, retried next run | — |
@@ -388,9 +388,27 @@ IAS answers like claim submission; handled like the email flow's `ias-claim-crea
 (`api-reply-intake` → OCR → member → document check → preparation → revision). Once the documents pass, the next
 revision sends `isSuspense=N` and IAS lifts the suspense. Revising the same `claimNo` again is safe (confirmed).
 
-### 6.8 `api-claim-stp` (Phase 9)
+### 6.8 `api-claim-stp` (Phase 9, built 2026-09-24)
 
-STP claims: fetch the settlement report like `ias-claim-stp`. Non-STP: manual approval. To be confirmed.
+| | |
+|---|---|
+| Module | `modules/api-claim-stp/service.js` — a runner job. Tests: `tests/apiClaimStp.test.js` |
+| Job | `POST /api/jobs/api-claim-stp/run` |
+| Input status | `API_AWAITING_CSR` — STP claims revised with documents complete |
+| Input | `{ 'api-claim-intake': { clNo } }` |
+| Output | `{ filename, filepath, csrFilePath, email }` |
+| Next | `API_CSR_SENT` |
+
+Same as the email flow's `ias-claim-stp`, reusing its exported pieces unchanged: `checkClaimStatus` polls IAS claim
+status for the settlement report (`CL_STATUS_FC` with a file), `downloadFile` fetches it, and it is stored under
+`CSR_UPLOAD_ROOT` with the same layout (`csrDestination`). `api-email-sender` then sends the `CSR_REPORT` email to the
+customer with the PDF attached (same template).
+
+- **Report not ready yet:** WAITING, polled again next run.
+- **Non-STP claims** don't come here: `api-claim-revision` leaves them at `API_CLAIM_REVISED` (JD2 approves in IAS),
+  as the email flow does.
+- **Known limitation (shared with the email flow):** `checkClaimStatus` asks IAS for status changes since **today
+  00:00**, so a report produced on a day the job didn't run would not be picked up later.
 
 ## 7. Email
 
@@ -545,7 +563,11 @@ SELECT barcode_id, scan_id, original_filename, size_bytes, storage_ref
 FROM ulink_case_documents WHERE case_id = '<id>' ORDER BY barcode_id, original_filename;
 ```
 
-- **Run one step by hand:** `POST /api/jobs/<name>/run`.
+- **Run one step (console):** click a step or email badge on the pipeline canvas → **Run this step**. It starts a
+  normal pipeline run containing only that step (`POST /api/jobs/api-pipeline/run` with `{ "steps": ["<step>"] }`;
+  the email tab uses `/api/jobs/pipeline/run`), so the canvas and run history show its result. It processes every
+  case waiting at that step's status. Other steps show idle for that run. Unknown step names are rejected (400).
+- **Run one step by hand (no run record):** `POST /api/jobs/<name>/run`.
 - **A job is stuck as "already running"** after a crash: `POST /api/jobs/<name>/release`.
 - **Reprocess a case:** `POST /api/dev/cases/reset` to an earlier `API_*` status. The DB check rejects a reset to
   an email status.

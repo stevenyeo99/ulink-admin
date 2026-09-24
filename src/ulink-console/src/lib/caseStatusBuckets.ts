@@ -24,6 +24,8 @@ const BUCKET_MAP: Record<string, StatusBucket> = {
   API_CLAIM_SUSPENDED: 'Needs Review',
   API_CLAIM_REVISED: 'Succeeded',
   API_CLAIM_REVISION_FAILED: 'Failed',
+  API_AWAITING_CSR: 'In Progress',
+  API_CSR_SENT: 'Succeeded',
 };
 
 export function bucketOf(status: string): StatusBucket {
@@ -60,6 +62,8 @@ const LABELS: Record<string, string> = {
   API_CLAIM_SUSPENDED: 'Suspended (awaiting documents)',
   API_CLAIM_REVISED: 'Claim Revised',
   API_CLAIM_REVISION_FAILED: 'Revision Failed',
+  API_AWAITING_CSR: 'Awaiting CSR',
+  API_CSR_SENT: 'CSR Sent',
   CLAIM_SUBMIT_FAILED: 'Claim Submit Failed',
 };
 

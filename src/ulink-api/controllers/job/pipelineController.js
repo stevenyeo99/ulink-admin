@@ -15,18 +15,31 @@ function createPipelineController(pipeline, lockName) {
    * (controllers/job/jobsController.js), wrapping the whole orchestrator instead of one
    * service. Guarded by the pipeline's own lock (jobLock is keyed by an arbitrary block_name
    * string) so two triggers can't produce two concurrent runs of the same pipeline.
+   *
+   * Optional body { steps: ['<step name>', ...] } runs only those steps (still a normal run,
+   * shown on the console canvas) — for debugging one job. No body: every step, as before.
    */
   async function runPipeline(req, res) {
+    const requested = req.body && req.body.steps;
+    if (requested !== undefined) {
+      const known = pipelineService.stepNames(pipeline);
+      const valid = Array.isArray(requested) && requested.length > 0 && requested.every((s) => typeof s === 'string' && known.includes(s));
+      if (!valid) {
+        return res.status(400).json({ error: { message: `steps must be a non-empty list of: ${known.join(', ')}`, status: 400 } });
+      }
+    }
+    const onlySteps = requested === undefined ? null : requested;
+
     const acquired = await jobLock.acquire(lockName);
     if (!acquired) {
       return res.json({ block: lockName, skipped: true, reason: 'already_running' });
     }
 
     const pipelineRun = await pipelineService.startRun(pipeline);
-    res.json({ block: lockName, started: true, runId: pipelineRun.id });
+    res.json({ block: lockName, started: true, runId: pipelineRun.id, ...(onlySteps ? { steps: onlySteps } : {}) });
 
     pipelineService
-      .executeSteps(pipelineRun)
+      .executeSteps(pipelineRun, onlySteps)
       .then((run) => {
         logger.info('Pipeline run finished', { pipeline, pipelineRunId: run.id, status: run.status });
       })

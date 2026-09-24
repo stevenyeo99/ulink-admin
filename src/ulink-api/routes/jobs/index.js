@@ -19,6 +19,7 @@ const apiEmailSenderService = require('../../modules/api-email-sender/service');
 const apiReplyIntakeService = require('../../modules/api-reply-intake/service');
 const apiClaimPreparationService = require('../../modules/api-claim-preparation/service');
 const apiClaimRevisionService = require('../../modules/api-claim-revision/service');
+const apiClaimStpService = require('../../modules/api-claim-stp/service');
 
 const router = express.Router();
 
@@ -886,7 +887,7 @@ router.use('/api-claim-preparation', createJobRouter('api-claim-preparation', ap
  *     summary: Start the api-claim-revision job (fire-and-forget) — API case workflow
  *     description: >
  *       For API_CLAIM_PAYLOAD_PREPARED cases, sends api-claim-preparation's payload to IAS
- *       POST /api/claim_revision. Success → API_CLAIM_REVISED, or API_CLAIM_SUSPENDED when documents
+ *       POST /api/claim_revision. Success → API_CLAIM_REVISED (non-STP), API_AWAITING_CSR (STP), or API_CLAIM_SUSPENDED when documents
  *       were incomplete (isSuspense=Y); IAS success=false → API_CLAIM_REVISION_FAILED (not retried);
  *       a technical failure is retried next run. REAL IAS WRITE. See
  *       docs/imp/day1/api-case-workflow.md section 6.7.
@@ -903,5 +904,30 @@ router.use('/api-claim-preparation', createJobRouter('api-claim-preparation', ap
  *         description: Lock cleared
  */
 router.use('/api-claim-revision', createJobRouter('api-claim-revision', apiClaimRevisionService));
+
+/**
+ * @openapi
+ * /api/jobs/api-claim-stp/run:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Start the api-claim-stp job (fire-and-forget) — API case workflow, STP claims
+ *     description: >
+ *       For API_AWAITING_CSR cases (STP claims revised with documents complete), polls IAS claim
+ *       status like the email flow's ias-claim-stp; once the settlement report exists, downloads it
+ *       to CSR_UPLOAD_ROOT and asks api-email-sender to send it to the customer. API_CSR_SENT. Not
+ *       ready yet is a normal wait. See docs/imp/day1/api-case-workflow.md section 6.8.
+ *     responses:
+ *       200:
+ *         description: Started, or skipped because a prior run is still in progress
+ *
+ * /api/jobs/api-claim-stp/release:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Manually clear a stuck api-claim-stp lock
+ *     responses:
+ *       200:
+ *         description: Lock cleared
+ */
+router.use('/api-claim-stp', createJobRouter('api-claim-stp', apiClaimStpService));
 
 module.exports = router;

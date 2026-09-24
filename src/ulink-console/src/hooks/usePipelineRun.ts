@@ -73,7 +73,8 @@ export function usePipelineRun(source: Source) {
   }, [latestRunQuery.data, trackedStartedAt]);
 
   const triggerMutation = useMutation({
-    mutationFn: () => runPipeline(source),
+    // undefined = the whole pipeline (Run Automation); a list = only those steps (Run this step).
+    mutationFn: (steps?: string[]) => runPipeline(source, steps),
     onSuccess: (response) => {
       if (response.skipped || !response.runId) return;
       setTrackedRunId(response.runId);
@@ -82,7 +83,8 @@ export function usePipelineRun(source: Source) {
     },
   });
 
-  const trigger = useCallback(() => triggerMutation.mutate(), [triggerMutation]);
+  const trigger = useCallback(() => triggerMutation.mutate(undefined), [triggerMutation]);
+  const runSteps = useCallback((steps: string[]) => triggerMutation.mutate(steps), [triggerMutation]);
 
   const run = runQuery.data ?? null;
   const isRunning = run?.status === 'RUNNING' || triggerMutation.isPending;
@@ -97,5 +99,6 @@ export function usePipelineRun(source: Source) {
     wasSkipped,
     isRateLimited,
     trigger,
+    runSteps,
   };
 }

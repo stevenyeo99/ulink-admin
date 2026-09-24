@@ -154,6 +154,7 @@ export const API_BLOCKS: BlockMeta[] = [
   { id: 'api-document-checking', label: 'Document Checking', description: 'Same completeness checklist as email', x: 0, y: 1140 },
   { id: 'api-claim-preparation', label: 'Claim Preparation', description: 'Same payload as email + claimNo, barcodes, flags', x: 0, y: 1330 },
   { id: 'api-claim-revision', label: 'Claim Revision', description: 'Revises the IAS claim (suspense if docs missing)', x: 0, y: 1520 },
+  { id: 'api-claim-stp', label: 'Claim STP', description: 'Downloads CSR, emails customer (STP claims only)', x: 0, y: 1710 },
 ];
 
 const apiEdge = (source: BlockName, target: BlockName): StaticEdge => ({
@@ -172,6 +173,7 @@ export const API_EMAIL_BADGES: EmailBadgeMeta[] = [
   { id: 'api-email-badge-member-verification', producer: 'api-member-verification', blockName: 'api-email-sender', label: 'MEMBER_VERIFY_ISSUE', audience: 'internal', x: 300, y: 950 },
   { id: 'api-email-badge-document-checking', producer: 'api-document-checking', blockName: 'api-email-sender', label: 'MISSING_DOCUMENTS · DOCUMENT_COMPLETE_ACK', audience: 'customer', x: 300, y: 1140 },
   { id: 'api-email-badge-claim-revision', producer: 'api-claim-revision', blockName: 'api-email-sender', label: 'CLAIM_APPROVAL_REVIEW · CLAIM_SUBMIT_ISSUE', audience: 'internal', x: 300, y: 1520 },
+  { id: 'api-email-badge-claim-stp', producer: 'api-claim-stp', blockName: 'api-email-sender', label: 'CSR_REPORT', audience: 'customer', x: 300, y: 1710 },
 ];
 
 export const API_EMAIL_BADGE_EDGES: EmailBadgeEdge[] = API_EMAIL_BADGES.map((badge) => ({

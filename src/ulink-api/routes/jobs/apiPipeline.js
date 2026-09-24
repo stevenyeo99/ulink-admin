@@ -15,6 +15,17 @@ const router = express.Router();
  *       Separate from the email orchestrator (/api/jobs/pipeline) and its own lock, so the two
  *       never block each other. Schedule: every 30 minutes. See
  *       docs/imp/day1/api-case-workflow.md section 5.
+ *     requestBody:
+ *       required: false
+ *       description: >
+ *         Optional. { "steps": ["<step name>"] } runs only those steps of this pipeline (in pipeline
+ *         order) as a normal run — for debugging one job from the console. Omit to run every step.
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               steps: { type: array, items: { type: string } }
  *     responses:
  *       200:
  *         description: Started (with runId), or skipped because a prior API run is still in progress

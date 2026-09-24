@@ -10,7 +10,8 @@ const { reviseClaim } = require('./iasClient');
 // Sends the prepared revision body to IAS (POST /api/claim_revision). Always a revision, never a
 // new claim: the claim already exists in IAS. IAS answers like claim submission, and the outcome is
 // handled the same way as the email flow's ias-claim-creation:
-// - success, documents complete      → API_CLAIM_REVISED (non-STP: internal CLAIM_APPROVAL_REVIEW email)
+// - success, documents complete, STP → API_AWAITING_CSR (api-claim-stp fetches the settlement report)
+// - success, documents complete, non-STP → API_CLAIM_REVISED (internal CLAIM_APPROVAL_REVIEW email; JD2)
 // - success, documents incomplete    → API_CLAIM_SUSPENDED — suspense set in IAS, the customer was
 //                                      asked for documents; their reply restarts the case, and the next
 //                                      revision (isSuspense=N) lifts the suspense
@@ -49,7 +50,7 @@ async function processCase({ caseRecord, input }) {
         ? { taskType: 'CLAIM_APPROVAL_REVIEW', audience: 'internal', payload: { caseId: caseRecord.id, claimNo }, dedupeKey: null }
         : null,
     },
-    nextStatus: suspended ? 'API_CLAIM_SUSPENDED' : 'API_CLAIM_REVISED',
+    nextStatus: suspended ? 'API_CLAIM_SUSPENDED' : (prepared.isStp ? 'API_AWAITING_CSR' : 'API_CLAIM_REVISED'),
     message: suspended
       ? `Claim ${claimNo} revised with suspense (documents missing); waiting for the customer`
       : `Claim ${claimNo} revised${prepared.isStp ? ' (STP)' : ''}`,

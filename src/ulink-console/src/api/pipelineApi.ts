@@ -4,8 +4,12 @@ import type { GetRunResponse, ListRunsResponse, PipelineRun, RunPipelineResponse
 // Each workflow has its own orchestrator endpoints; runs never cross between them.
 const BASE: Record<Source, string> = { EMAIL: '/api/jobs/pipeline', API: '/api/jobs/api-pipeline' };
 
-export function runPipeline(source: Source): Promise<RunPipelineResponse> {
-  return request<RunPipelineResponse>(`${BASE[source]}/run`, { method: 'POST' });
+// `steps` runs only those steps (debugging one job); omitted, the whole pipeline runs.
+export function runPipeline(source: Source, steps?: string[]): Promise<RunPipelineResponse> {
+  return request<RunPipelineResponse>(`${BASE[source]}/run`, {
+    method: 'POST',
+    ...(steps ? { body: JSON.stringify({ steps }) } : {}),
+  });
 }
 
 export async function getRun(source: Source, id: string): Promise<PipelineRun> {

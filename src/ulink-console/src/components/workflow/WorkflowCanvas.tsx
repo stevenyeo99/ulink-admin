@@ -22,6 +22,8 @@ function FocusRunningNode({ nodeId }: { nodeId?: string }) {
 
 export interface SelectedNode {
   blockId: BlockName;
+  /** The pipeline step name to run for "Run this step" (a block's id, or the step an email badge shows). */
+  stepName: string;
   label: string;
   description: string;
   steps: PipelineRunStep[];
@@ -43,11 +45,11 @@ export function WorkflowCanvas({ steps, source = 'EMAIL', onSelectNode }: Workfl
   const handleNodeClick: NodeMouseHandler<Node> = (_event, node) => {
     if (node.type === 'emailBadgeNode') {
       const data = node.data as EmailBadgeNodeData;
-      onSelectNode({ blockId: 'email-sender', label: 'Email Sender', description: 'Sends queued customer + internal emails', steps: data.steps });
+      onSelectNode({ blockId: 'email-sender', stepName: data.blockName, label: 'Email Sender', description: 'Sends queued customer + internal emails', steps: data.steps });
       return;
     }
     const data = node.data as PipelineNodeData;
-    onSelectNode({ blockId: node.id as BlockName, label: data.label, description: data.description, steps: data.steps });
+    onSelectNode({ blockId: node.id as BlockName, stepName: node.id, label: data.label, description: data.description, steps: data.steps });
   };
 
   return (

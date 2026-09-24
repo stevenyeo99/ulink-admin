@@ -24,7 +24,15 @@ const router = express.Router();
  *       and per-step results.
  *     requestBody:
  *       required: false
- *       description: No body needed — trigger only.
+ *       description: >
+ *         Optional. { "steps": ["<step name>"] } runs only those steps of this pipeline (in pipeline
+ *         order) as a normal run — for debugging one job from the console. Omit to run every step.
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               steps: { type: array, items: { type: string } }
  *     responses:
  *       200:
  *         description: Started, or skipped because a prior run is still in progress
