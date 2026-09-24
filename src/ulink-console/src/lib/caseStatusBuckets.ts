@@ -17,6 +17,10 @@ const BUCKET_MAP: Record<string, StatusBucket> = {
   NOT_RECOGNIZED: 'Failed',
   MANUAL_REVIEW: 'Failed',
   CLAIM_SUBMIT_FAILED: 'Failed',
+  // API cases: an operator has to look (same as email MANUAL_REVIEW)
+  API_MANUAL_REVIEW: 'Failed',
+  API_MEMBER_REVIEW_REQUIRED: 'Needs Review',
+  API_INCOMPLETE: 'Needs Review',
 };
 
 export function bucketOf(status: string): StatusBucket {
@@ -42,6 +46,12 @@ const LABELS: Record<string, string> = {
   API_RECEIVED: 'Received from IAS',
   API_MATERIALS_DOWNLOADED: 'Images Downloaded',
   API_NO_DOCUMENTS: 'No Documents',
+  API_RECOGNIZED: 'Recognized',
+  API_MANUAL_REVIEW: 'Manual Review',
+  API_READY_FOR_DOCUMENT_CHECKING: 'Ready for Document Checking',
+  API_MEMBER_REVIEW_REQUIRED: 'Member Review',
+  API_DOCUMENTS_VERIFIED: 'Documents Verified',
+  API_INCOMPLETE: 'Incomplete',
   CLAIM_SUBMIT_FAILED: 'Claim Submit Failed',
 };
 

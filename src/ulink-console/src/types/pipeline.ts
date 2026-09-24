@@ -22,7 +22,10 @@ export type BlockName =
   | 'ias-claim-stp'
   // API case workflow (modules/pipeline/service.js API_STEPS)
   | 'api-claim-intake'
-  | 'api-material-download';
+  | 'api-material-download'
+  | 'api-claim-recognition'
+  | 'api-member-verification'
+  | 'api-document-checking';
 
 export type EmailSenderBlockName =
   | 'email-sender-member-verification'

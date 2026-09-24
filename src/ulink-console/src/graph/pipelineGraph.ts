@@ -146,8 +146,14 @@ export const EMAIL_BADGE_EDGES: EmailBadgeEdge[] = EMAIL_BADGES.map((badge) => (
 export const API_BLOCKS: BlockMeta[] = [
   { id: 'api-claim-intake', label: 'API Claim Intake', description: "Lists today's IAS API claims, one case per claim", x: 0, y: 0 },
   { id: 'api-material-download', label: 'Material Download', description: 'Downloads console images via the middleware zip', x: 0, y: 190 },
+  { id: 'api-claim-recognition', label: 'Claim Recognition', description: 'Same OCR + extraction as email (AYAS member claim)', x: 0, y: 380 },
+  { id: 'api-member-verification', label: 'Member Verification', description: 'Same IAS member lookup + checks as email', x: 0, y: 570 },
+  { id: 'api-document-checking', label: 'Document Checking', description: 'Same completeness checklist as email', x: 0, y: 760 },
 ];
 
 export const API_EDGES: StaticEdge[] = [
   { id: 'e-api-intake-download', source: 'api-claim-intake', target: 'api-material-download', sourceHandle: 'source-bottom', targetHandle: 'target-top', kind: 'main' },
+  { id: 'e-api-download-recognition', source: 'api-material-download', target: 'api-claim-recognition', sourceHandle: 'source-bottom', targetHandle: 'target-top', kind: 'main' },
+  { id: 'e-api-recognition-member', source: 'api-claim-recognition', target: 'api-member-verification', sourceHandle: 'source-bottom', targetHandle: 'target-top', kind: 'main' },
+  { id: 'e-api-member-documents', source: 'api-member-verification', target: 'api-document-checking', sourceHandle: 'source-bottom', targetHandle: 'target-top', kind: 'main' },
 ];

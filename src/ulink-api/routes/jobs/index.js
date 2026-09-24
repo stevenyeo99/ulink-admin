@@ -12,6 +12,9 @@ const iasClaimCreationService = require('../../modules/ias-claim-creation/servic
 const iasClaimStpService = require('../../modules/ias-claim-stp/service');
 const apiClaimIntakeService = require('../../modules/api-claim-intake/service');
 const apiMaterialDownloadService = require('../../modules/api-material-download/service');
+const apiClaimRecognitionService = require('../../modules/api-claim-recognition/service');
+const apiMemberVerificationService = require('../../modules/api-member-verification/service');
+const apiDocumentCheckingService = require('../../modules/api-document-checking/service');
 
 const router = express.Router();
 
@@ -719,5 +722,77 @@ router.use('/api-claim-intake', createJobRouter('api-claim-intake', apiClaimInta
  *         description: Lock cleared
  */
 router.use('/api-material-download', createJobRouter('api-material-download', apiMaterialDownloadService));
+
+/**
+ * @openapi
+ * /api/jobs/api-claim-recognition/run:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Start the api-claim-recognition job (fire-and-forget) — API case workflow, step 3
+ *     description: >
+ *       For each API_MATERIALS_DOWNLOADED case, takes api-material-download's output (the case
+ *       documents) and reads them with the email flow's own OCR — same transcription prompt, same
+ *       ayas_member_claim extraction (no route decision: API claims are always AYAS member
+ *       claims). API_RECOGNIZED, or API_MANUAL_REVIEW if the extraction doesn't fit the schema.
+ *       Real LLM calls. See docs/imp/day1/api-case-workflow.md section 6.4.
+ *     responses:
+ *       200:
+ *         description: Started, or skipped because a prior run is still in progress
+ *
+ * /api/jobs/api-claim-recognition/release:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Manually clear a stuck api-claim-recognition lock
+ *     responses:
+ *       200:
+ *         description: Lock cleared
+ */
+router.use('/api-claim-recognition', createJobRouter('api-claim-recognition', apiClaimRecognitionService));
+
+/**
+ * @openapi
+ * /api/jobs/api-member-verification/run:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Start the api-member-verification job (fire-and-forget) — API case workflow, step 4
+ *     description: >
+ *       For API_RECOGNIZED cases (and API_MEMBER_REVIEW_REQUIRED ones, re-checked every run like
+ *       email cases), runs the email flow's own member check (IAS member lookup + rules) on
+ *       api-claim-recognition's extracted fields. API_READY_FOR_DOCUMENT_CHECKING or
+ *       API_MEMBER_REVIEW_REQUIRED. Real IAS call. See docs/imp/day1/api-case-workflow.md 6.5.
+ *     responses:
+ *       200:
+ *         description: Started, or skipped because a prior run is still in progress
+ *
+ * /api/jobs/api-member-verification/release:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Manually clear a stuck api-member-verification lock
+ *     responses:
+ *       200:
+ *         description: Lock cleared
+ *
+ * /api/jobs/api-document-checking/run:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Start the api-document-checking job (fire-and-forget) — API case workflow, step 5
+ *     description: >
+ *       For API_READY_FOR_DOCUMENT_CHECKING cases, runs the email flow's own document checklist
+ *       and judgments on api-claim-recognition's extracted fields. API_DOCUMENTS_VERIFIED or
+ *       API_INCOMPLETE. Real LLM calls. See docs/imp/day1/api-case-workflow.md 6.5.
+ *     responses:
+ *       200:
+ *         description: Started, or skipped because a prior run is still in progress
+ *
+ * /api/jobs/api-document-checking/release:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Manually clear a stuck api-document-checking lock
+ *     responses:
+ *       200:
+ *         description: Lock cleared
+ */
+router.use('/api-member-verification', createJobRouter('api-member-verification', apiMemberVerificationService));
+router.use('/api-document-checking', createJobRouter('api-document-checking', apiDocumentCheckingService));
 
 module.exports = router;

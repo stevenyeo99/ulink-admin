@@ -14,7 +14,8 @@ jest.mock('../db/models', () => {
     cases,
     sequelize: { transaction: (fn) => fn({}) },
     Case: {
-      findAll: jest.fn(async ({ where }) => cases.filter((c) => c.source === where.source && c.currentStatus === where.currentStatus)),
+      // Copies, like real Sequelize instances: a later change to the row doesn't change them.
+      findAll: jest.fn(async ({ where }) => cases.filter((c) => c.source === where.source && [].concat(where.currentStatus).includes(c.currentStatus)).map((c) => ({ ...c }))),
       update: jest.fn(async (fields, { where }) => {
         const c = cases.find((x) => x.id === where.id && x.source === where.source && x.currentStatus === where.currentStatus);
         if (!c) return [0];
@@ -100,4 +101,12 @@ it('does not move a case that left the input status meanwhile', async () => {
   }));
   expect(summary.errors[0].error).toMatch(/left API_A_DONE/);
   expect(models.cases[0].currentStatus).toBe('API_ELSEWHERE');
+});
+
+it('accepts several input statuses and records the status the case was actually at', async () => {
+  models.cases[0].currentStatus = 'API_RETRY';
+  const multi = { ...job(async () => ({ output: {}, nextStatus: 'API_B_DONE', message: 'ok' })), inputStatus: ['API_A_DONE', 'API_RETRY'] };
+
+  expect(await runApiJob(multi)).toEqual({ processed: 1, waiting: 0, errors: [] });
+  expect(models.events[0]).toMatchObject({ prevStatus: 'API_RETRY', newStatus: 'API_B_DONE' });
 });

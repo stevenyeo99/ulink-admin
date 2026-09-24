@@ -14,6 +14,9 @@ const iasClaimCreationService = require('../ias-claim-creation/service');
 const iasClaimStpService = require('../ias-claim-stp/service');
 const apiClaimIntakeService = require('../api-claim-intake/service');
 const apiMaterialDownloadService = require('../api-material-download/service');
+const apiClaimRecognitionService = require('../api-claim-recognition/service');
+const apiMemberVerificationService = require('../api-member-verification/service');
+const apiDocumentCheckingService = require('../api-document-checking/service');
 
 // Fixed order — later steps read the Case.currentStatus earlier steps write, per
 // docs/imp/day1/jobs-registry.md's "Orchestrator" section. Each block keeps its own
@@ -61,6 +64,9 @@ const STEPS = [
 const API_STEPS = [
   ['api-claim-intake', apiClaimIntakeService],
   ['api-material-download', apiMaterialDownloadService],
+  ['api-claim-recognition', apiClaimRecognitionService],
+  ['api-member-verification', apiMemberVerificationService],
+  ['api-document-checking', apiDocumentCheckingService],
 ];
 
 const PIPELINES = { EMAIL: STEPS, API: API_STEPS };

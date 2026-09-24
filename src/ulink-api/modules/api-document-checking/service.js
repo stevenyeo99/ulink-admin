@@ -1,0 +1,46 @@
+const config = require('../../config');
+const { runApiJob } = require('../api-pipeline/runApiJob');
+const { checkCase } = require('../document-checking/service');
+
+// api-document-checking: API case workflow job 5 (docs/imp/day1/api-case-workflow.md section 6.5).
+//
+//   input:  { 'api-claim-recognition': { recognizedType, extractedFields, ... } }
+//   output: { outcome, documentCheckResult, email }
+//
+// The email flow's own document check, unchanged: document-checking's checkCase runs the whole
+// checklist plus its entity-match judgments on the extracted fields. Runs after the member check
+// (API_READY_FOR_DOCUMENT_CHECKING), same order as email. Its input is the OCR output, not the
+// member check's: the checklist only needs the extracted fields.
+
+const OUTCOME_TO_STATUS = {
+  DOCUMENT_CHECKED: 'API_DOCUMENTS_VERIFIED',
+  INCOMPLETE: 'API_INCOMPLETE',
+};
+
+async function processCase({ caseRecord, input }) {
+  const { extractedFields, recognizedType } = input['api-claim-recognition'];
+  const { outcome, result } = await checkCase({ id: caseRecord.id, extractedFields, recognizedType });
+  const nextStatus = OUTCOME_TO_STATUS[outcome];
+  if (!nextStatus) throw new Error(`Unexpected document check outcome: ${outcome}`);
+
+  return {
+    output: {
+      outcome,
+      documentCheckResult: result,
+      // The customer email the email flow sends for this outcome. Sent once API emails exist.
+      email: { taskType: nextStatus === 'API_INCOMPLETE' ? 'MISSING_DOCUMENTS' : 'DOCUMENT_COMPLETE_ACK', audience: 'customer' },
+    },
+    nextStatus,
+    message: result.passed ? 'Documents complete' : `Documents incomplete: ${result.issues.join('; ')}`,
+  };
+}
+
+const job = {
+  name: 'api-document-checking',
+  inputStatus: 'API_READY_FOR_DOCUMENT_CHECKING',
+  inputs: ['api-claim-recognition'],
+  batchLimit: config.documentChecking.batchLimit,
+  process: processCase,
+};
+
+module.exports = { run: () => runApiJob(job), job };

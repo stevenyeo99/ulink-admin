@@ -17,6 +17,9 @@ const ICONS: Record<BlockName, LucideIcon> = {
   'ias-claim-stp': FileDown,
   'api-claim-intake': ListChecks,
   'api-material-download': Images,
+  'api-claim-recognition': ScanSearch,
+  'api-member-verification': UserCheck,
+  'api-document-checking': ClipboardCheck,
 };
 
 const handleClass = '!h-0 !w-0 !min-w-0 !border-0 !bg-transparent';

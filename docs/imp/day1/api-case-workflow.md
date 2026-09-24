@@ -120,10 +120,10 @@ stateDiagram-v2
 | `API_NO_DOCUMENTS` | No console images after the grace period; the customer will be asked | `api-material-download` | document checking (email) | 2c / 6 |
 | `API_REPLY_RECEIVED` | Customer replied with attachments while the case was waiting | `email-intake` | `api-claim-recognition` | 4 |
 | `API_RECOGNIZED` | OCR done | `api-claim-recognition` | `api-member-verification` | 5 |
-| `API_NOT_RECOGNIZED` / `API_MANUAL_REVIEW` | OCR couldn't classify the documents | `api-claim-recognition` | operator | 5 |
-| `API_MEMBER_REVIEW_REQUIRED` | Member/coverage issue; internal email sent. **Waits for a reply** | `api-member-verification` | `email-intake` (on reply) | 6 |
+| `API_MANUAL_REVIEW` | Extraction didn't fit the `ayas_member_claim` schema; waits for an operator | `api-claim-recognition` | operator | 5 |
+| `API_MEMBER_REVIEW_REQUIRED` | Member/coverage issue (internal email: 6c). Re-checked every run; **also waits for a reply** | `api-member-verification` | `api-member-verification` (re-check), `email-intake` (reply) | 6 |
 | `API_READY_FOR_DOCUMENT_CHECKING` | Member check passed | `api-member-verification` | `api-document-checking` | 6 |
-| `API_INCOMPLETE` | Documents missing; customer email sent. **Waits for a reply** | `api-document-checking` | `email-intake` (on reply) | 6 |
+| `API_INCOMPLETE` | Documents missing (customer email: 6c). **Waits for a reply** | `api-document-checking` | `email-intake` (on reply) | 6 |
 | `API_DOCUMENTS_VERIFIED` | Both checks passed | `api-document-checking` | `api-claim-preparation` | 6 |
 | `API_CLAIM_PAYLOAD_PREPARED` | Revision payload built | `api-claim-preparation` | `api-claim-revision` | 7 |
 | `API_CLAIM_REVISED` | IAS accepted the revision | `api-claim-revision` | `api-claim-stp` | 8 |
@@ -140,6 +140,9 @@ Statuses from Phase 3 onward are provisional until their phase is built.
 POST /api/jobs/api-pipeline/run        cron: every 30 minutes; lock 'api-pipeline'
   1. api-claim-intake
   2. api-material-download
+  3. api-claim-recognition
+  4. api-member-verification
+  5. api-document-checking
 ```
 
 Endpoints: `/api/jobs/api-pipeline/run`, `/release`, `/runs`, `/runs/:id` — they only ever see `pipeline='API'`
@@ -270,18 +273,61 @@ Logic:
 
 `console_barcode` is not set yet: which barcode claim revision needs is decided in Phase 8.
 
-### 6.4 `api-claim-recognition` (Phase 5)
+### 6.4 `api-claim-recognition` (Phase 5, built 2026-09-24)
 
-Selects `API_MATERIALS_DOWNLOADED` and `API_REPLY_RECEIVED`. Documents are the downloaded console images plus the
-attachments of every inbound reply on the case. It reuses the existing recognition logic; only the document
-gathering is API-specific. Writes `extracted_fields`.
+| | |
+|---|---|
+| Module | `modules/api-claim-recognition/service.js` — a runner job |
+| Job | `POST /api/jobs/api-claim-recognition/run`. Tests: `tests/apiClaimRecognition.test.js` |
+| Input status | `API_MATERIALS_DOWNLOADED` |
+| Input | `{ 'api-material-download': { scanId, fileCount, documents: [{ barcodeId, documentIds }] } }` |
+| Output | `{ recognizedType: 'ayas_member_claim', extractedFields, pageCount, transcripts }` |
+| Next | `API_RECOGNIZED`, or `API_MANUAL_REVIEW` (`reasonCode: 'SCHEMA_VALIDATION_FAILED'`) |
 
-### 6.5 `api-member-verification` and `api-document-checking` (Phase 6)
+Logic:
 
-Same order and the same rules as the email workflow, reusing `member-verification/checks.js`,
-`member-verification/iasClient.js` and `document-checking/checklist.js`. A member-check issue queues an **internal**
-email; missing documents queue a **customer** email. Writes `member_verify_result`, `ias_member_info_response`,
-`document_check_result`.
+1. **Same OCR as email cases.** It calls the email flow's own exported functions, unchanged: `transcribePages` (the
+   same page-transcription prompt) and `extractFields` (the same extraction prompt and schema, plus the same
+   post-processing — invoice dedupe, DOB / delegation-letter normalisation, medical-record fallback). The email job
+   itself is not modified.
+2. **No route decision.** API claims are always AYAS member claims (confirmed 2026-09-24), so it extracts with the
+   `ayas_member_claim` route from `ulink_claim_routes` directly. An API case can't come out "not recognized".
+3. **Documents:** the case documents named in the input, read through the storage adapter. Each page is labelled
+   `[<barcodeId>/<file> - page N]` — the same label shape as email attachments (the medical-record fallback groups
+   pages by it); the barcode is included because every console submission numbers its pages from `page-000.jpg`.
+4. **Extraction doesn't fit the schema** → `API_MANUAL_REVIEW`, waiting for an operator (decided 2026-09-24; a
+   customer email for this comes with Phase 6).
+5. **Route missing / a document gone / LLM or storage error** → FAILED, retried next run.
+6. The transcripts are kept in the output, so what the model read can be checked per case.
+
+Reply attachments (Phase 4) will be added as a second input (`inputs: ['api-material-download', 'email-reply']`).
+Verified on the sample scan: 7 pages → `API_RECOGNIZED` in about a minute.
+
+### 6.5 `api-member-verification` and `api-document-checking` (Phase 6, built 2026-09-24 — emails pending)
+
+Both are runner jobs that hand the OCR output to the **email flow's own check, unchanged** — the exported `checkCase`
+of `member-verification` / `document-checking`, which only reads `id`, `extractedFields` and `recognizedType`. Same
+order as email: member check first, then documents. Tests: `tests/apiChecks.test.js`.
+
+| | `api-member-verification` | `api-document-checking` |
+|---|---|---|
+| Job | `POST /api/jobs/api-member-verification/run` | `POST /api/jobs/api-document-checking/run` |
+| Input status | `API_RECOGNIZED`, and `API_MEMBER_REVIEW_REQUIRED` (re-checked every run) | `API_READY_FOR_DOCUMENT_CHECKING` |
+| Input | `{ 'api-claim-recognition': { extractedFields, recognizedType } }` | same |
+| Does | IAS member lookup + every member rule (hard/soft checks, exclusions, benefit eligibility and limits) | the full checklist + entity-match judgments |
+| Output | `{ outcome, memberVerifyResult, iasMemberInfoResponse, email }` | `{ outcome, documentCheckResult, email }` |
+| Next | `API_READY_FOR_DOCUMENT_CHECKING` / `API_MEMBER_REVIEW_REQUIRED` | `API_DOCUMENTS_VERIFIED` / `API_INCOMPLETE` |
+
+- **Member issue fixed in IAS (S14):** a case at `API_MEMBER_REVIEW_REQUIRED` is re-checked every run, as email cases
+  are. Still failing → WAITING (no new row, no status change); passing → moves on by itself.
+- **Document check input:** the OCR output, not the member check's — the checklist only needs the extracted fields.
+- **Emails are not sent yet.** Each output's `email` says which email the email flow sends for that outcome
+  (`MEMBER_VERIFY_ISSUE` → internal; `MISSING_DOCUMENTS` / `DOCUMENT_COMPLETE_ACK` → customer). Queuing an
+  `EmailTask` today would reach the shared `email-sender`, which can only reply inside an existing thread — API cases
+  have none. Sending them is step 6c, together with reply routing (Phase 4), so the shared email code changes once.
+
+Verified on the sample scan: download → OCR → member verified (IAS) → documents incomplete ("Incomplete medical
+report(s)", missing case number, missing claimant DOB), about a minute end to end.
 
 ### 6.6 `api-claim-preparation` (Phase 7)
 

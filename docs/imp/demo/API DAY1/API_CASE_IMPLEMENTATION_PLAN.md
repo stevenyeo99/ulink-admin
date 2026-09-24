@@ -1,6 +1,6 @@
 # API Case Implementation Plan
 
-Status: Phase 0, 1, 2, 2c and 3 built (2026-09-24); next: Phase 5  
+Status: Phase 0, 1, 2, 2c, 3, 5, 6a and 6b built (2026-09-24); next: 6c + 4 (API emails and replies)  
 Scope: `ulink-admin/src/ulink-api` + `ulink-admin/src/ulink-console`  
 Date: 2026-09-24
 
@@ -152,13 +152,23 @@ like email attachments. Done now, while only 2 jobs exist.
   S5 below).
 - Console: `GET /api/cases/:caseId/documents/:id` (ownership-checked, like attachments).
 
-## Phase 5: `api-claim-recognition` job
+## Phase 5: `api-claim-recognition` job — BUILT 2026-09-24
+
+Same prompts and post-processing as email OCR (calls `transcribePages` / `extractFields`, email module unchanged);
+no route decision — always `ayas_member_claim` (D14). Schema mismatch → `API_MANUAL_REVIEW` for an operator (D15).
 
 - Reads `API_MATERIALS_DOWNLOADED` and `API_REPLY_RECEIVED`.
 - Documents: the downloaded console images, plus attachments from customer replies.
 - Reuses the existing recognition logic; only the document gathering differs from `claim-recognition`.
 
 ## Phase 6: `api-member-verification` and `api-document-checking` jobs, plus `email-sender`
+
+- **6a/6b — BUILT 2026-09-24.** Both jobs call the email modules' own `checkCase` (unchanged) with the OCR output.
+  The member check re-checks `API_MEMBER_REVIEW_REQUIRED` every run (S14). Each output records the email the email
+  flow would send (`email: { taskType, audience }`).
+- **6c — next, together with Phase 4.** Send those emails: the first API email is a new email (not a reply) with the
+  `tpaCaseNumber` in the subject; the customer address is a fixed address for now (Q9). Changes shared email code
+  (`email-sender`, channel adapter), so it's built with reply routing and tested against the email flow.
 
 - Same order as the email workflow: member check first, then documents.
 - Reuse `member-verification/checks.js`, `member-verification/iasClient.js` and `document-checking/checklist.js`.
@@ -198,14 +208,14 @@ Found while walking through API case edge cases (2026-09-24). ⚠️ = can lose 
 | S4 | No console images yet on first download | Grace period 2 h after IAS `crtDate`, staying `API_RECEIVED` (WAITING); then `API_NO_DOCUMENTS` → customer asked for documents (Phase 6) | 2c ✓ / 6 |
 | S5 | Partial download (fewer files than the console lists) | WAITING; keep what arrived, fetch only the rest next run | 2c ✓ |
 | S6 | Customer uploads more pages to the console while the case waits | Re-check the console each run while waiting; new pages → back to OCR | 6 |
-| S7 | Blurry / unreadable images | Low OCR confidence → `API_MANUAL_REVIEW` | 5 |
+| S7 | Blurry / unreadable images | Unreadable values come back `unclear`/missing (same prompt as email) and document checking asks for them; a schema mismatch → `API_MANUAL_REVIEW` | 5 ✓ / 6 |
 | S8 | ⚠️ Customer sends a brand-new email without `tpaCaseNumber` | Would become an email case and could create a second IAS claim. Duplicate check: same member + treatment date as an open API case → flag, don't create | 4 |
 | S9 | Reply arrives while the case is processing (not waiting) | Keep it; include its attachments the next time the case is read (OCR reads every reply) | 4 / 5 |
 | S10 | Reply after revision already done | Store and alert internally; no reprocessing | 4 |
 | S11 | Customer email address unknown (fixed address for now) | Production blocker — use the member-info email | 6 |
 | S12 | Email bounces | Flag for an operator | 6 |
 | S13 | ⚠️ Customer never replies | Reminder after N days, close/escalate after M days | 6 |
-| S14 | ⚠️ Member-check issue fixed by the internal team in IAS (no customer reply will come) | Operator "retry member check" action for API cases | 6 |
+| S14 | ⚠️ Member-check issue fixed by the internal team in IAS (no customer reply will come) | Re-checked every run like email cases; moves on once IAS is fixed | 6 ✓ |
 | S15 | ⚠️ A person already changed/approved the claim in IAS | Check claim status before revising; only revise at the expected status | 8 |
 | S16 | Revision timeout (outcome unknown) | Check the claim in IAS before resending | 8 |
 | S17 | Revision runs again after a reply | Must be safe to repeat — confirm with the IAS sample | 8 |
@@ -233,6 +243,8 @@ sent (Phase 6).
 | D11 | No images in the console: continue anyway (after the S4 grace period); documents come from the customer's reply and document checking asks for them | 2026-09-24 |
 | D12 | Each API job receives the previous jobs' outputs explicitly, stored per run in `ulink_api_case_steps` | 2026-09-24 |
 | D13 | Console images are case-level records (`ulink_case_documents`) in the same storage as email attachments; an existing document is skipped | 2026-09-24 |
+| D14 | API claims are always AYAS member claims: API OCR skips the route decision and extracts with `ayas_member_claim` | 2026-09-24 |
+| D15 | OCR that can't produce valid fields → `API_MANUAL_REVIEW` (operator) now; a customer email for it may come with Phase 6 | 2026-09-24 |
 
 ## Open questions
 
@@ -246,3 +258,4 @@ sent (Phase 6).
 | Q6 | STP / non-STP meaning for API cases | Phase 9 |
 | Q7 | ~~S4 grace period~~ 2 hours after `crtDate` (`API_MATERIAL_GRACE_MINUTES`), confirmed 2026-09-24 | Phase 2c |
 | Q8 | S13 reminder / close timings (N and M days) | Phase 6 |
+| Q9 | The fixed customer email address for API emails (until the member-info email is used) | Phase 6c |

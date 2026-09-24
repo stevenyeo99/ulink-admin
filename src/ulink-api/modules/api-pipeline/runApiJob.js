@@ -3,7 +3,7 @@ const { sequelize, Case, CaseEvent, ApiCaseStep } = require('../../db/models');
 /**
  * Runs one API case job over every case waiting at its input status. A job is a plain object:
  *
- *   { name, inputStatus, inputs: ['earlier-job', ...], batchLimit,
+ *   { name, inputStatus, inputs: ['earlier-job', ...], batchLimit,     (inputStatus: one or several)
  *     process({ caseRecord, input }) -> { output, nextStatus, message } | { wait: true, output } }
  *
  * `input` is { [earlierJob]: its latest DONE output } — a job only ever receives what the jobs it
@@ -12,7 +12,7 @@ const { sequelize, Case, CaseEvent, ApiCaseStep } = require('../../db/models');
  * input, and saving the outcome.
  *
  * - DONE: the step row, the status move and the case event are written in one transaction, and
- *   only if the case is still at inputStatus (a concurrent change rolls it back).
+ *   only if the case is still at the status it was picked at (a concurrent change rolls it back).
  * - WAITING (nothing to do yet) / FAILED (technical error): the case stays where it is and is
  *   retried next run. Repeating the same outcome updates the latest row instead of adding one
  *   every 30 minutes, so the history shows changes, not polling.
@@ -35,18 +35,19 @@ async function recordRetryable(caseId, job, status, fields) {
 }
 
 async function recordDone(caseRecord, job, { input, output, nextStatus, message, startedAt }) {
+  const prevStatus = caseRecord.currentStatus;
   await sequelize.transaction(async (transaction) => {
     const [moved] = await Case.update(
       { currentStatus: nextStatus },
-      { where: { id: caseRecord.id, source: 'API', currentStatus: job.inputStatus }, transaction }
+      { where: { id: caseRecord.id, source: 'API', currentStatus: prevStatus }, transaction }
     );
-    if (moved !== 1) throw new Error(`Case left ${job.inputStatus} while ${job.name} was running`);
+    if (moved !== 1) throw new Error(`Case left ${prevStatus} while ${job.name} was running`);
     await ApiCaseStep.create(
       { caseId: caseRecord.id, job: job.name, status: 'DONE', input, output, startedAt, finishedAt: new Date() },
       { transaction }
     );
     await CaseEvent.create(
-      { caseId: caseRecord.id, blockName: job.name, prevStatus: job.inputStatus, newStatus: nextStatus, message },
+      { caseId: caseRecord.id, blockName: job.name, prevStatus, newStatus: nextStatus, message },
       { transaction }
     );
   });
@@ -56,7 +57,9 @@ async function runApiJob(job) {
   const cases = await Case.findAll({
     where: { source: 'API', currentStatus: job.inputStatus },
     limit: job.batchLimit,
-    order: [['createdAt', 'ASC']],
+    // Oldest untouched first, so cases re-checked every run (a waiting status among several
+    // inputStatus values) can't starve new ones.
+    order: [['updatedAt', 'ASC']],
   });
 
   const summary = { processed: 0, waiting: 0, errors: [] };
