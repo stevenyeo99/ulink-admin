@@ -17,6 +17,7 @@ const healthRouter = require('./routes/meta/health');
 const usersRouter = require('./routes/users');
 const jobsRouter = require('./routes/jobs');
 const pipelineRouter = require('./routes/jobs/pipeline');
+const apiPipelineRouter = require('./routes/jobs/apiPipeline');
 const casesRouter = require('./routes/cases');
 const devClaimRecognitionRouter = require('./routes/dev/claimRecognition');
 const devDocumentCheckingRouter = require('./routes/dev/documentChecking');
@@ -28,6 +29,7 @@ const devIasClaimPreparationRouter = require('./routes/dev/iasClaimPreparation')
 const devIasClaimCreationRouter = require('./routes/dev/iasClaimCreation');
 const devConsoleUploadRouter = require('./routes/dev/consoleUpload');
 const devIasClaimStpRouter = require('./routes/dev/iasClaimStp');
+const devApiClaimIntakeRouter = require('./routes/dev/apiClaimIntake');
 
 const app = express();
 
@@ -60,6 +62,7 @@ app.use('/health', healthRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/jobs', jobsRouter);
 app.use('/api/jobs/pipeline', pipelineRouter);
+app.use('/api/jobs/api-pipeline', apiPipelineRouter);
 app.use('/api/cases', casesRouter);
 app.use('/api/dev/claim-recognition', devClaimRecognitionRouter);
 app.use('/api/dev/document-checking', devDocumentCheckingRouter);
@@ -71,6 +74,7 @@ app.use('/api/dev/ias-claim-preparation', devIasClaimPreparationRouter);
 app.use('/api/dev/ias-claim-creation', devIasClaimCreationRouter);
 app.use('/api/dev/console-upload', devConsoleUploadRouter);
 app.use('/api/dev/ias-claim-stp', devIasClaimStpRouter);
+app.use('/api/dev/api-claim-intake', devApiClaimIntakeRouter);
 
 // Swagger UI needs inline script/style, which the global helmet CSP blocks —
 // relax it for this path only, everything else keeps the strict default.

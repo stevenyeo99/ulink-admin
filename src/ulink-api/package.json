@@ -31,6 +31,7 @@
     "http-errors": "^2.0.1",
     "imapflow": "^1.0.175",
     "js-yaml": "^4.1.0",
+    "jszip": "^3.10.2",
     "mailparser": "^3.7.4",
     "morgan": "^1.11.0",
     "nodemailer": "^9.0.5",

@@ -19,6 +19,10 @@ const router = express.Router();
  *         in: query
  *         schema: { type: string }
  *         description: Comma-separated Case.currentStatus values. Omit for all statuses.
+ *       - name: source
+ *         in: query
+ *         schema: { type: string, enum: [EMAIL, API] }
+ *         description: Only email cases or only API cases. Omit for both.
  *       - name: limit
  *         in: query
  *         schema: { type: integer, default: 100, maximum: 200 }

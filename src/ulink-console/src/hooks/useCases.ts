@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { listCases } from '../api/casesApi';
+import type { Source } from '../types/pipeline';
 
 /**
  * Fetch-on-mount only, no auto-polling — deliberately, after this session's rate-limit
@@ -9,9 +10,9 @@ import { listCases } from '../api/casesApi';
  * CasesPage's own unfiltered "all cases" query are cached separately, not conflated —
  * CasesPage's own Refresh button calls refetch() to update just its own query.
  */
-export function useCases(status?: string) {
+export function useCases(status?: string, source?: Source) {
   return useQuery({
-    queryKey: ['cases', status ?? 'all'],
-    queryFn: () => listCases(status),
+    queryKey: ['cases', status ?? 'all', source ?? 'all'],
+    queryFn: () => listCases(status, source),
   });
 }

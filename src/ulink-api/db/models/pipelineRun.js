@@ -9,6 +9,8 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: 'RUNNING',
         validate: { isIn: [['RUNNING', 'COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED']] },
       },
+      // 'EMAIL' or 'API' — which orchestrator (modules/pipeline/service.js PIPELINES) ran it.
+      pipeline: { type: DataTypes.STRING, allowNull: false, defaultValue: 'EMAIL' },
       startedAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
       finishedAt: { type: DataTypes.DATE, allowNull: true },
     },

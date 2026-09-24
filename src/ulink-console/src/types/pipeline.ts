@@ -1,6 +1,9 @@
 // Mirrors ulink-api/src/db/models/pipelineRun.js and pipelineRunStep.js exactly —
 // keep these in sync if those models change.
 
+// Which workflow a case or pipeline run belongs to — ulink_cases.source / ulink_pipeline_runs.pipeline.
+export type Source = 'EMAIL' | 'API';
+
 export type StepStatus = 'PENDING' | 'RUNNING' | 'DONE' | 'FAILED' | 'SKIPPED';
 
 export type RunStatus = 'RUNNING' | 'COMPLETED' | 'COMPLETED_WITH_ERRORS' | 'FAILED';
@@ -16,7 +19,10 @@ export type BlockName =
   | 'console-upload'
   | 'ias-claim-preparation'
   | 'ias-claim-creation'
-  | 'ias-claim-stp';
+  | 'ias-claim-stp'
+  // API case workflow (modules/pipeline/service.js API_STEPS)
+  | 'api-claim-intake'
+  | 'api-material-download';
 
 export type EmailSenderBlockName =
   | 'email-sender-member-verification'
@@ -39,6 +45,7 @@ export interface PipelineRunStep {
 
 export interface PipelineRun {
   id: string;
+  pipeline: Source;
   status: RunStatus;
   startedAt: string;
   finishedAt: string | null;
@@ -46,7 +53,7 @@ export interface PipelineRun {
 }
 
 export interface RunPipelineResponse {
-  block: 'pipeline';
+  block: 'pipeline' | 'api-pipeline';
   started?: boolean;
   runId?: string;
   skipped?: boolean;

@@ -10,6 +10,8 @@ const consoleUploadService = require('../../modules/console-upload/service');
 const iasClaimPreparationService = require('../../modules/ias-claim-preparation/service');
 const iasClaimCreationService = require('../../modules/ias-claim-creation/service');
 const iasClaimStpService = require('../../modules/ias-claim-stp/service');
+const apiClaimIntakeService = require('../../modules/api-claim-intake/service');
+const apiMaterialDownloadService = require('../../modules/api-material-download/service');
 
 const router = express.Router();
 
@@ -643,5 +645,78 @@ router.use('/console-upload', createJobRouter('console-upload', consoleUploadSer
 router.use('/ias-claim-preparation', createJobRouter('ias-claim-preparation', iasClaimPreparationService));
 router.use('/ias-claim-creation', createJobRouter('ias-claim-creation', iasClaimCreationService));
 router.use('/ias-claim-stp', createJobRouter('ias-claim-stp', iasClaimStpService));
+
+/**
+ * @openapi
+ * /api/jobs/api-claim-intake/run:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Start the api-claim-intake job (fire-and-forget) — API case workflow, step 1
+ *     description: >
+ *       Lists today's (Myanmar time) claims from IAS get_claim_api and creates one API case
+ *       (source=API, API_RECEIVED) per clNo not seen before. A clNo that already has a case is
+ *       left untouched, so re-running is safe. Returns immediately; the outcome is in the server
+ *       log and the new cases' ulink_case_events rows. To look at IAS's list for any date range
+ *       without saving, use GET /api/dev/api-claim-intake/preview. See
+ *       docs/imp/day1/api-case-workflow.md section 6.1.
+ *     requestBody:
+ *       required: false
+ *       description: No body needed — trigger only.
+ *     responses:
+ *       200:
+ *         description: Started, or skipped because a prior run is still in progress
+ *         content:
+ *           application/json:
+ *             examples:
+ *               started:
+ *                 value: { block: api-claim-intake, started: true }
+ *               skipped:
+ *                 value: { block: api-claim-intake, skipped: true, reason: already_running }
+ *
+ * /api/jobs/api-claim-intake/release:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Manually clear a stuck api-claim-intake lock
+ *     responses:
+ *       200:
+ *         description: Lock cleared
+ *         content:
+ *           application/json:
+ *             example: { block: api-claim-intake, released: true, wasLocked: true }
+ */
+router.use('/api-claim-intake', createJobRouter('api-claim-intake', apiClaimIntakeService));
+
+/**
+ * @openapi
+ * /api/jobs/api-material-download/run:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Start the api-material-download job (fire-and-forget) — API case workflow, step 2
+ *     description: >
+ *       For each API_RECEIVED case, lists console scan API-{tpaCaseNumber} through
+ *       ulink-console-middleware, downloads its images as a zip and unpacks them under
+ *       API_MATERIAL_DOWNLOAD_ROOT, then moves the case to API_MATERIALS_DOWNLOADED (also when the
+ *       console has no images yet). A middleware failure leaves the case at API_RECEIVED for the
+ *       next run. See docs/imp/day1/api-case-workflow.md section 6.3.
+ *     responses:
+ *       200:
+ *         description: Started, or skipped because a prior run is still in progress
+ *         content:
+ *           application/json:
+ *             examples:
+ *               started:
+ *                 value: { block: api-material-download, started: true }
+ *               skipped:
+ *                 value: { block: api-material-download, skipped: true, reason: already_running }
+ *
+ * /api/jobs/api-material-download/release:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Manually clear a stuck api-material-download lock
+ *     responses:
+ *       200:
+ *         description: Lock cleared
+ */
+router.use('/api-material-download', createJobRouter('api-material-download', apiMaterialDownloadService));
 
 module.exports = router;

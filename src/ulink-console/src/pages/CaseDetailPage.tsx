@@ -70,7 +70,7 @@ export function CaseDetailPage() {
   return (
     <div className="mx-auto h-full w-full max-w-6xl overflow-y-auto px-6 py-6">
       <button
-        onClick={() => navigate('/cases')}
+        onClick={() => navigate(caseRecord.source === 'API' ? '/cases?source=api' : '/cases')}
         className="mb-4 inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800"
       >
         <ArrowLeft size={14} />
@@ -82,7 +82,13 @@ export function CaseDetailPage() {
           <p className="font-mono text-xs text-slate-400">{caseRecord.id}</p>
           <div className="mt-1 flex items-center gap-2">
             <CaseStatusPill status={caseRecord.currentStatus} />
-            <span className="text-sm text-slate-600">{caseRecord.recognizedType ?? 'Unrecognized route'}</span>
+            {caseRecord.source === 'API' ? (
+              <span className="text-sm text-slate-600">
+                API case{caseRecord.tpaCaseNumber ? ` · ${caseRecord.tpaCaseNumber}` : ''}
+              </span>
+            ) : (
+              <span className="text-sm text-slate-600">{caseRecord.recognizedType ?? 'Unrecognized route'}</span>
+            )}
             {caseRecord.claimNo && (
               <span className="rounded-full bg-ulink-teal/15 px-2.5 py-1 text-xs font-semibold text-ulink-teal-dark">
                 Claim {caseRecord.claimNo}

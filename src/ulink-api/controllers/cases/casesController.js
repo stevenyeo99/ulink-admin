@@ -42,6 +42,9 @@ const KNOWN_STATUSES = [
   'CLAIM_PAYLOAD_PREPARED',
   'CLAIM_CREATED',
   'CLAIM_SUBMIT_FAILED',
+  // API cases — add each API_* status as its job ships (docs/imp/day1/api-case-workflow.md).
+  'API_RECEIVED',
+  'API_MATERIALS_DOWNLOADED',
 ];
 
 // One-line summary for the list view — the specific thing a reviewer would need to glance
@@ -59,6 +62,8 @@ function summarize(caseRecord) {
   }
   return null;
 }
+
+const CASE_SOURCES = ['EMAIL', 'API'];
 
 /**
  * GET /api/cases — cases at any status by default (a general "did the system process this
@@ -87,12 +92,24 @@ async function listCases(req, res) {
     }
   }
 
+  // Optional ?source=EMAIL|API — the console's Email / API tabs. Omitted = both.
+  const source = req.query.source ? String(req.query.source).toUpperCase() : null;
+  if (source && !CASE_SOURCES.includes(source)) {
+    return res.status(400).json({
+      error: { message: `Unknown source filter: ${req.query.source}. Must be one of: ${CASE_SOURCES.join(', ')}`, status: 400 },
+    });
+  }
+
   const limit = Math.min(parseInt(req.query.limit, 10) || 100, 200);
   const offset = parseInt(req.query.offset, 10) || 0;
 
+  const where = {};
+  if (statuses) where.currentStatus = statuses;
+  if (source) where.source = source;
+
   const { rows, count } = await Case.findAndCountAll({
-    where: statuses ? { currentStatus: statuses } : undefined,
-    attributes: ['id', 'currentStatus', 'recognizedType', 'documentCheckResult', 'memberVerifyResult', 'claimNo', 'updatedAt'],
+    where,
+    attributes: ['id', 'currentStatus', 'source', 'tpaCaseNumber', 'recognizedType', 'documentCheckResult', 'memberVerifyResult', 'claimNo', 'updatedAt'],
     order: [['updatedAt', 'DESC']],
     limit,
     offset,
@@ -101,6 +118,9 @@ async function listCases(req, res) {
   const cases = rows.map((row) => ({
     id: row.id,
     currentStatus: row.currentStatus,
+    source: row.source,
+    claimNo: row.claimNo,
+    tpaCaseNumber: row.tpaCaseNumber,
     recognizedType: row.recognizedType,
     updatedAt: row.updatedAt,
     summary: summarize(row),

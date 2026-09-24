@@ -5,6 +5,8 @@ import clsx from 'clsx';
 import { useCases } from '../hooks/useCases';
 import { CaseStatusPill } from '../components/cases/CaseStatusPill';
 import { Button } from '../components/common/Button';
+import { SourceTabs } from '../components/common/SourceTabs';
+import { useSource } from '../hooks/useSource';
 import { relativeTime } from '../lib/relativeTime';
 import { bucketOf, STATUS_BUCKET_FILTERS } from '../lib/caseStatusBuckets';
 import type { CaseSummary } from '../types/case';
@@ -12,7 +14,9 @@ import type { CaseSummary } from '../types/case';
 const EMPTY_CASES: CaseSummary[] = [];
 
 export function CasesPage() {
-  const { data, isLoading, isFetching, isError, refetch } = useCases();
+  // Email / API tab: the list only ever holds one workflow's cases (GET /api/cases?source=).
+  const [source, setSource] = useSource();
+  const { data, isLoading, isFetching, isError, refetch } = useCases(undefined, source);
   const navigate = useNavigate();
   const [filter, setFilter] = useState<(typeof STATUS_BUCKET_FILTERS)[number]>('All');
   const allCases = data?.cases ?? EMPTY_CASES;
@@ -33,6 +37,10 @@ export function CasesPage() {
           <RefreshCw size={14} className={isFetching ? 'animate-spin' : undefined} />
           Refresh
         </Button>
+      </div>
+
+      <div className="mb-3">
+        <SourceTabs source={source} onChange={setSource} />
       </div>
 
       <div className="mb-4 flex items-center gap-1 rounded-full bg-slate-100/80 p-1 w-fit">
@@ -63,7 +71,7 @@ export function CasesPage() {
             <thead>
               <tr className="border-b border-slate-900/5 text-xs font-semibold uppercase tracking-wide text-slate-400">
                 <th className="px-5 py-3">Status</th>
-                <th className="px-5 py-3">Route</th>
+                <th className="px-5 py-3">{source === 'API' ? 'IAS claim' : 'Route'}</th>
                 <th className="px-5 py-3">Summary</th>
                 <th className="px-5 py-3">Updated</th>
               </tr>
@@ -78,7 +86,16 @@ export function CasesPage() {
                   <td className="px-5 py-3">
                     <CaseStatusPill status={c.currentStatus} />
                   </td>
-                  <td className="px-5 py-3 text-slate-700">{c.recognizedType ?? '—'}</td>
+                  <td className="px-5 py-3 text-slate-700">
+                    {source === 'API' ? (
+                      <>
+                        {c.claimNo ?? '—'}
+                        {c.tpaCaseNumber && <span className="block text-xs text-slate-400">{c.tpaCaseNumber}</span>}
+                      </>
+                    ) : (
+                      c.recognizedType ?? '—'
+                    )}
+                  </td>
                   <td className="px-5 py-3 text-slate-500">{c.summary ?? '—'}</td>
                   <td className="px-5 py-3 text-slate-400">{relativeTime(c.updatedAt)}</td>
                 </tr>

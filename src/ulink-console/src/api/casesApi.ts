@@ -1,9 +1,13 @@
 import { API_BASE_URL, request } from './client';
 import type { GetCaseResponse, ListCasesResponse, OverrideCaseResponse, ResetCaseResponse } from '../types/case';
+import type { Source } from '../types/pipeline';
 
-export function listCases(status?: string): Promise<ListCasesResponse> {
-  const query = status ? `?status=${encodeURIComponent(status)}` : '';
-  return request<ListCasesResponse>(`/api/cases${query}`);
+export function listCases(status?: string, source?: Source): Promise<ListCasesResponse> {
+  const params = new URLSearchParams();
+  if (status) params.set('status', status);
+  if (source) params.set('source', source);
+  const query = params.toString();
+  return request<ListCasesResponse>(`/api/cases${query ? `?${query}` : ''}`);
 }
 
 export function getCase(id: string): Promise<GetCaseResponse> {

@@ -60,4 +60,11 @@ function dateToYYYYMMDD(date) {
   return `${yyyy}${mm}${dd}`;
 }
 
-module.exports = { toYYYYMMDD, iasDateToYYYYMMDD, isoToMMDDYYYY, dateToMMDDYYYY, dateToYYYYMMDD };
+// Today's date as YYYY-MM-DD in IAS's own timezone (Myanmar, UTC+6:30), not the server's —
+// the server runs on WIB (UTC+7), so its local date is wrong between 00:00 and 00:30.
+// get_claim_api's dateFrom/dateTo are Myanmar dates.
+function todayInIasTimezone(now = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Yangon' }).format(now);
+}
+
+module.exports = { toYYYYMMDD, iasDateToYYYYMMDD, isoToMMDDYYYY, dateToMMDDYYYY, dateToYYYYMMDD, todayInIasTimezone };

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { RateLimitedError } from '../api/client';
 import { getLatestRun, getRun, runPipeline } from '../api/pipelineApi';
-import type { PipelineRun } from '../types/pipeline';
+import type { PipelineRun, Source } from '../types/pipeline';
 
 const TERMINAL_STATUSES: PipelineRun['status'][] = ['COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED'];
 
@@ -27,16 +27,17 @@ const ACTIVE_RUN_POLL_MS = 3000;
  *  - runQuery: the detailed GET /runs/:id (with steps) for whichever run id is currently
  *    tracked, polled while that run is non-terminal.
  * mergeStatus.ts is what actually turns `steps` into graph node/edge state; this hook only
- * owns fetching it.
+ * owns fetching it. `source` picks the orchestrator (Email or API); the page remounts this per
+ * tab, so one tab's tracked run never leaks into the other.
  */
-export function usePipelineRun() {
+export function usePipelineRun(source: Source) {
   const queryClient = useQueryClient();
   const [trackedRunId, setTrackedRunId] = useState<string | null>(null);
   const [trackedStartedAt, setTrackedStartedAt] = useState<string | null>(null);
 
   const runQuery = useQuery({
-    queryKey: ['pipeline-run', trackedRunId],
-    queryFn: () => getRun(trackedRunId as string),
+    queryKey: ['pipeline-run', source, trackedRunId],
+    queryFn: () => getRun(source, trackedRunId as string),
     enabled: trackedRunId !== null,
     refetchInterval: (query) => {
       if (query.state.error instanceof RateLimitedError) return query.state.error.retryAfterMs;
@@ -49,8 +50,8 @@ export function usePipelineRun() {
   const isTrackingActiveRun = runQuery.data ? !TERMINAL_STATUSES.includes(runQuery.data.status) : trackedRunId !== null && !runQuery.isError;
 
   const latestRunQuery = useQuery({
-    queryKey: ['latest-pipeline-run'],
-    queryFn: getLatestRun,
+    queryKey: ['latest-pipeline-run', source],
+    queryFn: () => getLatestRun(source),
     refetchInterval: (query) => {
       if (query.state.error instanceof RateLimitedError) return query.state.error.retryAfterMs;
       if (isTrackingActiveRun) return false;
@@ -72,12 +73,12 @@ export function usePipelineRun() {
   }, [latestRunQuery.data, trackedStartedAt]);
 
   const triggerMutation = useMutation({
-    mutationFn: runPipeline,
+    mutationFn: () => runPipeline(source),
     onSuccess: (response) => {
       if (response.skipped || !response.runId) return;
       setTrackedRunId(response.runId);
       setTrackedStartedAt(new Date().toISOString());
-      queryClient.invalidateQueries({ queryKey: ['pipeline-run', response.runId] });
+      queryClient.invalidateQueries({ queryKey: ['pipeline-run', source, response.runId] });
     },
   });
 

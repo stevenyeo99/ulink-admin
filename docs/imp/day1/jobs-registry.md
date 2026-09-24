@@ -1,5 +1,8 @@
 # Jobs Registry
 
+> This file covers **email cases**. API cases (claims listed by IAS `get_claim_api`) have their own workflow and
+> jobs: see [api-case-workflow.md](api-case-workflow.md).
+
 Catalog of every cron-triggered job in this project — what it does, its API, and
 where it sits in the `Case.currentStatus` chain. Reference this when wiring the
 eventual orchestrator (a single cron entry that calls each job's `run()` in

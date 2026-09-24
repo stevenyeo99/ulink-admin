@@ -38,6 +38,9 @@ const LABELS: Record<string, string> = {
   CLAIM_CREATED: 'Claim Created',
   NOT_RECOGNIZED: 'Not Recognized',
   MANUAL_REVIEW: 'Manual Review',
+  // API cases (docs/imp/day1/api-case-workflow.md section 4)
+  API_RECEIVED: 'Received from IAS',
+  API_MATERIALS_DOWNLOADED: 'Images Downloaded',
   CLAIM_SUBMIT_FAILED: 'Claim Submit Failed',
 };
 

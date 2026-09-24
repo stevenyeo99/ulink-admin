@@ -1,9 +1,14 @@
 // Mirrors ulink-api/src/controllers/cases/casesController.js's response shapes and
 // db/models/case.js / caseEvent.js / emailThread.js / emailMessage.js / emailAttachment.js.
 
+import type { Source } from './pipeline';
+
 export interface CaseSummary {
   id: string;
   currentStatus: string;
+  source: Source;
+  claimNo: string | null;
+  tpaCaseNumber: string | null;
   recognizedType: string | null;
   updatedAt: string;
   summary: string | null;
@@ -110,6 +115,9 @@ export interface CaseDetail {
   claimPrepMeta: ClaimPrepMeta | null;
   iasClaimResult: unknown;
   claimNo: string | null;
+  source: Source;
+  tpaCaseNumber: string | null;
+  apiMaterialsResult: unknown;
   createdAt: string;
   updatedAt: string;
   EmailThreads: EmailThread[];

@@ -33,6 +33,7 @@ const spec = swaggerJsdoc({
     path.join(__dirname, '../routes/users/*.js'),
     path.join(__dirname, '../routes/jobs/index.js'),
     path.join(__dirname, '../routes/jobs/pipeline.js'),
+    path.join(__dirname, '../routes/jobs/apiPipeline.js'),
     path.join(__dirname, '../routes/cases.js'),
     path.join(__dirname, '../routes/dev/*.js'),
   ],

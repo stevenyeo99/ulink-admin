@@ -139,3 +139,15 @@ export const EMAIL_BADGE_EDGES: EmailBadgeEdge[] = EMAIL_BADGES.map((badge) => (
   targetHandle: 'target-left',
   kind: 'branch',
 }));
+
+// API case workflow (modules/pipeline/service.js API_STEPS, docs/imp/day1/api-case-workflow.md).
+// Its own chain on the console's API tab — grows as each API job ships. No email badges yet:
+// API emails arrive with document/member checking (Phase 6).
+export const API_BLOCKS: BlockMeta[] = [
+  { id: 'api-claim-intake', label: 'API Claim Intake', description: "Lists today's IAS API claims, one case per claim", x: 0, y: 0 },
+  { id: 'api-material-download', label: 'Material Download', description: 'Downloads console images via the middleware zip', x: 0, y: 190 },
+];
+
+export const API_EDGES: StaticEdge[] = [
+  { id: 'e-api-intake-download', source: 'api-claim-intake', target: 'api-material-download', sourceHandle: 'source-bottom', targetHandle: 'target-top', kind: 'main' },
+];

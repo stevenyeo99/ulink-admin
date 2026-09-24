@@ -12,6 +12,8 @@ const consoleUploadService = require('../console-upload/service');
 const iasClaimPreparationService = require('../ias-claim-preparation/service');
 const iasClaimCreationService = require('../ias-claim-creation/service');
 const iasClaimStpService = require('../ias-claim-stp/service');
+const apiClaimIntakeService = require('../api-claim-intake/service');
+const apiMaterialDownloadService = require('../api-material-download/service');
 
 // Fixed order — later steps read the Case.currentStatus earlier steps write, per
 // docs/imp/day1/jobs-registry.md's "Orchestrator" section. Each block keeps its own
@@ -51,6 +53,17 @@ const STEPS = [
   ['ias-claim-stp', iasClaimStpService],
   ['email-sender-csr-report', { run: () => emailSenderService.run({ taskTypes: ['CSR_REPORT'] }) }],
 ];
+
+// API case workflow (docs/imp/day1/api-case-workflow.md section 5) — its own orchestrator,
+// POST /api/jobs/api-pipeline/run. Only jobs that exist are listed; each phase adds its own
+// (email-intake joins when API replies are routed, Phase 4). Its jobs only ever select
+// source='API' cases, and the email STEPS above can't see them (DB check on ulink_cases).
+const API_STEPS = [
+  ['api-claim-intake', apiClaimIntakeService],
+  ['api-material-download', apiMaterialDownloadService],
+];
+
+const PIPELINES = { EMAIL: STEPS, API: API_STEPS };
 
 function withTimeout(promise, ms, blockName) {
   let timer;
@@ -103,15 +116,15 @@ async function runStep(pipelineRunId, blockName, service, sequence) {
  * right away, then let the actual step loop run in the background, same fire-and-forget
  * shape as every individual job endpoint.
  */
-async function startRun() {
-  return PipelineRun.create({ status: 'RUNNING', startedAt: new Date() });
+async function startRun(pipeline = 'EMAIL') {
+  return PipelineRun.create({ pipeline, status: 'RUNNING', startedAt: new Date() });
 }
 
-/** Runs all pipeline steps in order against an already-created PipelineRun, then finalizes it. */
+/** Runs the run's own pipeline steps in order against an already-created PipelineRun, then finalizes it. */
 async function executeSteps(pipelineRun) {
   try {
     let sequence = 0;
-    for (const [blockName, service] of STEPS) {
+    for (const [blockName, service] of PIPELINES[pipelineRun.pipeline]) {
       await runStep(pipelineRun.id, blockName, service, sequence);
       sequence += 1;
     }
@@ -135,4 +148,4 @@ async function run() {
   return executeSteps(pipelineRun);
 }
 
-module.exports = { run, startRun, executeSteps, STEPS };
+module.exports = { run, startRun, executeSteps, STEPS, API_STEPS, PIPELINES };

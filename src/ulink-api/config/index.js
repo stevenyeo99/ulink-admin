@@ -73,6 +73,16 @@ module.exports = {
     batchLimit: parseInt(process.env.DOCUMENT_CHECKING_BATCH_LIMIT, 10) || 50,
   },
 
+  apiMaterialDownload: {
+    // ulink-console-middleware base URL — API cases' console images come from its zip endpoint.
+    middlewareUrl: process.env.CONSOLE_MIDDLEWARE_URL,
+    // Where this app unpacks those zips (<root>/<scanId>/<barcodeId>/<file>). Our own folder, so
+    // it keeps working once the middleware runs on another server.
+    root: process.env.API_MATERIAL_DOWNLOAD_ROOT || './data/api-materials',
+    // Each case is one middleware zip call (about 0.5 s per image) — keep modest.
+    batchLimit: parseInt(process.env.API_MATERIAL_DOWNLOAD_BATCH_LIMIT, 10) || 10,
+  },
+
   consoleUpload: {
     // Separate from storage.root (STORAGE_ROOT) on purpose — that's this app's own private
     // attachment store; this is a dedicated shared folder the console/ops side browses
@@ -129,6 +139,8 @@ module.exports = {
     claimApi: process.env.CL_CLAIM_API,
     claimStatusApi: process.env.CL_CLAIM_STATUS_API,
     downloadFileApi: process.env.CL_DOWNLOAD_FILE_API,
+    // API cases: claims created in IAS through its API, listed by date (api-claim-intake).
+    claimListApi: process.env.GET_CLAIM_API,
     // Explicit and short, same reasoning as imap/linkedDocuments' own timeouts: an external
     // call must not be able to hang the job (see modules/member-verification/iasClient.js).
     timeoutMs: parseInt(process.env.IAS_TIMEOUT_MS, 10) || 30000,

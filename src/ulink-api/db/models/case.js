@@ -16,6 +16,13 @@ module.exports = (sequelize, DataTypes) => {
       consoleUploadResult: { type: DataTypes.JSONB, allowNull: true },
       consoleBarcode: { type: DataTypes.TEXT, allowNull: true },
       isStp: { type: DataTypes.BOOLEAN, allowNull: true },
+      // 'EMAIL' or 'API' — which workflow owns this case. Set once at creation; the DB only
+      // lets an API case hold API_* statuses (docs/imp/day1/api-case-workflow.md section 3).
+      source: { type: DataTypes.STRING, allowNull: false, defaultValue: 'EMAIL' },
+      tpaCaseNumber: { type: DataTypes.TEXT, allowNull: true },
+      iasApiClaim: { type: DataTypes.JSONB, allowNull: true },
+      // api-material-download's output: scanId, folder, and per-barcode downloaded files.
+      apiMaterialsResult: { type: DataTypes.JSONB, allowNull: true },
     },
     { tableName: 'ulink_cases' }
   );

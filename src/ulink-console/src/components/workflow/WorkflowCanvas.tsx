@@ -5,7 +5,7 @@ import { PipelineNode } from './PipelineNode';
 import { PipelineEdge } from './PipelineEdge';
 import { EmailBadgeNode } from './EmailBadgeNode';
 import { mergeStatus, type PipelineNodeData, type EmailBadgeNodeData } from '../../graph/mergeStatus';
-import type { BlockName, PipelineRunStep } from '../../types/pipeline';
+import type { BlockName, PipelineRunStep, Source } from '../../types/pipeline';
 
 const nodeTypes = { pipelineNode: PipelineNode, emailBadgeNode: EmailBadgeNode };
 const edgeTypes = { pipelineEdge: PipelineEdge };
@@ -29,11 +29,12 @@ export interface SelectedNode {
 
 interface WorkflowCanvasProps {
   steps: PipelineRunStep[];
+  source?: Source;
   onSelectNode: (selected: SelectedNode) => void;
 }
 
-export function WorkflowCanvas({ steps, onSelectNode }: WorkflowCanvasProps) {
-  const { nodes, edges } = useMemo(() => mergeStatus(steps), [steps]);
+export function WorkflowCanvas({ steps, source = 'EMAIL', onSelectNode }: WorkflowCanvasProps) {
+  const { nodes, edges } = useMemo(() => mergeStatus(steps, source), [steps, source]);
   const runningNodeId = nodes.find((node) => (node.data as PipelineNodeData).status === 'RUNNING')?.id;
 
   // Email badges aren't real blocks (see EMAIL_BADGES in pipelineGraph.ts) — clicking one

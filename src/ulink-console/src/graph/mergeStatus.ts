@@ -1,7 +1,13 @@
 import type { Edge, Node } from '@xyflow/react';
-import { BLOCKS, EDGES, EMAIL_BADGES, EMAIL_BADGE_EDGES } from './pipelineGraph';
+import { API_BLOCKS, API_EDGES, BLOCKS, EDGES, EMAIL_BADGES, EMAIL_BADGE_EDGES } from './pipelineGraph';
 import type { Audience } from './audienceStyle';
-import type { PipelineRunStep, StepStatus } from '../types/pipeline';
+import type { PipelineRunStep, Source, StepStatus } from '../types/pipeline';
+
+// Each workflow's own static layout. Email is unchanged; API has no email badges yet.
+const LAYOUTS = {
+  EMAIL: { blocks: BLOCKS, edges: EDGES, badges: EMAIL_BADGES, badgeEdges: EMAIL_BADGE_EDGES },
+  API: { blocks: API_BLOCKS, edges: API_EDGES, badges: [], badgeEdges: [] },
+} as const;
 
 export type NodeStatus = 'IDLE' | StepStatus;
 
@@ -47,7 +53,8 @@ function representativeStatus(steps: PipelineRunStep[]): NodeStatus {
  * from the graph layout itself and from WorkflowCanvas's rendering so the "what does the
  * data mean" logic has exactly one place to live.
  */
-export function mergeStatus(steps: PipelineRunStep[]): { nodes: Node[]; edges: Edge[] } {
+export function mergeStatus(steps: PipelineRunStep[], source: Source = 'EMAIL'): { nodes: Node[]; edges: Edge[] } {
+  const layout = LAYOUTS[source];
   const stepsByBlock = new Map<string, PipelineRunStep[]>();
   for (const step of steps) {
     const existing = stepsByBlock.get(step.blockName);
@@ -55,7 +62,7 @@ export function mergeStatus(steps: PipelineRunStep[]): { nodes: Node[]; edges: E
     else stepsByBlock.set(step.blockName, [step]);
   }
 
-  const blockNodes: Node<PipelineNodeData>[] = BLOCKS.map((block) => {
+  const blockNodes: Node<PipelineNodeData>[] = layout.blocks.map((block) => {
     const blockSteps = stepsByBlock.get(block.id) ?? [];
     return {
       id: block.id,
@@ -77,7 +84,7 @@ export function mergeStatus(steps: PipelineRunStep[]): { nodes: Node[]; edges: E
     };
   });
 
-  const badgeNodes: Node<EmailBadgeNodeData>[] = EMAIL_BADGES.map((badge) => ({
+  const badgeNodes: Node<EmailBadgeNodeData>[] = layout.badges.map((badge) => ({
     id: badge.id,
     type: 'emailBadgeNode',
     position: { x: badge.x, y: badge.y },
@@ -95,7 +102,7 @@ export function mergeStatus(steps: PipelineRunStep[]): { nodes: Node[]; edges: E
 
   const statusOf = (id: string): NodeStatus => (nodes.find((n) => n.id === id)?.data as { status?: NodeStatus } | undefined)?.status ?? 'IDLE';
 
-  const edges: Edge[] = [...EDGES, ...EMAIL_BADGE_EDGES].map((edge) => {
+  const edges: Edge[] = [...layout.edges, ...layout.badgeEdges].map((edge) => {
     const sourceStatus = statusOf(edge.source);
     const targetStatus = statusOf(edge.target);
     const isActive = targetStatus === 'RUNNING';
