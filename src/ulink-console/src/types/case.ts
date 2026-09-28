@@ -203,10 +203,21 @@ export interface AssessmentSummary {
   needsReview: boolean;
 }
 
+// Whether a reviewer can override this case's check (ulink-api modules/case-override/override.js).
+// allowed false + reason null: not an overridable status (nothing to show).
+export interface CaseOverrideInfo {
+  allowed: boolean;
+  target?: string;
+  reason?: string | null;
+  /** Finding id → label: "why the check was wrong". */
+  findings: Record<string, string>;
+}
+
 export interface GetCaseResponse {
   case: CaseDetail;
   events: CaseEvent[];
   documents: CaseDocument[];
+  override: CaseOverrideInfo;
   assessmentSummary: AssessmentSummary;
   /** API cases only. Their CaseDetail fields (extractedFields, …) are filled from these by the API. */
   apiSteps?: ApiCaseStep[];

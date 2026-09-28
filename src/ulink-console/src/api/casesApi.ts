@@ -31,11 +31,12 @@ export function getCase(id: string): Promise<GetCaseResponse> {
   return request<GetCaseResponse>(`/api/cases/${id}`);
 }
 
-// Who overrode is the logged-in user (the API reads it from the token).
-export function overrideCase(id: string, reason: string): Promise<OverrideCaseResponse> {
+// finding: why the check was wrong (an id from the case's override.findings). Who overrode is the
+// logged-in user (the API reads it from the token).
+export function overrideCase(id: string, reason: string, finding: string): Promise<OverrideCaseResponse> {
   return request<OverrideCaseResponse>(`/api/cases/${id}/override`, {
     method: 'POST',
-    body: JSON.stringify({ reason }),
+    body: JSON.stringify({ reason, finding }),
   });
 }
 

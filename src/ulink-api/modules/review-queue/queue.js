@@ -41,11 +41,14 @@ const rank = (reason) => {
  * on customer) with an assessment point our team should check. Not in the queue: finished cases
  * (checking those is the audit sample, a separate decision) and cases whose only point is missing
  * information the customer was already asked for.
+ *
+ * overriddenAreas: checks a person already overrode on this case ('member' / 'documents',
+ * modules/case-override) — their points were dealt with and don't queue the case again.
  */
-function queueEntry(status, fields) {
+function queueEntry(status, fields, overriddenAreas = []) {
   const group = CASE_STATUSES[status]?.group;
   const summary = buildAssessmentSummary(fields);
-  const points = summary.reviewPoints.filter((p) => !NOT_OURS.has(p.reason));
+  const points = summary.reviewPoints.filter((p) => !NOT_OURS.has(p.reason) && !overriddenAreas.includes(p.area));
 
   const reasons = new Set(points.map((p) => p.reason));
   if (SYSTEM_ISSUE_STATUSES.has(status)) reasons.add(SYSTEM_ISSUE);

@@ -268,17 +268,21 @@ function preparationLines(claimPrepMeta, isStp) {
  * { decision, result, status: ok|issue|not_checked, why, confidence, verified, review: { reason, mightBeWrong, check } | null }.
  */
 function buildAssessmentSummary(fields = {}) {
+  // area: which check a line came from — lets a manual override of that check (modules/case-override)
+  // mark its points as dealt with, e.g. so the Review Queue doesn't raise them again.
+  const withArea = (area, lines) => lines.map((l) => ({ ...l, area }));
   const lines = [
-    ...memberLines(fields.memberVerifyResult),
-    ...documentLines(fields.documentCheckResult),
-    ...preparationLines(fields.claimPrepMeta, fields.isStp),
+    ...withArea('member', memberLines(fields.memberVerifyResult)),
+    ...withArea('documents', documentLines(fields.documentCheckResult)),
+    ...withArea('claim', preparationLines(fields.claimPrepMeta, fields.isStp)),
   ];
-  const reviewPoints = lines.filter((l) => l.review).map((l) => ({ decision: l.decision, ...l.review }));
+  const reviewPoints = lines.filter((l) => l.review).map((l) => ({ decision: l.decision, area: l.area, ...l.review }));
 
   // An automatically approved claim that still has open points is exactly what a reviewer should see first.
   if (fields.isStp === true && reviewPoints.length) {
     reviewPoints.unshift({
       decision: 'STP',
+      area: 'claim',
       reason: 'STP with open review points',
       mightBeWrong: ['AI judgment'],
       check: 'This claim went straight through; confirm the points below were right.',

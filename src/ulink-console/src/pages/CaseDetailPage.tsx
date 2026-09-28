@@ -9,6 +9,7 @@ import { CaseDocumentsSection } from '../components/cases/CaseDocumentsSection';
 import { JobStepsSection } from '../components/cases/JobStepsSection';
 import { EmailThreadSection } from '../components/cases/EmailThreadSection';
 import { CaseAdminActions } from '../components/cases/CaseAdminActions';
+import { CaseOverridePanel } from '../components/cases/CaseOverridePanel';
 import { isSuperAdmin } from '../lib/session';
 import { JsonViewer } from '../components/panel/JsonViewer';
 import { ChecklistTable } from '../components/panel/ChecklistTable';
@@ -61,7 +62,7 @@ export function CaseDetailPage() {
   if (isLoading) return <div className="p-6 text-sm text-slate-400">Loading…</div>;
   if (isError || !data) return <div className="p-6 text-sm text-red-600">Couldn't load this case. It may have been removed.</div>;
 
-  const { case: caseRecord, events, documents, apiSteps, assessmentSummary } = data;
+  const { case: caseRecord, events, documents, apiSteps, assessmentSummary, override } = data;
   const isApi = caseRecord.source === 'API';
   const statusLabel = (code: string | null) => (code ? info(code).label : '—');
 
@@ -91,6 +92,8 @@ export function CaseDetailPage() {
       </header>
 
       <AssessmentSummaryPanel summary={assessmentSummary} />
+
+      {isSuperAdmin() && <CaseOverridePanel caseRecord={caseRecord} override={override} summary={assessmentSummary} />}
 
       {isApi && (
         <Section title="Documents">

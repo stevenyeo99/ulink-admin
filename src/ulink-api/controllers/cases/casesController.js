@@ -1,5 +1,6 @@
 const { Op, fn, col, cast, where: sqlWhere, literal } = require('sequelize');
-const { Case, CaseEvent, CaseDocument, ApiCaseStep, EmailThread, EmailMessage, EmailAttachment } = require('../../db/models');
+const { sequelize, Case, CaseEvent, CaseDocument, ApiCaseStep, EmailThread, EmailMessage, EmailAttachment } = require('../../db/models');
+const { OVERRIDE_TARGETS, OVERRIDE_AREAS, OVERRIDE_FINDINGS, overrideCheck } = require('../../modules/case-override/override');
 const { todayInIasTimezone } = require('../../modules/shared/iasDates');
 const { apiCaseView } = require('../../modules/api-pipeline/caseView');
 const { buildAssessmentSummary } = require('../../modules/assessment-summary/summary');
@@ -15,24 +16,7 @@ const logger = require('../../utils/logger');
 
 const BLOCK_NAME = 'case-review';
 
-// Which status a manual override advances a case to — the next stage's own job picks it up
-// naturally via its own Case.currentStatus filter, same as every other transition in this
-// codebase (see modules/pipeline/service.js's STEPS comment: never call another block's
-// service directly, only through DB status). This is deliberately just these two statuses —
-// the ones a customer genuinely cannot always self-resolve (a false-positive document check,
-// a stale/wrong IAS lookup) and that this project has no other escalation path for (see
-// claim-recognition/service.js's applyMedicalRecordFallback comment: no manual-review state
-// exists elsewhere in this project, by design).
-// Swapped 2026-09-01 alongside the member-verification/document-checking step order:
-// document-checking is now the last of the two checks, so overriding a stuck INCOMPLETE
-// skips straight to the final MEMBER_VERIFIED gate. member-verification runs first now, so
-// overriding a stuck MEMBER_REVIEW_REQUIRED sends the case into document-checking next
-// (READY_FOR_DOCUMENT_CHECKING), same as if member-verification itself had passed it.
-const OVERRIDE_TARGETS = {
-  INCOMPLETE: 'MEMBER_VERIFIED',
-  MEMBER_REVIEW_REQUIRED: 'READY_FOR_DOCUMENT_CHECKING',
-};
-
+// Statuses a reviewer can override (which, where to, and why: modules/case-override/override.js).
 const REVIEWABLE_STATUSES = Object.keys(OVERRIDE_TARGETS);
 
 // One-line summary for the list view — the specific thing a reviewer would need to glance
@@ -133,9 +117,18 @@ async function getReviewQueue(req, res) {
   });
 
   const fieldsOf = await assessmentFieldsLoader(cases);
+  // Checks a person already overrode, per case (from the override's case-history entry, email and API alike).
+  const overrides = cases.length
+    ? await CaseEvent.findAll({ where: { caseId: cases.map((c) => c.id), reasonCode: 'MANUAL_OVERRIDE' }, attributes: ['caseId', 'prevStatus'] })
+    : [];
+  const overriddenAreas = new Map();
+  for (const o of overrides) {
+    if (OVERRIDE_AREAS[o.prevStatus]) overriddenAreas.set(o.caseId, [...(overriddenAreas.get(o.caseId) || []), OVERRIDE_AREAS[o.prevStatus]]);
+  }
+
   const items = [];
   for (const c of cases) {
-    const entry = queueEntry(c.currentStatus, fieldsOf(c));
+    const entry = queueEntry(c.currentStatus, fieldsOf(c), overriddenAreas.get(c.id));
     if (!entry) continue;
     items.push({ ...listRow(c), ...entry });
   }
@@ -306,9 +299,14 @@ async function getCase(req, res) {
   });
 
   // assessmentSummary: the explanation trail (what was decided, why, how sure) — built at read time
-  // from the same case fields the page shows, so it is always current.
+  // from the same case fields the page shows, so it is always current. override: whether a
+  // reviewer can let this case past its check, and if not, why (modules/case-override/override.js).
+  const reviewInfo = (fields) => ({
+    assessmentSummary: buildAssessmentSummary(fields),
+    override: { ...overrideCheck(fields.currentStatus, fields), findings: OVERRIDE_FINDINGS },
+  });
   if (caseRecord.source !== 'API') {
-    return res.json({ case: caseRecord, events, documents, assessmentSummary: buildAssessmentSummary(caseRecord) });
+    return res.json({ case: caseRecord, events, documents, ...reviewInfo(caseRecord) });
   }
 
   // API cases: their job data lives in ulink_api_case_steps. Fill the same case fields the page
@@ -316,7 +314,7 @@ async function getCase(req, res) {
   // page's Job Steps section. Email cases take the branch above, unchanged.
   const apiSteps = await ApiCaseStep.findAll({ where: { caseId: caseRecord.id }, order: [['createdAt', 'ASC']] });
   const fields = { ...caseRecord.toJSON(), ...apiCaseView(apiSteps) };
-  res.json({ case: fields, events, documents, apiSteps, assessmentSummary: buildAssessmentSummary(fields) });
+  res.json({ case: fields, events, documents, apiSteps, ...reviewInfo(fields) });
 }
 
 /**
@@ -379,52 +377,77 @@ async function getDocument(req, res) {
 }
 
 /**
- * POST /api/cases/:id/override — human-in-the-loop bypass for a case stuck at INCOMPLETE or
- * MEMBER_REVIEW_REQUIRED. Advances Case.currentStatus straight to the next stage's own input
- * status — a pure status write, so the next scheduled job picks it up with no special
- * handling. Requires a written reason; who did it is the logged-in console user (req.user,
- * modules/auth/auth.js — replaced the free-text operatorName on 2026-09-28). The user, the reason
- * and a snapshot of exactly what was being waived go into one CaseEvent, so the audit record is
- * self-contained without needing to cross-reference the case's prior state.
+ * POST /api/cases/:id/override — { reason, finding }: a reviewer lets a case past a check the AI
+ * flagged wrongly (modules/case-override/override.js has which statuses and why). Only the status
+ * moves, to what the check would have set on a pass, so the next job picks the case up as usual.
+ * Who did it is the logged-in user. The user, the finding (why the check was wrong), the reason and
+ * the review points being waived go into one CaseEvent — and, for an API case, a `case-override`
+ * step in its job history — so the audit record stands on its own.
  */
 async function overrideCase(req, res) {
-  const { reason } = req.body || {};
+  const { reason, finding } = req.body || {};
   const operator = req.user.name ? `${req.user.name} (${req.user.username})` : req.user.username;
 
   if (typeof reason !== 'string' || reason.trim() === '') {
-    return res.status(400).json({ error: { message: '"reason" is required', status: 400 } });
+    return res.status(400).json({ error: { message: 'Write a reason for the override.', status: 400 } });
+  }
+  if (!OVERRIDE_FINDINGS[finding]) {
+    return res.status(400).json({ error: { message: `Pick why the check was wrong: ${Object.keys(OVERRIDE_FINDINGS).join(', ')}`, status: 400 } });
   }
 
   const caseRecord = await Case.findByPk(req.params.id);
   if (!caseRecord) {
     return res.status(404).json({ error: { message: `Case ${req.params.id} not found`, status: 404 } });
   }
-
-  const targetStatus = OVERRIDE_TARGETS[caseRecord.currentStatus];
-  if (!targetStatus) {
+  const fields = caseRecord.source === 'API'
+    ? apiCaseView(await ApiCaseStep.findAll({ where: { caseId: caseRecord.id } }))
+    : caseRecord;
+  const check = overrideCheck(caseRecord.currentStatus, fields);
+  if (!check.allowed) {
     return res.status(400).json({
-      error: {
-        message: `Case ${caseRecord.id} is at "${caseRecord.currentStatus}", not a reviewable status (${REVIEWABLE_STATUSES.join(', ')})`,
-        status: 400,
-      },
+      error: { message: check.reason || `This case is at "${caseRecord.currentStatus}", which can't be overridden.`, status: 400 },
     });
   }
 
   const prevStatus = caseRecord.currentStatus;
-  const waived = summarize(caseRecord);
+  const targetStatus = check.target;
+  const waived = buildAssessmentSummary(fields).reviewPoints.map((p) => `${p.decision}: ${p.reason}`);
+  const now = new Date();
 
-  await Case.update({ currentStatus: targetStatus }, { where: { id: caseRecord.id } });
-  await CaseEvent.create({
-    caseId: caseRecord.id,
-    blockName: BLOCK_NAME,
-    prevStatus,
-    newStatus: targetStatus,
-    reasonCode: 'MANUAL_OVERRIDE',
-    message: `Overridden by ${operator}: ${reason.trim()}${waived ? ` (waived: ${waived})` : ''}`,
+  const moved = await sequelize.transaction(async (transaction) => {
+    // Only if nothing moved the case meanwhile (e.g. a re-check just passed it).
+    const [count] = await Case.update(
+      { currentStatus: targetStatus },
+      { where: { id: caseRecord.id, currentStatus: prevStatus }, transaction }
+    );
+    if (count !== 1) return false;
+    await CaseEvent.create({
+      caseId: caseRecord.id,
+      blockName: BLOCK_NAME,
+      prevStatus,
+      newStatus: targetStatus,
+      reasonCode: 'MANUAL_OVERRIDE',
+      message: `Overridden by ${operator} — ${OVERRIDE_FINDINGS[finding]}: ${reason.trim()}`
+        + (waived.length ? ` (waived: ${waived.join('; ')})` : ''),
+    }, { transaction });
+    if (caseRecord.source === 'API') {
+      await ApiCaseStep.create({
+        caseId: caseRecord.id,
+        job: 'case-override',
+        status: 'DONE',
+        input: { username: req.user.username, finding, reason: reason.trim() },
+        output: { from: prevStatus, to: targetStatus, waived },
+        startedAt: now,
+        finishedAt: now,
+      }, { transaction });
+    }
+    return true;
   });
+  if (!moved) {
+    return res.status(409).json({ error: { message: 'The case changed while you were reviewing it. Reload the page and check again.', status: 409 } });
+  }
 
-  logger.info('Case manually overridden', { caseId: caseRecord.id, prevStatus, targetStatus, username: req.user.username });
-
+  logger.info('Case manually overridden', { caseId: caseRecord.id, prevStatus, targetStatus, finding, username: req.user.username });
   res.json({ caseId: caseRecord.id, previousStatus: prevStatus, currentStatus: targetStatus });
 }
 

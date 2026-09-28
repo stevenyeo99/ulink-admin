@@ -55,13 +55,14 @@ describe('getCase', () => {
 
   beforeEach(() => jest.clearAllMocks());
 
-  it('returns an email case as before (plus its assessment summary), no step lookup', async () => {
-    const emailCase = { id: 'case-1', source: 'EMAIL', extractedFields: { real: true }, toJSON: jest.fn() };
+  it('returns an email case as before (plus its assessment summary and override info), no step lookup', async () => {
+    const emailCase = { id: 'case-1', source: 'EMAIL', currentStatus: 'INCOMPLETE', extractedFields: { real: true }, toJSON: jest.fn() };
     Case.findByPk.mockResolvedValue(emailCase);
 
     const body = await call();
 
-    expect(Object.keys(body)).toEqual(['case', 'events', 'documents', 'assessmentSummary']);
+    expect(Object.keys(body)).toEqual(['case', 'events', 'documents', 'assessmentSummary', 'override']);
+    expect(body.override).toMatchObject({ allowed: true, target: 'MEMBER_VERIFIED' });
     expect(body.case).toBe(emailCase); // the model instance itself, untouched
     expect(ApiCaseStep.findAll).not.toHaveBeenCalled();
   });

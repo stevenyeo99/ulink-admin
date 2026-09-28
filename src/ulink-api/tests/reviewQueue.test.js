@@ -21,6 +21,17 @@ it('queues an open case with a point for the team, under its most serious reason
   expect(entry.check).toBe('Medical record readable: Look at the document image yourself.');
 });
 
+it("doesn't raise again the points of a check a person overrode, but still raises new ones", () => {
+  const bankMismatch = { memberVerifyResult: { outcome: 'MEMBER_REVIEW_REQUIRED', reasonCode: 'BANK_DETAILS_MISMATCH', reason: 'x' } };
+
+  // Member check overridden, case now checking documents: the bank point was dealt with.
+  expect(queueEntry('READY_FOR_DOCUMENT_CHECKING', bankMismatch, ['member'])).toBeNull();
+  expect(queueEntry('READY_FOR_DOCUMENT_CHECKING', bankMismatch)).toMatchObject({ reason: 'Data mismatch' });
+
+  // …but a document problem found after the override still queues it.
+  expect(queueEntry('API_CLAIM_SUSPENDED', { ...bankMismatch, ...unreadableRecord }, ['member'])).toMatchObject({ reason: 'Unreadable', pointCount: 1 });
+});
+
 it('leaves out cases only waiting on the customer, and finished cases', () => {
   expect(queueEntry('INCOMPLETE', missingOnly)).toBeNull();
   expect(queueEntry('API_CSR_SENT', unsureDiagnosis)).toBeNull();
