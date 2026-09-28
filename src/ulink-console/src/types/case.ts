@@ -193,7 +193,8 @@ export interface AssessmentLine {
   status: 'ok' | 'issue' | 'not_checked';
   why: string;
   confidence: string | null;
-  verified: 'Rule' | 'Cross-checked' | 'AI self-rated';
+  /** How it was verified: 'Rule', 'Cross-checked', 'AI self-rated' — plus ', AI translated' when Burmese text was translated first. */
+  verified: string;
   review: AssessmentReview | null;
 }
 

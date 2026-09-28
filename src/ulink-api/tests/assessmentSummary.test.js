@@ -132,3 +132,22 @@ it('handles a case with no results yet', () => {
   expect(assessmentSummaryText(summary)).toBe('No assessment yet.');
   expect(buildAssessmentSummary()).toEqual({ lines: [], reviewPoints: [], needsReview: false });
 });
+
+it('shows a diagnosis that was translated from Burmese, and marks it as AI translated', () => {
+  const summary = buildAssessmentSummary({
+    claimPrepMeta: {
+      diagnosis: {
+        pick: { diagCode: 'R22.1', diagDesc: 'Localized swelling, mass and lump, neck' },
+        defaulted: false,
+        confidence: 0.7,
+        reason: 'Text describes a neck lump.',
+        text: 'Diagnosis/illness: Neck lump, for ultrasound examination',
+        translation: { original: { diagnosis: 'လည်ပင်း', treatment: null }, confidence: 0.7, note: null },
+      },
+    },
+  });
+  expect(find(summary, 'Diagnosis code')).toMatchObject({
+    why: 'Translated from Burmese as: "Diagnosis/illness: Neck lump, for ultrasound examination". Text describes a neck lump.',
+    verified: 'AI self-rated, AI translated',
+  });
+});

@@ -220,15 +220,22 @@ function preparationLines(claimPrepMeta, isStp) {
   const diagnosis = claimPrepMeta?.diagnosis;
   if (diagnosis) {
     const code = diagnosis.pick ? `${diagnosis.pick.diagCode} ${diagnosis.pick.diagDesc || ''}`.trim() : 'None';
+    // A Burmese diagnosis is translated before the search — the reviewer should see what the AI read it as.
+    const translated = diagnosis.translation
+      ? `Translated from Burmese as: "${diagnosis.text}"${diagnosis.translation.note ? ` (${diagnosis.translation.note})` : ''}.`
+      : null;
     lines.push(line({
       decision: 'Diagnosis code',
       result: diagnosis.defaulted ? `${code} (default)` : code,
       status: diagnosis.defaulted ? 'issue' : 'ok',
-      why: diagnosis.defaulted
-        ? ['No confident match for the diagnosis text, so the default code was used.', diagnosis.reason && `AI: ${diagnosis.reason}`].filter(Boolean).join(' ')
-        : diagnosis.reason,
+      why: [
+        translated,
+        diagnosis.defaulted
+          ? ['No confident match for the diagnosis text, so the default code was used.', diagnosis.reason && `AI: ${diagnosis.reason}`].filter(Boolean).join(' ')
+          : diagnosis.reason,
+      ].filter(Boolean).join(' ') || null,
       confidence: formatConfidence(diagnosis.confidence),
-      verified: VERIFIED.AI,
+      verified: diagnosis.translation ? `${VERIFIED.AI}, AI translated` : VERIFIED.AI,
       review: diagnosis.defaulted ? REVIEW.AI_UNSURE : lowConfidenceReview(diagnosis.confidence),
     }));
   }

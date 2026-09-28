@@ -4,6 +4,7 @@ const { pickDiagnosis } = require('./diagnosisPicker');
 const { pickBenefit } = require('./benefitPicker');
 const { buildPayload } = require('./payloadBuilder');
 const { stpDecision } = require('./stpEligibility');
+const { toEnglishMedicalText } = require('./medicalTranslation');
 
 const BLOCK_NAME = 'ias-claim-preparation';
 
@@ -27,10 +28,17 @@ async function checkCase(caseRecord) {
     ? await ClaimRoute.findOne({ where: { routeKey: caseRecord.recognizedType } })
     : null;
 
+  // The ICD-10 search and the picks work in English: Burmese diagnosis / treatment text is translated
+  // first (medicalTranslation.js). Only these picks use the translation — the IAS payload keeps the
+  // original text (payloadBuilder reads extractedFields directly).
   const medical = extractedFields.medical || {};
+  const { diagnosis: illnessText, treatment: treatmentText, translation } = await toEnglishMedicalText({
+    diagnosis: medical.detail_of_illness_injury || null,
+    treatment: medical.full_description_of_treatment || null,
+  });
   const diagnosisText = [
-    medical.detail_of_illness_injury && `Diagnosis/illness: ${medical.detail_of_illness_injury}`,
-    medical.full_description_of_treatment && `Treatment: ${medical.full_description_of_treatment}`,
+    illnessText && `Diagnosis/illness: ${illnessText}`,
+    treatmentText && `Treatment: ${treatmentText}`,
   ].filter(Boolean).join('\n');
   const diagnosisPick = await pickDiagnosis(diagnosisText);
 
@@ -38,8 +46,8 @@ async function checkCase(caseRecord) {
   const benefitContext = {
     typeOfPatient: extractedFields.claim?.type_of_patient,
     claimBenefitType: extractedFields.claim?.claim_benefit_type,
-    illnessDescription: medical.detail_of_illness_injury,
-    treatmentDescription: medical.full_description_of_treatment,
+    illnessDescription: illnessText,
+    treatmentDescription: treatmentText,
   };
 
   // One line per real voucher (extractedFields.invoices.items — each with its own subtotal
@@ -88,7 +96,8 @@ async function checkCase(caseRecord) {
   // score plus the candidate list the LLM was actually shown — never merged into `payload`,
   // which is the literal IAS-bound submission (see payloadBuilder.js's header comment).
   const claimPrepMeta = {
-    diagnosis: { text: diagnosisText || null, ...diagnosisPick },
+    // text: what the pick actually searched with (English); translation: the Burmese original, when translated.
+    diagnosis: { text: diagnosisText || null, translation, ...diagnosisPick },
     lines: lineMeta,
     stp: { total: stpResult.total, limit: stpResult.limit, currency: stpResult.currency },
   };
