@@ -54,12 +54,12 @@ async function queueClaimApprovalReviewEmail(transaction, caseRecord, claimNo) {
 // text: a case retried after a genuinely different rejection reason gets a fresh email;
 // the exact same rejection re-surfacing (shouldn't happen, since CLAIM_SUBMIT_FAILED isn't
 // retried — defensive only) won't double-send.
-async function queueClaimSubmitIssueEmail(transaction, caseId, errorMessage) {
+async function queueClaimSubmitIssueEmail(transaction, caseRecord, errorMessage) {
   await queueDedupedTask(transaction, {
-    caseId,
+    caseId: caseRecord.id,
     taskType: 'CLAIM_SUBMIT_ISSUE',
     dedupeKey: errorMessage || null,
-    payload: { caseId, errorMessage },
+    payload: { caseId: caseRecord.id, errorMessage, assessment: assessmentSummaryText(buildAssessmentSummary(caseRecord)) },
   });
 }
 
@@ -104,7 +104,7 @@ async function persistOutcome(caseRecord, outcome) {
         reasonCode: 'IAS_REJECTED',
         message: errorMessage,
       });
-      await queueClaimSubmitIssueEmail(transaction, caseRecord.id, errorMessage);
+      await queueClaimSubmitIssueEmail(transaction, caseRecord, errorMessage);
     }
   });
 }

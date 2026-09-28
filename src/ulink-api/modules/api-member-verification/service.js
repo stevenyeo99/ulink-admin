@@ -1,6 +1,7 @@
 const config = require('../../config');
 const { runApiJob } = require('../api-pipeline/runApiJob');
 const { checkCase } = require('../member-verification/service');
+const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment-summary/summary');
 
 // api-member-verification: API case workflow job 4 (docs/imp/day1/api-case-workflow.md section 6.5).
 //
@@ -34,7 +35,12 @@ async function processCase({ caseRecord, input }) {
       ? {
         taskType: 'MEMBER_VERIFY_ISSUE',
         audience: 'internal',
-        payload: { caseId: caseRecord.id, reasonCode: result.reasonCode, reason: result.reason },
+        payload: {
+          caseId: caseRecord.id,
+          reasonCode: result.reasonCode,
+          reason: result.reason,
+          assessment: assessmentSummaryText(buildAssessmentSummary({ memberVerifyResult: result })),
+        },
         dedupeKey: result.reasonCode,
       }
       : null,

@@ -45,7 +45,12 @@ async function processCase({ caseRecord, input }) {
         response,
         isSuspense: payload.isSuspense,
         isStp: prepared.isStp,
-        email: { taskType: 'CLAIM_SUBMIT_ISSUE', audience: 'internal', payload: { caseId: caseRecord.id, errorMessage }, dedupeKey: errorMessage },
+        email: {
+          taskType: 'CLAIM_SUBMIT_ISSUE',
+          audience: 'internal',
+          payload: { caseId: caseRecord.id, errorMessage, assessment: assessmentFor(input) },
+          dedupeKey: errorMessage,
+        },
       },
       nextStatus: 'API_CLAIM_REVISION_FAILED',
       message: `IAS rejected the revision of claim ${claimNo}: ${errorMessage}`,

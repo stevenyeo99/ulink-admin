@@ -17,7 +17,7 @@ Legend: ✅ done · 🟡 partly done · 🔴 not started / minimal · ⏸ later 
 | 2 | AYAS delegation rule | ⏸ Later | Waiting for the AYAS exception list |
 | 3 | Customer communication | 🟡 Numbered list done; Burmese not | Decide Burmese scope |
 | 4 | Acknowledgement trigger | ✅ Done | Check live in the demo rehearsal |
-| 5 | Internal review | 🟡 Review queue + JD2 email done; internal summary email not | Summary in member-issue email; decide email vs dashboard |
+| 5 | Internal review | 🟡 Review queue, JD2 email, AI summary + case link in internal emails done | Decide email vs dashboard (#8) |
 | 6 | AI assessment history | 🟡 Done inside our system; not in iAS; STP not saved | Save STP summary; iAS field from iAS team |
 | 7 | STP governance | 🔴 Amount only | Plan below — decisions from Ulink |
 | 8 | API / integration | 🟡 API case workflow built; documents still via console | `cl-upload` (3rd demo) |
@@ -69,10 +69,15 @@ Legend: ✅ done · 🟡 partly done · 🔴 not started / minimal · ⏸ later 
 - ✅ **Approvals page** for JD2 — non-STP claims waiting for approval, with the AI's review points.
 - ✅ **Override and continue** — a reviewer can let a case past a wrongly flagged document / member check,
   with "why was the check wrong" + reason, recorded against their login.
-- ❌ **Action #7:** the internal member-issue email carries one reason code, **no AI summary**; no internal
-  email for other attention cases (unreadable documents, low AI confidence).
+- ✅ **Action #7, for the existing internal emails (built 2026-09-28):** the member-issue and IAS-rejection
+  emails (email and API cases) now carry the **AI assessment** (review points first), like the JD2 email;
+  all three internal emails have an **"Open this case" link** to the console (`CONSOLE_URL`).
+- ❌ No internal email yet for other attention cases (AI couldn't read the documents, AI unsure) — see #8.
 - ❌ **Action #8:** which cases email CSR/Ops vs dashboard only — **decision needed**.
-- **Next:** add the AI summary to the member-issue email (small); decide the email-vs-dashboard rule.
+- **Next:** decide the email-vs-dashboard rule (#8). Proposal: email when work is blocked until a person
+  acts (member / bank issue, IAS rejected, AI couldn't read the documents); dashboard only for the rest
+  (AI unsure on a case still moving, waiting on customer); optionally one daily summary email of the
+  Review queue.
 
 ### 6. AI assessment history — 🟡 done for now, inside our system
 - ✅ Every case shows its **AI assessment** in the console (what was decided, why, how sure, how verified,
@@ -123,9 +128,10 @@ open review point" block STP · who can change the rules.
 
 ## 3. Summary
 
-- **Done:** 4 (acknowledgement).
+- **Done:** 4 (acknowledgement); 3 inbound (Burmese diagnosis translated before the ICD-10 search);
+  5 / #7 for existing internal emails (AI assessment + case link).
 - **Done for now:** 3 (numbered list), 6 (inside our system).
-- **Small fixes left:** AI summary in the member-issue email (5 / #7); saved summary for STP claims (6).
+- **Small fixes left:** saved summary for STP claims (6).
 - **Needs a decision:** Burmese scope (3); email vs dashboard (5 / #8); STP rules (7).
 - **Needs the iAS team / a discussion:** assessment kept in iAS (6); `cl-upload` and console upload (8, #12).
 - **Later by decision:** attachment storage (1); AYAS delegation (2).

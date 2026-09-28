@@ -13,6 +13,8 @@ module.exports = {
   port: parseInt(process.env.PORT, 10) || 3000,
   logLevel: process.env.LOG_LEVEL || (env === 'production' ? 'info' : 'debug'),
   corsOrigin: process.env.CORS_ORIGIN || '*',
+  // The console's address, for "Open this case" links in internal emails. Unset = no link.
+  consoleUrl: process.env.CONSOLE_URL ? process.env.CONSOLE_URL.replace(/\/+$/, '') : null,
   auth: {
     // Signs console login tokens. Required — the server won't start without it (bin/www).
     jwtSecret: process.env.JWT_SECRET,

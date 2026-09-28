@@ -33,6 +33,7 @@
  */
 
 const path = require('path');
+const config = require('../../config');
 
 // Shared sign-off for every customer-facing template below — these are automated replies,
 // not a human agent's, so the signer is the bot, not a person's name.
@@ -44,6 +45,15 @@ ULINK AI Bot`;
 // "Re: <original subject>" default applies instead) — so ops can tell at a glance, before
 // opening it, that a message in their inbox came from this system rather than a colleague.
 const INTERNAL_SUBJECT_PREFIX = '(ULINK AI) ';
+
+// Internal emails end with the AI assessment (what the system decided and why — 17/09 meeting,
+// actions #7 / #10) and a link to the case in the console. Both optional: a task queued before
+// either existed, or no CONSOLE_URL configured, reads as it always did.
+function internalExtras({ caseId, assessment }) {
+  const link = config.consoleUrl && caseId ? `\n\nOpen this case: ${config.consoleUrl}/cases/${caseId}` : '';
+  const ai = assessment ? `\n\nAI assessment — what the system decided and why:\n\n${assessment}` : '';
+  return `${link}${ai}`;
+}
 
 const MISSING_DOCUMENTS_INTRO = `Dear Valued Customer,
 
@@ -116,7 +126,7 @@ We weren't able to confirm this case's member/bank details against IAS yet, so p
 Reason code: ${reasonCode}
 Detail: ${reason}
 
-Required action: ${requiredAction}
+Required action: ${requiredAction}${internalExtras(payload)}
 
 ${SIGN_OFF}`,
   };
@@ -136,7 +146,7 @@ function renderClaimSubmitIssue(payload) {
     bodyText: `IAS rejected this claim submission. Case sits at CLAIM_SUBMIT_FAILED and is NOT retried automatically — needs manual follow-up.
 
 Case ID: ${caseId}
-IAS rejection reason: ${errorMessage}`,
+IAS rejection reason: ${errorMessage}${internalExtras(payload)}`,
   };
 }
 
@@ -160,16 +170,14 @@ function renderSubmissionNotRecognized() {
 // automated work is done, a human now needs to review/approve before the customer is ever
 // told a claim number (which happens outside this system, manually, once approved).
 function renderClaimApprovalReview(payload) {
-  const { claimNo, assessment } = payload;
-  // Tasks queued before the assessment existed have none — the email reads as it always did.
-  const assessmentSection = assessment ? `\n\nAI assessment — what the system decided and why:\n\n${assessment}` : '';
+  const { claimNo } = payload;
   return {
     subject: `${INTERNAL_SUBJECT_PREFIX}Claim ready for review — Claim ${claimNo}`,
     bodyText: `A claim has been created in IAS and is ready for review and approval. The automated document and claim checks are complete.
 
 Claim Number: ${claimNo}
 
-Please review and approve the claim before communicating the claim number to the customer.${assessmentSection}
+Please review and approve the claim before communicating the claim number to the customer.${internalExtras(payload)}
 
 ${SIGN_OFF}`,
   };

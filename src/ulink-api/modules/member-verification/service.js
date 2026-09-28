@@ -6,6 +6,7 @@ const { checkExclusions } = require('./exclusionFlags');
 const { checkBenefitEligibility } = require('./benefitEligibility');
 const { summarizeBenefitLimits } = require('./benefitLimits');
 const { queueDedupedTask } = require('../shared/emailTaskQueue');
+const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment-summary/summary');
 
 const BLOCK_NAME = 'member-verification';
 
@@ -80,7 +81,8 @@ async function queueReviewRequiredEmail(transaction, caseId, result) {
     caseId,
     taskType: 'MEMBER_VERIFY_ISSUE',
     dedupeKey: result.reasonCode,
-    payload: { caseId, reasonCode: result.reasonCode, reason: result.reason },
+    // The AI assessment of what is known so far (the member check) — 17/09 meeting action #7.
+    payload: { caseId, reasonCode: result.reasonCode, reason: result.reason, assessment: assessmentSummaryText(buildAssessmentSummary({ memberVerifyResult: result })) },
   });
 }
 

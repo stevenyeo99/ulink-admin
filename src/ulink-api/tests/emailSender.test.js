@@ -16,7 +16,7 @@ describe('renderMemberVerifyIssue (internal-only, SOP §11)', () => {
     expect(rendered.subject).toContain('case-123');
     expect(rendered.subject).toContain('BANK_DETAILS_MISMATCH');
     expect(rendered.bodyText).not.toContain('Dear Valued Customer');
-    expect(rendered.bodyText).not.toContain('case-123'); // Case ID lives in the subject only, not repeated in the body
+    expect(rendered.bodyText).not.toMatch(/Case ID:/); // no case-ID data line — the ID is in the subject (and at most in the case link)
     expect(rendered.bodyText).toContain('hold off replying to the customer');
     expect(rendered.bodyText).toContain('Bank account number "123" does not match IAS record "456".');
     expect(rendered.bodyText).toContain('Hold payment-related verification');
@@ -108,5 +108,29 @@ describe('renderMissingDocuments (17/09 meeting, action 4)', () => {
     expect(bodyText).toContain('1. No Medical Report(s)\n2. Please provide the missing claimant date of birth.\n   Reason: not on the claim form\n\n');
     expect(bodyText).not.toContain('3.');
     expect(bodyText).not.toMatch(/^- /m);
+  });
+});
+
+describe('internal emails: AI assessment and case link (17/09 meeting, action #7)', () => {
+  const config = require('../config');
+  const original = config.consoleUrl;
+  afterEach(() => { config.consoleUrl = original; });
+
+  it('adds the case link and the AI assessment to the member-issue and IAS-rejection emails', () => {
+    config.consoleUrl = 'https://console.example';
+    const member = render('MEMBER_VERIFY_ISSUE', { caseId: 'c9', reasonCode: 'BANK_DETAILS_MISMATCH', reason: 'x', assessment: '1. Member check: BANK_DETAILS_MISMATCH' });
+    expect(member.bodyText).toContain('Open this case: https://console.example/cases/c9');
+    expect(member.bodyText).toContain('AI assessment — what the system decided and why:\n\n1. Member check: BANK_DETAILS_MISMATCH');
+
+    const rejected = render('CLAIM_SUBMIT_ISSUE', { caseId: 'c9', errorMessage: 'Claim already exists', assessment: '1. STP: No' });
+    expect(rejected.bodyText).toContain('Open this case: https://console.example/cases/c9');
+    expect(rejected.bodyText).toContain('1. STP: No');
+  });
+
+  it('reads as before with no console address and no assessment', () => {
+    config.consoleUrl = null;
+    const member = render('MEMBER_VERIFY_ISSUE', { caseId: 'c9', reasonCode: 'BANK_DETAILS_MISMATCH', reason: 'x' });
+    expect(member.bodyText).not.toContain('Open this case');
+    expect(member.bodyText).not.toContain('AI assessment');
   });
 });
