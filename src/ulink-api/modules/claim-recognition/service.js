@@ -698,6 +698,13 @@ async function persistOutcome(caseRecord, outcome) {
     if (outcome.outcome === 'NOT_RECOGNIZED') {
       await queueSubmissionNotRecognizedEmail(transaction, caseRecord.id, outcome.message);
     }
+    // Claim-received acknowledgement, as soon as the email is recognised as a claim (17/09
+    // meeting, action 6) — not after the document check. dedupeKey null: once per case, so a
+    // reply that is recognised again doesn't re-send it. Task type keeps its old name
+    // (DOCUMENT_COMPLETE_ACK) — it's in the ulink_email_tasks check constraint.
+    if (outcome.outcome === 'RECOGNIZED') {
+      await queueDedupedTask(transaction, { caseId: caseRecord.id, taskType: 'DOCUMENT_COMPLETE_ACK', dedupeKey: null, payload: {} });
+    }
   });
 }
 

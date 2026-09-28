@@ -8,7 +8,7 @@ const { transcribePages, extractFields } = require('../claim-recognition/service
 //
 //   input:  { 'api-material-download': { scanId, fileCount, documents: [{ barcodeId, documentIds }] },
 //             'api-reply-intake': { attachmentIds } }        (only once the customer has replied)
-//   output: { recognizedType, extractedFields, pageCount, transcripts }   (or reasonCode/message on review)
+//   output: { recognizedType, extractedFields, pageCount, transcripts, email }   (or reasonCode/message on review)
 //
 // Reads the case's console images with exactly the email flow's OCR: the same page-transcription
 // prompt (transcribePages) and the same field extraction + post-processing (extractFields: invoice
@@ -76,7 +76,16 @@ async function processCase({ caseRecord, input }) {
     };
   }
   return {
-    output: { recognizedType: API_ROUTE_KEY, extractedFields, pageCount: transcripts.length, transcripts },
+    output: {
+      recognizedType: API_ROUTE_KEY,
+      extractedFields,
+      pageCount: transcripts.length,
+      transcripts,
+      // Claim-received acknowledgement once the claim is read (17/09 meeting, action 6), same
+      // email as the email flow's. api-email-sender sends it once per case: re-reading after a
+      // reply asks again, and the repeat is skipped (same type, same dedupe key).
+      email: { taskType: 'DOCUMENT_COMPLETE_ACK', audience: 'customer', payload: {}, dedupeKey: null },
+    },
     nextStatus: 'API_RECOGNIZED',
     message: `${transcripts.length} page(s) read as ${API_ROUTE_KEY}`,
   };

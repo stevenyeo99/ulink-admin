@@ -419,7 +419,7 @@ customer with the PDF attached (same template).
 | No console images | `api-material-download` → `API_NO_DOCUMENTS` | Customer | `MISSING_DOCUMENTS` (one placeholder line) |
 | Member issue | `api-member-verification` → `API_MEMBER_REVIEW_REQUIRED` | Internal (`INTERNAL_REVIEW_EMAIL`, same as email cases) | `MEMBER_VERIFY_ISSUE` |
 | Missing documents | `api-document-checking` → `API_INCOMPLETE` | Customer | `MISSING_DOCUMENTS` |
-| Documents complete | `api-document-checking` → `API_DOCUMENTS_VERIFIED` | Customer | `DOCUMENT_COMPLETE_ACK` |
+| Claim read (claim-received acknowledgement, once per case; 17/09 meeting action 6) | `api-claim-recognition` → `API_RECOGNIZED` | Customer | `DOCUMENT_COMPLETE_ACK` |
 
 - **Customer address:** `API_CASE_CUSTOMER_EMAIL` (for now `steven.yeo@dynrtech.com`); later the IAS member-info email.
   CC: the `ayas_member_claim` route's `cc_email`, same as email cases.

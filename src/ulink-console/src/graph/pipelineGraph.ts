@@ -86,6 +86,17 @@ export const EDGES: StaticEdge[] = [
 // directly — see modules/email-sender/service.js's INTERNAL_ONLY_TASK_TYPES). Each producer
 // here is uniformly one audience today, so one badge per producer is enough.
 export const EMAIL_BADGES: EmailBadgeMeta[] = [
+  // Claim-received acknowledgement as soon as the claim is recognised (17/09 meeting, action
+  // 6), and the "not recognised" notice — both to the sender.
+  {
+    id: 'email-badge-claim-recognition',
+    producer: 'claim-recognition',
+    blockName: 'email-sender-claim-recognition',
+    label: 'DOCUMENT_COMPLETE_ACK · SUBMISSION_NOT_RECOGNIZED',
+    audience: 'customer',
+    x: 300,
+    y: 190,
+  },
   {
     id: 'email-badge-member-verification',
     producer: 'member-verification',
@@ -99,7 +110,7 @@ export const EMAIL_BADGES: EmailBadgeMeta[] = [
     id: 'email-badge-document-checking',
     producer: 'document-checking',
     blockName: 'email-sender-document-checking',
-    label: 'MISSING_DOCUMENTS · DOCUMENT_COMPLETE_ACK',
+    label: 'MISSING_DOCUMENTS',
     audience: 'customer',
     x: 300,
     y: 570,

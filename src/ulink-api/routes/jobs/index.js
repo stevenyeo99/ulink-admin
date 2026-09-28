@@ -112,8 +112,9 @@ const router = express.Router();
  *       Case.recognizedType/extractedFields, and logs a CaseEvent. On NOT_RECOGNIZED
  *       (submission didn't match any enabled claim route), also queues a
  *       SUBMISSION_NOT_RECOGNIZED EmailTask asking the sender to contact CS directly —
- *       deliberately not queued for MANUAL_REVIEW, since a route DID match there. Same
- *       lock/release pattern as email-intake.
+ *       deliberately not queued for MANUAL_REVIEW, since a route DID match there. On
+ *       RECOGNIZED, queues the claim-received DOCUMENT_COMPLETE_ACK EmailTask (once per case).
+ *       Same lock/release pattern as email-intake.
  *     requestBody:
  *       required: false
  *       description: No body needed — trigger only.
@@ -176,8 +177,8 @@ const router = express.Router();
  *       Case.currentStatus to MEMBER_VERIFIED (no issues — the final gate
  *       ias-claim-preparation reads, since this is now the last of the two checks) or
  *       INCOMPLETE (one or more issues), sets Case.documentCheckResult, and logs a
- *       CaseEvent. On MEMBER_VERIFIED, also queues a DOCUMENT_COMPLETE_ACK EmailTask (both
- *       checks have now passed). Same lock/release pattern as the other jobs. Note:
+ *       CaseEvent. On INCOMPLETE, queues a MISSING_DOCUMENTS EmailTask (the claim-received
+ *       acknowledgement is queued earlier, by claim-recognition). Same lock/release pattern as the other jobs. Note:
  *       "Incorrect bank details" is evaluated by member-verification, not here.
  *     requestBody:
  *       required: false
@@ -240,8 +241,8 @@ const router = express.Router();
  *       flips the task to SENT, and logs a CaseEvent. A per-task failure is retried on
  *       later runs up to EMAIL_SENDER_MAX_ATTEMPTS before the task is marked FAILED; it
  *       does not block other tasks in the same batch. Same lock/release pattern as the
- *       other jobs. Tasks are created by validators (document-checking today; a future
- *       member-verify/JD2 module for DOCUMENT_COMPLETE_ACK), never by this job itself.
+ *       other jobs. Tasks are created by the jobs that decide them (e.g. claim-recognition
+ *       queues DOCUMENT_COMPLETE_ACK, document-checking MISSING_DOCUMENTS), never by this job itself.
  *     requestBody:
  *       required: false
  *       description: No body needed — trigger only.
@@ -519,8 +520,8 @@ const router = express.Router();
  *       CLAIM_APPROVAL_REVIEW EmailTask (SOP §13 "ready for JD2 handover" signal, sent to
  *       INTERNAL_REVIEW_EMAIL — this system can't detect JD2's later approval, so the
  *       customer's claim-number notice is now a manual step outside this system, not
- *       automatic; DOCUMENT_COMPLETE_ACK at MEMBER_VERIFIED is unrelated and unaffected,
- *       still sent to the customer). On a real business rejection from IAS (success:false
+ *       automatic; the claim-received DOCUMENT_COMPLETE_ACK, sent at claim recognition, is
+ *       unrelated and unaffected). On a real business rejection from IAS (success:false
  *       with a reason, e.g. "Claim already exists"), sets
  *       Case.currentStatus=CLAIM_SUBMIT_FAILED, stores the error, and queues an
  *       INTERNAL-ONLY CLAIM_SUBMIT_ISSUE EmailTask with the real IAS rejection reason (SOP

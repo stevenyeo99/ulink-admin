@@ -113,10 +113,6 @@ async function queueMissingDocumentsEmail(transaction, caseId, result) {
   });
 }
 
-async function queueCompleteAckEmail(transaction, caseId) {
-  await queueDedupedTask(transaction, { caseId, taskType: 'DOCUMENT_COMPLETE_ACK', dedupeKey: null, payload: {} });
-}
-
 // checkCase()'s own outcome names (DOCUMENT_CHECKED/INCOMPLETE) describe what this block
 // itself concluded — kept as-is (dev preview endpoint documents this exact enum, see
 // routes/dev/documentChecking.js) and are NOT the Case.currentStatus to write. Since this
@@ -144,14 +140,9 @@ async function persistOutcome(caseRecord, outcome) {
       message: outcome.result.passed ? 'All document checks passed' : outcome.result.issues.join('; '),
     });
 
-    if (outcome.result.passed) {
-      // Both checks have now passed (member-verification already passed this case earlier
-      // in the same run/an earlier run, or this case wouldn't be at READY_FOR_DOCUMENT_CHECKING) —
-      // this block is the final gate now, so it's the one that queues the "complete"
-      // acknowledgement. Previously queued by member-verification/service.js; moved here
-      // when the step order swapped.
-      await queueCompleteAckEmail(transaction, caseRecord.id);
-    } else {
+    // A pass sends nothing: the customer was already acknowledged at claim recognition
+    // (17/09 meeting, action 6).
+    if (!outcome.result.passed) {
       await queueMissingDocumentsEmail(transaction, caseRecord.id, outcome.result);
     }
   });

@@ -33,6 +33,7 @@ export type BlockName =
   | 'api-claim-stp';
 
 export type EmailSenderBlockName =
+  | 'email-sender-claim-recognition'
   | 'email-sender-member-verification'
   | 'email-sender-document-checking'
   | 'email-sender-claim-approval-review'

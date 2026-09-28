@@ -115,9 +115,8 @@ async function persistOutcome(caseRecord, outcome) {
       message: outcome.result.reasonCode || 'Member and coverage verified',
     });
 
-    // No email queued on a pass here — this block is no longer the final gate, so there's
-    // nothing to acknowledge yet. document-checking queues DOCUMENT_COMPLETE_ACK once it
-    // also passes (see its own service.js persistOutcome).
+    // No email queued on a pass here — the customer was already acknowledged at claim
+    // recognition (DOCUMENT_COMPLETE_ACK, claim-recognition/service.js persistOutcome).
     if (outcome.outcome !== 'MEMBER_VERIFIED') {
       await queueReviewRequiredEmail(transaction, caseRecord.id, outcome.result);
     }

@@ -41,10 +41,13 @@ const apiClaimStpService = require('../api-claim-stp/service');
 const STEPS = [
   ['email-intake', emailIntakeService],
   ['claim-recognition', claimRecognitionService],
+  // Right after recognition, so the claim-received acknowledgement (17/09 meeting, action 6)
+  // and the "not recognised" notice go out before the slower checks run.
+  ['email-sender-claim-recognition', { run: () => emailSenderService.run({ taskTypes: ['DOCUMENT_COMPLETE_ACK', 'SUBMISSION_NOT_RECOGNIZED'] }) }],
   ['member-verification', memberVerificationService],
   ['document-checking', documentCheckingService],
   ['email-sender-member-verification', { run: () => emailSenderService.run({ taskTypes: ['MEMBER_VERIFY_ISSUE'] }) }],
-  ['email-sender-document-checking', { run: () => emailSenderService.run({ taskTypes: ['MISSING_DOCUMENTS', 'DOCUMENT_COMPLETE_ACK'] }) }],
+  ['email-sender-document-checking', { run: () => emailSenderService.run({ taskTypes: ['MISSING_DOCUMENTS'] }) }],
   // Added 2026-09-15 — copies a cleared AYAS-reimbursement case's documents to the shared
   // console folder and generates its barcode (Case.consoleBarcode) before ias-claim-
   // preparation needs it. MEMBER_VERIFIED -> DOCUMENTS_UPLOADED; see

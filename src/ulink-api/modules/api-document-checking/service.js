@@ -15,7 +15,8 @@ const { checkCase } = require('../document-checking/service');
 // The customer email the email flow sends for each outcome, with the same payload and dedupe key
 // (document-checking's queueMissingDocumentsEmail / queueCompleteAckEmail). Sent by api-email-sender.
 function emailFor(result) {
-  if (result.passed) return { taskType: 'DOCUMENT_COMPLETE_ACK', audience: 'customer', payload: {}, dedupeKey: null };
+  // Complete documents send nothing: the customer was acknowledged at api-claim-recognition.
+  if (result.passed) return null;
   const issues = result.issues.map((issue) => {
     const detail = result.details.find((candidate) => candidate.issue === issue && candidate.reason);
     return detail?.reason ? `${issue}\n  Reason: ${detail.reason}` : issue;

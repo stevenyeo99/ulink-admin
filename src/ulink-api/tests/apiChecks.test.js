@@ -68,7 +68,7 @@ describe('api-document-checking', () => {
     expect(documentEmail.checkCase).toHaveBeenCalledWith({ id: 'case-1', extractedFields, recognizedType: 'ayas_member_claim' });
     expect(result).toMatchObject({
       nextStatus: 'API_DOCUMENTS_VERIFIED',
-      output: { outcome: 'DOCUMENT_CHECKED', email: { taskType: 'DOCUMENT_COMPLETE_ACK', audience: 'customer' } },
+      output: { outcome: 'DOCUMENT_CHECKED', email: null },
     });
   });
 

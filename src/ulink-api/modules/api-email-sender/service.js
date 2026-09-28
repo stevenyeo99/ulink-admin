@@ -28,7 +28,7 @@ const API_ROUTE_KEY = 'ayas_member_claim';
 // subject); API emails start their own thread, so they need one.
 const CUSTOMER_SUBJECTS = {
   MISSING_DOCUMENTS: 'Additional documents required',
-  DOCUMENT_COMPLETE_ACK: 'Claim documents received',
+  DOCUMENT_COMPLETE_ACK: 'Claim received',
   CSR_REPORT: 'Claim settlement report',
 };
 
