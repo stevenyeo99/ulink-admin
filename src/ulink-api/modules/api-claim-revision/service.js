@@ -2,6 +2,7 @@ const config = require('../../config');
 const { runApiJob } = require('../api-pipeline/runApiJob');
 const { reviseClaim } = require('./iasClient');
 const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment-summary/summary');
+const { OVERRIDE_AREAS } = require('../case-override/override');
 
 // api-claim-revision: API case workflow job (docs/imp/day1/api-case-workflow.md section 6.7).
 //
@@ -24,12 +25,15 @@ const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment
 // Same case fields the email flow keeps on ulink_cases, taken from this case's earlier job outputs.
 function assessmentFor(input) {
   const prepared = input['api-claim-preparation'];
+  // A reviewer's override (the case's latest case-override step) marks that check's points as handled.
+  const override = input['case-override'];
+  const overrides = override && OVERRIDE_AREAS[override.from] ? [{ area: OVERRIDE_AREAS[override.from], at: null, note: override.note }] : [];
   return assessmentSummaryText(buildAssessmentSummary({
     memberVerifyResult: input['api-member-verification']?.memberVerifyResult,
     documentCheckResult: input['api-document-checking']?.documentCheckResult,
     claimPrepMeta: prepared.claimPrepMeta,
     isStp: prepared.isStp,
-  }));
+  }, { overrides }));
 }
 
 async function processCase({ caseRecord, input }) {
@@ -80,7 +84,7 @@ const job = {
   name: 'api-claim-revision',
   inputStatus: 'API_CLAIM_PAYLOAD_PREPARED',
   inputs: ['api-claim-preparation'],
-  optionalInputs: ['api-member-verification', 'api-document-checking'],
+  optionalInputs: ['api-member-verification', 'api-document-checking', 'case-override'],
   // One real IAS write per case — same modest batch as claim creation.
   batchLimit: config.iasClaimCreation.batchLimit,
   process: processCase,

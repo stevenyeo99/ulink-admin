@@ -11,7 +11,7 @@ jest.mock('../db/models', () => ({
 }));
 
 const { Case, CaseEvent, ApiCaseStep } = require('../db/models');
-const { overrideCheck } = require('../modules/case-override/override');
+const { overrideCheck, overridesFromEvents } = require('../modules/case-override/override');
 const { overrideCase } = require('../controllers/cases/casesController');
 
 const user = { id: 'u1', username: 'ulink', name: 'Ulink', role: 'super_admin' };
@@ -90,5 +90,14 @@ describe('POST /api/cases/:id/override', () => {
     const moved = await call({ reason: 'x', finding: 'OTHER' }, emailCase);
     expect(moved.status).toBe(409);
     expect(CaseEvent.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('overridesFromEvents', () => {
+  it("reads the case history's override entries, without the waived list", () => {
+    expect(overridesFromEvents([
+      { reasonCode: 'MANUAL_OVERRIDE', prevStatus: 'API_MEMBER_REVIEW_REQUIRED', createdAt: 't1', message: 'Overridden by Ulink (ulink) — Other (see reason): ok (waived: Member check: Data mismatch)' },
+      { reasonCode: 'MANUAL_RESET', prevStatus: 'INCOMPLETE', createdAt: 't2', message: 'Reset' },
+    ])).toEqual([{ area: 'member', at: 't1', note: 'Overridden by Ulink (ulink) — Other (see reason): ok' }]);
   });
 });

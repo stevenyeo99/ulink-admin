@@ -1,6 +1,6 @@
 const { Op, fn, col, cast, where: sqlWhere, literal } = require('sequelize');
 const { sequelize, Case, CaseEvent, CaseDocument, ApiCaseStep, EmailThread, EmailMessage, EmailAttachment } = require('../../db/models');
-const { OVERRIDE_TARGETS, OVERRIDE_AREAS, OVERRIDE_FINDINGS, overrideCheck } = require('../../modules/case-override/override');
+const { OVERRIDE_TARGETS, OVERRIDE_FINDINGS, overrideCheck, overridesFromEvents } = require('../../modules/case-override/override');
 const { todayInIasTimezone } = require('../../modules/shared/iasDates');
 const { apiCaseView } = require('../../modules/api-pipeline/caseView');
 const { buildAssessmentSummary } = require('../../modules/assessment-summary/summary');
@@ -118,17 +118,17 @@ async function getReviewQueue(req, res) {
 
   const fieldsOf = await assessmentFieldsLoader(cases);
   // Checks a person already overrode, per case (from the override's case-history entry, email and API alike).
-  const overrides = cases.length
-    ? await CaseEvent.findAll({ where: { caseId: cases.map((c) => c.id), reasonCode: 'MANUAL_OVERRIDE' }, attributes: ['caseId', 'prevStatus'] })
+  const overrideEvents = cases.length
+    ? await CaseEvent.findAll({
+      where: { caseId: cases.map((c) => c.id), reasonCode: 'MANUAL_OVERRIDE' },
+      attributes: ['caseId', 'prevStatus', 'reasonCode', 'message', 'createdAt'],
+    })
     : [];
-  const overriddenAreas = new Map();
-  for (const o of overrides) {
-    if (OVERRIDE_AREAS[o.prevStatus]) overriddenAreas.set(o.caseId, [...(overriddenAreas.get(o.caseId) || []), OVERRIDE_AREAS[o.prevStatus]]);
-  }
+  const overridesOf = (caseId) => overridesFromEvents(overrideEvents.filter((e) => e.caseId === caseId));
 
   const items = [];
   for (const c of cases) {
-    const entry = queueEntry(c.currentStatus, fieldsOf(c), overriddenAreas.get(c.id));
+    const entry = queueEntry(c.currentStatus, fieldsOf(c), overridesOf(c.id));
     if (!entry) continue;
     items.push({ ...listRow(c), ...entry });
   }
@@ -302,7 +302,7 @@ async function getCase(req, res) {
   // from the same case fields the page shows, so it is always current. override: whether a
   // reviewer can let this case past its check, and if not, why (modules/case-override/override.js).
   const reviewInfo = (fields) => ({
-    assessmentSummary: buildAssessmentSummary(fields),
+    assessmentSummary: buildAssessmentSummary(fields, { overrides: overridesFromEvents(events) }),
     override: { ...overrideCheck(fields.currentStatus, fields), findings: OVERRIDE_FINDINGS },
   });
   if (caseRecord.source !== 'API') {
@@ -436,7 +436,8 @@ async function overrideCase(req, res) {
         job: 'case-override',
         status: 'DONE',
         input: { username: req.user.username, finding, reason: reason.trim() },
-        output: { from: prevStatus, to: targetStatus, waived },
+        // note: the same text as the case-history entry — later API jobs read it (e.g. the JD2 email).
+        output: { from: prevStatus, to: targetStatus, waived, note: `Overridden by ${operator} — ${OVERRIDE_FINDINGS[finding]}: ${reason.trim()}` },
         startedAt: now,
         finishedAt: now,
       }, { transaction });

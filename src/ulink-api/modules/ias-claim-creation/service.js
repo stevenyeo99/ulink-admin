@@ -3,6 +3,7 @@ const config = require('../../config');
 const { submitClaim } = require('./iasClaimClient');
 const { queueDedupedTask } = require('../shared/emailTaskQueue');
 const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment-summary/summary');
+const { overridesFromEvents } = require('../case-override/override');
 
 const BLOCK_NAME = 'ias-claim-creation';
 
@@ -37,6 +38,12 @@ async function checkCase(caseRecord) {
 // manual step for ops once they've reviewed/approved, not automatic. This email is the
 // SOP §13 "ready for JD2 handover" signal, fired at exactly the point JD1's automated work
 // ends.
+// The case's AI assessment for an internal email, with any check a reviewer overrode marked as handled.
+async function assessmentText(transaction, caseRecord) {
+  const events = await CaseEvent.findAll({ where: { caseId: caseRecord.id, reasonCode: 'MANUAL_OVERRIDE' }, transaction });
+  return assessmentSummaryText(buildAssessmentSummary(caseRecord, { overrides: overridesFromEvents(events) }));
+}
+
 // The AI assessment goes with it (17/09 meeting, action 10): JD2 sees what was decided and why before
 // approving, and the task payload keeps that text as the case's audit snapshot.
 async function queueClaimApprovalReviewEmail(transaction, caseRecord, claimNo) {
@@ -44,7 +51,7 @@ async function queueClaimApprovalReviewEmail(transaction, caseRecord, claimNo) {
     caseId: caseRecord.id,
     taskType: 'CLAIM_APPROVAL_REVIEW',
     dedupeKey: null,
-    payload: { caseId: caseRecord.id, claimNo, assessment: assessmentSummaryText(buildAssessmentSummary(caseRecord)) },
+    payload: { caseId: caseRecord.id, claimNo, assessment: await assessmentText(transaction, caseRecord) },
   });
 }
 
@@ -59,7 +66,7 @@ async function queueClaimSubmitIssueEmail(transaction, caseRecord, errorMessage)
     caseId: caseRecord.id,
     taskType: 'CLAIM_SUBMIT_ISSUE',
     dedupeKey: errorMessage || null,
-    payload: { caseId: caseRecord.id, errorMessage, assessment: assessmentSummaryText(buildAssessmentSummary(caseRecord)) },
+    payload: { caseId: caseRecord.id, errorMessage, assessment: await assessmentText(transaction, caseRecord) },
   });
 }
 

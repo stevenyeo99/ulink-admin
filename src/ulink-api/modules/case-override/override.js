@@ -45,4 +45,19 @@ function overrideCheck(status, fields = {}) {
   return { allowed: true, target };
 }
 
-module.exports = { OVERRIDE_TARGETS, OVERRIDE_AREAS, OVERRIDE_FINDINGS, overrideCheck };
+/**
+ * The overrides recorded in a case's history (CaseEvent rows, reasonCode MANUAL_OVERRIDE) as the
+ * assessment summary reads them: [{ area, at, note }]. note is the event's own text — "Overridden by
+ * Ulink (ulink) — <why the check was wrong>: <reason>" — without the list of waived points.
+ */
+function overridesFromEvents(events = []) {
+  return events
+    .filter((e) => e.reasonCode === 'MANUAL_OVERRIDE' && OVERRIDE_AREAS[e.prevStatus])
+    .map((e) => ({
+      area: OVERRIDE_AREAS[e.prevStatus],
+      at: e.createdAt,
+      note: String(e.message || '').split(' (waived: ')[0],
+    }));
+}
+
+module.exports = { OVERRIDE_TARGETS, OVERRIDE_AREAS, OVERRIDE_FINDINGS, overrideCheck, overridesFromEvents };

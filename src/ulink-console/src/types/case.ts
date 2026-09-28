@@ -187,8 +187,16 @@ export interface AssessmentReview {
   check: string;
 }
 
+/** A reviewer already overrode the check this came from (ulink-api modules/case-override). */
+export interface AssessmentOverride {
+  at: string | null;
+  /** "Overridden by <name> (<username>) — <why the check was wrong>: <reason>" */
+  note: string;
+}
+
 export interface AssessmentLine {
   decision: string;
+  overridden?: AssessmentOverride;
   result: string;
   status: 'ok' | 'issue' | 'not_checked';
   why: string;
@@ -200,7 +208,7 @@ export interface AssessmentLine {
 
 export interface AssessmentSummary {
   lines: AssessmentLine[];
-  reviewPoints: (AssessmentReview & { decision: string })[];
+  reviewPoints: (AssessmentReview & { decision: string; overridden?: AssessmentOverride })[];
   needsReview: boolean;
 }
 

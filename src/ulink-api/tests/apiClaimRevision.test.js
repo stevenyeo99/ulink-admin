@@ -17,7 +17,7 @@ it('receives the prepared payload and runs on API_CLAIM_PAYLOAD_PREPARED', () =>
   expect(job).toMatchObject({
     inputStatus: 'API_CLAIM_PAYLOAD_PREPARED',
     inputs: ['api-claim-preparation'],
-    optionalInputs: ['api-member-verification', 'api-document-checking'],
+    optionalInputs: ['api-member-verification', 'api-document-checking', 'case-override'],
   });
 });
 

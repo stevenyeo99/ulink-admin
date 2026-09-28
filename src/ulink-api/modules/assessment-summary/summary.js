@@ -271,22 +271,31 @@ function preparationLines(claimPrepMeta, isStp) {
 
 /**
  * Builds the explanation trail for one case.
+ * overrides: checks a person overrode ([{ area, at, note }], modules/case-override overridesFromEvents).
  * Returns { lines, reviewPoints, needsReview }; each line is
  * { decision, result, status: ok|issue|not_checked, why, confidence, verified, review: { reason, mightBeWrong, check } | null }.
  */
-function buildAssessmentSummary(fields = {}) {
-  // area: which check a line came from — lets a manual override of that check (modules/case-override)
-  // mark its points as dealt with, e.g. so the Review Queue doesn't raise them again.
-  const withArea = (area, lines) => lines.map((l) => ({ ...l, area }));
+function buildAssessmentSummary(fields = {}, { overrides = [] } = {}) {
+  // area: which check a line came from. A manual override of that check (modules/case-override,
+  // overrides = [{ area, at, note }]) marks its lines and points as handled by a person — they stay
+  // visible (the AI's finding is part of the record) but no longer count as open.
+  const overrideFor = (area) => overrides.find((o) => o.area === area) || null;
+  const withArea = (area, lines) => lines.map((l) => {
+    const overridden = l.review ? overrideFor(area) : null;
+    return overridden ? { ...l, area, overridden: { at: overridden.at, note: overridden.note } } : { ...l, area };
+  });
   const lines = [
     ...withArea('member', memberLines(fields.memberVerifyResult)),
     ...withArea('documents', documentLines(fields.documentCheckResult)),
     ...withArea('claim', preparationLines(fields.claimPrepMeta, fields.isStp)),
   ];
-  const reviewPoints = lines.filter((l) => l.review).map((l) => ({ decision: l.decision, area: l.area, ...l.review }));
+  const reviewPoints = lines
+    .filter((l) => l.review)
+    .map((l) => ({ decision: l.decision, area: l.area, ...l.review, ...(l.overridden ? { overridden: l.overridden } : {}) }));
+  const open = reviewPoints.filter((p) => !p.overridden);
 
   // An automatically approved claim that still has open points is exactly what a reviewer should see first.
-  if (fields.isStp === true && reviewPoints.length) {
+  if (fields.isStp === true && open.length) {
     reviewPoints.unshift({
       decision: 'STP',
       area: 'claim',
@@ -295,19 +304,22 @@ function buildAssessmentSummary(fields = {}) {
       check: 'This claim went straight through; confirm the points below were right.',
     });
   }
-  return { lines, reviewPoints, needsReview: reviewPoints.length > 0 };
+  return { lines, reviewPoints, needsReview: reviewPoints.some((p) => !p.overridden) };
 }
 
 // Plain text for emails and logs. Review points first — what a reader should check before anything else.
 function assessmentSummaryText(summary) {
   if (!summary.lines.length) return 'No assessment yet.';
   const next = summary.reviewPoints.length
-    ? `Next review points:\n${summary.reviewPoints.map((p, i) => `${i + 1}. ${p.decision} — ${p.check}`).join('\n')}`
+    ? `Next review points:\n${summary.reviewPoints
+      .map((p, i) => `${i + 1}. ${p.decision} — ${p.overridden ? `already handled — ${p.overridden.note}` : p.check}`)
+      .join('\n')}`
     : 'No review points.';
   const body = summary.lines.map((l, i) => {
     const how = [l.verified, l.confidence != null ? `confidence ${l.confidence}` : null].filter(Boolean).join(', ');
     const review = l.review
       ? `\n   Review: ${l.review.reason}${l.review.mightBeWrong.length ? ` (might be wrong: ${l.review.mightBeWrong.join(', ')})` : ''}`
+        + (l.overridden ? `\n   Overridden: ${l.overridden.note}` : '')
       : '';
     return `${i + 1}. ${l.decision}: ${l.result}\n   Why: ${l.why}\n   How: ${how}${review}`;
   }).join('\n');

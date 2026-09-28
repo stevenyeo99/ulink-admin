@@ -68,7 +68,9 @@ Legend: ✅ done · 🟡 partly done · 🔴 not started / minimal · ⏸ later 
   check first.
 - ✅ **Approvals page** for JD2 — non-STP claims waiting for approval, with the AI's review points.
 - ✅ **Override and continue** — a reviewer can let a case past a wrongly flagged document / member check,
-  with "why was the check wrong" + reason, recorded against their login.
+  with "why was the check wrong" + reason, recorded against their login. The overridden points stay visible
+  but are marked "✔ Overridden by … — why: reason" on the case page and in the JD2 / IAS-rejection emails,
+  and no longer count as open (Review queue, needs-review colour).
 - ✅ **Action #7, for the existing internal emails (built 2026-09-28):** the member-issue and IAS-rejection
   emails (email and API cases) now carry the **AI assessment** (review points first), like the JD2 email;
   all three internal emails have an **"Open this case" link** to the console (`CONSOLE_URL`).

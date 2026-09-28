@@ -1,12 +1,22 @@
 import { AlertTriangle, CheckCircle2 } from 'lucide-react';
 import clsx from 'clsx';
-import type { AssessmentLine, AssessmentSummary } from '../../types/case';
+import type { AssessmentLine, AssessmentOverride, AssessmentSummary } from '../../types/case';
 
 const STATUS_PILL: Record<AssessmentLine['status'], string> = {
   ok: 'bg-ulink-teal/15 text-ulink-teal-dark',
   issue: 'bg-ulink-orange/15 text-ulink-orange-dark',
   not_checked: 'bg-slate-900/5 text-slate-500',
 };
+
+/** A point a reviewer already dealt with: kept visible (the AI's finding is part of the record), marked as handled. */
+function OverriddenNote({ override }: { override: AssessmentOverride }) {
+  return (
+    <span className="text-ulink-teal-dark">
+      ✔ {override.note}
+      {override.at && <span className="text-slate-500"> · {new Date(override.at).toLocaleString()}</span>}
+    </span>
+  );
+}
 
 /**
  * Top-of-page explanation of the case: every decision the system or the AI made, why, how sure,
@@ -42,10 +52,17 @@ export function AssessmentSummaryPanel({ summary }: { summary: AssessmentSummary
           <p className="mb-1.5 text-xs font-semibold text-ulink-orange-dark">Review points</p>
           <ol className="list-decimal space-y-1 pl-5 text-sm text-slate-700">
             {reviewPoints.map((point, index) => (
-              <li key={index}>
-                <span className="font-medium">{point.decision}</span> — {point.reason}. {point.check}
-                {point.mightBeWrong.length > 0 && (
-                  <span className="text-xs text-slate-500"> (might be wrong: {point.mightBeWrong.join(', ')})</span>
+              <li key={index} className={clsx(point.overridden && 'text-slate-500')}>
+                <span className="font-medium">{point.decision}</span> — {point.reason}.{' '}
+                {point.overridden ? (
+                  <OverriddenNote override={point.overridden} />
+                ) : (
+                  <>
+                    {point.check}
+                    {point.mightBeWrong.length > 0 && (
+                      <span className="text-xs text-slate-500"> (might be wrong: {point.mightBeWrong.join(', ')})</span>
+                    )}
+                  </>
                 )}
               </li>
             ))}
@@ -65,6 +82,11 @@ export function AssessmentSummaryPanel({ summary }: { summary: AssessmentSummary
                 <p className="mt-0.5 text-xs text-ulink-orange-dark">
                   {line.review.reason}
                   {line.review.mightBeWrong.length > 0 && ` · might be wrong: ${line.review.mightBeWrong.join(', ')}`}
+                </p>
+              )}
+              {line.overridden && (
+                <p className="mt-0.5 text-xs">
+                  <OverriddenNote override={line.overridden} />
                 </p>
               )}
             </div>

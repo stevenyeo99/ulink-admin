@@ -151,3 +151,23 @@ it('shows a diagnosis that was translated from Burmese, and marks it as AI trans
     verified: 'AI self-rated, AI translated',
   });
 });
+
+it('marks the points of a check a person overrode as handled, keeping them visible', () => {
+  const fields = {
+    memberVerifyResult: { outcome: 'MEMBER_REVIEW_REQUIRED', reasonCode: 'BANK_DETAILS_MISMATCH', reason: 'x' },
+    claimPrepMeta: { diagnosis: { pick: { diagCode: 'R69' }, defaulted: true, confidence: 0 } },
+  };
+  const note = "Overridden by Ulink (ulink) — The customer's details were confirmed: phoned.";
+  const summary = buildAssessmentSummary(fields, { overrides: [{ area: 'member', at: '2026-09-28T07:00:00Z', note }] });
+
+  expect(find(summary, 'Member check').overridden).toEqual({ at: '2026-09-28T07:00:00Z', note });
+  expect(summary.reviewPoints.find((p) => p.decision === 'Member check').overridden.note).toBe(note);
+  // the diagnosis point (another check) stays open
+  expect(summary.reviewPoints.find((p) => p.decision === 'Diagnosis code').overridden).toBeUndefined();
+  expect(summary.needsReview).toBe(true);
+  expect(assessmentSummaryText(summary)).toContain(`Member check — already handled — ${note}`);
+
+  // nothing left open once the only point is handled
+  const handled = buildAssessmentSummary({ memberVerifyResult: fields.memberVerifyResult }, { overrides: [{ area: 'member', at: null, note }] });
+  expect(handled.needsReview).toBe(false);
+});
