@@ -9,7 +9,7 @@ Status checked against the code on 2026-09-28. Tick **Decide** to choose what to
 
 | Decide | # | Action | Where it stands today | Applies to API case | Size |
 |---|---|---|---|---|---|
-| [ ] | 4 | **Missing-documents email as a numbered list**, with a reason for each item | Bullet list (`- item`) in `src/ulink-api/modules/email-sender/templates.js:80`. Reasons already included. | Yes (same template) | Small — bullets → 1. 2. 3. |
+| [x] | 4 | **Missing-documents email as a numbered list** (built 2026-09-28), with a reason for each item | Done: numbered 1. 2. 3., each reason indented under its item (`email-sender/templates.js` renderMissingDocuments). | Yes (same template) | Small — bullets → 1. 2. 3. |
 | [ ] | 6 | **Acknowledgement email when a new claim arrives**, separate from the later document email | Not built. Only "documents received" after the document check passes. | Yes (send at API intake) | Small–Medium |
 | [ ] | 7 | **Internal AI verification summary** (member check + document check result) for cases needing CSR/Ops attention | Partly built: internal emails exist for member issues and IAS rejections, but not a combined AI summary. | Yes | Medium |
 | [ ] | 10 | **Enrich the manual-approval (JD2) email** with AI assessment, issue/reason, next review point | Email exists; carries only claim/case details. | Yes (non-STP API cases) | Medium — build with #7, same content |

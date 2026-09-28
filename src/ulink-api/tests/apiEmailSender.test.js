@@ -70,7 +70,7 @@ it('sends the first email as a new email and starts the case thread', async () =
   const [submission, reply] = sendReply.mock.calls[0];
   expect(submission).toEqual({ messageId: null, references: null }); // no In-Reply-To: a new email
   expect(reply).toMatchObject({ to: 'customer@test', cc: 'cc@test', subject: 'AYA Sompo claim 2604050015 — Additional documents required (Ref: STEVENEVERHILLC58)' });
-  expect(reply.bodyText).toContain('- No Medical Report(s)'); // the email flow's own MISSING_DOCUMENTS template
+  expect(reply.bodyText).toContain('1. No Medical Report(s)'); // the email flow's own MISSING_DOCUMENTS template
   expect(state.threads).toEqual([expect.objectContaining({ caseId: 'case-1', firstMessageId: '<m1@test>' })]);
   expect(state.messages[0]).toMatchObject({ threadId: 'thread-1', direction: 'outbound', messageId: '<m1@test>', inReplyTo: null });
   expect(state.steps[0]).toMatchObject({ job: 'api-email-sender', status: 'DONE', input: { sourceStepId: 'step-1' }, output: { messageId: '<m1@test>' } });

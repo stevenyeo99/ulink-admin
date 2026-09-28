@@ -89,3 +89,14 @@ describe('resolveRecipient', () => {
     expect(resolveRecipient('DOCUMENT_COMPLETE_ACK', 'customer@example.com')).toBe('customer@example.com');
   });
 });
+
+describe('renderMissingDocuments (17/09 meeting, action 4)', () => {
+  it('numbers each outstanding item and keeps its reason under it', () => {
+    const { bodyText } = render('MISSING_DOCUMENTS', {
+      issues: ['No Medical Report(s)', 'Please provide the missing claimant date of birth.\n  Reason: not on the claim form', '  '],
+    });
+    expect(bodyText).toContain('1. No Medical Report(s)\n2. Please provide the missing claimant date of birth.\n   Reason: not on the claim form\n\n');
+    expect(bodyText).not.toContain('3.');
+    expect(bodyText).not.toMatch(/^- /m);
+  });
+});

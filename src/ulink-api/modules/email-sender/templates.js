@@ -74,10 +74,12 @@ ${SIGN_OFF}`;
 
 function renderMissingDocuments(payload) {
   const issues = payload.issues || [];
+  // Numbered, one item per outstanding issue (17/09 meeting, action 4). An issue's own
+  // "Reason:" line is re-indented to sit under its number.
   const bullets = issues
     .map((issue) => String(issue).trim())
     .filter(Boolean)
-    .map((issue) => `- ${issue}`)
+    .map((issue, i) => `${i + 1}. ${issue.replace(/\n\s*/g, '\n   ')}`)
     .join('\n');
   const intro = MISSING_DOCUMENTS_INTRO.trimEnd();
   const footer = MISSING_DOCUMENTS_FOOTER.trim();
