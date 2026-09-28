@@ -1,0 +1,44 @@
+1. call claim submission
+{
+    "Items": [
+        {
+            "PlanId": "2147",
+            "BankName": "CB Bank",
+            "ClaimType": "M",
+            "InvoiceID": "NIL",
+            "BankAcctNo": "0158-6005-0010-1796",
+            "PayeeEmail": "hsumyat.pyae@aml.mobi",
+            "BenefitHead": "",
+            "BenefitType": "",
+            "IncurDateTo": "08142026",
+            "SymptomDate": "08142026",
+            "BankAcctName": "Hsu Myat Pyae",
+            "ExchangeRate": 1,
+            "PresentedAmt": 32500,
+            "ProviderCode": null,
+            "ProviderName": "Punhlaing Hospital",
+            "ReceivedDate": "09172026",
+            "ContactNumber": "09791000344",
+            "DiagnosisCode": "",
+            "IncurDateFrom": "08142026",
+            "PaymentMethod": null,
+            "PaymentCurrency": "MMK",
+            "TreatmentCountry": "MYANMAR",
+            "DiagnosisCodeDesc": "",
+            "PresentedCurrency": "MMK",
+            "PaymentExchangeRate": 1,
+            "DiagnosisDescription": "",
+            "ReviseClaimReasonCode": ""
+        }
+    ],
+    "MemberRefNo": "12/DAGAYA(N)081441",
+    "TpaCaseNumber": "AYA-CL-26034912",
+    "TpaClaimNumber": "CL/YGN/AYH/26027162",
+    "ProvPortalCaseNumber": ""
+}
+
+2. call submission upload
+POST = https://api.ulink.ins-link.com/cl-upload
+Form Data
+- TpaCaseNumber = AYA-CL-26034912
+- file = use the document for this tpa

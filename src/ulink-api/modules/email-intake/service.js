@@ -84,6 +84,7 @@ async function persistSubmission(submission) {
       references: submission.references,
       subjectHint: submission.subject,
       firstMessageId: submission.messageId,
+      from: submission.from,
     });
 
     const emailMessage = await EmailMessage.create(

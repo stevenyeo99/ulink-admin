@@ -486,11 +486,13 @@ Long threads are fine: a reply to *any* earlier message matches, because every i
 - `email-intake` is also a step of the API pipeline (same job, same lock as the email pipeline), so replies are read
   on the API schedule too.
 
+**Subject fallback (S8, built 2026-09-28):** a new email without matching reply headers, whose subject has
+`(Ref: <tpaCaseNumber>)` of an API case, joins that case's thread — but only when the sender is an address we already
+emailed on that thread (exact, case-insensitive). Otherwise it becomes a new email case as before
+(`email-intake/threadMatcher.js`).
+
 **Not built yet**
 
-- **Subject fallback (S8):** a brand-new email without reply headers but with `(Ref: <tpaCaseNumber>)` in the subject
-  still becomes a new email case. Needs a small change inside `email-intake`'s thread matching — to be done as a
-  separate, reviewed change.
 - **Reply after the case moved on (S10):** stored on the thread but not acted on; no internal alert yet.
 - Links inside reply PDFs are not followed (the email flow's linked-document fetch isn't used for API replies).
 

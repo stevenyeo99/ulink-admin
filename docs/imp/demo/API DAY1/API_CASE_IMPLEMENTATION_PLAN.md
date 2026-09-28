@@ -222,7 +222,7 @@ Found while walking through API case edge cases (2026-09-24). ⚠️ = can lose 
 | S5 | Partial download (fewer files than the console lists) | WAITING; keep what arrived, fetch only the rest next run | 2c ✓ |
 | S6 | Customer uploads more pages to the console while the case waits | Re-check the console each run while waiting; new pages → back to OCR | 6 |
 | S7 | Blurry / unreadable images | Unreadable values come back `unclear`/missing (same prompt as email) and document checking asks for them; a schema mismatch → `API_MANUAL_REVIEW` | 5 ✓ / 6 |
-| S8 | ⚠️ Customer sends a brand-new email without `tpaCaseNumber` | Would become an email case and could create a second IAS claim. Duplicate check: same member + treatment date as an open API case → flag, don't create | 4 |
+| S8 | ⚠️ Customer sends a brand-new email without `tpaCaseNumber` | Would become an email case and could create a second IAS claim. Subject `(Ref: <tpaCaseNumber>)` + sender we already emailed on that case → joins the API case; otherwise a new email case as before | 4 ✓ |
 | S9 | Reply arrives while the case is processing (not waiting) | Keep it; include its attachments the next time the case is read (OCR reads every reply) | 4 ✓ |
 | S10 | Reply after revision already done | Store and alert internally; no reprocessing | 4 |
 | S11 | Customer email address unknown (fixed address for now) | Production blocker — use the member-info email | 6 |
