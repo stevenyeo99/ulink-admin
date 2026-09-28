@@ -13,7 +13,7 @@ const { pickDiagnosis, DEFAULT_DIAGNOSIS } = require('../modules/ias-claim-prepa
 describe('pickDiagnosis', () => {
   it('falls back to DEFAULT_DIAGNOSIS, marked defaulted, when there is no free text at all', async () => {
     const result = await pickDiagnosis('');
-    expect(result).toEqual({ pick: DEFAULT_DIAGNOSIS, defaulted: true, confidence: null, candidates: [] });
+    expect(result).toEqual({ pick: DEFAULT_DIAGNOSIS, defaulted: true, confidence: null, reason: null, candidates: [] });
   });
 
   it('DEFAULT_DIAGNOSIS is a real ICD-10 code, not a placeholder string', () => {

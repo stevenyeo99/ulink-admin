@@ -158,10 +158,35 @@ export interface ApiCaseStep {
   finishedAt: string | null;
 }
 
+// Explanation trail built by the API (modules/assessment-summary/summary.js): what was decided on this
+// case, why, how sure, how it was verified, and where a person should look.
+export interface AssessmentReview {
+  reason: string;
+  mightBeWrong: string[];
+  check: string;
+}
+
+export interface AssessmentLine {
+  decision: string;
+  result: string;
+  status: 'ok' | 'issue' | 'not_checked';
+  why: string;
+  confidence: string | null;
+  verified: 'Rule' | 'Cross-checked' | 'AI self-rated';
+  review: AssessmentReview | null;
+}
+
+export interface AssessmentSummary {
+  lines: AssessmentLine[];
+  reviewPoints: (AssessmentReview & { decision: string })[];
+  needsReview: boolean;
+}
+
 export interface GetCaseResponse {
   case: CaseDetail;
   events: CaseEvent[];
   documents: CaseDocument[];
+  assessmentSummary: AssessmentSummary;
   /** API cases only. Their CaseDetail fields (extractedFields, …) are filled from these by the API. */
   apiSteps?: ApiCaseStep[];
 }

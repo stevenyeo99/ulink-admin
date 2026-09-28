@@ -7,11 +7,14 @@ const SYSTEM_PROMPT = fs.readFileSync(path.join(__dirname, 'prompts', 'diagnosis
 
 const SCHEMA = {
   type: 'object',
-  required: ['diagCode', 'diagDesc', 'confidence'],
+  required: ['diagCode', 'diagDesc', 'confidence', 'reason'],
   properties: {
     diagCode: { type: ['string', 'null'] },
     diagDesc: { type: ['string', 'null'] },
     confidence: { type: 'number' },
+    // Why this code (or none) — shown to reviewers in the assessment summary. Explanation only:
+    // the pick never depends on it, and null is fine.
+    reason: { type: ['string', 'null'] },
   },
 };
 
@@ -40,10 +43,10 @@ const DEFAULT_DIAGNOSIS = { diagCode: 'R69', diagDesc: 'Unknown and unspecified 
  * didn't happen, not just the outcome. See db/migrations/20260916100000-add-claim-prep-meta.js.
  */
 async function pickDiagnosis(freeText) {
-  if (!freeText || !freeText.trim()) return { pick: DEFAULT_DIAGNOSIS, defaulted: true, confidence: null, candidates: [] };
+  if (!freeText || !freeText.trim()) return { pick: DEFAULT_DIAGNOSIS, defaulted: true, confidence: null, reason: null, candidates: [] };
 
   const candidates = await findCandidates(freeText, { topK: 5 });
-  if (candidates.length === 0) return { pick: DEFAULT_DIAGNOSIS, defaulted: true, confidence: null, candidates: [] };
+  if (candidates.length === 0) return { pick: DEFAULT_DIAGNOSIS, defaulted: true, confidence: null, reason: null, candidates: [] };
 
   const userText = [
     `Clinical context:\n${freeText}`,
@@ -59,6 +62,7 @@ async function pickDiagnosis(freeText) {
     pick: confidentPick ? { diagCode: result.diagCode, diagDesc: result.diagDesc } : DEFAULT_DIAGNOSIS,
     defaulted: !confidentPick,
     confidence: result.confidence,
+    reason: result.reason || null,
     candidates,
   };
 }

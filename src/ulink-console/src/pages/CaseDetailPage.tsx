@@ -10,7 +10,7 @@ import { JobStepsSection } from '../components/cases/JobStepsSection';
 import { EmailThreadSection } from '../components/cases/EmailThreadSection';
 import { JsonViewer } from '../components/panel/JsonViewer';
 import { ChecklistTable } from '../components/panel/ChecklistTable';
-import { ConfidenceSummary } from '../components/panel/ConfidenceSummary';
+import { AssessmentSummaryPanel } from '../components/panel/AssessmentSummaryPanel';
 import { Button } from '../components/common/Button';
 import type { ChecklistItem } from '../types/case';
 
@@ -67,7 +67,7 @@ export function CaseDetailPage() {
   if (isLoading) return <div className="p-6 text-sm text-slate-400">Loading…</div>;
   if (isError || !data) return <div className="p-6 text-sm text-red-500">Couldn't load this case.</div>;
 
-  const { case: caseRecord, events, documents, apiSteps } = data;
+  const { case: caseRecord, events, documents, apiSteps, assessmentSummary } = data;
 
   return (
     <div className="mx-auto h-full w-full max-w-6xl overflow-y-auto px-6 py-6">
@@ -100,7 +100,7 @@ export function CaseDetailPage() {
         </div>
       </div>
 
-      <ConfidenceSummary caseRecord={caseRecord} />
+      <AssessmentSummaryPanel summary={assessmentSummary} />
 
       {caseRecord.source === 'API' && (
         <section className="mb-6 rounded-xl2 border border-slate-900/5 bg-white/80 p-5 shadow-glass backdrop-blur-xl">

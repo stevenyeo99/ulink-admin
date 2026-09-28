@@ -1,5 +1,6 @@
 const { Case, CaseEvent, CaseDocument, ApiCaseStep, EmailThread, EmailMessage, EmailAttachment } = require('../../db/models');
 const { apiCaseView } = require('../../modules/api-pipeline/caseView');
+const { buildAssessmentSummary } = require('../../modules/assessment-summary/summary');
 const { getStorageAdapter } = require('../../storage');
 const { resetOneCase } = require('../dev/casesController');
 const logger = require('../../utils/logger');
@@ -169,15 +170,18 @@ async function getCase(req, res) {
     order: [['barcodeId', 'ASC'], ['originalFilename', 'ASC']],
   });
 
+  // assessmentSummary: the explanation trail (what was decided, why, how sure) — built at read time
+  // from the same case fields the page shows, so it is always current.
   if (caseRecord.source !== 'API') {
-    return res.json({ case: caseRecord, events, documents });
+    return res.json({ case: caseRecord, events, documents, assessmentSummary: buildAssessmentSummary(caseRecord) });
   }
 
   // API cases: their job data lives in ulink_api_case_steps. Fill the same case fields the page
   // reads from each job's latest output, and return every step (input/output/error) for the
   // page's Job Steps section. Email cases take the branch above, unchanged.
   const apiSteps = await ApiCaseStep.findAll({ where: { caseId: caseRecord.id }, order: [['createdAt', 'ASC']] });
-  res.json({ case: { ...caseRecord.toJSON(), ...apiCaseView(apiSteps) }, events, documents, apiSteps });
+  const fields = { ...caseRecord.toJSON(), ...apiCaseView(apiSteps) };
+  res.json({ case: fields, events, documents, apiSteps, assessmentSummary: buildAssessmentSummary(fields) });
 }
 
 /**

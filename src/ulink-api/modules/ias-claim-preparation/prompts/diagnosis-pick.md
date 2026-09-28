@@ -17,5 +17,8 @@ Rules:
 - `confidence`: your own honest 0.0–1.0 estimate that the picked candidate is actually
   correct — not just the least-bad of the set. Prefer a low confidence (or `null`) over
   forcing a pick you don't actually believe in.
+- `reason`: one short sentence in English for a claims reviewer — which words in the
+  clinical context led to this code, or why none of the candidates fit. Quote the evidence;
+  don't restate the code description.
 
 Return ONLY JSON matching the provided schema.

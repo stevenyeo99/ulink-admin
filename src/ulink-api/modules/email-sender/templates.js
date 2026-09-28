@@ -160,14 +160,16 @@ function renderSubmissionNotRecognized() {
 // automated work is done, a human now needs to review/approve before the customer is ever
 // told a claim number (which happens outside this system, manually, once approved).
 function renderClaimApprovalReview(payload) {
-  const { claimNo } = payload;
+  const { claimNo, assessment } = payload;
+  // Tasks queued before the assessment existed have none — the email reads as it always did.
+  const assessmentSection = assessment ? `\n\nAI assessment — what the system decided and why:\n\n${assessment}` : '';
   return {
     subject: `${INTERNAL_SUBJECT_PREFIX}Claim ready for review — Claim ${claimNo}`,
     bodyText: `A claim has been created in IAS and is ready for review and approval. The automated document and claim checks are complete.
 
 Claim Number: ${claimNo}
 
-Please review and approve the claim before communicating the claim number to the customer.
+Please review and approve the claim before communicating the claim number to the customer.${assessmentSection}
 
 ${SIGN_OFF}`,
   };

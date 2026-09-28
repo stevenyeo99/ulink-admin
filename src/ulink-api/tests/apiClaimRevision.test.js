@@ -14,7 +14,11 @@ const inputWith = ({ isSuspense, isStp }) => ({
 beforeEach(() => jest.clearAllMocks());
 
 it('receives the prepared payload and runs on API_CLAIM_PAYLOAD_PREPARED', () => {
-  expect(job).toMatchObject({ inputStatus: 'API_CLAIM_PAYLOAD_PREPARED', inputs: ['api-claim-preparation'] });
+  expect(job).toMatchObject({
+    inputStatus: 'API_CLAIM_PAYLOAD_PREPARED',
+    inputs: ['api-claim-preparation'],
+    optionalInputs: ['api-member-verification', 'api-document-checking'],
+  });
 });
 
 it('sends the prepared body as-is and marks a complete claim revised, handing non-STP to JD2', async () => {
@@ -28,6 +32,21 @@ it('sends the prepared body as-is and marks a complete claim revised, handing no
     nextStatus: 'API_CLAIM_REVISED',
     output: { isSuspense: 'N', email: { taskType: 'CLAIM_APPROVAL_REVIEW', audience: 'internal', payload: { caseId: 'case-1', claimNo: '2604050015' } } },
   });
+});
+
+it("puts the AI assessment from the earlier jobs' results into the JD2 email", async () => {
+  reviseClaim.mockResolvedValue({ success: true });
+  const input = {
+    ...inputWith({ isSuspense: 'N', isStp: false }),
+    'api-member-verification': { memberVerifyResult: { outcome: 'MEMBER_VERIFIED', checks: { hard: { dobMatch: true } } } },
+    'api-document-checking': { documentCheckResult: { checklist: [{ code: 'NO_MEDICAL_REPORT', label: 'x', passed: true, confidence: 0.3, note: 'Maybe page 2.' }] } },
+  };
+
+  const { assessment } = (await job.process({ caseRecord, input })).output.email.payload;
+
+  expect(assessment).toContain('Member check: Verified');
+  expect(assessment).toContain('Medical record present: OK');
+  expect(assessment).toContain('Next review points:');
 });
 
 it('sends an STP claim on to the settlement report (no approval email)', async () => {

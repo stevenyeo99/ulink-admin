@@ -24,5 +24,7 @@ Rules:
 - If nothing in the list plausibly fits, return `benefitType: null, benefitHead: null`.
 - `confidence`: your own honest 0.0–1.0 estimate. Prefer a low confidence (or `null`) over
   forcing a pick you don't actually believe in.
+- `reason`: one short sentence in English for a claims reviewer — what on this voucher or
+  in the claim led to this benefit, or why none fit. Quote the evidence.
 
 Return ONLY JSON matching the provided schema.

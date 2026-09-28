@@ -51,6 +51,16 @@ describe('renderClaimApprovalReview (internal-only, SOP §13)', () => {
   });
 });
 
+describe('renderClaimApprovalReview with the AI assessment (17/09 meeting, action 10)', () => {
+  it('adds the assessment under the handover text, and reads as before without one', () => {
+    const withAssessment = render('CLAIM_APPROVAL_REVIEW', { caseId: 'c1', claimNo: 'CL-1', assessment: '1. Member check: Verified' });
+    expect(withAssessment.bodyText).toContain('AI assessment — what the system decided and why:\n\n1. Member check: Verified');
+
+    const without = render('CLAIM_APPROVAL_REVIEW', { caseId: 'c1', claimNo: 'CL-1' });
+    expect(without.bodyText).not.toContain('AI assessment');
+  });
+});
+
 // CLAIM_SUBMIT_ISSUE is internal-only for the same reason as MEMBER_VERIFY_ISSUE — the real
 // IAS rejection reason is what ops needs, not the old generic customer wording.
 describe('renderClaimSubmitIssue (internal-only, SOP §11)', () => {

@@ -55,13 +55,13 @@ describe('getCase', () => {
 
   beforeEach(() => jest.clearAllMocks());
 
-  it('returns an email case exactly as before: same keys, no step lookup', async () => {
+  it('returns an email case as before (plus its assessment summary), no step lookup', async () => {
     const emailCase = { id: 'case-1', source: 'EMAIL', extractedFields: { real: true }, toJSON: jest.fn() };
     Case.findByPk.mockResolvedValue(emailCase);
 
     const body = await call();
 
-    expect(Object.keys(body)).toEqual(['case', 'events', 'documents']);
+    expect(Object.keys(body)).toEqual(['case', 'events', 'documents', 'assessmentSummary']);
     expect(body.case).toBe(emailCase); // the model instance itself, untouched
     expect(ApiCaseStep.findAll).not.toHaveBeenCalled();
   });
@@ -75,5 +75,18 @@ describe('getCase', () => {
 
     expect(body.case).toMatchObject({ id: 'case-1', source: 'API', recognizedType: 'ayas_member_claim', extractedFields: { v: 1 } });
     expect(body.apiSteps).toBe(steps);
+    expect(body.assessmentSummary).toEqual({ lines: [], reviewPoints: [], needsReview: false });
+  });
+
+  it("builds the API case's assessment summary from its step outputs", async () => {
+    Case.findByPk.mockResolvedValue({ id: 'case-1', source: 'API', toJSON: () => ({ id: 'case-1', source: 'API' }) });
+    ApiCaseStep.findAll.mockResolvedValue([
+      step('api-member-verification', { memberVerifyResult: { outcome: 'MEMBER_REVIEW_REQUIRED', reasonCode: 'BANK_DETAILS_MISMATCH', reason: 'x' } }, '2026-09-24T01:00Z'),
+    ]);
+
+    const body = await call();
+
+    expect(body.assessmentSummary.lines[0]).toMatchObject({ decision: 'Member check', result: 'BANK_DETAILS_MISMATCH' });
+    expect(body.assessmentSummary.needsReview).toBe(true);
   });
 });

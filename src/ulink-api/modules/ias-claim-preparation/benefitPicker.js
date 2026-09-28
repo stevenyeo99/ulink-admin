@@ -7,11 +7,13 @@ const SYSTEM_PROMPT = fs.readFileSync(path.join(__dirname, 'prompts', 'benefit-p
 
 const SCHEMA = {
   type: 'object',
-  required: ['benefitType', 'benefitHead', 'confidence'],
+  required: ['benefitType', 'benefitHead', 'confidence', 'reason'],
   properties: {
     benefitType: { type: ['string', 'null'] },
     benefitHead: { type: ['string', 'null'] },
     confidence: { type: 'number' },
+    // Why this benefit (or none) — explanation only, same as diagnosisPicker's reason.
+    reason: { type: ['string', 'null'] },
   },
 };
 
@@ -33,7 +35,7 @@ async function pickBenefit(
   memberPlansRaw
 ) {
   const candidates = uniqueBenefitCandidates(memberPlansRaw);
-  if (candidates.length === 0) return { pick: null, confidence: null, candidates: [] };
+  if (candidates.length === 0) return { pick: null, confidence: null, reason: null, candidates: [] };
 
   const userText = [
     `Voucher type (this specific line, strongest signal if not null/other): ${voucherType || 'null'}`,
@@ -52,7 +54,7 @@ async function pickBenefit(
       ? { benefitType: result.benefitType, benefitHead: result.benefitHead }
       : null;
 
-  return { pick, confidence: result.confidence, candidates };
+  return { pick, confidence: result.confidence, reason: result.reason || null, candidates };
 }
 
 module.exports = { pickBenefit };

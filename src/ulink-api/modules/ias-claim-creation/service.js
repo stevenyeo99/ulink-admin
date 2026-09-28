@@ -2,6 +2,7 @@ const { sequelize, Case, CaseEvent } = require('../../db/models');
 const config = require('../../config');
 const { submitClaim } = require('./iasClaimClient');
 const { queueDedupedTask } = require('../shared/emailTaskQueue');
+const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment-summary/summary');
 
 const BLOCK_NAME = 'ias-claim-creation';
 
@@ -36,12 +37,14 @@ async function checkCase(caseRecord) {
 // manual step for ops once they've reviewed/approved, not automatic. This email is the
 // SOP §13 "ready for JD2 handover" signal, fired at exactly the point JD1's automated work
 // ends.
-async function queueClaimApprovalReviewEmail(transaction, caseId, claimNo) {
+// The AI assessment goes with it (17/09 meeting, action 10): JD2 sees what was decided and why before
+// approving, and the task payload keeps that text as the case's audit snapshot.
+async function queueClaimApprovalReviewEmail(transaction, caseRecord, claimNo) {
   await queueDedupedTask(transaction, {
-    caseId,
+    caseId: caseRecord.id,
     taskType: 'CLAIM_APPROVAL_REVIEW',
     dedupeKey: null,
-    payload: { caseId, claimNo },
+    payload: { caseId: caseRecord.id, claimNo, assessment: assessmentSummaryText(buildAssessmentSummary(caseRecord)) },
   });
 }
 
@@ -81,7 +84,7 @@ async function persistOutcome(caseRecord, outcome) {
       // claims need an internal review/approval notification. Null preserves the safe
       // non-STP behavior for older cases created before isStp was populated.
       if (caseRecord.isStp !== true) {
-        await queueClaimApprovalReviewEmail(transaction, caseRecord.id, claimNo);
+        await queueClaimApprovalReviewEmail(transaction, caseRecord, claimNo);
       }
     } else {
       // A real business rejection from IAS (e.g. "Claim already exists"), not a technical

@@ -1,10 +1,12 @@
 const config = require('../../config');
 const { runApiJob } = require('../api-pipeline/runApiJob');
 const { reviseClaim } = require('./iasClient');
+const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment-summary/summary');
 
 // api-claim-revision: API case workflow job (docs/imp/day1/api-case-workflow.md section 6.7).
 //
-//   input:  { 'api-claim-preparation': { payload, documentsComplete, isStp } }
+//   input:  { 'api-claim-preparation': { payload, documentsComplete, isStp, claimPrepMeta },
+//             'api-member-verification', 'api-document-checking' }   (their results go into the JD2 email's assessment)
 //   output: { response, isSuspense, isStp, email }
 //
 // Sends the prepared revision body to IAS (POST /api/claim_revision). Always a revision, never a
@@ -18,6 +20,17 @@ const { reviseClaim } = require('./iasClient');
 // - success: false                   → API_CLAIM_REVISION_FAILED, not retried (internal CLAIM_SUBMIT_ISSUE email)
 // - network error / timeout / non-2xx → thrown: FAILED step, retried next run
 // Revising the same claimNo again is safe (confirmed 2026-09-24).
+
+// Same case fields the email flow keeps on ulink_cases, taken from this case's earlier job outputs.
+function assessmentFor(input) {
+  const prepared = input['api-claim-preparation'];
+  return assessmentSummaryText(buildAssessmentSummary({
+    memberVerifyResult: input['api-member-verification']?.memberVerifyResult,
+    documentCheckResult: input['api-document-checking']?.documentCheckResult,
+    claimPrepMeta: prepared.claimPrepMeta,
+    isStp: prepared.isStp,
+  }));
+}
 
 async function processCase({ caseRecord, input }) {
   const prepared = input['api-claim-preparation'];
@@ -45,9 +58,10 @@ async function processCase({ caseRecord, input }) {
       response,
       isSuspense: payload.isSuspense,
       isStp: prepared.isStp,
-      // Same as the email flow: a non-STP claim that's through is handed to JD2 for approval.
+      // Same as the email flow: a non-STP claim that's through is handed to JD2 for approval, with the
+      // AI assessment (17/09 meeting, action 10) — kept in this output as the case's audit snapshot.
       email: !suspended && !prepared.isStp
-        ? { taskType: 'CLAIM_APPROVAL_REVIEW', audience: 'internal', payload: { caseId: caseRecord.id, claimNo }, dedupeKey: null }
+        ? { taskType: 'CLAIM_APPROVAL_REVIEW', audience: 'internal', payload: { caseId: caseRecord.id, claimNo, assessment: assessmentFor(input) }, dedupeKey: null }
         : null,
     },
     nextStatus: suspended ? 'API_CLAIM_SUSPENDED' : (prepared.isStp ? 'API_AWAITING_CSR' : 'API_CLAIM_REVISED'),
@@ -61,6 +75,7 @@ const job = {
   name: 'api-claim-revision',
   inputStatus: 'API_CLAIM_PAYLOAD_PREPARED',
   inputs: ['api-claim-preparation'],
+  optionalInputs: ['api-member-verification', 'api-document-checking'],
   // One real IAS write per case — same modest batch as claim creation.
   batchLimit: config.iasClaimCreation.batchLimit,
   process: processCase,

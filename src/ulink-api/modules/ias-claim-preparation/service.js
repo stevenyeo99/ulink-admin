@@ -3,7 +3,7 @@ const config = require('../../config');
 const { pickDiagnosis } = require('./diagnosisPicker');
 const { pickBenefit } = require('./benefitPicker');
 const { buildPayload } = require('./payloadBuilder');
-const { isStp } = require('./stpEligibility');
+const { stpDecision } = require('./stpEligibility');
 
 const BLOCK_NAME = 'ias-claim-preparation';
 
@@ -69,7 +69,8 @@ async function checkCase(caseRecord) {
   // no multi-currency support anywhere in this system yet, so this is the only currency an
   // STP limit could ever be checked against today.
   const presentedAmt = lines.reduce((sum, line) => sum + (line.subtotal ?? 0), 0);
-  const stp = await isStp({ routeKey: caseRecord.recognizedType, currency: 'MMK', presentedAmt });
+  const stpResult = await stpDecision({ routeKey: caseRecord.recognizedType, currency: 'MMK', presentedAmt });
+  const stp = stpResult.isStp;
 
   const payload = buildPayload({
     extractedFields,
@@ -89,6 +90,7 @@ async function checkCase(caseRecord) {
   const claimPrepMeta = {
     diagnosis: { text: diagnosisText || null, ...diagnosisPick },
     lines: lineMeta,
+    stp: { total: stpResult.total, limit: stpResult.limit, currency: stpResult.currency },
   };
 
   return { caseId: caseRecord.id, payload, diagnosis: diagnosisPick.pick, lines, isStp: stp, claimPrepMeta };
