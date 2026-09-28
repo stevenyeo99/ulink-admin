@@ -145,7 +145,7 @@ users get access.
 | [x] | 3 | Review Queue (built 2026-09-28): needs-review statuses, IAS rejections, and open cases with an assessment point for the team; grouped by most serious reason, oldest first (`modules/review-queue/queue.js`, `GET /api/cases/review-queue`, `/review`); sidebar count moved here | Read-only | — |
 | ~~[ ]~~ | 4 | ~~Module pages~~ — **dropped 2026-09-28**: steps are the orchestrator's view, not how people work (CSR/Ops use the Review queue, JD2 Approvals, managers the Overview). Step visibility stays in Overview's "Cases by step" table and the Cases "Step" filter / column | — | — |
 | [x] | 5 | Case page (built 2026-09-28): reviewer view (status in words + description, AI assessment, documents, emails, plain history) + "Technical details" toggle (checklists, raw data, job steps, codes); reset / override moved to Admin actions, hidden when built with `VITE_ADMIN_TOOLS=false` | UI only | — |
-| [ ] | 6 | Approvals (JD2) | Read-only | — |
+| [x] | 6 | Approvals (built 2026-09-28): non-STP claims waiting for JD2 in IAS (email `CLAIM_CREATED` non-STP, API `API_CLAIM_REVISED`), oldest first, with the AI review points (`GET /api/cases/approvals`, `/approvals`). The system can't see JD2's approval in IAS yet — claims stay listed until a status check or an "Approved" action (step 8) exists | Read-only | — |
 | [ ] | 7 | Login + roles | Access | Decisions 1, 2 |
 | [ ] | 8 | Reviewer actions + audit log | Write | SUMMARY_REQUIREMENT decisions 2, 3 |
 | [ ] | 9 | Settings: STP rules | Write | Decision 4 |

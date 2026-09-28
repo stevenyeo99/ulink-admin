@@ -56,6 +56,58 @@ const CASE_SOURCES = ['EMAIL', 'API'];
 // ?sort= values the list accepts → model attribute.
 const SORTABLE = { updatedAt: 'updatedAt', createdAt: 'createdAt', claimNo: 'claimNo', status: 'currentStatus' };
 
+// The case fields the assessment reads, for a batch of cases: email cases have them on the row; API
+// cases keep them in their job steps, fetched in one query. Returns (caseRecord) => fields.
+async function assessmentFieldsLoader(cases) {
+  const apiIds = cases.filter((c) => c.source === 'API').map((c) => c.id);
+  const steps = apiIds.length ? await ApiCaseStep.findAll({ where: { caseId: apiIds } }) : [];
+  const stepsByCase = new Map();
+  for (const step of steps) stepsByCase.set(step.caseId, [...(stepsByCase.get(step.caseId) || []), step]);
+  return (c) => (c.source === 'API' ? apiCaseView(stepsByCase.get(c.id) || []) : c);
+}
+
+const listRow = (c) => ({
+  id: c.id,
+  source: c.source,
+  currentStatus: c.currentStatus,
+  claimNo: c.claimNo,
+  tpaCaseNumber: c.tpaCaseNumber,
+  recognizedType: c.recognizedType,
+  createdAt: c.createdAt,
+  updatedAt: c.updatedAt,
+});
+
+/**
+ * GET /api/cases/approvals — non-STP claims waiting for JD2 to approve in IAS, oldest first, each with
+ * its AI assessment's review points (what JD2 should look at before approving). Email cases: created
+ * in IAS and not STP; API cases: revised in IAS with documents complete (API STP goes on to the CSR
+ * instead). The system can't see JD2's approval in IAS, so a case stays here until something moves it.
+ */
+async function getApprovals(req, res) {
+  const source = req.query.source ? String(req.query.source).toUpperCase() : null;
+  if (source && !CASE_SOURCES.includes(source)) {
+    return res.status(400).json({ error: { message: `Unknown source filter: ${req.query.source}. Must be one of: ${CASE_SOURCES.join(', ')}`, status: 400 } });
+  }
+  const cases = await Case.findAll({
+    where: {
+      [Op.or]: [
+        { currentStatus: 'CLAIM_CREATED', isStp: { [Op.not]: true } },
+        { currentStatus: 'API_CLAIM_REVISED' },
+      ],
+      ...(source ? { source } : {}),
+    },
+    order: [['updatedAt', 'ASC']],
+    limit: QUEUE_SCAN_LIMIT,
+  });
+  const fieldsOf = await assessmentFieldsLoader(cases);
+  const items = cases.map((c) => {
+    const { reviewPoints } = buildAssessmentSummary(fieldsOf(c));
+    const points = reviewPoints.filter((p) => p.reason !== 'STP with open review points');
+    return { ...listRow(c), reviewPoints: points.map((p) => `${p.decision}: ${p.check}`) };
+  });
+  res.json({ items, total: items.length });
+}
+
 // Statuses a queued case can be at: every open one, plus the IAS rejections (queue.js decides).
 const QUEUE_CANDIDATE_STATUSES = [
   ...codesInGroup('in_progress'), ...codesInGroup('waiting_customer'), ...codesInGroup('needs_review'),
@@ -80,28 +132,12 @@ async function getReviewQueue(req, res) {
     limit: QUEUE_SCAN_LIMIT,
   });
 
-  // API cases keep their results in their job steps — one query for all of them.
-  const apiIds = cases.filter((c) => c.source === 'API').map((c) => c.id);
-  const steps = apiIds.length ? await ApiCaseStep.findAll({ where: { caseId: apiIds } }) : [];
-  const stepsByCase = new Map();
-  for (const step of steps) stepsByCase.set(step.caseId, [...(stepsByCase.get(step.caseId) || []), step]);
-
+  const fieldsOf = await assessmentFieldsLoader(cases);
   const items = [];
   for (const c of cases) {
-    const fields = c.source === 'API' ? apiCaseView(stepsByCase.get(c.id) || []) : c;
-    const entry = queueEntry(c.currentStatus, fields);
+    const entry = queueEntry(c.currentStatus, fieldsOf(c));
     if (!entry) continue;
-    items.push({
-      id: c.id,
-      source: c.source,
-      currentStatus: c.currentStatus,
-      claimNo: c.claimNo,
-      tpaCaseNumber: c.tpaCaseNumber,
-      recognizedType: c.recognizedType,
-      createdAt: c.createdAt,
-      updatedAt: c.updatedAt,
-      ...entry,
-    });
+    items.push({ ...listRow(c), ...entry });
   }
   const counts = Object.fromEntries(REASON_ORDER.map((r) => [r, items.filter((i) => i.reason === r).length]));
   res.json({ items, counts, total: items.length });
@@ -420,4 +456,4 @@ async function resetCase(req, res) {
   }
 }
 
-module.exports = { getCaseStatuses, getOverview, getReviewQueue, listCases, getCase, getAttachment, getDocument, overrideCase, resetCase, OVERRIDE_TARGETS, REVIEWABLE_STATUSES };
+module.exports = { getCaseStatuses, getOverview, getReviewQueue, getApprovals, listCases, getCase, getAttachment, getDocument, overrideCase, resetCase, OVERRIDE_TARGETS, REVIEWABLE_STATUSES };

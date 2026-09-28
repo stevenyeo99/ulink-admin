@@ -1,5 +1,5 @@
 const express = require('express');
-const { getCaseStatuses, getOverview, getReviewQueue, listCases, getCase, getAttachment, getDocument, overrideCase, resetCase } = require('../controllers/cases/casesController');
+const { getCaseStatuses, getOverview, getReviewQueue, getApprovals, listCases, getCase, getAttachment, getDocument, overrideCase, resetCase } = require('../controllers/cases/casesController');
 
 const router = express.Router();
 
@@ -105,6 +105,22 @@ router.get('/overview', getOverview);
  *         description: "{ items: [{ id, source, currentStatus, claimNo, tpaCaseNumber, reason, check, reasons, pointCount, … }], counts: { reason: n }, total }"
  */
 router.get('/review-queue', getReviewQueue);
+
+/**
+ * @openapi
+ * /api/cases/approvals:
+ *   get:
+ *     tags: [cases]
+ *     summary: Approvals — non-STP claims waiting for JD2 in IAS, oldest first, with the AI's review points
+ *     parameters:
+ *       - name: source
+ *         in: query
+ *         schema: { type: string, enum: [EMAIL, API] }
+ *     responses:
+ *       200:
+ *         description: "{ items: [{ id, source, currentStatus, claimNo, tpaCaseNumber, updatedAt, reviewPoints: [string] }], total }"
+ */
+router.get('/approvals', getApprovals);
 
 /**
  * @openapi

@@ -266,3 +266,22 @@ export interface ReviewQueueResponse {
   counts: Record<string, number>;
   total: number;
 }
+
+// GET /api/cases/approvals — non-STP claims waiting for JD2 to approve in IAS.
+export interface ApprovalItem {
+  id: string;
+  source: Source;
+  currentStatus: string;
+  claimNo: string | null;
+  tpaCaseNumber: string | null;
+  recognizedType: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /** "Decision: what to check" — the AI's review points for this claim. */
+  reviewPoints: string[];
+}
+
+export interface ApprovalsResponse {
+  items: ApprovalItem[];
+  total: number;
+}

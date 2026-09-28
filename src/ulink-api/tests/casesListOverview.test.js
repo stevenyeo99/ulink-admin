@@ -4,13 +4,14 @@
 jest.mock('../db/models', () => {
   return {
     Case: { findAndCountAll: jest.fn(async () => ({ rows: [], count: 0 })), findAll: jest.fn(), count: jest.fn() },
-    CaseEvent: {}, CaseDocument: {}, ApiCaseStep: {}, EmailThread: {}, EmailMessage: {}, EmailAttachment: {},
+    ApiCaseStep: { findAll: jest.fn(async () => []) },
+    CaseEvent: {}, CaseDocument: {}, EmailThread: {}, EmailMessage: {}, EmailAttachment: {},
   };
 });
 
 const { Op } = require('sequelize');
 const { Case } = require('../db/models');
-const { listCases, getOverview } = require('../controllers/cases/casesController');
+const { listCases, getOverview, getApprovals } = require('../controllers/cases/casesController');
 
 const call = async (handler, query) => {
   const res = { status: jest.fn(() => res), json: jest.fn() };
@@ -61,4 +62,24 @@ it('counts cases per group and per module × group, and new today', async () => 
   expect(body.modules.documents.waiting_customer).toBe(3);
   expect(body.modules.claim.waiting_customer).toBe(2);
   expect(body.modules.stp.done).toBe(4);
+});
+
+it('lists non-STP claims waiting for JD2, with the review points JD2 should look at', async () => {
+  Case.findAll.mockResolvedValue([
+    {
+      id: 'c1', source: 'EMAIL', currentStatus: 'CLAIM_CREATED', claimNo: '26', isStp: false,
+      claimPrepMeta: { diagnosis: { pick: { diagCode: 'R69' }, defaulted: true, confidence: 0 } },
+    },
+  ]);
+
+  const { body } = await call(getApprovals, {});
+
+  const { where } = Case.findAll.mock.calls.at(-1)[0];
+  expect(where[Op.or]).toEqual([
+    { currentStatus: 'CLAIM_CREATED', isStp: { [Op.not]: true } },
+    { currentStatus: 'API_CLAIM_REVISED' },
+  ]);
+  expect(body.total).toBe(1);
+  expect(body.items[0]).toMatchObject({ id: 'c1', claimNo: '26' });
+  expect(body.items[0].reviewPoints).toEqual(["Diagnosis code: Check the AI's result against the documents."]);
 });

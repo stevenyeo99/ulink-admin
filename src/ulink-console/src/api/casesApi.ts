@@ -1,5 +1,5 @@
 import { API_BASE_URL, request } from './client';
-import type { CaseListQuery, CaseOverview, ReviewQueueResponse, CaseStatusCatalog, GetCaseResponse, ListCasesResponse, OverrideCaseResponse, ResetCaseResponse } from '../types/case';
+import type { ApprovalsResponse, CaseListQuery, CaseOverview, ReviewQueueResponse, CaseStatusCatalog, GetCaseResponse, ListCasesResponse, OverrideCaseResponse, ResetCaseResponse } from '../types/case';
 import type { Source } from '../types/pipeline';
 
 export function listCases(query: CaseListQuery = {}): Promise<ListCasesResponse> {
@@ -13,6 +13,10 @@ export function listCases(query: CaseListQuery = {}): Promise<ListCasesResponse>
 
 export function getReviewQueue(source?: Source): Promise<ReviewQueueResponse> {
   return request<ReviewQueueResponse>(`/api/cases/review-queue${source ? `?source=${source}` : ''}`);
+}
+
+export function getApprovals(source?: Source): Promise<ApprovalsResponse> {
+  return request<ApprovalsResponse>(`/api/cases/approvals${source ? `?source=${source}` : ''}`);
 }
 
 export function getCaseOverview(source?: Source): Promise<CaseOverview> {

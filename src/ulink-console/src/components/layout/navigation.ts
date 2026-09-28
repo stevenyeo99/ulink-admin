@@ -1,4 +1,4 @@
-import { ClipboardCheck, FolderOpen, LayoutDashboard, Workflow, type LucideIcon } from 'lucide-react';
+import { ClipboardCheck, FolderOpen, LayoutDashboard, Stamp, Workflow, type LucideIcon } from 'lucide-react';
 
 export interface NavItem {
   to: string;
@@ -17,6 +17,7 @@ export const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     title: 'Work',
     items: [
       { to: '/review', label: 'Review queue', icon: ClipboardCheck, showReviewCount: true },
+      { to: '/approvals', label: 'Approvals', icon: Stamp },
       { to: '/cases', label: 'Cases', icon: FolderOpen },
     ],
   },

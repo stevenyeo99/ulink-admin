@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { getCaseOverview, getReviewQueue, listCases } from '../api/casesApi';
+import { getApprovals, getCaseOverview, getReviewQueue, listCases } from '../api/casesApi';
 import type { CaseListQuery } from '../types/case';
 import type { Source } from '../types/pipeline';
 
@@ -26,4 +26,9 @@ export function useCaseOverview(source?: Source) {
 /** The Review Queue; without a source, both workflows (the sidebar count). */
 export function useReviewQueue(source?: Source) {
   return useQuery({ queryKey: ['review-queue', source ?? 'all'], queryFn: () => getReviewQueue(source), staleTime: 30_000 });
+}
+
+/** Claims waiting for JD2 approval in IAS. */
+export function useApprovals(source?: Source) {
+  return useQuery({ queryKey: ['approvals', source ?? 'all'], queryFn: () => getApprovals(source) });
 }

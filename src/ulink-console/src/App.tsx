@@ -8,6 +8,7 @@ import { CasesPage } from './pages/CasesPage';
 import { CaseDetailPage } from './pages/CaseDetailPage';
 import { OverviewPage } from './pages/OverviewPage';
 import { ReviewQueuePage } from './pages/ReviewQueuePage';
+import { ApprovalsPage } from './pages/ApprovalsPage';
 import { useReviewQueue } from './hooks/useCases';
 
 export function App() {
@@ -32,6 +33,7 @@ export function App() {
             <Route path="/overview" element={<OverviewPage />} />
             <Route path="/pipeline" element={<PipelinePage />} />
             <Route path="/review" element={<ReviewQueuePage />} />
+            <Route path="/approvals" element={<ApprovalsPage />} />
             <Route path="/cases" element={<CasesPage />} />
             <Route path="/cases/:id" element={<CaseDetailPage />} />
           </Routes>
