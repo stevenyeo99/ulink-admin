@@ -1,20 +1,19 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import * as AlertDialog from '@radix-ui/react-alert-dialog';
-import { ArrowLeft, Clock } from 'lucide-react';
-import { getCase, overrideCase, resetCase } from '../api/casesApi';
+import { useQuery } from '@tanstack/react-query';
+import { ArrowLeft, ChevronDown, Clock } from 'lucide-react';
+import clsx from 'clsx';
+import { getCase } from '../api/casesApi';
 import { CaseStatusPill } from '../components/cases/CaseStatusPill';
 import { CaseDocumentsSection } from '../components/cases/CaseDocumentsSection';
 import { JobStepsSection } from '../components/cases/JobStepsSection';
 import { EmailThreadSection } from '../components/cases/EmailThreadSection';
+import { CaseAdminActions, ADMIN_TOOLS_ENABLED } from '../components/cases/CaseAdminActions';
 import { JsonViewer } from '../components/panel/JsonViewer';
 import { ChecklistTable } from '../components/panel/ChecklistTable';
 import { AssessmentSummaryPanel } from '../components/panel/AssessmentSummaryPanel';
-import { Button } from '../components/common/Button';
+import { useCaseStatuses } from '../hooks/useCaseStatuses';
 import type { ChecklistItem } from '../types/case';
-
-const REVIEWABLE_STATUSES = ['INCOMPLETE', 'MEMBER_REVIEW_REQUIRED'];
 
 // Labels for member-verification's checks.hard object (modules/member-verification/checks.js)
 // — that module is deliberately pure/no-I/O, so display wording belongs here, not there.
@@ -31,14 +30,26 @@ function formatTimestamp(iso: string): string {
   return new Date(iso).toLocaleString();
 }
 
+function Section({ title, children, className }: { title: string; children: ReactNode; className?: string }) {
+  return (
+    <section className={clsx('mb-6 rounded-xl2 border border-slate-900/5 bg-white/80 p-5 shadow-glass backdrop-blur-xl', className)}>
+      <h2 className="mb-3 text-sm font-semibold text-slate-800">{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+/**
+ * One case (docs/imp/demo/API DAY1/PREV_FEEDBACK/CONSOLE_DASHBOARD_DESIGN.md, step 5). The reviewer view comes
+ * first — what the AI decided and why (the assessment already covers every check), the documents, the
+ * emails and the history in plain words. The raw checklists, data, job steps and admin actions sit
+ * behind "Technical details".
+ */
 export function CaseDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const [operatorName, setOperatorName] = useState('');
-  const [reason, setReason] = useState('');
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const { info } = useCaseStatuses();
+  const [showTechnical, setShowTechnical] = useState(false);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['case', id],
@@ -46,280 +57,159 @@ export function CaseDetailPage() {
     enabled: !!id,
   });
 
-  const overrideMutation = useMutation({
-    mutationFn: () => overrideCase(id as string, reason.trim(), operatorName.trim()),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['cases'] });
-      navigate('/cases');
-    },
-  });
-
-  const canSubmit = operatorName.trim() !== '' && reason.trim() !== '' && !overrideMutation.isPending;
-
-  const resetMutation = useMutation({
-    mutationFn: () => resetCase(id as string),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['cases'] });
-      navigate('/cases');
-    },
-  });
-
   if (isLoading) return <div className="p-6 text-sm text-slate-400">Loading…</div>;
-  if (isError || !data) return <div className="p-6 text-sm text-red-500">Couldn't load this case.</div>;
+  if (isError || !data) return <div className="p-6 text-sm text-red-600">Couldn't load this case. It may have been removed.</div>;
 
   const { case: caseRecord, events, documents, apiSteps, assessmentSummary } = data;
+  const isApi = caseRecord.source === 'API';
+  const statusLabel = (code: string | null) => (code ? info(code).label : '—');
 
   return (
-    <div className="mx-auto h-full w-full max-w-6xl overflow-y-auto px-6 py-6">
+    <div className="mx-auto h-full w-full max-w-6xl overflow-y-auto px-4 py-6 sm:px-6">
       <button
-        onClick={() => navigate(caseRecord.source === 'API' ? '/cases?source=api' : '/cases')}
-        className="mb-4 inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800"
+        onClick={() => navigate(-1)}
+        className="mb-4 inline-flex items-center gap-1.5 rounded text-sm text-slate-500 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ulink-teal/60"
       >
         <ArrowLeft size={14} />
-        Back to Cases
+        Back
       </button>
 
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <p className="font-mono text-xs text-slate-400">{caseRecord.id}</p>
-          <div className="mt-1 flex items-center gap-2">
-            <CaseStatusPill status={caseRecord.currentStatus} />
-            {caseRecord.source === 'API' ? (
-              <span className="text-sm text-slate-600">
-                API case{caseRecord.tpaCaseNumber ? ` · ${caseRecord.tpaCaseNumber}` : ''}
-              </span>
-            ) : (
-              <span className="text-sm text-slate-600">{caseRecord.recognizedType ?? 'Unrecognized route'}</span>
-            )}
-            {caseRecord.claimNo && (
-              <span className="rounded-full bg-ulink-teal/15 px-2.5 py-1 text-xs font-semibold text-ulink-teal-dark">
-                Claim {caseRecord.claimNo}
-              </span>
-            )}
-          </div>
+      <header className="mb-6">
+        <div className="flex flex-wrap items-center gap-2">
+          <CaseStatusPill status={caseRecord.currentStatus} />
+          {caseRecord.claimNo && (
+            <span className="rounded-full bg-ulink-teal/15 px-2.5 py-1 text-xs font-semibold text-ulink-teal-dark">Claim {caseRecord.claimNo}</span>
+          )}
+          {caseRecord.tpaCaseNumber && <span className="text-sm text-slate-700">{caseRecord.tpaCaseNumber}</span>}
         </div>
-      </div>
+        <p className="mt-2 text-sm text-slate-500">
+          {isApi ? 'API case' : `Email case${caseRecord.recognizedType ? `, ${caseRecord.recognizedType}` : ''}`}. Received{' '}
+          {formatTimestamp(caseRecord.createdAt)}, last updated {formatTimestamp(caseRecord.updatedAt)}.
+        </p>
+        <p className="mt-1 text-sm text-slate-600">{info(caseRecord.currentStatus).description}</p>
+      </header>
 
       <AssessmentSummaryPanel summary={assessmentSummary} />
 
-      {caseRecord.source === 'API' && (
-        <section className="mb-6 rounded-xl2 border border-slate-900/5 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Console Documents</h2>
+      {isApi && (
+        <Section title="Documents">
           <CaseDocumentsSection caseId={caseRecord.id} documents={documents} />
-        </section>
+        </Section>
       )}
 
-      {caseRecord.source === 'API' && (
-        <section className="mb-6 rounded-xl2 border border-slate-900/5 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Job Steps</h2>
-          <JobStepsSection steps={apiSteps ?? []} />
-        </section>
-      )}
-
-      <section className="mb-6 rounded-xl2 border border-slate-900/5 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Email Thread</h2>
+      <Section title="Emails">
         <EmailThreadSection caseId={caseRecord.id} threads={caseRecord.EmailThreads} />
-      </section>
+      </Section>
 
-      <section className="mb-6 rounded-xl2 border border-slate-900/5 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Extracted Fields</h2>
-        <JsonViewer value={caseRecord.extractedFields} />
-      </section>
-
-      <section className="mb-6 rounded-xl2 border border-slate-900/5 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Member Verify Result</h2>
-        {caseRecord.memberVerifyResult?.checks ? (
-          <>
-            <ChecklistTable
-              items={Object.entries(caseRecord.memberVerifyResult.checks.hard).map(
-                ([code, passed]): ChecklistItem => ({ code, label: HARD_CHECK_LABELS[code] ?? code, passed })
-              )}
-            />
-            {caseRecord.memberVerifyResult.reason && (
-              <p className="mt-3 text-xs text-slate-500">{caseRecord.memberVerifyResult.reason}</p>
-            )}
-          </>
-        ) : (
-          <p className="text-sm italic text-slate-400">Not checked yet</p>
-        )}
-        <details className="mt-3">
-          <summary className="cursor-pointer text-xs text-slate-400">Raw result</summary>
-          <JsonViewer value={caseRecord.memberVerifyResult} />
-        </details>
-      </section>
-
-      <section className="mb-6 rounded-xl2 border border-slate-900/5 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Document Check Result</h2>
-        {caseRecord.documentCheckResult?.checklist ? (
-          <ChecklistTable
-            items={caseRecord.documentCheckResult.checklist}
-            reasonByCode={Object.fromEntries(
-              (caseRecord.documentCheckResult.details ?? [])
-                .filter((detail) => detail.code && detail.reason)
-                .map((detail) => [detail.code as string, detail.reason as string])
-            )}
-          />
-        ) : (
-          <p className="text-sm italic text-slate-400">Not checked yet</p>
-        )}
-        <details className="mt-3">
-          <summary className="cursor-pointer text-xs text-slate-400">Raw result</summary>
-          <JsonViewer value={caseRecord.documentCheckResult} />
-        </details>
-      </section>
-
-      <section className="mb-6 rounded-xl2 border border-slate-900/5 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">IAS Member Info</h2>
-        <JsonViewer value={caseRecord.iasMemberInfoResponse} />
-      </section>
-
-      <section className="mb-6 rounded-xl2 border border-slate-900/5 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">IAS Claim Payload</h2>
-        <JsonViewer value={caseRecord.iasClaimPayload} />
-      </section>
-
-      <section className="mb-6 rounded-xl2 border border-slate-900/5 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
-          Diagnosis / Benefit Pick Reasoning
-        </h2>
-        <p className="mb-3 text-xs text-slate-500">
-          Confidence and candidates considered for the DiagnosisCode/BenefitType/BenefitHead above — internal only,
-          not part of the IAS submission.
-        </p>
-        <JsonViewer value={caseRecord.claimPrepMeta} />
-      </section>
-
-      <section className="mb-6 rounded-xl2 border border-slate-900/5 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">IAS Claim Result</h2>
-        <JsonViewer value={caseRecord.iasClaimResult} />
-      </section>
-
-      <section className="mb-6 rounded-xl2 border border-slate-900/5 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Case Timeline</h2>
-        {events.length === 0 && <p className="text-sm italic text-slate-400">No events yet</p>}
+      <Section title="Case history">
+        {events.length === 0 && <p className="text-sm text-slate-500">Nothing has happened to this case yet.</p>}
         <ol className="space-y-3">
           {events.map((event) => (
-            <li key={event.id} className="flex gap-3 text-xs">
-              <Clock size={13} className="mt-0.5 shrink-0 text-slate-300" />
+            <li key={event.id} className="flex gap-3 text-sm">
+              <Clock size={14} className="mt-0.5 shrink-0 text-slate-300" />
               <div>
                 <p className="text-slate-700">
-                  <span className="font-medium">{event.blockName}</span>: {event.prevStatus ?? '—'} → {event.newStatus}
-                  {event.reasonCode && <span className="text-slate-400"> ({event.reasonCode})</span>}
+                  {event.prevStatus ? `${statusLabel(event.prevStatus)} → ` : ''}
+                  <span className="font-medium">{statusLabel(event.newStatus)}</span>
                 </p>
-                {event.message && <p className="mt-0.5 text-slate-500">{event.message}</p>}
-                <p className="mt-0.5 text-slate-300">{formatTimestamp(event.createdAt)}</p>
+                {event.message && <p className="mt-0.5 text-xs text-slate-500">{event.message}</p>}
+                <p className="mt-0.5 text-xs text-slate-400">{formatTimestamp(event.createdAt)}</p>
               </div>
             </li>
           ))}
         </ol>
-      </section>
+      </Section>
 
-      {caseRecord.claimNo ? (
-        <section className="mb-6 rounded-xl2 border border-slate-900/5 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
-          <h2 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Reset Case</h2>
-          <p className="text-xs text-slate-500">
-            This case already has a real IAS claim number (Claim {caseRecord.claimNo}) — resetting is disabled to
-            avoid losing the only local record of an already-created claim.
-          </p>
-        </section>
-      ) : (
-        <section className="mb-6 rounded-xl2 border border-slate-900/5 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
-          <h2 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Reset Case</h2>
-          <p className="mb-4 text-xs text-slate-500">
-            Rewinds this case back to READY_FOR_DOCUMENT_READING and clears everything the pipeline computed for
-            it, so the next pipeline run reprocesses it from scratch. Logged permanently to this case's audit
-            trail.
-          </p>
+      <button
+        onClick={() => setShowTechnical((open) => !open)}
+        aria-expanded={showTechnical}
+        aria-controls="technical-details"
+        className="mb-4 inline-flex items-center gap-1.5 rounded text-sm font-medium text-slate-600 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ulink-teal/60"
+      >
+        <ChevronDown size={16} className={clsx('motion-safe:transition-transform', showTechnical && 'rotate-180')} />
+        {showTechnical ? 'Hide technical details' : 'Show technical details'}
+      </button>
 
-          <AlertDialog.Root open={resetConfirmOpen} onOpenChange={setResetConfirmOpen}>
-            <AlertDialog.Trigger asChild>
-              <Button variant="ghost">Reset Case</Button>
-            </AlertDialog.Trigger>
-            <AlertDialog.Portal>
-              <AlertDialog.Overlay className="fixed inset-0 z-40 bg-slate-900/30 backdrop-blur-sm" />
-              <AlertDialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-xl2 bg-white p-5 shadow-glass">
-                <AlertDialog.Title className="text-sm font-semibold text-slate-900">Confirm reset</AlertDialog.Title>
-                <AlertDialog.Description className="mt-2 text-xs leading-relaxed text-slate-500">
-                  This clears the recognized route, extracted fields, and every check result this case has, and
-                  sends it back to READY_FOR_DOCUMENT_READING. The next pipeline run will reprocess it as if it
-                  were freshly submitted. This is logged permanently and cannot be automatically undone.
-                </AlertDialog.Description>
-                <div className="mt-4 flex justify-end gap-2">
-                  <AlertDialog.Cancel asChild>
-                    <Button variant="ghost">Cancel</Button>
-                  </AlertDialog.Cancel>
-                  <AlertDialog.Action asChild>
-                    <Button onClick={() => resetMutation.mutate()} disabled={resetMutation.isPending}>
-                      {resetMutation.isPending ? 'Resetting…' : 'Confirm Reset'}
-                    </Button>
-                  </AlertDialog.Action>
-                </div>
-              </AlertDialog.Content>
-            </AlertDialog.Portal>
-          </AlertDialog.Root>
+      {showTechnical && (
+        <div id="technical-details">
+          <Section title="Identifiers">
+            <p className="font-mono text-xs text-slate-600">Case ID {caseRecord.id}</p>
+            <p className="mt-1 font-mono text-xs text-slate-600">Status code {caseRecord.currentStatus}</p>
+          </Section>
+          <Section title="Member check (each IAS comparison)">
+            {caseRecord.memberVerifyResult?.checks ? (
+              <>
+                <ChecklistTable
+                  items={Object.entries(caseRecord.memberVerifyResult.checks.hard).map(
+                    ([code, passed]): ChecklistItem => ({ code, label: HARD_CHECK_LABELS[code] ?? code, passed })
+                  )}
+                />
+                {caseRecord.memberVerifyResult.reason && <p className="mt-3 text-xs text-slate-500">{caseRecord.memberVerifyResult.reason}</p>}
+              </>
+            ) : (
+              <p className="text-sm text-slate-500">Not checked yet.</p>
+            )}
+          </Section>
 
-          {resetMutation.isError && <p className="mt-3 text-xs text-red-500">{(resetMutation.error as Error).message}</p>}
-        </section>
-      )}
-
-      {REVIEWABLE_STATUSES.includes(caseRecord.currentStatus) && (
-      <section className="rounded-xl2 border border-ulink-orange/20 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
-        <h2 className="mb-1 text-xs font-semibold uppercase tracking-wide text-ulink-orange-dark">Manual Override</h2>
-        <p className="mb-4 text-xs text-slate-500">
-          Advances this case past its current check. Requires a written reason — logged permanently to this case's audit trail.
-        </p>
-
-        <label className="mb-3 block">
-          <span className="mb-1 block text-xs font-medium text-slate-600">Your name</span>
-          <input
-            value={operatorName}
-            onChange={(e) => setOperatorName(e.target.value)}
-            placeholder="e.g. Steven"
-            className="w-full rounded-lg border border-slate-900/10 px-3 py-2 text-sm outline-none focus:border-ulink-orange"
-          />
-        </label>
-
-        <label className="mb-4 block">
-          <span className="mb-1 block text-xs font-medium text-slate-600">Reason for override</span>
-          <textarea
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            rows={3}
-            placeholder="e.g. Verified voucher stamp is legitimate via phone call with the provider — extraction misread it."
-            className="w-full rounded-lg border border-slate-900/10 px-3 py-2 text-sm outline-none focus:border-ulink-orange"
-          />
-        </label>
-
-        <AlertDialog.Root open={confirmOpen} onOpenChange={setConfirmOpen}>
-          <AlertDialog.Trigger asChild>
-            <Button disabled={!canSubmit}>Override & Proceed</Button>
-          </AlertDialog.Trigger>
-          <AlertDialog.Portal>
-            <AlertDialog.Overlay className="fixed inset-0 z-40 bg-slate-900/30 backdrop-blur-sm" />
-            <AlertDialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-xl2 bg-white p-5 shadow-glass">
-              <AlertDialog.Title className="text-sm font-semibold text-slate-900">Confirm override</AlertDialog.Title>
-              <AlertDialog.Description className="mt-2 text-xs leading-relaxed text-slate-500">
-                This bypasses this case's {caseRecord.currentStatus === 'INCOMPLETE' ? 'document check' : 'member verification'}{' '}
-                and advances it for further processing. This is logged permanently and cannot be automatically undone.
-              </AlertDialog.Description>
-              <div className="mt-4 flex justify-end gap-2">
-                <AlertDialog.Cancel asChild>
-                  <Button variant="ghost">Cancel</Button>
-                </AlertDialog.Cancel>
-                <AlertDialog.Action asChild>
-                  <Button onClick={() => overrideMutation.mutate()} disabled={overrideMutation.isPending}>
-                    {overrideMutation.isPending ? 'Overriding…' : 'Confirm Override'}
-                  </Button>
-                </AlertDialog.Action>
-              </div>
-            </AlertDialog.Content>
-          </AlertDialog.Portal>
-        </AlertDialog.Root>
-
-        {overrideMutation.isError && (
-          <p className="mt-3 text-xs text-red-500">{(overrideMutation.error as Error).message}</p>
-        )}
-      </section>
+          <Section title="Document checklist (as the checklist words it)">
+            {caseRecord.documentCheckResult?.checklist ? (
+              <ChecklistTable
+                items={caseRecord.documentCheckResult.checklist}
+                reasonByCode={Object.fromEntries(
+                  (caseRecord.documentCheckResult.details ?? [])
+                    .filter((detail) => detail.code && detail.reason)
+                    .map((detail) => [detail.code as string, detail.reason as string])
+                )}
+              />
+            ) : (
+              <p className="text-sm text-slate-500">Not checked yet.</p>
+            )}
+          </Section>
+          {isApi && (
+            <Section title="Job steps">
+              <JobStepsSection steps={apiSteps ?? []} />
+            </Section>
+          )}
+          <Section title="Extracted fields">
+            <JsonViewer value={caseRecord.extractedFields} />
+          </Section>
+          <Section title="Member check result (raw)">
+            <JsonViewer value={caseRecord.memberVerifyResult} />
+          </Section>
+          <Section title="Document check result (raw)">
+            <JsonViewer value={caseRecord.documentCheckResult} />
+          </Section>
+          <Section title="IAS member info">
+            <JsonViewer value={caseRecord.iasMemberInfoResponse} />
+          </Section>
+          <Section title="IAS claim payload">
+            <JsonViewer value={caseRecord.iasClaimPayload} />
+          </Section>
+          <Section title="Diagnosis and benefit pick reasoning">
+            <p className="mb-3 text-xs text-slate-500">
+              Confidence, reasons and the candidates considered for the diagnosis and benefit codes. Internal only, not sent to IAS.
+            </p>
+            <JsonViewer value={caseRecord.claimPrepMeta} />
+          </Section>
+          <Section title="IAS claim result">
+            <JsonViewer value={caseRecord.iasClaimResult} />
+          </Section>
+          <Section title="Case history (codes)">
+            <ol className="space-y-1 font-mono text-xs text-slate-600">
+              {events.map((event) => (
+                <li key={event.id}>
+                  {formatTimestamp(event.createdAt)} {event.blockName}: {event.prevStatus ?? '—'} → {event.newStatus}
+                  {event.reasonCode && ` (${event.reasonCode})`}
+                </li>
+              ))}
+            </ol>
+          </Section>
+          {ADMIN_TOOLS_ENABLED && (
+            <Section title="Admin actions" className="border-ulink-orange/20">
+              <CaseAdminActions caseRecord={caseRecord} />
+            </Section>
+          )}
+        </div>
       )}
     </div>
   );

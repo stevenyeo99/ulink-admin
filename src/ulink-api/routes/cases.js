@@ -1,5 +1,5 @@
 const express = require('express');
-const { listCases, getCase, getAttachment, getDocument, overrideCase, resetCase } = require('../controllers/cases/casesController');
+const { getCaseStatuses, getOverview, getReviewQueue, listCases, getCase, getAttachment, getDocument, overrideCase, resetCase } = require('../controllers/cases/casesController');
 
 const router = express.Router();
 
@@ -23,6 +23,24 @@ const router = express.Router();
  *         in: query
  *         schema: { type: string, enum: [EMAIL, API] }
  *         description: Only email cases or only API cases. Omit for both.
+ *       - name: group
+ *         in: query
+ *         schema: { type: string, enum: [in_progress, waiting_customer, needs_review, done, failed] }
+ *         description: Status group from GET /api/cases/statuses.
+ *       - name: module
+ *         in: query
+ *         schema: { type: string }
+ *         description: Module id from GET /api/cases/statuses (intake, recognition, member, documents, claim, stp).
+ *       - name: q
+ *         in: query
+ *         schema: { type: string }
+ *         description: Search claim no., TPA case number, case id or claimant name.
+ *       - name: sort
+ *         in: query
+ *         schema: { type: string, enum: [updatedAt, createdAt, claimNo, status], default: updatedAt }
+ *       - name: dir
+ *         in: query
+ *         schema: { type: string, enum: [asc, desc], default: desc }
  *       - name: limit
  *         in: query
  *         schema: { type: integer, default: 100, maximum: 200 }
@@ -36,6 +54,57 @@ const router = express.Router();
  *         description: Unknown status filter
  */
 router.get('/', listCases);
+
+/**
+ * @openapi
+ * /api/cases/statuses:
+ *   get:
+ *     tags: [cases]
+ *     summary: Case status catalog — label, description, module and group for every status code
+ *     description: >
+ *       Status codes stay internal; the console shows the label (badge) and description (hover)
+ *       from here, and groups / modules drive its filters and dashboard counts.
+ *     responses:
+ *       200:
+ *         description: "{ statuses: { CODE: { module, group, label, description } }, modules: [...], groups: [...] }"
+ */
+router.get('/statuses', getCaseStatuses);
+
+/**
+ * @openapi
+ * /api/cases/overview:
+ *   get:
+ *     tags: [cases]
+ *     summary: Dashboard numbers — cases per group, per module × group, and new today
+ *     parameters:
+ *       - name: source
+ *         in: query
+ *         schema: { type: string, enum: [EMAIL, API] }
+ *     responses:
+ *       200:
+ *         description: "{ total, newToday, groups: { groupId: n }, modules: { moduleId: { groupId: n } } }"
+ */
+router.get('/overview', getOverview);
+
+/**
+ * @openapi
+ * /api/cases/review-queue:
+ *   get:
+ *     tags: [cases]
+ *     summary: Review Queue — cases a person should look at, oldest first, with reason and what to check
+ *     description: >
+ *       Needs-review statuses, IAS rejections, and open cases whose AI assessment has a point the
+ *       team should check (modules/review-queue/queue.js). Finished cases and cases only waiting on
+ *       the customer's missing documents are not included.
+ *     parameters:
+ *       - name: source
+ *         in: query
+ *         schema: { type: string, enum: [EMAIL, API] }
+ *     responses:
+ *       200:
+ *         description: "{ items: [{ id, source, currentStatus, claimNo, tpaCaseNumber, reason, check, reasons, pointCount, … }], counts: { reason: n }, total }"
+ */
+router.get('/review-queue', getReviewQueue);
 
 /**
  * @openapi

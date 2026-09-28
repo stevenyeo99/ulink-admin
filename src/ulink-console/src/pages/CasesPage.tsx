@@ -1,109 +1,148 @@
-import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { RefreshCw } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { RefreshCw, Search } from 'lucide-react';
 import clsx from 'clsx';
 import { useCases } from '../hooks/useCases';
-import { CaseStatusPill } from '../components/cases/CaseStatusPill';
+import { useCaseStatuses } from '../hooks/useCaseStatuses';
+import { caseColumns } from '../components/cases/caseColumns';
 import { Button } from '../components/common/Button';
 import { SourceTabs } from '../components/common/SourceTabs';
-import { useSource } from '../hooks/useSource';
-import { relativeTime } from '../lib/relativeTime';
-import { bucketOf, STATUS_BUCKET_FILTERS } from '../lib/caseStatusBuckets';
-import type { CaseSummary } from '../types/case';
+import { DataTable, type SortState } from '../components/common/DataTable';
+import type { CaseListQuery, CaseSummary } from '../types/case';
+import type { Source } from '../types/pipeline';
 
-const EMPTY_CASES: CaseSummary[] = [];
+const PAGE_SIZE = 25;
+const EMPTY: CaseSummary[] = [];
 
+/**
+ * Every case, searchable and filterable. The whole view lives in the URL
+ * (?source=api&group=needs_review&module=member&q=…&sort=…&dir=…&page=…), so Overview and other
+ * pages can link straight into a filtered list, and a reload or shared link keeps it.
+ */
 export function CasesPage() {
-  // Email / API tab: the list only ever holds one workflow's cases (GET /api/cases?source=).
-  const [source, setSource] = useSource();
-  const { data, isLoading, isFetching, isError, refetch } = useCases(undefined, source);
   const navigate = useNavigate();
-  const [filter, setFilter] = useState<(typeof STATUS_BUCKET_FILTERS)[number]>('All');
-  const allCases = data?.cases ?? EMPTY_CASES;
+  const [params, setParams] = useSearchParams();
+  const { data: catalog, info } = useCaseStatuses();
 
-  const cases = useMemo(
-    () => (filter === 'All' ? allCases : allCases.filter((c) => bucketOf(c.currentStatus) === filter)),
-    [allCases, filter]
-  );
+  const source: Source = params.get('source')?.toUpperCase() === 'API' ? 'API' : 'EMAIL';
+  const group = params.get('group') ?? '';
+  const moduleId = params.get('module') ?? '';
+  const q = params.get('q') ?? '';
+  const sort: SortState = {
+    key: params.get('sort') ?? 'updatedAt',
+    dir: params.get('dir') === 'asc' ? 'asc' : 'desc',
+  };
+  const page = Math.max(0, Number(params.get('page')) || 0);
+
+  // Changing any filter goes back to the first page; empty values leave the URL.
+  const update = (patch: Record<string, string>, keepPage = false) => {
+    const next = new URLSearchParams(params);
+    for (const [key, value] of Object.entries(patch)) {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    }
+    if (!keepPage) next.delete('page');
+    setParams(next, { replace: true });
+  };
+
+  // Search box: type freely, the list follows a moment after typing stops.
+  const [searchText, setSearchText] = useState(q);
+  useEffect(() => setSearchText(q), [q]);
+  useEffect(() => {
+    if (searchText.trim() === q) return undefined;
+    const timer = setTimeout(() => update({ q: searchText.trim() }), 300);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only the typed text should restart the timer
+  }, [searchText]);
+
+  const query: CaseListQuery = {
+    source,
+    group: group || undefined,
+    module: moduleId || undefined,
+    q: q || undefined,
+    sort: sort.key as CaseListQuery['sort'],
+    dir: sort.dir,
+    limit: PAGE_SIZE,
+    offset: page * PAGE_SIZE,
+  };
+  const { data, isLoading, isFetching, isError, refetch } = useCases(query);
+  const rows = data?.cases ?? EMPTY;
+  const moduleLabel = (id: string) => catalog?.modules.find((m) => m.id === id)?.label ?? '—';
+
+  const columns = caseColumns(source, (status) => moduleLabel(info(status).module));
+
+  const filtered = Boolean(group || moduleId || q);
 
   return (
-    <div className="mx-auto h-full w-full max-w-4xl overflow-y-auto px-6 py-6">
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight text-slate-900">Cases</h1>
-          <p className="text-sm text-slate-500">Every case the system has processed — its extraction, checks, and outcome.</p>
-        </div>
+    <div className="mx-auto h-full w-full max-w-6xl overflow-y-auto px-4 py-6 sm:px-6">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <SourceTabs source={source} onChange={(next) => update({ source: next === 'API' ? 'api' : '' })} />
         <Button variant="ghost" onClick={() => refetch()} disabled={isFetching}>
           <RefreshCw size={14} className={isFetching ? 'animate-spin' : undefined} />
           Refresh
         </Button>
       </div>
 
-      <div className="mb-3">
-        <SourceTabs source={source} onChange={setSource} />
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <label className="relative min-w-[16rem] flex-1">
+          <span className="sr-only">Search cases</span>
+          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="search"
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            placeholder="Search claim no., TPA case no., claimant or case ID"
+            className="w-full rounded-full border border-slate-900/10 bg-white/80 py-2 pl-9 pr-4 text-sm text-slate-800 placeholder:text-slate-400 focus:border-ulink-teal focus:outline-none focus:ring-2 focus:ring-ulink-teal/30"
+          />
+        </label>
+        <label>
+          <span className="sr-only">Step</span>
+          <select
+            value={moduleId}
+            onChange={(e) => update({ module: e.target.value })}
+            className="rounded-full border border-slate-900/10 bg-white/80 py-2 pl-4 pr-8 text-sm text-slate-700 focus:border-ulink-teal focus:outline-none focus:ring-2 focus:ring-ulink-teal/30"
+          >
+            <option value="">All steps</option>
+            {catalog?.modules.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
-      <div className="mb-4 flex items-center gap-1 rounded-full bg-slate-100/80 p-1 w-fit">
-        {STATUS_BUCKET_FILTERS.map((bucket) => (
+      <div className="mb-4 flex w-fit flex-wrap items-center gap-1 rounded-full bg-slate-100/80 p-1">
+        {[{ id: '', label: 'All' }, ...(catalog?.groups ?? [])].map((g) => (
           <button
-            key={bucket}
-            onClick={() => setFilter(bucket)}
+            key={g.id || 'all'}
+            onClick={() => update({ group: g.id })}
+            aria-pressed={group === g.id}
             className={clsx(
-              'rounded-full px-3 py-1.5 text-xs font-medium transition-colors',
-              filter === bucket ? 'bg-white text-slate-900 shadow-glass' : 'text-slate-500 hover:text-slate-800'
+              'rounded-full px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ulink-teal/60',
+              group === g.id ? 'bg-white text-slate-900 shadow-glass' : 'text-slate-500 hover:text-slate-800'
             )}
           >
-            {bucket}
+            {g.label}
           </button>
         ))}
       </div>
 
-      <div className="overflow-hidden rounded-xl2 border border-slate-900/5 bg-white/80 shadow-glass backdrop-blur-xl">
-        {isLoading && <p className="p-6 text-sm text-slate-400">Loading…</p>}
-        {isError && <p className="p-6 text-sm text-red-500">Couldn't load cases. Try refreshing.</p>}
-        {!isLoading && !isError && cases.length === 0 && (
-          <p className="p-6 text-sm text-slate-400">
-            {allCases.length === 0 ? 'No cases yet.' : `No cases in "${filter}".`}
-          </p>
-        )}
-        {cases.length > 0 && (
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-slate-900/5 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                <th className="px-5 py-3">Status</th>
-                <th className="px-5 py-3">{source === 'API' ? 'IAS claim' : 'Route'}</th>
-                <th className="px-5 py-3">Summary</th>
-                <th className="px-5 py-3">Updated</th>
-              </tr>
-            </thead>
-            <tbody>
-              {cases.map((c) => (
-                <tr
-                  key={c.id}
-                  onClick={() => navigate(`/cases/${c.id}`)}
-                  className="cursor-pointer border-b border-slate-900/5 last:border-0 hover:bg-slate-50"
-                >
-                  <td className="px-5 py-3">
-                    <CaseStatusPill status={c.currentStatus} />
-                  </td>
-                  <td className="px-5 py-3 text-slate-700">
-                    {source === 'API' ? (
-                      <>
-                        {c.claimNo ?? '—'}
-                        {c.tpaCaseNumber && <span className="block text-xs text-slate-400">{c.tpaCaseNumber}</span>}
-                      </>
-                    ) : (
-                      c.recognizedType ?? '—'
-                    )}
-                  </td>
-                  <td className="px-5 py-3 text-slate-500">{c.summary ?? '—'}</td>
-                  <td className="px-5 py-3 text-slate-400">{relativeTime(c.updatedAt)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      <DataTable
+        columns={columns}
+        rows={rows}
+        rowKey={(c) => c.id}
+        onRowClick={(c) => navigate(`/cases/${c.id}`)}
+        sort={sort}
+        onSortChange={(next) => update({ sort: next.key, dir: next.dir })}
+        page={page}
+        pageSize={PAGE_SIZE}
+        total={data?.total ?? 0}
+        onPageChange={(next) => update({ page: next > 0 ? String(next) : '' }, true)}
+        isLoading={isLoading || isFetching}
+        isError={isError}
+        emptyText={filtered ? 'No cases match these filters. Clear the search or pick "All".' : 'No cases yet. New claims appear here once the pipeline takes them in.'}
+      />
     </div>
   );
 }

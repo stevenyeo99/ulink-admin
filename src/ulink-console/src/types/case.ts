@@ -10,8 +10,30 @@ export interface CaseSummary {
   claimNo: string | null;
   tpaCaseNumber: string | null;
   recognizedType: string | null;
+  createdAt: string;
   updatedAt: string;
   summary: string | null;
+}
+
+// GET /api/cases query — every field optional; the console's filters and dashboard links.
+export interface CaseListQuery {
+  source?: Source;
+  status?: string;
+  group?: string;
+  module?: string;
+  q?: string;
+  sort?: 'updatedAt' | 'createdAt' | 'claimNo' | 'status';
+  dir?: 'asc' | 'desc';
+  limit?: number;
+  offset?: number;
+}
+
+// GET /api/cases/overview
+export interface CaseOverview {
+  total: number;
+  newToday: number;
+  groups: Record<string, number>;
+  modules: Record<string, Record<string, number>>;
 }
 
 export interface ListCasesResponse {
@@ -202,4 +224,45 @@ export interface ResetCaseResponse {
   previousStatus: string;
   currentStatus: string;
   clearedFields: string[];
+}
+
+// Case status catalog (GET /api/cases/statuses — ulink-api modules/case-status/catalog.js). Codes stay
+// internal; the console shows label / description and groups by module / group.
+export type StatusGroup = 'in_progress' | 'waiting_customer' | 'needs_review' | 'done' | 'failed';
+
+export interface CaseStatusInfo {
+  module: string;
+  group: StatusGroup;
+  label: string;
+  description: string;
+}
+
+export interface CaseStatusCatalog {
+  statuses: Record<string, CaseStatusInfo>;
+  modules: { id: string; label: string }[];
+  groups: { id: StatusGroup; label: string }[];
+}
+
+// GET /api/cases/review-queue — cases a person should look at (ulink-api modules/review-queue/queue.js).
+export interface ReviewQueueItem {
+  id: string;
+  source: Source;
+  currentStatus: string;
+  claimNo: string | null;
+  tpaCaseNumber: string | null;
+  recognizedType: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /** Most serious reason, e.g. "Data mismatch". */
+  reason: string;
+  /** What to check first. */
+  check: string;
+  reasons: string[];
+  pointCount: number;
+}
+
+export interface ReviewQueueResponse {
+  items: ReviewQueueItem[];
+  counts: Record<string, number>;
+  total: number;
 }

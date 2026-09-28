@@ -1,13 +1,26 @@
 import { API_BASE_URL, request } from './client';
-import type { GetCaseResponse, ListCasesResponse, OverrideCaseResponse, ResetCaseResponse } from '../types/case';
+import type { CaseListQuery, CaseOverview, ReviewQueueResponse, CaseStatusCatalog, GetCaseResponse, ListCasesResponse, OverrideCaseResponse, ResetCaseResponse } from '../types/case';
 import type { Source } from '../types/pipeline';
 
-export function listCases(status?: string, source?: Source): Promise<ListCasesResponse> {
+export function listCases(query: CaseListQuery = {}): Promise<ListCasesResponse> {
   const params = new URLSearchParams();
-  if (status) params.set('status', status);
-  if (source) params.set('source', source);
-  const query = params.toString();
-  return request<ListCasesResponse>(`/api/cases${query ? `?${query}` : ''}`);
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== '') params.set(key, String(value));
+  }
+  const qs = params.toString();
+  return request<ListCasesResponse>(`/api/cases${qs ? `?${qs}` : ''}`);
+}
+
+export function getReviewQueue(source?: Source): Promise<ReviewQueueResponse> {
+  return request<ReviewQueueResponse>(`/api/cases/review-queue${source ? `?source=${source}` : ''}`);
+}
+
+export function getCaseOverview(source?: Source): Promise<CaseOverview> {
+  return request<CaseOverview>(`/api/cases/overview${source ? `?source=${source}` : ''}`);
+}
+
+export function getCaseStatuses(): Promise<CaseStatusCatalog> {
+  return request<CaseStatusCatalog>('/api/cases/statuses');
 }
 
 export function getCase(id: string): Promise<GetCaseResponse> {

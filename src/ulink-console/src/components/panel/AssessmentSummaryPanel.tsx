@@ -32,8 +32,8 @@ export function AssessmentSummaryPanel({ summary }: { summary: AssessmentSummary
         ) : (
           <CheckCircle2 size={16} className="text-ulink-teal-dark" />
         )}
-        <h2 className={clsx('text-xs font-semibold uppercase tracking-wide', needsReview ? 'text-ulink-orange-dark' : 'text-ulink-teal-dark')}>
-          AI Assessment — what was decided and why
+        <h2 className={clsx('text-sm font-semibold', needsReview ? 'text-ulink-orange-dark' : 'text-ulink-teal-dark')}>
+          AI assessment: what was decided and why
         </h2>
       </div>
 

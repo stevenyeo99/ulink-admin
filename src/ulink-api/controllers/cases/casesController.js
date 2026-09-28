@@ -1,6 +1,14 @@
+const { Op, fn, col, cast, where: sqlWhere, literal } = require('sequelize');
 const { Case, CaseEvent, CaseDocument, ApiCaseStep, EmailThread, EmailMessage, EmailAttachment } = require('../../db/models');
+const { todayInIasTimezone } = require('../../modules/shared/iasDates');
 const { apiCaseView } = require('../../modules/api-pipeline/caseView');
 const { buildAssessmentSummary } = require('../../modules/assessment-summary/summary');
+const { queueEntry, REASON_ORDER } = require('../../modules/review-queue/queue');
+const { CASE_STATUSES, MODULES, GROUPS, codesInGroup } = require('../../modules/case-status/catalog');
+
+
+// Every status code the jobs set — rejects a typo'd ?status= filter with a helpful error.
+const KNOWN_STATUSES = Object.keys(CASE_STATUSES);
 const { getStorageAdapter } = require('../../storage');
 const { resetOneCase } = require('../dev/casesController');
 const logger = require('../../utils/logger');
@@ -27,42 +35,6 @@ const OVERRIDE_TARGETS = {
 
 const REVIEWABLE_STATUSES = Object.keys(OVERRIDE_TARGETS);
 
-// Every Case.currentStatus value this project's jobs actually set (see jobs-registry.md) —
-// used only to reject a typo'd ?status= filter with a helpful error, not to restrict which
-// cases GET /api/cases can return. Keep in sync with jobs-registry.md if a job adds a status.
-const KNOWN_STATUSES = [
-  'EMAIL_RECEIVED',
-  'ATTACHMENTS_STORED',
-  'READY_FOR_DOCUMENT_READING',
-  'RECOGNIZED',
-  'MANUAL_REVIEW',
-  'NOT_RECOGNIZED',
-  'READY_FOR_DOCUMENT_CHECKING',
-  'INCOMPLETE',
-  'MEMBER_VERIFIED',
-  'MEMBER_REVIEW_REQUIRED',
-  'CLAIM_PAYLOAD_PREPARED',
-  'CLAIM_CREATED',
-  'CLAIM_SUBMIT_FAILED',
-  // API cases — add each API_* status as its job ships (docs/imp/day1/api-case-workflow.md).
-  'API_RECEIVED',
-  'API_MATERIALS_DOWNLOADED',
-  'API_NO_DOCUMENTS',
-  'API_RECOGNIZED',
-  'API_MANUAL_REVIEW',
-  'API_READY_FOR_DOCUMENT_CHECKING',
-  'API_MEMBER_REVIEW_REQUIRED',
-  'API_DOCUMENTS_VERIFIED',
-  'API_INCOMPLETE',
-  'API_REPLY_RECEIVED',
-  'API_CLAIM_PAYLOAD_PREPARED',
-  'API_CLAIM_SUSPENDED',
-  'API_CLAIM_REVISED',
-  'API_CLAIM_REVISION_FAILED',
-  'API_AWAITING_CSR',
-  'API_CSR_SENT',
-];
-
 // One-line summary for the list view — the specific thing a reviewer would need to glance
 // at before deciding whether to open a case at all, or (for CLAIM_CREATED) the quickest
 // "yes, this one actually worked" signal.
@@ -80,6 +52,102 @@ function summarize(caseRecord) {
 }
 
 const CASE_SOURCES = ['EMAIL', 'API'];
+
+// ?sort= values the list accepts → model attribute.
+const SORTABLE = { updatedAt: 'updatedAt', createdAt: 'createdAt', claimNo: 'claimNo', status: 'currentStatus' };
+
+// Statuses a queued case can be at: every open one, plus the IAS rejections (queue.js decides).
+const QUEUE_CANDIDATE_STATUSES = [
+  ...codesInGroup('in_progress'), ...codesInGroup('waiting_customer'), ...codesInGroup('needs_review'),
+  'CLAIM_SUBMIT_FAILED', 'API_CLAIM_REVISION_FAILED',
+];
+// ponytail: the queue rebuilds each open case's assessment on every request, capped here; move to a
+// stored summary / paged query once open cases run into the hundreds.
+const QUEUE_SCAN_LIMIT = 500;
+
+/**
+ * GET /api/cases/review-queue — cases a person should look at, oldest first, each with the reason
+ * and what to check (modules/review-queue/queue.js), plus a count per reason. Optional ?source=.
+ */
+async function getReviewQueue(req, res) {
+  const source = req.query.source ? String(req.query.source).toUpperCase() : null;
+  if (source && !CASE_SOURCES.includes(source)) {
+    return res.status(400).json({ error: { message: `Unknown source filter: ${req.query.source}. Must be one of: ${CASE_SOURCES.join(', ')}`, status: 400 } });
+  }
+  const cases = await Case.findAll({
+    where: { currentStatus: QUEUE_CANDIDATE_STATUSES, ...(source ? { source } : {}) },
+    order: [['updatedAt', 'ASC']],
+    limit: QUEUE_SCAN_LIMIT,
+  });
+
+  // API cases keep their results in their job steps — one query for all of them.
+  const apiIds = cases.filter((c) => c.source === 'API').map((c) => c.id);
+  const steps = apiIds.length ? await ApiCaseStep.findAll({ where: { caseId: apiIds } }) : [];
+  const stepsByCase = new Map();
+  for (const step of steps) stepsByCase.set(step.caseId, [...(stepsByCase.get(step.caseId) || []), step]);
+
+  const items = [];
+  for (const c of cases) {
+    const fields = c.source === 'API' ? apiCaseView(stepsByCase.get(c.id) || []) : c;
+    const entry = queueEntry(c.currentStatus, fields);
+    if (!entry) continue;
+    items.push({
+      id: c.id,
+      source: c.source,
+      currentStatus: c.currentStatus,
+      claimNo: c.claimNo,
+      tpaCaseNumber: c.tpaCaseNumber,
+      recognizedType: c.recognizedType,
+      createdAt: c.createdAt,
+      updatedAt: c.updatedAt,
+      ...entry,
+    });
+  }
+  const counts = Object.fromEntries(REASON_ORDER.map((r) => [r, items.filter((i) => i.reason === r).length]));
+  res.json({ items, counts, total: items.length });
+}
+
+/**
+ * GET /api/cases/overview — the dashboard's numbers: cases per group, per module × group, and
+ * how many arrived today (Myanmar time, the same day boundary IAS uses). Optional ?source=.
+ */
+async function getOverview(req, res) {
+  const source = req.query.source ? String(req.query.source).toUpperCase() : null;
+  if (source && !CASE_SOURCES.includes(source)) {
+    return res.status(400).json({ error: { message: `Unknown source filter: ${req.query.source}. Must be one of: ${CASE_SOURCES.join(', ')}`, status: 400 } });
+  }
+  const where = source ? { source } : {};
+
+  const rows = await Case.findAll({
+    where,
+    attributes: ['currentStatus', [fn('COUNT', col('id')), 'count']],
+    group: ['currentStatus'],
+    raw: true,
+  });
+  const startOfToday = new Date(`${todayInIasTimezone()}T00:00:00+06:30`);
+  const newToday = await Case.count({ where: { ...where, createdAt: { [Op.gte]: startOfToday } } });
+
+  const groups = Object.fromEntries(GROUPS.map((g) => [g.id, 0]));
+  const modules = Object.fromEntries(MODULES.map((m) => [m.id, Object.fromEntries(GROUPS.map((g) => [g.id, 0]))]));
+  let total = 0;
+  for (const row of rows) {
+    const count = Number(row.count);
+    const info = CASE_STATUSES[row.currentStatus];
+    total += count;
+    if (!info) continue; // an unknown status still counts toward the total
+    groups[info.group] += count;
+    modules[info.module][info.group] += count;
+  }
+  res.json({ total, newToday, groups, modules });
+}
+
+/**
+ * GET /api/cases/statuses — what each status code means to a person (label, description, module,
+ * group), plus the module and group lists. The console shows these instead of raw codes.
+ */
+function getCaseStatuses(req, res) {
+  res.json({ statuses: CASE_STATUSES, modules: MODULES, groups: GROUPS });
+}
 
 /**
  * GET /api/cases — cases at any status by default (a general "did the system process this
@@ -116,17 +184,49 @@ async function listCases(req, res) {
     });
   }
 
+  // ?group= / ?module= — the status catalog's groups and modules (the console's filters and
+  // dashboard links), turned into the status codes they cover.
+  const group = req.query.group ? String(req.query.group) : null;
+  const moduleId = req.query.module ? String(req.query.module) : null;
+  if (group && !GROUPS.some((g) => g.id === group)) {
+    return res.status(400).json({ error: { message: `Unknown group: ${group}. Must be one of: ${GROUPS.map((g) => g.id).join(', ')}`, status: 400 } });
+  }
+  if (moduleId && !MODULES.some((m) => m.id === moduleId)) {
+    return res.status(400).json({ error: { message: `Unknown module: ${moduleId}. Must be one of: ${MODULES.map((m) => m.id).join(', ')}`, status: 400 } });
+  }
+
+  const sortBy = SORTABLE[req.query.sort] ? req.query.sort : 'updatedAt';
+  const direction = String(req.query.dir).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+
   const limit = Math.min(parseInt(req.query.limit, 10) || 100, 200);
   const offset = parseInt(req.query.offset, 10) || 0;
 
+  let codes = statuses;
+  const narrow = (allowed) => { codes = codes ? codes.filter((c) => allowed.includes(c)) : allowed; };
+  if (group) narrow(codesInGroup(group));
+  if (moduleId) narrow(KNOWN_STATUSES.filter((c) => CASE_STATUSES[c].module === moduleId));
+
   const where = {};
-  if (statuses) where.currentStatus = statuses;
+  if (codes) where.currentStatus = codes;
   if (source) where.source = source;
+
+  // ?q= — free-text search over the identifiers people have in hand: claim no., TPA case number,
+  // case id, and the claimant name the AI read (email cases keep it on the case row).
+  const q = req.query.q ? String(req.query.q).trim() : '';
+  if (q) {
+    const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    where[Op.or] = [
+      { claimNo: { [Op.iLike]: like } },
+      { tpaCaseNumber: { [Op.iLike]: like } },
+      sqlWhere(cast(col('Case.id'), 'text'), { [Op.iLike]: like }),
+      sqlWhere(literal(`"Case"."extracted_fields"->'claimant'->>'claimant_name'`), { [Op.iLike]: like }),
+    ];
+  }
 
   const { rows, count } = await Case.findAndCountAll({
     where,
-    attributes: ['id', 'currentStatus', 'source', 'tpaCaseNumber', 'recognizedType', 'documentCheckResult', 'memberVerifyResult', 'claimNo', 'updatedAt'],
-    order: [['updatedAt', 'DESC']],
+    attributes: ['id', 'currentStatus', 'source', 'tpaCaseNumber', 'recognizedType', 'documentCheckResult', 'memberVerifyResult', 'claimNo', 'createdAt', 'updatedAt'],
+    order: [[SORTABLE[sortBy], direction], ['id', 'ASC']],
     limit,
     offset,
   });
@@ -138,6 +238,7 @@ async function listCases(req, res) {
     claimNo: row.claimNo,
     tpaCaseNumber: row.tpaCaseNumber,
     recognizedType: row.recognizedType,
+    createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     summary: summarize(row),
   }));
@@ -319,4 +420,4 @@ async function resetCase(req, res) {
   }
 }
 
-module.exports = { listCases, getCase, getAttachment, getDocument, overrideCase, resetCase, OVERRIDE_TARGETS, REVIEWABLE_STATUSES };
+module.exports = { getCaseStatuses, getOverview, getReviewQueue, listCases, getCase, getAttachment, getDocument, overrideCase, resetCase, OVERRIDE_TARGETS, REVIEWABLE_STATUSES };

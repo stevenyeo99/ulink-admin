@@ -37,6 +37,19 @@ consistent, cheap, auditable.
 
 ---
 
+### Who uses it
+
+`ulink-console` is not only a developer / demo tool: it will be the **internal users' dashboard** (CSR / Ops /
+JD2) for reviewing the assessment and handling unsure cases. So:
+
+- **Plain language** for business users — no status codes or field paths; always show *why*.
+- **Read-only first.** Anything that changes data (reviewer actions) needs console login and "who can act" rules
+  (decision 2) before it is built.
+- The **review queue** is the natural home page for internal users; the pipeline graph and raw JSON sections stay
+  as the developer view.
+
+---
+
 ## 2. Terminology
 
 ### Review reason — why a case needs a human
@@ -104,27 +117,27 @@ How often each AI decision is corrected, per confidence band. Later used to set 
 
 ---
 
-## 4. Current system — what "why" exists today
+## 4. Current system — what "why" exists (checked 2026-09-28, updated after steps 1–5)
 
 | Decision | Decided by | Result stored | "Why" stored |
 |---|---|---|---|
 | Member / coverage / DOB / bank / policy | Rules | Yes | **Yes** — extracted value vs IAS value |
-| Missing / incomplete documents | Rules | Yes | **Partly** — reason exists but in technical wording (e.g. `invoices.present is false`) |
+| Missing / incomplete documents | Rules | Yes | **Yes** — technical wording is rewritten in plain language by the summary builder |
 | Medical record present / legible | LLM | Yes | **Yes** — `presence_reason` + confidence |
 | Identity consistency | LLM | Yes | **Yes** — reason + confidence |
 | Voucher amount | Rules + LLM | Yes | **Yes** — note + agreement-based confidence |
-| Diagnosis code pick | LLM | Code, confidence, candidates, `defaulted` | **No reason** |
-| Benefit type / head pick | LLM | Pick, confidence, candidates | **No reason** |
-| STP yes / no | Rules | `isStp` only | **No** — total and limit not stored |
+| Diagnosis code pick | LLM | Code, confidence, candidates, `defaulted` | **Yes (new claims)** — `reason` added 2026-09-28 |
+| Benefit type / head pick | LLM | Pick, confidence, candidates | **Yes (new claims)** — `reason` added 2026-09-28 |
+| STP yes / no | Rules | `isStp` + `claimPrepMeta.stp` | **Yes (new claims)** — total, limit, currency added 2026-09-28 |
 | Member check with several problems | Rules | First problem only | **Partly** — later problems are not listed |
 
 Other facts:
 - Email cases store results on `ulink_cases`; API cases in `ulink_api_case_steps`. `apiCaseView()`
   (`modules/api-pipeline/caseView.js`) already maps API outputs to the same field names — one builder serves both.
-- Console already has an **AI Confidence Summary** panel (`ConfidenceSummary.tsx`) — scores only, no "why".
+- Console case page shows the **AI Assessment** panel (`AssessmentSummaryPanel.tsx`, replaced the scores-only `ConfidenceSummary.tsx`).
 - "Needs a human" statuses exist (`MANUAL_REVIEW`, `API_MANUAL_REVIEW`, `MEMBER_REVIEW_REQUIRED`) but no queue
   view, no review reason, no reviewer actions; the console is read-only apart from "Run this step".
-- JD2 email (`CLAIM_APPROVAL_REVIEW`) carries the claim number only.
+- JD2 email (`CLAIM_APPROVAL_REVIEW`) carries the claim number plus the assessment text (the audit snapshot for non-STP claims).
 
 ---
 
@@ -134,7 +147,7 @@ Other facts:
 |---|---|---|---|---|---|
 | [x] | 1 | **L0** (done 2026-09-28) — store a reason for diagnosis / benefit picks (`reason` in the picker results); store STP total + limit (`claimPrepMeta.stp`) | R1 | Small | — |
 | [x] | 2 | **L1** (built 2026-09-28, `modules/assessment-summary/summary.js`) — explanation builder: result, why, confidence, how verified, review reason, who might be wrong; plain-language document reasons | R1, R2 | Small–Medium | — |
-| [x] | 3 | **L1b** (built 2026-09-28 — saved in the JD2 email task payload / api-claim-revision output) — save the summary snapshot with the case | R3 | Small | — |
+| [ ] | 3 | **L1b** — save the summary snapshot with the case. **Non-STP done** 2026-09-28 (JD2 email task payload / api-claim-revision output); **STP still open** (no JD2 email → save at case end, CSR sent) | R3 | Small | — |
 | [x] | 4 | **L3** (built 2026-09-28) — summary in the JD2 approval email | R4 (#10) | Small | — |
 | [x] | 5 | **L2** (built 2026-09-28, `AssessmentSummaryPanel.tsx`) — explanation panel on the case page | R4 | Small–Medium | — |
 | [ ] | 6 | Summary in the internal member-issue email | R4 (#7 part) | Small | — |
@@ -151,7 +164,36 @@ both email and API cases.
 
 ---
 
-## 6. Decisions needed (take to the demo)
+## 6. Next actions (ordered)
+
+Status 2026-09-28: summary CR steps 1–5 built (L0, L1, L1b non-STP, L2, L3).
+
+**Before the demo**
+1. Commit summary steps 1–5.
+2. LLM model confirmed: `qwen/qwen3.6-35b-a3b` (picks match 24/09).
+3. Rehearse with one fresh claim — check the AI Assessment panel (STP numbers, diagnosis / benefit reasons, review
+   points) and the JD2 email if non-STP. Existing cases show "Reason not recorded" until prepared again.
+
+**Next to build (small, no decision needed)**
+4. Save a summary snapshot for STP claims at case end (CSR sent) — finishes step 3.
+5. Summary in the internal member-issue email — step 6.
+
+**After that (bigger, no decision needed)**
+6. Review queue page, read-only — step 7.
+7. Member check lists every problem, not just the first — step 11.
+
+**Ask at the demo (unblocks the rest)**
+8. Audit % for STP cases → random audit sample — step 8, decision 4.
+9. Who can act on the dashboard, what they can correct → reviewer actions — step 9, decisions 2, 3.
+10. Which cases email CSR/Ops vs dashboard only → internal alerts — step 10, decision 1.
+11. iAS field for the summary → send to iAS — step 13, decision 5.
+
+**Later**
+12. Accuracy report, once reviewer actions exist — step 12.
+
+---
+
+## 7. Decisions needed (take to the demo)
 
 | Decide | # | Question |
 |---|---|---|
