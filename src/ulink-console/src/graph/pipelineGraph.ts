@@ -144,16 +144,16 @@ export const EMAIL_BADGE_EDGES: EmailBadgeEdge[] = EMAIL_BADGES.map((badge) => (
 // Its own chain on the console's API tab — grows as each API job ships. No email badges yet:
 // API emails arrive with document/member checking (Phase 6).
 export const API_BLOCKS: BlockMeta[] = [
-  { id: 'api-claim-intake', label: 'API Claim Intake', description: "Lists today's IAS API claims, one case per claim", x: 0, y: 0 },
-  { id: 'api-material-download', label: 'Material Download', description: 'Downloads console images via the middleware zip', x: 0, y: 190 },
+  { id: 'api-claim-intake', label: 'API Claim Intake', description: "Retrieve today's IAS API Claims Created", x: 0, y: 0 },
+  { id: 'api-material-download', label: 'Console Material Download', description: 'Downloads IAS Console Submission Materials', x: 0, y: 190 },
   // Shared with the email tab: the one inbox reader. Replies to API emails land on the API case.
-  { id: 'email-intake', label: 'Email Intake (shared)', description: 'Reads the inbox; replies go to their own case', x: 0, y: 380 },
-  { id: 'api-reply-intake', label: 'Reply Intake', description: 'New customer reply attachments → read again', x: 0, y: 570 },
-  { id: 'api-claim-recognition', label: 'Claim Recognition', description: 'Same OCR + extraction as email (AYAS member claim)', x: 0, y: 760 },
-  { id: 'api-member-verification', label: 'Member Verification', description: 'Same IAS member lookup + checks as email', x: 0, y: 950 },
-  { id: 'api-document-checking', label: 'Document Checking', description: 'Same completeness checklist as email', x: 0, y: 1140 },
-  { id: 'api-claim-preparation', label: 'Claim Preparation', description: 'Same payload as email + claimNo, barcodes, flags', x: 0, y: 1330 },
-  { id: 'api-claim-revision', label: 'Claim Revision', description: 'Revises the IAS claim (suspense if docs missing)', x: 0, y: 1520 },
+  { id: 'email-intake', label: 'Email Intake (API Only)', description: 'Reads the inbox (Reply API Case)', x: 0, y: 380 },
+  { id: 'api-reply-intake', label: 'API Email Reply Intake', description: 'Download Email Attachments for API Cases', x: 0, y: 570 },
+  { id: 'api-claim-recognition', label: 'Claim Recognition', description: 'AI OCR Document Processing', x: 0, y: 760 },
+  { id: 'api-member-verification', label: 'Member Verification', description: 'Verifies the IAS member information', x: 0, y: 950 },
+  { id: 'api-document-checking', label: 'Document Checking', description: 'AI Document Completeness Check', x: 0, y: 1140 },
+  { id: 'api-claim-preparation', label: 'Claim Preparation', description: 'IAS Claim Revision Preparation', x: 0, y: 1330 },
+  { id: 'api-claim-revision', label: 'Claim Revision', description: 'Revises the IAS Claim', x: 0, y: 1520 },
   { id: 'api-claim-stp', label: 'Claim STP', description: 'Downloads CSR, emails customer (STP claims only)', x: 0, y: 1710 },
 ];
 
