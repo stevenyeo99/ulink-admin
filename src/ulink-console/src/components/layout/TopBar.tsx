@@ -1,5 +1,7 @@
 import { useLocation } from 'react-router-dom';
-import { Menu } from 'lucide-react';
+import { LogOut, Menu } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { clearSession, getSession } from '../../lib/session';
 import { NAV_SECTIONS } from './navigation';
 
 function titleFor(pathname: string): string {
@@ -8,9 +10,20 @@ function titleFor(pathname: string): string {
   return item?.label ?? 'ULINK Claims';
 }
 
-/** Top bar in the SB Admin pattern: the current page's name, and the menu button on small screens. */
+const ROLE_LABELS: Record<string, string> = { super_admin: 'Super admin' };
+
+/** Top bar in the SB Admin pattern: the page's name, who is logged in and log out; the menu button on small screens. */
 export function TopBar({ onOpenMenu }: { onOpenMenu: () => void }) {
   const { pathname } = useLocation();
+  const queryClient = useQueryClient();
+  const user = getSession()?.user;
+
+  const logOut = () => {
+    clearSession();
+    queryClient.clear(); // nothing of this user's data stays in memory for the next one
+    window.location.assign('/login');
+  };
+
   return (
     <header className="flex items-center gap-3 border-b border-slate-900/5 bg-white/70 px-4 py-3 backdrop-blur-xl sm:px-6">
       <button
@@ -21,6 +34,21 @@ export function TopBar({ onOpenMenu }: { onOpenMenu: () => void }) {
         <Menu size={20} />
       </button>
       <h1 className="text-[15px] font-semibold tracking-tight text-slate-900">{titleFor(pathname)}</h1>
+      {user && (
+        <div className="ml-auto flex items-center gap-3">
+          <div className="text-right leading-tight">
+            <p className="text-sm font-medium text-slate-800">{user.name || user.username}</p>
+            <p className="text-xs text-slate-500">{ROLE_LABELS[user.role] ?? user.role}</p>
+          </div>
+          <button
+            onClick={logOut}
+            className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-900/5 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ulink-teal/60"
+          >
+            <LogOut size={15} />
+            Log out
+          </button>
+        </div>
+      )}
     </header>
   );
 }

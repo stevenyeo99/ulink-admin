@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Navigate, Routes, Route } from 'react-router-dom';
+import { Navigate, Routes, Route, useLocation } from 'react-router-dom';
 import { BackgroundBlobs } from './components/layout/BackgroundBlobs';
 import { Sidebar } from './components/layout/Sidebar';
 import { TopBar } from './components/layout/TopBar';
@@ -9,9 +9,33 @@ import { CaseDetailPage } from './pages/CaseDetailPage';
 import { OverviewPage } from './pages/OverviewPage';
 import { ReviewQueuePage } from './pages/ReviewQueuePage';
 import { ApprovalsPage } from './pages/ApprovalsPage';
+import { LoginPage } from './pages/LoginPage';
 import { useReviewQueue } from './hooks/useCases';
+import { getSession } from './lib/session';
 
 export function App() {
+  return (
+    <>
+      <BackgroundBlobs />
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="*" element={<LoggedIn />} />
+      </Routes>
+    </>
+  );
+}
+
+/** Every page except login needs a logged-in user; without one, go to login and come back here after. */
+function LoggedIn() {
+  const location = useLocation();
+  if (!getSession()) {
+    const next = location.pathname + location.search;
+    return <Navigate to={`/login?next=${encodeURIComponent(next)}`} replace />;
+  }
+  return <Shell />;
+}
+
+function Shell() {
   // The sidebar count: cases in the Review Queue, both workflows.
   const { data } = useReviewQueue();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -19,7 +43,6 @@ export function App() {
   // Dashboard shell (SB Admin pattern): sidebar on the left, top bar + page on the right.
   return (
     <div className="relative flex h-screen overflow-hidden">
-      <BackgroundBlobs />
       <Sidebar reviewCount={data?.total} open={menuOpen} onClose={() => setMenuOpen(false)} />
       <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
         <TopBar onOpenMenu={() => setMenuOpen(true)} />

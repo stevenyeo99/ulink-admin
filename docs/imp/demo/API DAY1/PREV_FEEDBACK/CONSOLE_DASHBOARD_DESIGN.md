@@ -19,8 +19,8 @@ exception); **email only nudges** people about the exceptions that need them.
 ## 2. Design principles
 
 1. **Organised by how people work, not by pipeline step.** Steps (intake, recognition, …) are the orchestrator's
-   view; pages are Overview, Review queue, Approvals, Cases. Step shows up only as a filter, a column and the
-   Overview's "Cases by step" table.
+   view; pages are Overview, Review queue, Approvals, Cases. Step shows up only as the Cases page's filter and
+   column (the Overview's "Cases by step" table was removed 2026-09-28 for the same reason).
 2. **Plain language.** No status codes or field paths for business users; always show *why* (AI Assessment).
 3. **Read-only first.** Pages that only show data come first; anything that changes data waits for login + roles.
 4. **One brain.** Explanations come only from the assessment-summary builder (API); pages never re-derive them.
@@ -80,7 +80,8 @@ Every page has an **Email / API / All** source filter (the existing `SourceTabs`
 ## 5. Steps (modules) — mapping only
 
 > **Update 2026-09-28:** no per-step pages (build step 4 dropped). The mapping below is still used — status
-> catalog, Overview's "Cases by step" table, the Cases "Step" filter. The card/table template is kept for reference.
+> catalog and the Cases "Step" filter / column (the Overview's "Cases by step" table was also removed). The
+> card/table template is kept for reference.
 
 ### Original idea: one template
 
@@ -140,13 +141,13 @@ users get access.
 |---|---|---|---|---|
 | [x] | 1 | Layout shell (built 2026-09-28): sidebar + top bar, move Pipeline under Admin (`/pipeline`), keep existing pages working | UI only | — |
 | [x] | 2a | Status catalog (built 2026-09-28): every status code → label, description, module, group (`modules/case-status/catalog.js`, `GET /api/cases/statuses`); console shows labels, codes stay internal | Read-only | — |
-| [x] | 2b | Overview page (built 2026-09-28): home page, cards per group + received today, cases-by-step table; every number links to the filtered Cases list (`GET /api/cases/overview`) | Read-only | — |
+| [x] | 2b | Overview page (built 2026-09-28): home page, cards per group (who acts next) + received today — the cases-by-step table was removed the same day (steps are the orchestrator's view); every number links to the filtered Cases list (`GET /api/cases/overview`) | Read-only | — |
 | [x] | 2c | Data table (built 2026-09-28, `components/common/DataTable.tsx`): search, sortable columns, paging, group + step filters, all kept in the URL; cases API gained `q`, `group`, `module`, `sort`, `dir` | Read-only | — |
 | [x] | 3 | Review Queue (built 2026-09-28): needs-review statuses, IAS rejections, and open cases with an assessment point for the team; grouped by most serious reason, oldest first (`modules/review-queue/queue.js`, `GET /api/cases/review-queue`, `/review`); sidebar count moved here | Read-only | — |
-| ~~[ ]~~ | 4 | ~~Module pages~~ — **dropped 2026-09-28**: steps are the orchestrator's view, not how people work (CSR/Ops use the Review queue, JD2 Approvals, managers the Overview). Step visibility stays in Overview's "Cases by step" table and the Cases "Step" filter / column | — | — |
-| [x] | 5 | Case page (built 2026-09-28): reviewer view (status in words + description, AI assessment, documents, emails, plain history) + "Technical details" toggle (checklists, raw data, job steps, codes); reset / override moved to Admin actions, hidden when built with `VITE_ADMIN_TOOLS=false` | UI only | — |
+| ~~[ ]~~ | 4 | ~~Module pages~~ — **dropped 2026-09-28**: steps are the orchestrator's view, not how people work (CSR/Ops use the Review queue, JD2 Approvals, managers the Overview). Step visibility stays only in the Cases "Step" filter / column | — | — |
+| [x] | 5 | Case page (built 2026-09-28): reviewer view (status in words + description, AI assessment, documents, emails, plain history) + "Technical details" toggle (checklists, raw data, job steps, codes); reset / override moved to Admin actions, shown to super admins only (the `VITE_ADMIN_TOOLS` flag was replaced by the login role in step 7) | UI only | — |
 | [x] | 6 | Approvals (built 2026-09-28): non-STP claims waiting for JD2 in IAS (email `CLAIM_CREATED` non-STP, API `API_CLAIM_REVISED`), oldest first, with the AI review points (`GET /api/cases/approvals`, `/approvals`). The system can't see JD2's approval in IAS yet — claims stay listed until a status check or an "Approved" action (step 8) exists | Read-only | — |
-| [ ] | 7 | Login + roles | Access | Decisions 1, 2 |
+| [x] | 7 | Login (built 2026-09-28): username + password, JWT for 8 hours kept in sessionStorage; one role `super_admin`; all API routes need login except `/api/auth/login`, health and the pipeline / job routes (cron); reset / override and `/api/dev` are super-admin only and record the logged-in user; users managed by command (`npm run user:create / user:reset-password / user:disable / user:enable`); failed logins rate-limited per IP | Access | — |
 | [ ] | 8 | Reviewer actions + audit log | Write | SUMMARY_REQUIREMENT decisions 2, 3 |
 | [ ] | 9 | Settings: STP rules | Write | Decision 4 |
 
@@ -156,8 +157,8 @@ Steps 1–6 are safe to build now. 7–9 wait for decisions.
 
 | Decide | # | Question |
 |---|---|---|
-| [ ] | 1 | **Login method** for internal users — company SSO (Google / Microsoft) or simple accounts? |
-| [ ] | 2 | **Roles** — are CSR / Ops / JD2 / Manager / Admin the right set? Who is admin? |
+| [x] | 1 | **Login method** — decided 2026-09-28: manual username + password, JWT (8 h, sessionStorage); no SSO / two-factor for now |
+| [ ] | 2 | **Roles** — only `super_admin` for now (demo stage, first user `ulink`). Still open: which future roles (CSR / Ops / JD2 / Manager) and what each may see / do |
 | [ ] | 3 | **Overview numbers** — which matter most to Ulink (volume, STP rate, turnaround time, waiting on customer, failures)? |
 | [ ] | 4 | **STP rules in Settings** — which parameters should be editable, and by whom (#11)? |
 | [ ] | 5 | **Pipeline page** — developers only, or Ops too? |

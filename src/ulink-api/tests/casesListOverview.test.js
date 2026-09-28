@@ -46,7 +46,7 @@ it('rejects an unknown group or module', async () => {
   expect((await call(listCases, { module: 'x' })).status).toBe(400);
 });
 
-it('counts cases per group and per module × group, and new today', async () => {
+it('counts cases per group, and new today', async () => {
   Case.findAll.mockResolvedValue([
     { currentStatus: 'INCOMPLETE', count: '3' },
     { currentStatus: 'API_CLAIM_SUSPENDED', count: '2' },
@@ -59,9 +59,7 @@ it('counts cases per group and per module × group, and new today', async () => 
 
   expect(body).toMatchObject({ total: 10, newToday: 5 });
   expect(body.groups).toMatchObject({ waiting_customer: 5, done: 4, needs_review: 0 });
-  expect(body.modules.documents.waiting_customer).toBe(3);
-  expect(body.modules.claim.waiting_customer).toBe(2);
-  expect(body.modules.stp.done).toBe(4);
+  expect(body).not.toHaveProperty('modules');
 });
 
 it('lists non-STP claims waiting for JD2, with the review points JD2 should look at', async () => {

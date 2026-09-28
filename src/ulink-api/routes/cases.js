@@ -1,4 +1,5 @@
 const express = require('express');
+const { requireRole } = require('../modules/auth/auth');
 const { getCaseStatuses, getOverview, getReviewQueue, getApprovals, listCases, getCase, getAttachment, getDocument, overrideCase, resetCase } = require('../controllers/cases/casesController');
 
 const router = express.Router();
@@ -75,14 +76,14 @@ router.get('/statuses', getCaseStatuses);
  * /api/cases/overview:
  *   get:
  *     tags: [cases]
- *     summary: Dashboard numbers — cases per group, per module × group, and new today
+ *     summary: Dashboard numbers — cases per group (who acts next) and new today
  *     parameters:
  *       - name: source
  *         in: query
  *         schema: { type: string, enum: [EMAIL, API] }
  *     responses:
  *       200:
- *         description: "{ total, newToday, groups: { groupId: n }, modules: { moduleId: { groupId: n } } }"
+ *         description: "{ total, newToday, groups: { groupId: n } }"
  */
 router.get('/overview', getOverview);
 
@@ -212,10 +213,9 @@ router.get('/:caseId/documents/:documentId', getDocument);
  *     description: >
  *       Only valid from INCOMPLETE (→ MEMBER_VERIFIED) or MEMBER_REVIEW_REQUIRED
  *       (→ READY_FOR_DOCUMENT_CHECKING) — a pure Case.currentStatus write, so the next scheduled job for
- *       the new status picks the case up normally. Requires both reason and operatorName;
- *       no auth exists yet (Day 1, trusted host, same as every /api/jobs/* endpoint) so
- *       operatorName is plain free text, not an authenticated identity. Logs one CaseEvent
- *       (reasonCode MANUAL_OVERRIDE) capturing the reason and a snapshot of what was waived.
+ *       the new status picks the case up normally. Super admin only; requires a reason, and
+ *       records the logged-in user. Logs one CaseEvent (reasonCode MANUAL_OVERRIDE) capturing
+ *       who, the reason and a snapshot of what was waived.
  *     parameters:
  *       - name: id
  *         in: path
@@ -227,19 +227,18 @@ router.get('/:caseId/documents/:documentId', getDocument);
  *         application/json:
  *           schema:
  *             type: object
- *             required: [reason, operatorName]
+ *             required: [reason]
  *             properties:
  *               reason: { type: string }
- *               operatorName: { type: string }
  *     responses:
  *       200:
  *         description: Case advanced
  *       400:
- *         description: Missing reason/operatorName, or the case isn't at a reviewable status
+ *         description: Missing reason, or the case isn't at a reviewable status
  *       404:
  *         description: Case not found
  */
-router.post('/:id/override', overrideCase);
+router.post('/:id/override', requireRole('super_admin'), overrideCase);
 
 /**
  * @openapi
@@ -269,6 +268,6 @@ router.post('/:id/override', overrideCase);
  *       409:
  *         description: Case already has a real IAS claim number — refusing to reset
  */
-router.post('/:id/reset', resetCase);
+router.post('/:id/reset', requireRole('super_admin'), resetCase);
 
 module.exports = router;

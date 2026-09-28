@@ -1,5 +1,6 @@
 import { Image } from 'lucide-react';
-import { getDocumentUrl } from '../../api/casesApi';
+import { documentPath } from '../../api/casesApi';
+import { FileLink } from '../common/FileLink';
 import { formatBytes } from '../../lib/formatBytes';
 import type { CaseDocument } from '../../types/case';
 
@@ -22,17 +23,15 @@ export function CaseDocumentsSection({ caseId, documents }: { caseId: string; do
           </p>
           <div className="flex flex-wrap gap-2">
             {docs.map((doc) => (
-              <a
+              <FileLink
                 key={doc.id}
-                href={getDocumentUrl(caseId, doc.id)}
-                target="_blank"
-                rel="noreferrer"
+                path={documentPath(caseId, doc.id)}
                 className="inline-flex items-center gap-1.5 rounded-full border border-slate-900/10 bg-white px-3 py-1.5 text-xs text-slate-600 hover:border-ulink-orange/40 hover:text-ulink-orange-dark"
               >
                 <Image size={12} />
                 {doc.originalFilename}
                 <span className="text-slate-400">{formatBytes(doc.sizeBytes)}</span>
-              </a>
+              </FileLink>
             ))}
           </div>
         </div>

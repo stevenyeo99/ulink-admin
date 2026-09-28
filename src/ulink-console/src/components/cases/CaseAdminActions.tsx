@@ -8,8 +8,7 @@ import type { CaseDetail } from '../../types/case';
 
 const REVIEWABLE_STATUSES = ['INCOMPLETE', 'MEMBER_REVIEW_REQUIRED'];
 
-/** Until login + roles exist, the admin actions are hidden only by building with VITE_ADMIN_TOOLS=false. */
-export const ADMIN_TOOLS_ENABLED = import.meta.env.VITE_ADMIN_TOOLS !== 'false';
+
 
 /**
  * Admin-only actions on a case: reset it to be reprocessed, or override a stuck check. Both are
@@ -18,7 +17,6 @@ export const ADMIN_TOOLS_ENABLED = import.meta.env.VITE_ADMIN_TOOLS !== 'false';
 export function CaseAdminActions({ caseRecord }: { caseRecord: CaseDetail }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [operatorName, setOperatorName] = useState('');
   const [reason, setReason] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
@@ -28,9 +26,9 @@ export function CaseAdminActions({ caseRecord }: { caseRecord: CaseDetail }) {
     queryClient.invalidateQueries({ queryKey: ['review-queue'] });
     navigate('/cases');
   };
-  const overrideMutation = useMutation({ mutationFn: () => overrideCase(caseRecord.id, reason.trim(), operatorName.trim()), onSuccess: done });
+  const overrideMutation = useMutation({ mutationFn: () => overrideCase(caseRecord.id, reason.trim()), onSuccess: done });
   const resetMutation = useMutation({ mutationFn: () => resetCase(caseRecord.id), onSuccess: done });
-  const canSubmit = operatorName.trim() !== '' && reason.trim() !== '' && !overrideMutation.isPending;
+  const canSubmit = reason.trim() !== '' && !overrideMutation.isPending;
 
   return (
     <div className="space-y-4">
@@ -82,16 +80,8 @@ export function CaseAdminActions({ caseRecord }: { caseRecord: CaseDetail }) {
         <div className="border-t border-slate-900/5 pt-4">
           <h4 className="text-sm font-medium text-ulink-orange-dark">Manual override</h4>
           <p className="mb-3 mt-1 text-xs text-slate-500">
-            Moves the case past its current check. Needs your name and a written reason, both logged permanently to the case history.
+            Moves the case past its current check. Needs a written reason; it and your name are logged permanently to the case history.
           </p>
-          <label className="mb-3 block">
-            <span className="mb-1 block text-xs font-medium text-slate-600">Your name</span>
-            <input
-              value={operatorName}
-              onChange={(e) => setOperatorName(e.target.value)}
-              className="w-full rounded-lg border border-slate-900/10 px-3 py-2 text-sm outline-none focus:border-ulink-orange focus:ring-2 focus:ring-ulink-orange/20"
-            />
-          </label>
           <label className="mb-3 block">
             <span className="mb-1 block text-xs font-medium text-slate-600">Reason for override</span>
             <textarea

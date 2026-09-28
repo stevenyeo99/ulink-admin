@@ -31,6 +31,9 @@ const devConsoleUploadRouter = require('./routes/dev/consoleUpload');
 const devIasClaimStpRouter = require('./routes/dev/iasClaimStp');
 const devApiClaimIntakeRouter = require('./routes/dev/apiClaimIntake');
 
+const authRouter = require('./routes/auth');
+const { requireAuth, requireRole } = require('./modules/auth/auth');
+
 const app = express();
 
 app.disable('x-powered-by');
@@ -59,11 +62,15 @@ app.use(
 
 app.use('/', rootRouter);
 app.use('/health', healthRouter);
-app.use('/api/users', usersRouter);
+app.use('/api/auth', authRouter);
+// Pipeline and job routes stay open: cron runs them with no user (decided 2026-09-28).
 app.use('/api/jobs', jobsRouter);
 app.use('/api/jobs/pipeline', pipelineRouter);
 app.use('/api/jobs/api-pipeline', apiPipelineRouter);
-app.use('/api/cases', casesRouter);
+// Everything else needs a logged-in console user; admin-only actions check the role too.
+app.use('/api/users', requireAuth, requireRole('super_admin'), usersRouter);
+app.use('/api/cases', requireAuth, casesRouter);
+app.use('/api/dev', requireAuth, requireRole('super_admin'));
 app.use('/api/dev/claim-recognition', devClaimRecognitionRouter);
 app.use('/api/dev/document-checking', devDocumentCheckingRouter);
 app.use('/api/dev/cases', devCasesRouter);

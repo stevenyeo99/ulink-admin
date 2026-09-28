@@ -1,4 +1,4 @@
-import { API_BASE_URL, request } from './client';
+import { request } from './client';
 import type { ApprovalsResponse, CaseListQuery, CaseOverview, ReviewQueueResponse, CaseStatusCatalog, GetCaseResponse, ListCasesResponse, OverrideCaseResponse, ResetCaseResponse } from '../types/case';
 import type { Source } from '../types/pipeline';
 
@@ -31,10 +31,11 @@ export function getCase(id: string): Promise<GetCaseResponse> {
   return request<GetCaseResponse>(`/api/cases/${id}`);
 }
 
-export function overrideCase(id: string, reason: string, operatorName: string): Promise<OverrideCaseResponse> {
+// Who overrode is the logged-in user (the API reads it from the token).
+export function overrideCase(id: string, reason: string): Promise<OverrideCaseResponse> {
   return request<OverrideCaseResponse>(`/api/cases/${id}/override`, {
     method: 'POST',
-    body: JSON.stringify({ reason, operatorName }),
+    body: JSON.stringify({ reason }),
   });
 }
 
@@ -47,11 +48,11 @@ export function resetCase(id: string): Promise<ResetCaseResponse> {
 // Not a fetch wrapper — the browser handles the actual GET itself (opened via
 // <a target="_blank">), so it can render the PDF/image with its own native viewer instead of
 // this app building one.
-export function getAttachmentUrl(caseId: string, attachmentId: string): string {
-  return `${API_BASE_URL}/api/cases/${caseId}/attachments/${attachmentId}`;
+// API paths of a case's files — opened with the login token by components/common/FileLink.tsx.
+export function attachmentPath(caseId: string, attachmentId: string): string {
+  return `/api/cases/${caseId}/attachments/${attachmentId}`;
 }
 
-// Same idea for a case-level document (an API case's console image).
-export function getDocumentUrl(caseId: string, documentId: string): string {
-  return `${API_BASE_URL}/api/cases/${caseId}/documents/${documentId}`;
+export function documentPath(caseId: string, documentId: string): string {
+  return `/api/cases/${caseId}/documents/${documentId}`;
 }

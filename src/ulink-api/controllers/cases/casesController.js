@@ -144,8 +144,8 @@ async function getReviewQueue(req, res) {
 }
 
 /**
- * GET /api/cases/overview — the dashboard's numbers: cases per group, per module × group, and
- * how many arrived today (Myanmar time, the same day boundary IAS uses). Optional ?source=.
+ * GET /api/cases/overview — the dashboard's numbers: cases per group (who acts next), and how many
+ * arrived today (Myanmar time, the same day boundary IAS uses). Optional ?source=.
  */
 async function getOverview(req, res) {
   const source = req.query.source ? String(req.query.source).toUpperCase() : null;
@@ -164,7 +164,6 @@ async function getOverview(req, res) {
   const newToday = await Case.count({ where: { ...where, createdAt: { [Op.gte]: startOfToday } } });
 
   const groups = Object.fromEntries(GROUPS.map((g) => [g.id, 0]));
-  const modules = Object.fromEntries(MODULES.map((m) => [m.id, Object.fromEntries(GROUPS.map((g) => [g.id, 0]))]));
   let total = 0;
   for (const row of rows) {
     const count = Number(row.count);
@@ -172,9 +171,8 @@ async function getOverview(req, res) {
     total += count;
     if (!info) continue; // an unknown status still counts toward the total
     groups[info.group] += count;
-    modules[info.module][info.group] += count;
   }
-  res.json({ total, newToday, groups, modules });
+  res.json({ total, newToday, groups });
 }
 
 /**
@@ -384,21 +382,17 @@ async function getDocument(req, res) {
  * POST /api/cases/:id/override — human-in-the-loop bypass for a case stuck at INCOMPLETE or
  * MEMBER_REVIEW_REQUIRED. Advances Case.currentStatus straight to the next stage's own input
  * status — a pure status write, so the next scheduled job picks it up with no special
- * handling. Requires both a written reason and an operator name: no real auth/user system
- * exists anywhere in this project yet (confirmed 2026-08-25, controllers/users/usersController.js
- * is an unwired scaffold) — operatorName is plain, unauthenticated free text, a stopgap for
- * *some* accountability in the audit trail rather than none, not real auth. Both fields, plus
- * a snapshot of exactly what was being waived, go into one CaseEvent so the audit record is
+ * handling. Requires a written reason; who did it is the logged-in console user (req.user,
+ * modules/auth/auth.js — replaced the free-text operatorName on 2026-09-28). The user, the reason
+ * and a snapshot of exactly what was being waived go into one CaseEvent, so the audit record is
  * self-contained without needing to cross-reference the case's prior state.
  */
 async function overrideCase(req, res) {
-  const { reason, operatorName } = req.body || {};
+  const { reason } = req.body || {};
+  const operator = req.user.name ? `${req.user.name} (${req.user.username})` : req.user.username;
 
   if (typeof reason !== 'string' || reason.trim() === '') {
     return res.status(400).json({ error: { message: '"reason" is required', status: 400 } });
-  }
-  if (typeof operatorName !== 'string' || operatorName.trim() === '') {
-    return res.status(400).json({ error: { message: '"operatorName" is required', status: 400 } });
   }
 
   const caseRecord = await Case.findByPk(req.params.id);
@@ -426,10 +420,10 @@ async function overrideCase(req, res) {
     prevStatus,
     newStatus: targetStatus,
     reasonCode: 'MANUAL_OVERRIDE',
-    message: `Overridden by ${operatorName.trim()}: ${reason.trim()}${waived ? ` (waived: ${waived})` : ''}`,
+    message: `Overridden by ${operator}: ${reason.trim()}${waived ? ` (waived: ${waived})` : ''}`,
   });
 
-  logger.info('Case manually overridden', { caseId: caseRecord.id, prevStatus, targetStatus, operatorName: operatorName.trim() });
+  logger.info('Case manually overridden', { caseId: caseRecord.id, prevStatus, targetStatus, username: req.user.username });
 
   res.json({ caseId: caseRecord.id, previousStatus: prevStatus, currentStatus: targetStatus });
 }
@@ -444,8 +438,8 @@ async function overrideCase(req, res) {
  */
 async function resetCase(req, res) {
   try {
-    const result = await resetOneCase(req.params.id, 'READY_FOR_DOCUMENT_READING', { source: 'console' });
-    logger.info('Case manually reset', { caseId: result.caseId, previousStatus: result.previousStatus });
+    const result = await resetOneCase(req.params.id, 'READY_FOR_DOCUMENT_READING', { source: `console by ${req.user.username}` });
+    logger.info('Case manually reset', { caseId: result.caseId, previousStatus: result.previousStatus, username: req.user.username });
     res.json(result);
   } catch (error) {
     if (error.message.includes('not found')) {

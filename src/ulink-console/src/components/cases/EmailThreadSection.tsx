@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Paperclip, ChevronDown, ChevronRight } from 'lucide-react';
 import clsx from 'clsx';
-import { getAttachmentUrl } from '../../api/casesApi';
+import { attachmentPath } from '../../api/casesApi';
+import { FileLink } from '../common/FileLink';
 import { formatBytes } from '../../lib/formatBytes';
 import type { EmailMessage, EmailThread } from '../../types/case';
 
@@ -48,17 +49,15 @@ function MessageRow({ caseId, message }: { caseId: string; message: EmailMessage
           {message.EmailAttachments.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {message.EmailAttachments.map((attachment) => (
-                <a
+                <FileLink
                   key={attachment.id}
-                  href={getAttachmentUrl(caseId, attachment.id)}
-                  target="_blank"
-                  rel="noreferrer"
+                  path={attachmentPath(caseId, attachment.id)}
                   className="inline-flex items-center gap-1.5 rounded-full border border-slate-900/10 bg-white px-3 py-1.5 text-xs text-slate-600 hover:border-ulink-orange/40 hover:text-ulink-orange-dark"
                 >
                   <Paperclip size={12} />
                   {attachment.originalFilename ?? 'attachment'}
                   <span className="text-slate-400">{formatBytes(attachment.sizeBytes)}</span>
-                </a>
+                </FileLink>
               ))}
             </div>
           )}

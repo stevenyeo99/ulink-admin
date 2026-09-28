@@ -4,6 +4,14 @@
  * Module dependencies.
  */
 
+var config = require('../config');
+
+// Console logins are signed with this — refuse to start without it rather than fail at first login.
+if (!config.auth.jwtSecret) {
+  console.error('JWT_SECRET is not set. Add a long random value to .env (e.g. `openssl rand -hex 32`).');
+  process.exit(1);
+}
+
 var app = require('../app');
 var debug = require('debug')('ulink-api:server');
 var http = require('http');

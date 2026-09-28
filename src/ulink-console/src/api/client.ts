@@ -1,3 +1,5 @@
+import { getSession, goToLogin } from '../lib/session';
+
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3088';
 
 // ulink-api applies express-rate-limit globally to every route (app.js), a shared budget
@@ -16,11 +18,19 @@ export interface ApiErrorBody {
   error?: { message?: string; status?: number };
 }
 
-export async function request<T>(path: string, init?: RequestInit): Promise<T> {
+/** fetch() against the API with the logged-in user's token; an expired or missing login goes back to the login page. */
+export async function authFetch(path: string, init?: RequestInit): Promise<Response> {
+  const token = getSession()?.token;
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...init,
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...init?.headers },
   });
+  if (response.status === 401 && !path.startsWith('/api/auth/login')) goToLogin();
+  return response;
+}
+
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await authFetch(path, init);
 
   if (response.status === 429) {
     const retryAfterSeconds = Number(response.headers.get('Retry-After'));

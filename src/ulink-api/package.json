@@ -15,7 +15,11 @@
     "format": "prettier --write .",
     "test": "jest --runInBand",
     "db:migrate": "sequelize-cli db:migrate",
-    "db:migrate:undo": "sequelize-cli db:migrate:undo"
+    "db:migrate:undo": "sequelize-cli db:migrate:undo",
+    "user:create": "node scripts/users.js create",
+    "user:reset-password": "node scripts/users.js reset-password",
+    "user:disable": "node scripts/users.js disable",
+    "user:enable": "node scripts/users.js enable"
   },
   "dependencies": {
     "ajv": "^8.20.0",
@@ -31,6 +35,7 @@
     "http-errors": "^2.0.1",
     "imapflow": "^1.0.175",
     "js-yaml": "^4.1.0",
+    "jsonwebtoken": "^9.0.3",
     "jszip": "^3.10.2",
     "mailparser": "^3.7.4",
     "morgan": "^1.11.0",

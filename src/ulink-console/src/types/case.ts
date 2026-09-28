@@ -33,7 +33,6 @@ export interface CaseOverview {
   total: number;
   newToday: number;
   groups: Record<string, number>;
-  modules: Record<string, Record<string, number>>;
 }
 
 export interface ListCasesResponse {

@@ -13,6 +13,12 @@ module.exports = {
   port: parseInt(process.env.PORT, 10) || 3000,
   logLevel: process.env.LOG_LEVEL || (env === 'production' ? 'info' : 'debug'),
   corsOrigin: process.env.CORS_ORIGIN || '*',
+  auth: {
+    // Signs console login tokens. Required — the server won't start without it (bin/www).
+    jwtSecret: process.env.JWT_SECRET,
+    // Failed-login attempts allowed per IP per window.
+    loginMax: parseInt(process.env.LOGIN_RATE_LIMIT_MAX, 10) || 10,
+  },
   rateLimit: {
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || 15 * 60 * 1000,
     max: parseInt(process.env.RATE_LIMIT_MAX, 10) || 100,

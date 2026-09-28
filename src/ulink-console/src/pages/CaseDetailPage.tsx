@@ -8,7 +8,8 @@ import { CaseStatusPill } from '../components/cases/CaseStatusPill';
 import { CaseDocumentsSection } from '../components/cases/CaseDocumentsSection';
 import { JobStepsSection } from '../components/cases/JobStepsSection';
 import { EmailThreadSection } from '../components/cases/EmailThreadSection';
-import { CaseAdminActions, ADMIN_TOOLS_ENABLED } from '../components/cases/CaseAdminActions';
+import { CaseAdminActions } from '../components/cases/CaseAdminActions';
+import { isSuperAdmin } from '../lib/session';
 import { JsonViewer } from '../components/panel/JsonViewer';
 import { ChecklistTable } from '../components/panel/ChecklistTable';
 import { AssessmentSummaryPanel } from '../components/panel/AssessmentSummaryPanel';
@@ -204,7 +205,7 @@ export function CaseDetailPage() {
               ))}
             </ol>
           </Section>
-          {ADMIN_TOOLS_ENABLED && (
+          {isSuperAdmin() && (
             <Section title="Admin actions" className="border-ulink-orange/20">
               <CaseAdminActions caseRecord={caseRecord} />
             </Section>
