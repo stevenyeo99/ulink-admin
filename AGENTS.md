@@ -48,5 +48,6 @@ status; the pipeline orchestrator runs every job in order (`modules/pipeline/ser
   `docs/imp/demo/API DAY1/PREV_FEEDBACK/20260917_enhancement_status.md` (the owner's tracker).
 - Real side effects need a go-ahead: sending email, calling IAS create/revise, uploading to the console, deleting data.
   Read-only checks against the dev DB and the console middleware are fine.
-- Commit only files with real changes: many docs differ only in line endings (`git diff --ignore-cr-at-eol`).
-  Commit message: one short line, no `Co-Authored-By` trailer. Leave Word lock files (`~$…docx`) out.
+- **The owner commits, never the agent.** After each change, suggest a one-line commit message (no `Co-Authored-By`
+  trailer) and the files it covers: only files with real changes (many docs differ only in line endings —
+  `git diff --ignore-cr-at-eol`), never `.env`, no secrets (check `.env.example` and docs), no Word lock files (`~$…docx`).
