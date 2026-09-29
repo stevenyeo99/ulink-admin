@@ -17,11 +17,11 @@ const inputWith = (documentCheck) => ({
     { barcodeId: 'FIRST', createdAt: '2026-09-24T04:00:00Z', documentIds: ['d1'] },
   ] },
   'api-claim-recognition': { recognizedType: 'ayas_member_claim', extractedFields },
-  'api-member-verification': { iasMemberInfoResponse: { success: true, payload: { member: {} } } },
+  'api-member-verification': { iasMemberInfoResponse: { success: true, payload: { member: {} } }, memberVerifyResult: { outcome: 'MEMBER_VERIFIED' } },
   'api-document-checking': documentCheck,
 });
-const passed = { outcome: 'DOCUMENT_CHECKED', checkedAt: '2026-09-24T06:00:00.000Z' };
-const failed = { outcome: 'INCOMPLETE', checkedAt: '2026-09-24T06:00:00.000Z' };
+const passed = { outcome: 'DOCUMENT_CHECKED', checkedAt: '2026-09-24T06:00:00.000Z', documentCheckResult: { passed: true } };
+const failed = { outcome: 'INCOMPLETE', checkedAt: '2026-09-24T06:00:00.000Z', documentCheckResult: { passed: false } };
 const prepared = (isStp) => ({
   payload: { MemberRefNo: 'M1', TpaCaseNumber: 'OCR-READ-NUMBER', barcode: 'FIRST', isValidation: 'N', isCSR: 'N', Items: [{ PresentedAmt: 1000 }] },
   diagnosis: { diagCode: 'J06.9' },
@@ -46,6 +46,10 @@ it("builds the email flow's payload from the earlier outputs, then the revision 
 
   expect(checkCase).toHaveBeenCalledWith({
     id: 'case-1',
+    // For the AI summary sent to IAS (AiSummaryRemark).
+    claimNo: '2604050015',
+    memberVerifyResult: { outcome: 'MEMBER_VERIFIED' },
+    documentCheckResult: { passed: true },
     extractedFields,
     recognizedType: 'ayas_member_claim',
     iasMemberInfoResponse: { success: true, payload: { member: {} } },

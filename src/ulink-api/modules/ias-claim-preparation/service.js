@@ -5,6 +5,8 @@ const { pickBenefit } = require('./benefitPicker');
 const { buildPayload } = require('./payloadBuilder');
 const { stpDecision } = require('./stpEligibility');
 const { toEnglishMedicalText } = require('./medicalTranslation');
+const { aiSummaryRemark } = require('./aiSummaryRemark');
+const { overridesFromEvents } = require('../case-override/override');
 
 const BLOCK_NAME = 'ias-claim-preparation';
 
@@ -83,7 +85,7 @@ async function checkCase(caseRecord) {
   });
   const stp = stpResult.isStp;
 
-  const payload = buildPayload({
+  const iasPayload = buildPayload({
     extractedFields,
     iasMemberInfoResponse,
     route,
@@ -103,6 +105,19 @@ async function checkCase(caseRecord) {
     diagnosis: { text: diagnosisText || null, translation, ...diagnosisPick },
     lines: lineMeta,
     stp: stpResult,
+  };
+
+  // The AI assessment goes to IAS with the claim (AiSummaryRemark, 17/09 meeting #9): the case as it
+  // stands when sent — member and document results, overrides, and the picks and STP decision just made.
+  const overrides = overridesFromEvents(await CaseEvent.findAll({ where: { caseId: caseRecord.id, reasonCode: 'MANUAL_OVERRIDE' } }));
+  const payload = {
+    ...iasPayload,
+    AiSummaryRemark: aiSummaryRemark({
+      ...(caseRecord.toJSON ? caseRecord.toJSON() : caseRecord),
+      currentStatus: caseRecord.source === 'API' ? 'API_CLAIM_PAYLOAD_PREPARED' : 'CLAIM_PAYLOAD_PREPARED',
+      claimPrepMeta,
+      isStp: stp,
+    }, overrides),
   };
 
   return { caseId: caseRecord.id, payload, diagnosis: diagnosisPick.pick, lines, isStp: stp, claimPrepMeta };

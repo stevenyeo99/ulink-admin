@@ -23,7 +23,7 @@ Legend: ✅ done · 🟡 partly done · 🔴 not started / minimal · ⏸ later 
 | 3 | Customer communication | 🟡 Numbered list done; Burmese not | Decide Burmese scope |
 | 4 | Acknowledgement trigger | ✅ Done | Check live in the demo rehearsal |
 | 5 | Internal review | 🟡 Review queue, JD2 email, AI summary + case link + "why the case went this way" in internal emails and console; internal email for incomplete documents | Decide email vs dashboard for the rest (#8) |
-| 6 | AI assessment history | 🟡 Done inside our system (STP + non-STP saved); not in iAS | iAS field from iAS team |
+| 6 | AI assessment history | ✅ Saved in our system (STP + non-STP) and sent to iAS (`AiSummaryRemark`) | Check it in iAS on the next submission |
 | 7 | STP governance | 🟡 Configurable rules built (demo) | Real values + decisions from Ulink |
 | 8 | API / integration | 🟡 API case workflow built; documents still via console | `cl-upload` (3rd demo) |
 | — | Console upload (action #12) | 🗣 To discuss | Questions below |
@@ -110,7 +110,10 @@ Legend: ✅ done · 🟡 partly done · 🔴 not started / minimal · ⏸ later 
 - ✅ **STP** claims keep a saved copy too (built 2026-09-29), taken when the claim is created / revised in
   IAS — the point the STP decision is final: email cases on the `CLAIM_CREATED` case event (`rawRef`),
   API cases in the `api-claim-revision` step output (`assessment`). Not shown in the console (audit only).
-- ❌ **Kept in iAS** — needs a field or API from the iAS team.
+- ✅ **Sent to iAS (built 2026-09-29)** — new IAS field `AiSummaryRemark` (top level, optional, up to 10,000
+  characters, line breaks and Burmese allowed — confirmed by the IAS team) on the claim submission (email cases) and
+  the claim revision (API cases): the same text as the internal emails (why the case went this way, review points,
+  decisions), as the case stands when sent. Longer text is cut at 10,000 with a note. A real case is ~4,200 characters.
 - Detail: [SUMMARY_REQUIREMENT.md](SUMMARY_REQUIREMENT.md).
 
 ### 7. STP governance — 🟡 configurable rules built for the demo (2026-09-29)
@@ -203,7 +206,7 @@ override block STP · who can change the rules.
 
 | # | What is missing | Needed | Point |
 |---|---|---|---|
-| C1 | AI assessment kept in iAS | Field or API on the iAS side | 6 |
+| ~~C1~~ | ~~AI assessment kept in iAS~~ — ✅ built 2026-09-29 (`AiSummaryRemark`) | — | 6 |
 | C2 | Document upload by API (`cl-upload`, 3rd demo) | Spec, test account, barcode owner | 8, #12 |
 
 **D. Later — needs data first**
@@ -232,4 +235,5 @@ override block STP · who can change the rules.
 | 2026-09-29 | 5 | **Internal "Documents incomplete" email** (meeting notes item 4): new internal task type `DOCUMENTS_INCOMPLETE` (migration `20260929110000`); email cases with the customer's missing-documents email, API cases at the suspense revision. Tests 233/233 |
 | 2026-09-29 | 5 | **Possible policy exclusion explained**: was only "Possible match with exclusion clause 6.22" (tagged "Rule hold"). Now shows the clause's own words, the AI's one-line reason (new claims; the exclusion judge now returns it), that it is only a warning for JD2 (the case is not stopped), and a "Policy check" step in "why the case went this way". Older cases get the clause words from the policy clause list |
 | 2026-09-29 | 5 | **Fix:** email cases with incomplete documents got stuck at "Checking documents" — the new `DOCUMENTS_INCOMPLETE` email type was allowed in the DB but not in the `EmailTask` model, so the document check's save failed and rolled back. Added to the model; the pipeline's document-check email step now also sends it in the same run; regression test `emailTaskTypes.test.js`. Status label "Waiting for documents" renamed **"Documents incomplete"** (email `INCOMPLETE`, API `API_CLAIM_SUSPENDED`). Tests 242/242 |
+| 2026-09-29 | 6 | **AI assessment sent to iAS**: `AiSummaryRemark` (top level, ≤ 10,000 chars) added to the claim submission and revision payloads, built in `ias-claim-preparation` for both flows (`aiSummaryRemark.js`); includes overrides. Tests 245/245 |
 

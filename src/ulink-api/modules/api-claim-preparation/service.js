@@ -54,6 +54,10 @@ async function processCase({ caseRecord, input }) {
   const prepared = await checkCase({
     id: caseRecord.id,
     source: caseRecord.source,
+    claimNo: claim.clNo,
+    // For the AI summary sent to IAS (AiSummaryRemark): the member and document results so far.
+    memberVerifyResult: input['api-member-verification'].memberVerifyResult,
+    documentCheckResult: documentCheck.documentCheckResult,
     extractedFields,
     recognizedType,
     iasMemberInfoResponse: input['api-member-verification'].iasMemberInfoResponse,
