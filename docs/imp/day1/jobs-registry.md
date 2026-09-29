@@ -1,5 +1,11 @@
 # Jobs Registry
 
+> **Start here instead:** [CLAIM_FLOW_END_TO_END.md](../CLAIM_FLOW_END_TO_END.md) describes both flows end to end as
+> they run today (2026-09-29): every step, status, email, human checkpoint, setting and failure path. This file is
+> the per-job developer detail and was last reviewed 2026-09-28 — jobs and statuses added after that
+> (`console-barcode`, *Check before emailing customer*, the STP rules and switches, `AiSummaryRemark`) are described
+> there.
+
 > This file covers **email cases**. API cases (claims listed by IAS `get_claim_api`) have their own workflow and
 > jobs: see [api-case-workflow.md](api-case-workflow.md).
 
