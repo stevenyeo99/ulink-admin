@@ -32,6 +32,8 @@ async function checkExclusions(extractedFields, routeKey) {
     {
       code: 'POSSIBLE_EXCLUSION',
       clauseRef: judgment.clauseRef,
+      clauseText: judgment.clauseText,
+      reason: judgment.reason,
       severity: judgment.severity,
       confidence: judgment.confidence,
       policyHolderOverrides: overrides.map((o) => ({ coverageArea: o.coverageArea, note: o.note })),

@@ -47,7 +47,8 @@ const STEPS = [
   ['member-verification', memberVerificationService],
   ['document-checking', documentCheckingService],
   ['email-sender-member-verification', { run: () => emailSenderService.run({ taskTypes: ['MEMBER_VERIFY_ISSUE'] }) }],
-  ['email-sender-document-checking', { run: () => emailSenderService.run({ taskTypes: ['MISSING_DOCUMENTS'] }) }],
+  // The customer's missing-documents email and the team's internal copy (DOCUMENTS_INCOMPLETE).
+  ['email-sender-document-checking', { run: () => emailSenderService.run({ taskTypes: ['MISSING_DOCUMENTS', 'DOCUMENTS_INCOMPLETE'] }) }],
   // Added 2026-09-15 — copies a cleared AYAS-reimbursement case's documents to the shared
   // console folder and generates its barcode (Case.consoleBarcode) before ias-claim-
   // preparation needs it. MEMBER_VERIFIED -> DOCUMENTS_UPLOADED; see

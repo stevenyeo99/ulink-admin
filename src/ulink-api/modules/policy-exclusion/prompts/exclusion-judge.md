@@ -20,4 +20,8 @@ Rules:
   as "no match") over a confident-sounding guess — this flag reaches a human either way, a
   false negative here is far less costly than training the assessor to distrust the flag.
 
+- `reason`: one short sentence for the assessor naming the words in the claim that match the
+  clause, e.g. "Treatment is Tirzepatide (a weight-loss drug) with BMI 30.2 — matches 'weight loss or
+  weight problems'." Null when nothing applies.
+
 Return ONLY JSON matching the provided schema.

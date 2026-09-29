@@ -42,6 +42,12 @@ function buildCaseJourney(fields = {}, lines = []) {
   const member = find('Member check');
   if (member) steps.push(step('Member check', member.result, `${member.why || ''}${handled(member)}`.trim()));
 
+  // Advisory warnings from the member check (possible policy exclusion, benefit not on the plan): they
+  // don't stop the case, but JD2 should weigh them — so the path says so.
+  for (const warning of lines.filter((l) => l.decision === 'Policy exclusion' || l.decision === 'Benefit eligibility')) {
+    steps.push(step('Policy check', warning.result, `${warning.brief || warning.why}${handled(warning)}`));
+  }
+
   const documents = lines.filter((l) => l.area === 'documents');
   if (documents.length) {
     const open = documents.filter((l) => l.status === 'issue' && !l.overridden);

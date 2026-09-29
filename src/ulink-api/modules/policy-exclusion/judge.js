@@ -6,12 +6,14 @@ const SYSTEM_PROMPT = fs.readFileSync(path.join(__dirname, 'prompts', 'exclusion
 
 const SCHEMA = {
   type: 'object',
-  required: ['excluded', 'clauseRef', 'severity', 'confidence'],
+  required: ['excluded', 'clauseRef', 'severity', 'confidence', 'reason'],
   properties: {
     excluded: { type: 'boolean' },
     clauseRef: { type: ['string', 'null'] },
     severity: { type: ['string', 'null'], enum: ['exclude', 'cap', null] },
     confidence: { type: 'number' },
+    // One sentence a reviewer can check: which words in the claim match which words in the clause.
+    reason: { type: ['string', 'null'] },
   },
 };
 
@@ -42,7 +44,9 @@ async function judgeExclusion({ diagnosisText, treatmentText, candidates }) {
   const result = await synthesizeJson({ systemPrompt: SYSTEM_PROMPT, userText, jsonSchema: SCHEMA });
   if (!result.excluded || !result.clauseRef || result.confidence < CONFIDENCE_THRESHOLD) return null;
 
-  return { clauseRef: result.clauseRef, severity: result.severity, confidence: result.confidence };
+  // clauseText: the wording judged against, kept with the flag so a reviewer reads the clause, not just its number.
+  const clauseText = candidates.find((c) => c.clauseRef === result.clauseRef)?.clauseText ?? null;
+  return { clauseRef: result.clauseRef, clauseText, severity: result.severity, confidence: result.confidence, reason: result.reason || null };
 }
 
 module.exports = { judgeExclusion };

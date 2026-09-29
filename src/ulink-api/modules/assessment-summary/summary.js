@@ -10,6 +10,9 @@
 // which maps their step outputs onto the same names. Any field may be missing (a case part-way through).
 
 const { buildCaseJourney, caseJourneyText } = require('./journey');
+// Exclusion clause wording by number — for flags stored before the clause text was kept on the flag
+// (2026-09-29). Static, hand-transcribed policy text (the same list the clause table is seeded from).
+const CLAUSE_TEXT = Object.fromEntries(require('../../scripts/seeds/ayaHealthExclusionClauses').clauses.map((c) => [c.clauseRef, c.clauseText]));
 
 // Same 0.5 every confidence-gated judge uses (identityJudgment, diagnosisPicker, benefitPicker,
 // policy-exclusion judge) and the console's ConfidenceSummary.
@@ -100,8 +103,9 @@ function formatConfidence(confidence) {
   return confidence == null ? null : Number(confidence).toFixed(2);
 }
 
-function line({ decision, result, status, why, confidence = null, verified, review = null }) {
-  return { decision, result, status, why: why || NOT_RECORDED, confidence, verified, review };
+// brief: optional short form of `why` for "why the case went this way" (journey.js), when `why` is long.
+function line({ decision, result, status, why, confidence = null, verified, review = null, brief = null }) {
+  return { decision, result, status, why: why || NOT_RECORDED, confidence, verified, review, ...(brief ? { brief } : {}) };
 }
 
 // A result the AI rated below the threshold is worth a look even when it passed.
@@ -143,14 +147,29 @@ function memberLines(memberVerifyResult) {
   // Advisory flags on a verified member: benefit eligibility (rule) and possible policy exclusion (AI).
   for (const flag of flags || []) {
     const byAi = flag.confidence != null;
+    const exclusion = flag.code === 'POSSIBLE_EXCLUSION';
+    // An exclusion shows the clause's own words and what in the claim matched, so a reviewer can judge it.
+    const clauseText = exclusion ? flag.clauseText || CLAUSE_TEXT[flag.clauseRef] : null;
     lines.push(line({
-      decision: flag.code === 'POSSIBLE_EXCLUSION' ? 'Policy exclusion' : 'Benefit eligibility',
-      result: flag.code,
+      decision: exclusion ? 'Policy exclusion' : 'Benefit eligibility',
+      result: exclusion ? `Possible exclusion${flag.clauseRef ? ` (clause ${flag.clauseRef})` : ''}` : flag.code,
       status: 'issue',
-      why: flag.reason || flag.desc || (flag.clauseRef ? `Possible match with exclusion clause ${flag.clauseRef}.` : null),
+      why: exclusion
+        ? [
+          clauseText ? `Clause ${flag.clauseRef}: "${clauseText.replace(/\.$/, '')}".` : `Clause ${flag.clauseRef}.`,
+          flag.reason ? `AI: ${flag.reason}` : null,
+          'Only a warning for JD2 — the case is not stopped.',
+        ].filter(Boolean).join(' ')
+        : flag.reason || flag.desc || null,
       confidence: formatConfidence(flag.confidence),
       verified: byAi ? VERIFIED.AI : VERIFIED.RULE,
-      review: byAi ? { ...REVIEW.RULE_HOLD, mightBeWrong: ['AI judgment'] } : REVIEW.RULE_HOLD,
+      review: exclusion
+        ? { ...REVIEW.RULE_HOLD, mightBeWrong: ['AI judgment'], check: `Read clause ${flag.clauseRef} and decide whether it applies to this claim.` }
+        : byAi ? { ...REVIEW.RULE_HOLD, mightBeWrong: ['AI judgment'] } : REVIEW.RULE_HOLD,
+      // Short form for "why the case went this way": the AI's reason, else the start of the clause.
+      brief: exclusion
+        ? `${flag.reason || (clauseText ? `"${clauseText.length > 110 ? `${clauseText.slice(0, 110).trimEnd()}…` : clauseText}"` : `Clause ${flag.clauseRef}.`)} A warning for JD2, not a stop.`
+        : null,
     }));
   }
   return lines;

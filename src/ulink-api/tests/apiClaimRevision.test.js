@@ -79,7 +79,7 @@ it('marks a revision with missing documents suspended, and tells the team what i
     },
   });
   expect(result.output.email.payload.assessment).toMatch(/^Why the case went this way:\n/);
-  expect(result.output.email.payload.assessment).toContain('Now — Waiting for documents');
+  expect(result.output.email.payload.assessment).toContain('Now — Documents incomplete');
 });
 
 it("treats IAS's success:false as a rejection: not retried, internal email", async () => {

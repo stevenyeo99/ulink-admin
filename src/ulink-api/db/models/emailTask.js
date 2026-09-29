@@ -18,6 +18,7 @@ module.exports = (sequelize, DataTypes) => {
               'SUBMISSION_NOT_RECOGNIZED',
               'CLAIM_APPROVAL_REVIEW',
               'CSR_REPORT',
+              'DOCUMENTS_INCOMPLETE',
             ],
           ],
         },
