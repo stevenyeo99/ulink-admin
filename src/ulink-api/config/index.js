@@ -108,6 +108,18 @@ module.exports = {
     // Real disk I/O (reads every attachment, writes a copy) per case — keep modest, same
     // reasoning as memberVerification's batch size.
     batchLimit: parseInt(process.env.CONSOLE_UPLOAD_BATCH_LIMIT, 10) || 20,
+    // 'folder' (copy to the shared folder + our own barcode, as before) or 'cl-upload' (upload by API;
+    // the console creates the barcode later — docs/imp/demo/API DAY1/CL-UPLOAD SPEC/console_upload_requirement.md).
+    method: process.env.CONSOLE_UPLOAD_METHOD === 'cl-upload' ? 'cl-upload' : 'folder',
+  },
+
+  clUpload: {
+    url: process.env.CL_UPLOAD_URL,
+    apiKey: process.env.CL_UPLOAD_API_KEY,
+    timeoutMs: parseInt(process.env.CL_UPLOAD_TIMEOUT_MS, 10) || 60000,
+    // The console's barcode job runs about every 15 minutes, so a barcode normally shows up 15-30
+    // minutes after the upload. Past this, the case is flagged for review (it keeps being checked).
+    barcodeWaitMinutes: parseInt(process.env.CONSOLE_BARCODE_WAIT_MINUTES, 10) || 120,
   },
 
   emailSender: {

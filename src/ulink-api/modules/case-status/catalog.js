@@ -39,6 +39,12 @@ const CASE_STATUSES = {
   READY_FOR_DOCUMENT_CHECKING: status('documents', 'in_progress', 'Checking documents', 'The member check passed; the document checklist runs next.'),
   INCOMPLETE: status('documents', 'waiting_customer', 'Documents incomplete', "Documents are missing or unclear; the customer was emailed the list and the case waits for their reply."),
   MEMBER_VERIFIED: status('documents', 'in_progress', 'Checks passed', 'Member and documents are checked; documents go to the console next.'),
+  // Console upload by API (cl-upload): the console creates the barcode later, about every 15 minutes
+  // (docs/imp/demo/API DAY1/CL-UPLOAD SPEC/console_upload_requirement.md).
+  CONSOLE_BARCODE_PENDING: status('claim', 'in_progress', 'Waiting for console barcode', 'Documents were uploaded to the console; the console creates the barcode about every 15 minutes. The system checks again on every run.'),
+  CONSOLE_BARCODE_MISSING: status('claim', 'needs_review', 'Console barcode not received', 'Documents were uploaded to the console, but no barcode came back within the expected time. The system keeps checking; check the console side.'),
+  CASE_NUMBER_UNCLEAR: status('claim', 'needs_review', 'Case number unclear', "The case number read from the claim form doesn't look like AYA-CL- and 8 digits, so the documents were not uploaded to the console."),
+  CONSOLE_UPLOAD_FAILED: status('claim', 'needs_review', 'Console upload refused', 'The console upload API refused the documents; the reason is in the case history.'),
   DOCUMENTS_UPLOADED: status('claim', 'in_progress', 'Documents uploaded', 'Documents are in the console; the IAS claim is being prepared.'),
   CLAIM_PAYLOAD_PREPARED: status('claim', 'in_progress', 'Claim prepared', 'The IAS claim is built and about to be submitted.'),
   CLAIM_CREATED: status('claim', 'done', 'Created in IAS', 'The claim is in IAS. Non-STP: waiting for JD2 approval. STP: the settlement report follows.'),

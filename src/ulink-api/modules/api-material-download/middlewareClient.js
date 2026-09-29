@@ -48,4 +48,11 @@ async function downloadZip(scanId, items) {
   return Buffer.from(await response.arrayBuffer());
 }
 
-module.exports = { listMaterials, downloadZip };
+// GET /api/barcodes?scanId=… — { items: [{ barcodeId, createdAt, scanId }], hasMore }. scanId is the case's
+// prefix (API-<TpaCaseNumber>); each upload of the case is its own item (…-01, …-02). Used by console-barcode.
+async function listBarcodes(scanId) {
+  const response = await call(`/api/barcodes?${new URLSearchParams({ scanId })}`, { headers: { Accept: 'application/json' } });
+  return response.json();
+}
+
+module.exports = { listMaterials, downloadZip, listBarcodes };

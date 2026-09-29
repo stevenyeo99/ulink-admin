@@ -25,7 +25,7 @@ Legend: ✅ done · 🟡 partly done · 🔴 not started / minimal · ⏸ later 
 | 5 | Internal review | 🟡 Review queue, JD2 email, AI summary + case link + "why the case went this way" in internal emails and console; internal email for incomplete documents | Decide email vs dashboard for the rest (#8) |
 | 6 | AI assessment history | ✅ Saved in our system (STP + non-STP) and sent to iAS (`AiSummaryRemark`) | Check it in iAS on the next submission |
 | 7 | STP governance | 🟡 Configurable rules built (demo) | Real values + decisions from Ulink |
-| 8 | API / integration | 🟡 API case workflow built; documents still via console | `cl-upload` (3rd demo) |
+| 8 | API / integration | 🟡 API case workflow built; `cl-upload` for email cases built (off by default) | Live check with `AYA-CL-26031486`, then switch on |
 | — | Console upload (action #12) | 🗣 To discuss | Questions below |
 
 ---
@@ -169,14 +169,17 @@ override block STP · who can change the rules.
 ## 3. Summary
 
 - **Done:** 4 (acknowledgement); 3 inbound (Burmese diagnosis translated before the ICD-10 search);
-  5 / #7 for existing internal emails (AI assessment + case link).
-- **Done for now:** 3 (numbered list), 6 (inside our system, STP and non-STP saved).
+  5 / #7 internal emails (AI assessment, case link, "why the case went this way", incomplete-documents email,
+  every member problem listed, policy exclusion explained); 6 (saved in our system and sent to iAS as
+  `AiSummaryRemark`).
+- **Done for now:** 3 (numbered list).
 - **Built for the demo:** 7 (STP settings in the console). Before the demo: check the page in a browser and
   rehearse a rule change + re-running claim preparation.
 - **Small fixes left:** history of STP rule changes (7, before production).
 - **Needs a decision:** Burmese scope (3); email vs dashboard (5 / #8); real STP values, PA, review-point /
   override rules, who edits (7).
-- **Needs the iAS team / a discussion:** assessment kept in iAS (6); `cl-upload` and console upload (8, #12).
+- **Needs the iAS team / a discussion:** `cl-upload` and console upload (8, #12) — a first spec now exists
+  (`CL-UPLOAD SPEC/console-upload-spec.md`), open questions in C2.
 - **Later by decision:** attachment storage (1); AYAS delegation (2).
 
 ---
@@ -207,7 +210,7 @@ override block STP · who can change the rules.
 | # | What is missing | Needed | Point |
 |---|---|---|---|
 | ~~C1~~ | ~~AI assessment kept in iAS~~ — ✅ built 2026-09-29 (`AiSummaryRemark`) | — | 6 |
-| C2 | Document upload by API (`cl-upload`, 3rd demo) | Spec, test account, barcode owner | 8, #12 |
+| C2 | 🟡 **Built 2026-09-29 for email cases, switched off by default** — see [console_upload_requirement.md](../CL-UPLOAD%20SPEC/console_upload_requirement.md). Document upload by API (`cl-upload`, 3rd demo). **First spec received** (`CL-UPLOAD SPEC/console-upload-spec.md`): POST multipart `TpaCaseNumber` + one merged PDF, API key; barcode not returned — fetched later from `/api/barcodes?scanId=API-<case>` | Still open: when the barcode is ready (how long to wait, retry); what `-01`/`-02` in the scan id means for a second upload; production URLs; whether it replaces the email-case folder copy too; failure / repeat upload handling | 8, #12 |
 
 **D. Later — needs data first**
 
@@ -236,4 +239,5 @@ override block STP · who can change the rules.
 | 2026-09-29 | 5 | **Possible policy exclusion explained**: was only "Possible match with exclusion clause 6.22" (tagged "Rule hold"). Now shows the clause's own words, the AI's one-line reason (new claims; the exclusion judge now returns it), that it is only a warning for JD2 (the case is not stopped), and a "Policy check" step in "why the case went this way". Older cases get the clause words from the policy clause list |
 | 2026-09-29 | 5 | **Fix:** email cases with incomplete documents got stuck at "Checking documents" — the new `DOCUMENTS_INCOMPLETE` email type was allowed in the DB but not in the `EmailTask` model, so the document check's save failed and rolled back. Added to the model; the pipeline's document-check email step now also sends it in the same run; regression test `emailTaskTypes.test.js`. Status label "Waiting for documents" renamed **"Documents incomplete"** (email `INCOMPLETE`, API `API_CLAIM_SUSPENDED`). Tests 242/242 |
 | 2026-09-29 | 6 | **AI assessment sent to iAS**: `AiSummaryRemark` (top level, ≤ 10,000 chars) added to the claim submission and revision payloads, built in `ias-claim-preparation` for both flows (`aiSummaryRemark.js`); includes overrides. Tests 245/245 |
+| 2026-09-29 | 8 | **Console upload by API (`cl-upload`) for email cases** — upload one merged PDF, then wait at the new status **Waiting for console barcode** until the console creates it (its job runs every 15 min); all the case's barcodes go to IAS as `barcode` + `suppBarcode1`–`5`; case number checked first; after 2 h → *Console barcode not received* (needs review, internal email, still checked). Off by default (`CONSOLE_UPLOAD_METHOD=folder`). New dependency `pdf-lib`; migration `20260929120000`. Details: `CL-UPLOAD SPEC/console_upload_requirement.md`. Tests 260/260 |
 

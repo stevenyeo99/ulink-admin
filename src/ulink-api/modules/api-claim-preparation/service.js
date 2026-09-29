@@ -1,6 +1,7 @@
 const config = require('../../config');
 const { runApiJob } = require('../api-pipeline/runApiJob');
 const { checkCase } = require('../ias-claim-preparation/service');
+const { barcodeFields } = require('../shared/barcodeFields');
 
 // api-claim-preparation: API case workflow job (docs/imp/day1/api-case-workflow.md section 6.6).
 //
@@ -19,21 +20,6 @@ const { checkCase } = require('../ias-claim-preparation/service');
 // the customer is asked for them. The payload then becomes the IAS claim revision body
 // (docs/imp/demo/API DAY1/IAS_CLAIM_REVISION.md): the same fields plus claimNo, the API flags
 // below, and every console barcode.
-
-const MAX_BARCODES = 6; // barcode + suppBarcode1..5
-
-// The case's console submissions, earliest first (the middleware lists newest first): the first
-// goes in `barcode`, the next five in suppBarcode1..5; unused slots are null; more than six are
-// left out (confirmed 2026-09-24).
-function barcodeFields(documents) {
-  const ids = [...documents]
-    .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)))
-    .map((d) => d.barcodeId)
-    .slice(0, MAX_BARCODES);
-  const fields = { barcode: ids[0] ?? null };
-  for (let i = 1; i < MAX_BARCODES; i += 1) fields[`suppBarcode${i}`] = ids[i] ?? null;
-  return fields;
-}
 
 // API flags (confirmed 2026-09-24). Missing documents always mean a suspense, even for an STP
 // amount. isSuspense is sent every time: IAS sets the suspense on Y and lifts it on N, so the

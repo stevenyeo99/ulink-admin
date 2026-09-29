@@ -25,6 +25,9 @@ const STATUS_REASONS = {
   API_MANUAL_REVIEW: 'Unreadable',
   MEMBER_REVIEW_REQUIRED: 'Data mismatch',
   API_MEMBER_REVIEW_REQUIRED: 'Data mismatch',
+  CONSOLE_BARCODE_MISSING: SYSTEM_ISSUE,
+  CONSOLE_UPLOAD_FAILED: SYSTEM_ISSUE,
+  CASE_NUMBER_UNCLEAR: 'Unreadable',
 };
 
 const rank = (reason) => {

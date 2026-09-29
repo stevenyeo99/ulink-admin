@@ -224,6 +224,23 @@ ${SIGN_OFF}`,
   };
 }
 
+// Internal: a cl-upload case needs a person (docs/imp/demo/API DAY1/CL-UPLOAD SPEC/console_upload_requirement.md).
+// problem: what went wrong in a few words; detail: the specifics (case number read, API answer, wait time).
+function renderConsoleUploadIssue(payload) {
+  const { caseId, problem, detail } = payload;
+  return {
+    subject: `${INTERNAL_SUBJECT_PREFIX}Console upload — ${problem} — Case ${caseId}`,
+    bodyText: `Hi team,
+
+This case can't go on to the IAS claim until the console upload is sorted out.
+
+Problem: ${problem}
+Detail: ${detail}${internalExtras(payload)}
+
+${SIGN_OFF}`,
+  };
+}
+
 const RENDERERS = {
   MISSING_DOCUMENTS: renderMissingDocuments,
   DOCUMENT_COMPLETE_ACK: renderDocumentCompleteAck,
@@ -233,6 +250,7 @@ const RENDERERS = {
   CLAIM_APPROVAL_REVIEW: renderClaimApprovalReview,
   CSR_REPORT: renderCsrReport,
   DOCUMENTS_INCOMPLETE: renderDocumentsIncomplete,
+  CONSOLE_UPLOAD_ISSUE: renderConsoleUploadIssue,
 };
 
 function render(taskType, payload) {

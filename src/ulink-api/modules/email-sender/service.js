@@ -14,6 +14,7 @@ const CASE_EVENT_STATUS = {
   SUBMISSION_NOT_RECOGNIZED: 'SUBMISSION_NOT_RECOGNIZED_EMAIL_SENT',
   CSR_REPORT: 'CSR_REPORT_EMAIL_SENT',
   DOCUMENTS_INCOMPLETE: 'DOCUMENTS_INCOMPLETE_EMAIL_SENT',
+  CONSOLE_UPLOAD_ISSUE: 'CONSOLE_UPLOAD_ISSUE_EMAIL_SENT',
 };
 
 async function logEvent(transaction, { caseId, newStatus, reasonCode = null, message = null }) {
@@ -27,7 +28,7 @@ async function logEvent(transaction, { caseId, newStatus, reasonCode = null, mes
 // CLAIM_APPROVAL_REVIEW (SOP §13 "ready for JD2 handover") and CLAIM_SUBMIT_ISSUE (a real
 // IAS rejection — ops needs the actual reason, not a customer-safe placeholder) get the
 // same treatment, same reasoning.
-const INTERNAL_ONLY_TASK_TYPES = new Set(['MEMBER_VERIFY_ISSUE', 'CLAIM_APPROVAL_REVIEW', 'CLAIM_SUBMIT_ISSUE', 'DOCUMENTS_INCOMPLETE']);
+const INTERNAL_ONLY_TASK_TYPES = new Set(['MEMBER_VERIFY_ISSUE', 'CLAIM_APPROVAL_REVIEW', 'CLAIM_SUBMIT_ISSUE', 'DOCUMENTS_INCOMPLETE', 'CONSOLE_UPLOAD_ISSUE']);
 
 /**
  * Fails loudly (task marked FAILED, retried per config.emailSender.maxAttempts) rather
