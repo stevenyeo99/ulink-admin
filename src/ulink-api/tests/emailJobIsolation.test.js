@@ -29,6 +29,7 @@ const EMAIL_JOBS = {
   'member-verification': '../modules/member-verification/service',
   'document-checking': '../modules/document-checking/service',
   'console-upload': '../modules/console-upload/service',
+  'console-barcode': '../modules/console-barcode/service',
   'ias-claim-preparation': '../modules/ias-claim-preparation/service',
   'ias-claim-creation': '../modules/ias-claim-creation/service',
   'ias-claim-stp': '../modules/ias-claim-stp/service',
