@@ -13,6 +13,7 @@ const KNOWN_STATUSES = Object.keys(CASE_STATUSES);
 const { getStorageAdapter } = require('../../storage');
 const { resetOneCase } = require('../dev/casesController');
 const logger = require('../../utils/logger');
+const { releaseMissingDocumentsEmail } = require('../../modules/document-checking/service');
 
 const BLOCK_NAME = 'case-review';
 
@@ -474,4 +475,43 @@ async function resetCase(req, res) {
   }
 }
 
-module.exports = { getCaseStatuses, getOverview, getReviewQueue, getApprovals, listCases, getCase, getAttachment, getDocument, overrideCase, resetCase, OVERRIDE_TARGETS, REVIEWABLE_STATUSES };
+/**
+ * POST /api/cases/:id/release-missing-documents — a held case (switch "hold the missing-documents email
+ * when the AI is unsure"): a person checked the documents and they really are missing, so the customer
+ * gets the request the document check prepared. Email case: → INCOMPLETE. API case: → API_INCOMPLETE
+ * (then the usual suspended revision in IAS); the email goes out through api-email-sender as a
+ * case-review step. The other choice — the documents are fine — is the normal override.
+ */
+async function releaseMissingDocuments(req, res) {
+  const operator = req.user.name ? `${req.user.name} (${req.user.username})` : req.user.username;
+  const caseRecord = await Case.findByPk(req.params.id);
+  if (!caseRecord) return res.status(404).json({ error: { message: `Case ${req.params.id} not found`, status: 404 } });
+  const notHeld = () => res.status(400).json({ error: { message: 'This case is not waiting for a check before the customer is emailed.', status: 400 } });
+
+  if (caseRecord.source !== 'API') {
+    if (caseRecord.currentStatus !== 'DOCUMENTS_REVIEW') return notHeld();
+    if (!(await releaseMissingDocumentsEmail(caseRecord, operator))) {
+      return res.status(409).json({ error: { message: 'The case changed while you were reviewing it. Reload the page and check again.', status: 409 } });
+    }
+    logger.info('Missing-documents email released', { caseId: caseRecord.id, username: req.user.username });
+    return res.json({ caseId: caseRecord.id, currentStatus: 'INCOMPLETE' });
+  }
+
+  if (caseRecord.currentStatus !== 'API_DOCUMENTS_REVIEW') return notHeld();
+  const check = await ApiCaseStep.findOne({ where: { caseId: caseRecord.id, job: 'api-document-checking', status: 'DONE' }, order: [['createdAt', 'DESC']] });
+  const heldEmail = check?.output?.heldEmail;
+  if (!heldEmail) return res.status(409).json({ error: { message: 'No held email found for this case.', status: 409 } });
+  const now = new Date();
+  const moved = await sequelize.transaction(async (transaction) => {
+    const [count] = await Case.update({ currentStatus: 'API_INCOMPLETE' }, { where: { id: caseRecord.id, currentStatus: 'API_DOCUMENTS_REVIEW' }, transaction });
+    if (count !== 1) return false;
+    await CaseEvent.create({ caseId: caseRecord.id, blockName: BLOCK_NAME, prevStatus: 'API_DOCUMENTS_REVIEW', newStatus: 'API_INCOMPLETE', reasonCode: 'MISSING_DOCUMENTS_RELEASED', message: `Missing-documents email sent to the customer by ${operator} after review` }, { transaction });
+    await ApiCaseStep.create({ caseId: caseRecord.id, job: 'case-review', status: 'DONE', input: { username: req.user.username, action: 'release-missing-documents' }, output: { email: heldEmail }, startedAt: now, finishedAt: now }, { transaction });
+    return true;
+  });
+  if (!moved) return res.status(409).json({ error: { message: 'The case changed while you were reviewing it. Reload the page and check again.', status: 409 } });
+  logger.info('Missing-documents email released', { caseId: caseRecord.id, username: req.user.username });
+  res.json({ caseId: caseRecord.id, currentStatus: 'API_INCOMPLETE' });
+}
+
+module.exports = { getCaseStatuses, getOverview, getReviewQueue, getApprovals, listCases, getCase, getAttachment, getDocument, overrideCase, resetCase, releaseMissingDocuments, OVERRIDE_TARGETS, REVIEWABLE_STATUSES };

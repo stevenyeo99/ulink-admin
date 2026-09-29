@@ -207,15 +207,21 @@ ${SIGN_OFF}`,
 
 // Internal copy of a missing-documents request (17/09 meeting notes, item 4): the customer was already
 // asked; nothing to do unless they don't reply. claimNo only on API cases (email cases have none yet).
+// held (switch "hold the missing-documents email when the AI is unsure"): the AI's unsure points — the
+// customer has NOT been emailed; a person decides: send the request, or override the check.
 function renderDocumentsIncomplete(payload) {
-  const { caseId, claimNo, issues = [] } = payload;
+  const { caseId, claimNo, issues = [], held } = payload;
   const ref = claimNo ? `Claim ${claimNo}` : `Case ${caseId}`;
   const list = issues.map((issue, i) => `${i + 1}. ${issue}`).join('\n');
+  const intro = held?.length
+    ? `ACTION NEEDED — the customer has NOT been emailed yet. The AI was unsure about: ${held.join('; ')}.
+Open the case and check the documents, then either send the customer the request below, or override the document check if the documents are fine.`
+    : "The customer has been asked for the missing documents below. No action is needed unless they don't reply.";
   return {
-    subject: `${INTERNAL_SUBJECT_PREFIX}Documents incomplete — ${ref} — ${issues.length} missing`,
+    subject: `${INTERNAL_SUBJECT_PREFIX}${held?.length ? 'Check before emailing the customer' : 'Documents incomplete'} — ${ref} — ${issues.length} missing`,
     bodyText: `Hi team,
 
-The customer has been asked for the missing documents below. No action is needed unless they don't reply.
+${intro}
 
 Missing:
 ${list}${internalExtras(payload)}

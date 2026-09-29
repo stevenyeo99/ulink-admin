@@ -9,6 +9,7 @@ const documentCheckingService = require('../document-checking/service');
 const memberVerificationService = require('../member-verification/service');
 const emailSenderService = require('../email-sender/service');
 const consoleUploadService = require('../console-upload/service');
+const consoleBarcodeService = require('../console-barcode/service');
 const iasClaimPreparationService = require('../ias-claim-preparation/service');
 const iasClaimCreationService = require('../ias-claim-creation/service');
 const iasClaimStpService = require('../ias-claim-stp/service');
@@ -54,6 +55,10 @@ const STEPS = [
   // preparation needs it. MEMBER_VERIFIED -> DOCUMENTS_UPLOADED; see
   // modules/console-upload/service.js.
   ['console-upload', consoleUploadService],
+  // cl-upload only (CONSOLE_UPLOAD_METHOD=cl-upload): picks up the barcode the console creates later
+  // (CONSOLE_BARCODE_PENDING -> DOCUMENTS_UPLOADED); nothing to do for the folder method.
+  ['console-barcode', consoleBarcodeService],
+  ['email-sender-console-upload', { run: () => emailSenderService.run({ taskTypes: ['CONSOLE_UPLOAD_ISSUE'] }) }],
   ['ias-claim-preparation', iasClaimPreparationService],
   ['ias-claim-creation', iasClaimCreationService],
   ['email-sender-claim-approval-review', { run: () => emailSenderService.run({ taskTypes: ['CLAIM_APPROVAL_REVIEW', 'CLAIM_SUBMIT_ISSUE'] }) }],

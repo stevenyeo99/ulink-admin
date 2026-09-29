@@ -41,6 +41,12 @@ export function overrideCase(id: string, reason: string, finding: string): Promi
 }
 
 // Always rewinds to READY_FOR_DOCUMENT_READING (the only target the console exposes) — see
+// A case held by the switch "hold the missing-documents email when the AI is unsure": a person checked
+// and the documents really are missing — send the customer the request (casesController.js::releaseMissingDocuments).
+export function releaseMissingDocuments(id: string): Promise<{ caseId: string; currentStatus: string }> {
+  return request(`/api/cases/${id}/release-missing-documents`, { method: 'POST' });
+}
+
 // casesController.js::resetCase. Fails with 409 if the case already has a real IAS claimNo.
 export function resetCase(id: string): Promise<ResetCaseResponse> {
   return request<ResetCaseResponse>(`/api/cases/${id}/reset`, { method: 'POST' });

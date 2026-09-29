@@ -27,6 +27,8 @@ const AWAITING_CUSTOMER_STATUSES = [
   'NOT_RECOGNIZED',
   'MANUAL_REVIEW',
   'INCOMPLETE',
+  // Held for review (switch): the customer may still send more documents on their own.
+  'DOCUMENTS_REVIEW',
   'MEMBER_REVIEW_REQUIRED',
 ];
 

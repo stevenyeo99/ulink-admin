@@ -38,6 +38,8 @@ const CASE_STATUSES = {
   MEMBER_REVIEW_REQUIRED: status('member', 'needs_review', 'Member check issue', "Member, coverage or bank details don't match IAS; held for internal review."),
   READY_FOR_DOCUMENT_CHECKING: status('documents', 'in_progress', 'Checking documents', 'The member check passed; the document checklist runs next.'),
   INCOMPLETE: status('documents', 'waiting_customer', 'Documents incomplete', "Documents are missing or unclear; the customer was emailed the list and the case waits for their reply."),
+  // Switch "hold the missing-documents email when the AI is unsure" on: a person checks before the customer is emailed.
+  DOCUMENTS_REVIEW: status('documents', 'needs_review', 'Check before emailing customer', "Documents look incomplete, but the AI wasn't sure. The customer has NOT been emailed: check the documents, then send the request or override the check."),
   MEMBER_VERIFIED: status('documents', 'in_progress', 'Checks passed', 'Member and documents are checked; documents go to the console next.'),
   // Console upload by API (cl-upload): the console creates the barcode later, about every 15 minutes
   // (docs/imp/demo/API DAY1/CL-UPLOAD SPEC/console_upload_requirement.md).
@@ -61,6 +63,7 @@ const CASE_STATUSES = {
   API_MEMBER_REVIEW_REQUIRED: status('member', 'needs_review', 'Member check issue', "Member, coverage or bank details don't match IAS; held for internal review."),
   API_READY_FOR_DOCUMENT_CHECKING: status('documents', 'in_progress', 'Checking documents', 'The member check passed; the document checklist runs next.'),
   API_INCOMPLETE: status('documents', 'in_progress', 'Documents missing', 'Documents are missing; the claim will be revised with suspense and the customer asked.'),
+  API_DOCUMENTS_REVIEW: status('documents', 'needs_review', 'Check before emailing customer', "Documents look incomplete, but the AI wasn't sure. The customer has NOT been emailed and IAS is unchanged: check the documents, then send the request or override the check."),
   API_DOCUMENTS_VERIFIED: status('documents', 'in_progress', 'Documents complete', 'Member and documents are checked; the IAS revision is being prepared.'),
   API_CLAIM_PAYLOAD_PREPARED: status('claim', 'in_progress', 'Revision prepared', 'The IAS claim revision is built and about to be sent.'),
   API_CLAIM_SUSPENDED: status('claim', 'waiting_customer', 'Documents incomplete', "Revised in IAS with suspense; the customer was asked for the missing documents and the case waits for their reply."),

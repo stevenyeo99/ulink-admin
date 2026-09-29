@@ -5,6 +5,10 @@ const config = require('../../config');
 const { getStorageAdapter } = require('../../storage');
 const { gatherAttachments } = require('../shared/gatherAttachments');
 const { datePathSegments } = require('../shared/datePathSegments');
+const { queueDedupedTask } = require('../shared/emailTaskQueue');
+const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment-summary/summary');
+const { mergeToPdf } = require('./mergePdf');
+const { uploadToConsole, UploadRejected } = require('./clUploadClient');
 
 const BLOCK_NAME = 'console-upload';
 
@@ -132,6 +136,81 @@ async function persistOutcome(caseRecord, outcome) {
   });
 }
 
+// --- Upload by API (cl-upload) ---------------------------------------------------------------
+// config.consoleUpload.method === 'cl-upload' (docs/imp/demo/API DAY1/CL-UPLOAD SPEC/console_upload_requirement.md).
+// The console files the upload under API-<TpaCaseNumber>-NN and creates its barcode later (about every
+// 15 minutes), so the case waits at CONSOLE_BARCODE_PENDING and the console-barcode job picks the barcode up.
+
+// The case number the console files the upload under — and the key the barcode lookup searches. Email
+// cases get it from the AI reading the claim form, so it's checked before anything is uploaded.
+const CASE_NUMBER = /^AYA-CL-\d{8}$/;
+
+// Internal notice when a cl-upload case needs a person (also used by console-barcode). Once per problem.
+async function queueConsoleUploadIssue(transaction, caseRecord, { status, problem, detail }) {
+  const fields = { ...(caseRecord.toJSON ? caseRecord.toJSON() : caseRecord), currentStatus: status };
+  await queueDedupedTask(transaction, {
+    caseId: caseRecord.id,
+    taskType: 'CONSOLE_UPLOAD_ISSUE',
+    dedupeKey: status,
+    payload: { caseId: caseRecord.id, problem, detail, assessment: assessmentSummaryText(buildAssessmentSummary(fields)) },
+  });
+}
+
+async function uploadByApi(caseRecord, tpaCaseNumber) {
+  const attachments = await gatherAttachments(caseRecord.id);
+  const storage = getStorageAdapter();
+  const files = [];
+  for (const attachment of attachments) {
+    files.push({ bytes: await storage.get(attachment.storageRef), contentType: attachment.contentType, filename: attachment.originalFilename });
+  }
+  const { pdf, pageCount, skipped } = await mergeToPdf(files);
+  const file = `${tpaCaseNumber}.pdf`;
+  const uploadedAt = new Date();
+  const { path: consolePath } = await uploadToConsole({ tpaCaseNumber, pdf, filename: file });
+  return {
+    method: 'cl-upload',
+    tpaCaseNumber,
+    uploadedAt: uploadedAt.toISOString(),
+    // Read back as the claim's docCompleteDate (ias-claim-preparation), same as the folder method.
+    completedAt: uploadedAt.toISOString(),
+    path: consolePath,
+    file,
+    sizeBytes: pdf.length,
+    pageCount,
+    files: attachments.map((a) => a.originalFilename),
+    skipped,
+  };
+}
+
+async function persistStatus(caseRecord, { status, fields = {}, reasonCode = null, message, issue = null }) {
+  return sequelize.transaction(async (transaction) => {
+    await Case.update({ currentStatus: status, ...fields }, { where: { id: caseRecord.id }, transaction });
+    await logEvent(transaction, { caseId: caseRecord.id, prevStatus: caseRecord.currentStatus, newStatus: status, reasonCode, message });
+    if (issue) await queueConsoleUploadIssue(transaction, { ...caseRecord.toJSON?.() ?? caseRecord, ...fields, id: caseRecord.id }, { status, ...issue });
+  });
+}
+
+async function runByApi(caseRecord) {
+  const tpaCaseNumber = (caseRecord.extractedFields?.claim?.insurer_case_number || '').trim();
+  if (!CASE_NUMBER.test(tpaCaseNumber)) {
+    const detail = `The case number read from the claim form is "${tpaCaseNumber || '(none)'}"; it should be AYA-CL- and 8 digits. Nothing was uploaded.`;
+    return persistStatus(caseRecord, { status: 'CASE_NUMBER_UNCLEAR', reasonCode: 'CASE_NUMBER_UNCLEAR', message: detail, issue: { problem: 'Case number unclear', detail } });
+  }
+  let result;
+  try {
+    result = await uploadByApi(caseRecord, tpaCaseNumber);
+  } catch (error) {
+    if (!(error instanceof UploadRejected)) throw error; // technical: stays at MEMBER_VERIFIED, retried next run
+    return persistStatus(caseRecord, { status: 'CONSOLE_UPLOAD_FAILED', reasonCode: 'CONSOLE_UPLOAD_REFUSED', message: error.message, issue: { problem: 'Upload refused', detail: error.message } });
+  }
+  const skipped = result.skipped.length ? ` (not a PDF or image, left out: ${result.skipped.join(', ')})` : '';
+  return persistStatus(caseRecord, {
+    status: 'CONSOLE_BARCODE_PENDING',
+    fields: { consoleUploadResult: result },
+    message: `Uploaded ${result.files.length} file(s) to the console as ${result.file} (${result.pageCount} page(s))${skipped}; waiting for its barcode`,
+  });
+}
+
 async function run() {
   const cases = await Case.findAll({
     where: { currentStatus: 'MEMBER_VERIFIED', recognizedType: AYAS_REIMBURSEMENT_ROUTE },
@@ -142,8 +221,12 @@ async function run() {
   const results = [];
   for (const caseRecord of cases) {
     try {
-      const outcome = await uploadCase(caseRecord);
-      await persistOutcome(caseRecord, outcome);
+      if (config.consoleUpload.method === 'cl-upload') {
+        await runByApi(caseRecord);
+      } else {
+        const outcome = await uploadCase(caseRecord);
+        await persistOutcome(caseRecord, outcome);
+      }
       results.push({ caseId: caseRecord.id, ok: true });
     } catch (error) {
       // Left at MEMBER_VERIFIED for retry on the next run — same pattern as every other
@@ -157,4 +240,4 @@ async function run() {
   return { processed, errors };
 }
 
-module.exports = { run, planUpload, uploadCase, buildFolder, generateBarcode, sanitize };
+module.exports = { run, planUpload, uploadCase, buildFolder, generateBarcode, sanitize, queueConsoleUploadIssue, CASE_NUMBER };

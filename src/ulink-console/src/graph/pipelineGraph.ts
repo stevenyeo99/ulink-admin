@@ -58,12 +58,15 @@ export const BLOCKS: BlockMeta[] = [
   // Added 2026-09-15 — AYAS reimbursement route only (Case.recognizedType==='ayas_member_claim'),
   // copies the case's documents to the shared console folder and generates its barcode
   // before ias-claim-preparation needs it. MEMBER_VERIFIED -> DOCUMENTS_UPLOADED.
-  { id: 'console-upload', label: 'Console Upload', description: 'Copies docs to console folder, generates barcode', x: 0, y: 760 },
-  { id: 'ias-claim-preparation', label: 'Claim Preparation', description: 'ICD-10 pick, benefit pick, payload build', x: 0, y: 950 },
-  { id: 'ias-claim-creation', label: 'Claim Creation', description: 'Submits to IAS, assigns claim number', x: 0, y: 1140 },
+  { id: 'console-upload', label: 'Console Upload', description: 'Uploads docs to the console (cl-upload), or copies them to its folder', x: 0, y: 760 },
+  // cl-upload only: the console creates the barcode later (about every 15 minutes) — waits for it.
+  // CONSOLE_BARCODE_PENDING -> DOCUMENTS_UPLOADED.
+  { id: 'console-barcode', label: 'Console Barcode', description: 'Waits for the barcode from the console', x: 0, y: 950 },
+  { id: 'ias-claim-preparation', label: 'Claim Preparation', description: 'ICD-10 pick, benefit pick, payload build', x: 0, y: 1140 },
+  { id: 'ias-claim-creation', label: 'Claim Creation', description: 'Submits to IAS, assigns claim number', x: 0, y: 1330 },
   // Added 2026-09-15 — isStp claims only: polls IAS claim-status for the settlement report
   // (CSR), downloads it once ready, emails it to the customer. CLAIM_CREATED -> CSR_SENT.
-  { id: 'ias-claim-stp', label: 'Claim STP', description: 'Downloads CSR, emails customer (STP claims only)', x: 0, y: 1330 },
+  { id: 'ias-claim-stp', label: 'Claim STP', description: 'Downloads CSR, emails customer (STP claims only)', x: 0, y: 1520 },
 ];
 
 export const EDGES: StaticEdge[] = [
@@ -71,7 +74,8 @@ export const EDGES: StaticEdge[] = [
   { id: 'e-recognition-verification', source: 'claim-recognition', target: 'member-verification', sourceHandle: 'source-bottom', targetHandle: 'target-top', kind: 'main' },
   { id: 'e-verification-checking', source: 'member-verification', target: 'document-checking', sourceHandle: 'source-bottom', targetHandle: 'target-top', kind: 'main' },
   { id: 'e-checking-upload', source: 'document-checking', target: 'console-upload', sourceHandle: 'source-bottom', targetHandle: 'target-top', kind: 'main' },
-  { id: 'e-upload-preparation', source: 'console-upload', target: 'ias-claim-preparation', sourceHandle: 'source-bottom', targetHandle: 'target-top', kind: 'main' },
+  { id: 'e-upload-barcode', source: 'console-upload', target: 'console-barcode', sourceHandle: 'source-bottom', targetHandle: 'target-top', kind: 'main' },
+  { id: 'e-barcode-preparation', source: 'console-barcode', target: 'ias-claim-preparation', sourceHandle: 'source-bottom', targetHandle: 'target-top', kind: 'main' },
   { id: 'e-preparation-creation', source: 'ias-claim-preparation', target: 'ias-claim-creation', sourceHandle: 'source-bottom', targetHandle: 'target-top', kind: 'main' },
   { id: 'e-creation-stp', source: 'ias-claim-creation', target: 'ias-claim-stp', sourceHandle: 'source-bottom', targetHandle: 'target-top', kind: 'main' },
 ];
@@ -110,10 +114,20 @@ export const EMAIL_BADGES: EmailBadgeMeta[] = [
     id: 'email-badge-document-checking',
     producer: 'document-checking',
     blockName: 'email-sender-document-checking',
-    label: 'MISSING_DOCUMENTS',
+    label: 'MISSING_DOCUMENTS · DOCUMENTS_INCOMPLETE (team)',
     audience: 'customer',
     x: 300,
     y: 570,
+  },
+  // cl-upload problems (case number unclear, upload refused, no barcode in time) — internal only.
+  {
+    id: 'email-badge-console-barcode',
+    producer: 'console-barcode',
+    blockName: 'email-sender-console-upload',
+    label: 'CONSOLE_UPLOAD_ISSUE',
+    audience: 'internal',
+    x: 300,
+    y: 950,
   },
   // ias-claim-creation's emails are internal-only, not the customer-facing
   // CLAIM_CREATED_NOTIFICATION this used to be — that taskType was removed (2026-09-14):
@@ -127,7 +141,7 @@ export const EMAIL_BADGES: EmailBadgeMeta[] = [
     label: 'CLAIM_APPROVAL_REVIEW · CLAIM_SUBMIT_ISSUE',
     audience: 'internal',
     x: 300,
-    y: 1140,
+    y: 1330,
   },
   // CSR_REPORT is customer-facing (the settlement report itself, with the PDF attached) —
   // unlike ias-claim-creation's internal-only emails above.
@@ -138,7 +152,7 @@ export const EMAIL_BADGES: EmailBadgeMeta[] = [
     label: 'CSR_REPORT',
     audience: 'customer',
     x: 300,
-    y: 1330,
+    y: 1520,
   },
 ];
 

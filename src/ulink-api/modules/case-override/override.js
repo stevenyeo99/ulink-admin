@@ -4,13 +4,16 @@
 //
 // Why only these: they are the checks that can stop a case where the AI may simply be wrong
 // (a misread document, a name/number read differently from IAS). An API case with missing
-// documents doesn't stop — it's already revised in IAS with a suspense — so it has no override.
+// documents doesn't stop — it's already revised in IAS with a suspense — unless the switch "hold the
+// missing-documents email when the AI is unsure" held it for review (API_DOCUMENTS_REVIEW).
 
 // Where each overridable status goes: the status the check itself would have set on a pass.
 const OVERRIDE_TARGETS = {
   INCOMPLETE: 'MEMBER_VERIFIED', // email: document check is the last check → straight to "checks passed"
   MEMBER_REVIEW_REQUIRED: 'READY_FOR_DOCUMENT_CHECKING', // email: member check → document check next
   API_MEMBER_REVIEW_REQUIRED: 'API_READY_FOR_DOCUMENT_CHECKING', // API: member check → document check next
+  DOCUMENTS_REVIEW: 'MEMBER_VERIFIED', // email: held document check → "checks passed", no customer email
+  API_DOCUMENTS_REVIEW: 'API_DOCUMENTS_VERIFIED', // API: held document check → revision with documents complete
 };
 
 // Which check an override of each status skips — matches the assessment summary's `area`, so the
@@ -19,6 +22,8 @@ const OVERRIDE_AREAS = {
   INCOMPLETE: 'documents',
   MEMBER_REVIEW_REQUIRED: 'member',
   API_MEMBER_REVIEW_REQUIRED: 'member',
+  DOCUMENTS_REVIEW: 'documents',
+  API_DOCUMENTS_REVIEW: 'documents',
 };
 
 // Why the reviewer thinks the check was wrong — one click, and the start of the AI accuracy data.

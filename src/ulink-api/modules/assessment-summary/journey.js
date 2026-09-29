@@ -61,6 +61,17 @@ function buildCaseJourney(fields = {}, lines = []) {
     ));
   }
 
+  // Console upload by API (cl-upload): the barcode comes back later, so say whether it has — a case
+  // waiting here is expected, not stuck (docs/imp/demo/API DAY1/CL-UPLOAD SPEC/console_upload_requirement.md).
+  const upload = fields.consoleUploadResult;
+  if (upload?.method === 'cl-upload') {
+    const at = `${String(upload.uploadedAt).slice(0, 16).replace('T', ' ')} UTC`;
+    const [first, ...more] = upload.barcodes || [];
+    steps.push(first
+      ? step('Console upload', 'Barcode received', `Uploaded ${at} as ${upload.file}; barcode ${first.barcodeId}${more.length ? ` (+${more.length} supplementary)` : ''}.`)
+      : step('Console upload', 'Waiting for barcode', `Uploaded ${at} as ${upload.file}; the console creates barcodes about every 15 minutes.`));
+  }
+
   const diagnosis = find('Diagnosis code');
   // The AI's full reasoning is in the assessment; here just how it was picked and how sure.
   if (diagnosis) {

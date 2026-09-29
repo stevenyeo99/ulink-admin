@@ -16,7 +16,17 @@ export interface StpBlockedDiagnosis {
   note: string | null;
 }
 
-export function getStpSettings(): Promise<{ rules: StpRule[]; blockedDiagnoses: StpBlockedDiagnosis[] }> {
+// Human-in-the-loop switches (ulink-api modules/settings/settings.js) — both off until Ulink decides.
+export interface Switches {
+  stpBlockOnReviewPoints: boolean;
+  holdUnsureMissingDocsEmail: boolean;
+}
+
+export function updateSwitches(changes: Partial<Switches>): Promise<{ switches: Switches }> {
+  return request('/api/stp-settings/switches', { method: 'PUT', body: JSON.stringify(changes) });
+}
+
+export function getStpSettings(): Promise<{ rules: StpRule[]; blockedDiagnoses: StpBlockedDiagnosis[]; switches: Switches }> {
   return request('/api/stp-settings');
 }
 

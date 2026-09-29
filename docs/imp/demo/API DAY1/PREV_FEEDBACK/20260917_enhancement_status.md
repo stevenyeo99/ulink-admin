@@ -1,7 +1,7 @@
 # 17/09 Meeting — Enhancement Status
 
 Source: `Ulink_AI_Claims_Automation_Meeting_Summary_Action.docx` (same folder), "Key Discussion Points".
-Status checked against the system on 2026-09-29.
+Status checked against the system on 2026-09-29 (evening).
 Related: [MEETING_20260917_ACTION_STATUS.md](MEETING_20260917_ACTION_STATUS.md) (action items),
 [SUMMARY_REQUIREMENT.md](SUMMARY_REQUIREMENT.md), [CONSOLE_DASHBOARD_DESIGN.md](CONSOLE_DASHBOARD_DESIGN.md).
 
@@ -22,11 +22,11 @@ Legend: ✅ done · 🟡 partly done · 🔴 not started / minimal · ⏸ later 
 | 2 | AYAS delegation rule | ⏸ Later | Waiting for the AYAS exception list |
 | 3 | Customer communication | 🟡 Numbered list done; Burmese not | Decide Burmese scope |
 | 4 | Acknowledgement trigger | ✅ Done | Check live in the demo rehearsal |
-| 5 | Internal review | 🟡 Review queue, JD2 email, AI summary + case link + "why the case went this way" in internal emails and console; internal email for incomplete documents | Decide email vs dashboard for the rest (#8) |
+| 5 | Internal review | 🟡 Review queue, JD2 email, AI summary + case link + "why the case went this way" in internal emails and console; internal email for incomplete documents; switch to hold the customer email when the AI is unsure | Decide email vs dashboard for the rest (#8); whether to switch the hold on |
 | 6 | AI assessment history | ✅ Saved in our system (STP + non-STP) and sent to iAS (`AiSummaryRemark`) | Check it in iAS on the next submission |
-| 7 | STP governance | 🟡 Configurable rules built (demo) | Real values + decisions from Ulink |
+| 7 | STP governance | 🟡 Configurable rules built (demo); switch "open review point blocks STP" | Real values + decisions from Ulink (incl. whether to switch on) |
 | 8 | API / integration | 🟡 API case workflow built; `cl-upload` for email cases built (off by default) | Live check with `AYA-CL-26031486`, then switch on |
-| — | Console upload (action #12) | 🗣 To discuss | Questions below |
+| — | Console upload (action #12) | 🟡 Built for email cases (`cl-upload`, off by default) | Live check, then switch on; open questions in C2 |
 
 ---
 
@@ -95,6 +95,12 @@ Legend: ✅ done · 🟡 partly done · 🔴 not started / minimal · ⏸ later 
   case went this way and the AI assessment. Sent once per missing-documents list. Email cases: with the
   customer's missing-documents email (`DOCUMENTS_INCOMPLETE` task). API cases: when the claim is revised in
   IAS with suspense. Covered by decision #8 — easy to switch off if Ulink says "dashboard only".
+- ✅ **Human checks when the AI is unsure (built 2026-09-29, two switches, both off by default)** — console
+  STP settings → "Human checks when the AI is unsure": **#1** a claim with an open review point never goes STP
+  (goes to JD2, reason shown); **#2** when the AI is unsure a document is missing (couldn't read it, or below 0.5
+  confidence) the customer's missing-documents email is held — status **Check before emailing customer**, team
+  email "ACTION NEEDED"; the person sends the request or overrides (email and API cases). Covers B3's "open
+  review point blocks STP" as a switch Ulink can turn on.
 - ❌ No internal email yet for the remaining attention cases (AI couldn't read the documents, AI unsure) — see #8.
 - ❌ **Action #8:** which cases email CSR/Ops vs dashboard only — **decision needed**.
 - **Next:** decide the email-vs-dashboard rule (#8). Proposal: email when work is blocked until a person
@@ -173,13 +179,16 @@ override block STP · who can change the rules.
   every member problem listed, policy exclusion explained); 6 (saved in our system and sent to iAS as
   `AiSummaryRemark`).
 - **Done for now:** 3 (numbered list).
-- **Built for the demo:** 7 (STP settings in the console). Before the demo: check the page in a browser and
-  rehearse a rule change + re-running claim preparation.
-- **Small fixes left:** history of STP rule changes (7, before production).
-- **Needs a decision:** Burmese scope (3); email vs dashboard (5 / #8); real STP values, PA, review-point /
-  override rules, who edits (7).
-- **Needs the iAS team / a discussion:** `cl-upload` and console upload (8, #12) — a first spec now exists
-  (`CL-UPLOAD SPEC/console-upload-spec.md`), open questions in C2.
+- **Built for the demo:** 7 (STP settings in the console); human checks when the AI is unsure (two switches,
+  off by default: open review point blocks STP; hold the customer email when the AI is unsure);
+  8 / #12 console upload by API (`cl-upload`) for email cases, off by default.
+- **Before the demo:** run the migrations (`npm run db:migrate`), restart; rehearse with the switches set as they
+  will be demoed ([ULINK_Demo_Rundown.docx](../ULINK_Demo_Rundown.docx)); check the STP settings page, the journey
+  panel and the "send the request" button in a browser.
+- **Parked by decision:** history of STP rule changes (A1, 29/09).
+- **Needs a decision:** Burmese scope (3); email vs dashboard (5 / #8); real STP values, PA, whether to switch on
+  the two human checks, who edits (7).
+- **Needs the console team:** open `cl-upload` questions (C2).
 - **Later by decision:** attachment storage (1); AYAS delegation (2).
 
 ---
@@ -190,16 +199,16 @@ override block STP · who can change the rules.
 
 | # | What | Point | Size |
 |---|---|---|---|
-| A1 | **History of STP rule changes** — who changed which rule, when, before → after; "Recent changes" on the STP settings page | 7 | Small (½ day) |
+| A1 | ⏸ **Parked (not needed for now, 29/09)** — history of STP rule changes: who changed which rule, when, before → after; "Recent changes" on the STP settings page | 7 | Small (½ day) |
 | ~~A2~~ | ~~Member check reports every problem, not just the first~~ — ✅ done 2026-09-29 (see change log) | 5, 6 | — |
 
 **B. Waiting on a Ulink decision**
 
 | # | What is missing | Decision needed | Point |
 |---|---|---|---|
-| B1 | Internal email for the remaining attention cases (AI couldn't read the documents, AI unsure). Incomplete documents: built 2026-09-29 | Which cases email CSR/Ops vs dashboard only (#8); confirm the incomplete-documents email is wanted | 5 |
+| B1 | Internal email for "Needs manual reading" (the AI couldn't read the claim at all). Built 2026-09-29: incomplete documents email; documents the AI was unsure about → held for the team (switch #2) | Which cases email CSR/Ops vs dashboard only (#8); confirm the incomplete-documents email is wanted | 5 |
 | B2 | Burmese outbound emails | Full email or missing-documents part; approved wording | 3 |
-| B3 | Real STP values; PA; "open review point" / "overridden" block STP; who edits | Final STP parameters | 7 |
+| B3 | Real STP values; PA; who edits. "Open review point blocks STP" is built as a switch (off) — only whether to turn it on | Final STP parameters | 7 |
 | B4 | Random audit sample of STP claims | Audit % (e.g. 5–10%) | 6, 7 |
 | B5 | Reviewer actions on the dashboard (confirm / correct, beyond override) | Who can act, what they may correct, does iAS update | 5 |
 | B6 | AYAS delegation — different bank-account holder as a payment rule | AYAS exception list (Dr KP / Ulink) | 2 |
@@ -210,7 +219,7 @@ override block STP · who can change the rules.
 | # | What is missing | Needed | Point |
 |---|---|---|---|
 | ~~C1~~ | ~~AI assessment kept in iAS~~ — ✅ built 2026-09-29 (`AiSummaryRemark`) | — | 6 |
-| C2 | 🟡 **Built 2026-09-29 for email cases, switched off by default** — see [console_upload_requirement.md](../CL-UPLOAD%20SPEC/console_upload_requirement.md). Document upload by API (`cl-upload`, 3rd demo). **First spec received** (`CL-UPLOAD SPEC/console-upload-spec.md`): POST multipart `TpaCaseNumber` + one merged PDF, API key; barcode not returned — fetched later from `/api/barcodes?scanId=API-<case>` | Still open: when the barcode is ready (how long to wait, retry); what `-01`/`-02` in the scan id means for a second upload; production URLs; whether it replaces the email-case folder copy too; failure / repeat upload handling | 8, #12 |
+| C2 | 🟡 **Built 2026-09-29 for email cases, switched off by default** — see [console_upload_requirement.md](../CL-UPLOAD%20SPEC/console_upload_requirement.md). Document upload by API (`cl-upload`, 3rd demo). **First spec received** (`CL-UPLOAD SPEC/console-upload-spec.md`): POST multipart `TpaCaseNumber` + one merged PDF, API key; barcode not returned — fetched later from `/api/barcodes?scanId=API-<case>` | **Answered:** barcode in 15–30 min (console job every 15 min; our limit 2 h); upload at `api.ulink.ins-link.com/cl-upload`, barcode lookup at the console middleware (`localhost:3023`); failures / repeats handled (requirement R7). **Still open:** are `-01`/`-02` always created in upload order; upload size limit (a real case merges to 11 MB); when to switch production from the folder copy | 8, #12 |
 
 **D. Later — needs data first**
 
@@ -240,4 +249,5 @@ override block STP · who can change the rules.
 | 2026-09-29 | 5 | **Fix:** email cases with incomplete documents got stuck at "Checking documents" — the new `DOCUMENTS_INCOMPLETE` email type was allowed in the DB but not in the `EmailTask` model, so the document check's save failed and rolled back. Added to the model; the pipeline's document-check email step now also sends it in the same run; regression test `emailTaskTypes.test.js`. Status label "Waiting for documents" renamed **"Documents incomplete"** (email `INCOMPLETE`, API `API_CLAIM_SUSPENDED`). Tests 242/242 |
 | 2026-09-29 | 6 | **AI assessment sent to iAS**: `AiSummaryRemark` (top level, ≤ 10,000 chars) added to the claim submission and revision payloads, built in `ias-claim-preparation` for both flows (`aiSummaryRemark.js`); includes overrides. Tests 245/245 |
 | 2026-09-29 | 8 | **Console upload by API (`cl-upload`) for email cases** — upload one merged PDF, then wait at the new status **Waiting for console barcode** until the console creates it (its job runs every 15 min); all the case's barcodes go to IAS as `barcode` + `suppBarcode1`–`5`; case number checked first; after 2 h → *Console barcode not received* (needs review, internal email, still checked). Off by default (`CONSOLE_UPLOAD_METHOD=folder`). New dependency `pdf-lib`; migration `20260929120000`. Details: `CL-UPLOAD SPEC/console_upload_requirement.md`. Tests 260/260 |
+| 2026-09-29 | 5, 7 | **Human checks when the AI is unsure** — two switches on the STP settings page, both off by default (table `ulink_settings`, migration `20260929130000`): #1 open review point blocks STP; #2 hold the customer's missing-documents email when the AI is unsure (new statuses `DOCUMENTS_REVIEW` / `API_DOCUMENTS_REVIEW` "Check before emailing customer"; `POST /api/cases/:id/release-missing-documents`; override from the held status, API override revised as complete). Demo run-down updated. Tests 271/271 |
 

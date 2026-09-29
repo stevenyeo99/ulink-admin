@@ -1,6 +1,6 @@
 const express = require('express');
 const { requireRole } = require('../modules/auth/auth');
-const { getStpSettings, updateStpRule, addBlockedDiagnosis, removeBlockedDiagnosis } = require('../controllers/stp-settings/stpSettingsController');
+const { getStpSettings, updateStpRule, addBlockedDiagnosis, removeBlockedDiagnosis, updateSwitches } = require('../controllers/stp-settings/stpSettingsController');
 
 const router = express.Router();
 
@@ -76,5 +76,29 @@ router.post('/blocked-diagnoses', requireRole('super_admin'), addBlockedDiagnosi
  *       404: { description: Not found }
  */
 router.delete('/blocked-diagnoses/:id', requireRole('super_admin'), removeBlockedDiagnosis);
+
+/**
+ * @openapi
+ * /api/stp-settings/switches:
+ *   put:
+ *     tags: [stp-settings]
+ *     summary: Turn the human-in-the-loop switches on or off (super admin)
+ *     description: >
+ *       stpBlockOnReviewPoints — a claim with an open review point never goes STP.
+ *       holdUnsureMissingDocsEmail — when the AI is unsure a document is missing, the customer's email waits for a person.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               stpBlockOnReviewPoints: { type: boolean }
+ *               holdUnsureMissingDocsEmail: { type: boolean }
+ *     responses:
+ *       200: { description: The switches after the change }
+ *       400: { description: Unknown switch or not true/false }
+ */
+router.put('/switches', requireRole('super_admin'), updateSwitches);
 
 module.exports = router;

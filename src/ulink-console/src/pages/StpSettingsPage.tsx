@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
-import { addBlockedDiagnosis, getStpSettings, removeBlockedDiagnosis, updateStpRule, type StpRule } from '../api/stpSettingsApi';
+import { addBlockedDiagnosis, getStpSettings, removeBlockedDiagnosis, updateStpRule, updateSwitches, type StpRule, type Switches } from '../api/stpSettingsApi';
 import { SourceTabs } from '../components/common/SourceTabs';
 import { Button } from '../components/common/Button';
 import { isSuperAdmin } from '../lib/session';
@@ -63,6 +63,7 @@ export function StpSettingsPage() {
           </section>
 
           <BlockedDiagnoses items={data.blockedDiagnoses} canEdit={canEdit} />
+          <HumanChecks switches={data.switches} canEdit={canEdit} />
         </>
       )}
     </div>
@@ -184,6 +185,56 @@ function BlockedDiagnoses({ items, canEdit }: { items: { id: string; codePrefix:
         </form>
       )}
       {(add.isError || remove.isError) && <p className="mt-2 text-xs text-red-600">{(add.error ?? remove.error)?.message}</p>}
+    </section>
+  );
+}
+
+// When the AI itself says it is unsure, a person decides — before anything is paid, and before the
+// customer is asked for documents. Both off until Ulink decides; off, the system works as before.
+const SWITCHES: { key: keyof Switches; title: string; text: string }[] = [
+  {
+    key: 'stpBlockOnReviewPoints',
+    title: "Don't pay automatically when the AI was unsure",
+    text: 'A claim with an open review point (the AI unsure, a possible policy exclusion, …) never goes STP — it goes to JD2 for approval, and the STP reason says why.',
+  },
+  {
+    key: 'holdUnsureMissingDocsEmail',
+    title: "Don't email the customer when the AI is unsure a document is missing",
+    text: "When the AI couldn't read a document, or wasn't sure it is missing, the customer's missing-documents email waits. The team checks, then sends the request or overrides the check.",
+  },
+];
+
+function HumanChecks({ switches, canEdit }: { switches: Switches; canEdit: boolean }) {
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: updateSwitches,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['stp-settings'] }),
+  });
+
+  return (
+    <section className={card}>
+      <h2 className="text-sm font-semibold text-slate-800">Human checks when the AI is unsure</h2>
+      <p className="mb-4 mt-1 text-sm text-slate-600">Applies to email and API cases. Changes apply to cases processed after you switch.</p>
+      <ul className="space-y-4">
+        {SWITCHES.map((s) => (
+          <li key={s.key}>
+            <label className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                checked={switches[s.key]}
+                disabled={!canEdit || mutation.isPending}
+                onChange={(e) => mutation.mutate({ [s.key]: e.target.checked })}
+                className="mt-0.5 h-4 w-4 accent-ulink-orange"
+              />
+              <span>
+                <span className="block text-sm font-medium text-slate-800">{s.title}</span>
+                <span className="block text-sm text-slate-600">{s.text}</span>
+              </span>
+            </label>
+          </li>
+        ))}
+      </ul>
+      {mutation.isError && <p className="mt-2 text-xs text-red-600">{mutation.error.message}</p>}
     </section>
   );
 }

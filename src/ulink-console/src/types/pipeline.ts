@@ -17,6 +17,7 @@ export type BlockName =
   | 'member-verification'
   | 'email-sender'
   | 'console-upload'
+  | 'console-barcode'
   | 'ias-claim-preparation'
   | 'ias-claim-creation'
   | 'ias-claim-stp'
@@ -38,6 +39,7 @@ export type EmailSenderBlockName =
   | 'email-sender-document-checking'
   | 'email-sender-claim-approval-review'
   | 'email-sender-csr-report'
+  | 'email-sender-console-upload'
   // API workflow: one sender step for every API email (modules/api-email-sender)
   | 'api-email-sender';
 

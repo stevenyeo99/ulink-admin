@@ -7,6 +7,8 @@ const { stpDecision } = require('./stpEligibility');
 const { toEnglishMedicalText } = require('./medicalTranslation');
 const { aiSummaryRemark } = require('./aiSummaryRemark');
 const { overridesFromEvents } = require('../case-override/override');
+const { barcodeFields } = require('../shared/barcodeFields');
+const { buildAssessmentSummary } = require('../assessment-summary/summary');
 
 const BLOCK_NAME = 'ias-claim-preparation';
 
@@ -75,15 +77,34 @@ async function checkCase(caseRecord) {
     lineMeta.push({ voucherType: null, subtotal: extractedFields.claim?.total_claim_amount ?? null, ...benefitPick });
   }
 
+  // Internal-only diagnostic record of *why* each pick landed where it did — confidence
+  // score plus the candidate list the LLM was actually shown — never merged into `payload`,
+  // which is the literal IAS-bound submission (see payloadBuilder.js's header comment).
+  const claimPrepMeta = {
+    // text: what the pick actually searched with (English); translation: the Burmese original, when translated.
+    diagnosis: { text: diagnosisText || null, translation, ...diagnosisPick },
+    lines: lineMeta,
+  };
+
+  // Open review points so far — member, documents and the picks just made — for the STP switch "open
+  // review point blocks STP". A check a person overrode no longer counts.
+  const overrides = overridesFromEvents(await CaseEvent.findAll({ where: { caseId: caseRecord.id, reasonCode: 'MANUAL_OVERRIDE' } }));
+  const caseFields = caseRecord.toJSON ? caseRecord.toJSON() : caseRecord;
+  const openReviewPoints = buildAssessmentSummary({ ...caseFields, claimPrepMeta }, { overrides }).reviewPoints
+    .filter((p) => !p.overridden)
+    .map(({ decision, reason }) => ({ decision, reason }));
+
   // STP rules (console Settings) apply per case type + the IAS benefit type each line is submitted
   // with. Currency: the same MMK payloadBuilder.js hardcodes — no multi-currency support yet.
   const stpResult = await stpDecision({
+    openReviewPoints,
     source: caseRecord.source,
     currency: 'MMK',
     lines: lines.map((line) => ({ benefitType: line.benefit?.benefitType ?? null, subtotal: line.subtotal })),
     diagCode: diagnosisPick.pick?.diagCode ?? null,
   });
   const stp = stpResult.isStp;
+  claimPrepMeta.stp = stpResult;
 
   const iasPayload = buildPayload({
     extractedFields,
@@ -97,23 +118,16 @@ async function checkCase(caseRecord) {
     docCompleteDate: caseRecord.consoleUploadResult?.completedAt,
   });
 
-  // Internal-only diagnostic record of *why* each pick landed where it did — confidence
-  // score plus the candidate list the LLM was actually shown — never merged into `payload`,
-  // which is the literal IAS-bound submission (see payloadBuilder.js's header comment).
-  const claimPrepMeta = {
-    // text: what the pick actually searched with (English); translation: the Burmese original, when translated.
-    diagnosis: { text: diagnosisText || null, translation, ...diagnosisPick },
-    lines: lineMeta,
-    stp: stpResult,
-  };
-
   // The AI assessment goes to IAS with the claim (AiSummaryRemark, 17/09 meeting #9): the case as it
   // stands when sent — member and document results, overrides, and the picks and STP decision just made.
-  const overrides = overridesFromEvents(await CaseEvent.findAll({ where: { caseId: caseRecord.id, reasonCode: 'MANUAL_OVERRIDE' } }));
+  // An email case uploaded by cl-upload can have several console barcodes (one per upload): all of them,
+  // barcode + suppBarcode1..5, same rule as API cases. The folder method has one barcode, sent as before.
+  const consoleBarcodes = caseRecord.consoleUploadResult?.barcodes;
   const payload = {
     ...iasPayload,
+    ...(consoleBarcodes?.length ? barcodeFields(consoleBarcodes) : {}),
     AiSummaryRemark: aiSummaryRemark({
-      ...(caseRecord.toJSON ? caseRecord.toJSON() : caseRecord),
+      ...caseFields,
       currentStatus: caseRecord.source === 'API' ? 'API_CLAIM_PAYLOAD_PREPARED' : 'CLAIM_PAYLOAD_PREPARED',
       claimPrepMeta,
       isStp: stp,

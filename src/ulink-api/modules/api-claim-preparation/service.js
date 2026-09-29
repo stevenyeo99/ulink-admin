@@ -34,7 +34,8 @@ async function processCase({ caseRecord, input }) {
   const claim = input['api-claim-intake'];
   const { extractedFields, recognizedType } = input['api-claim-recognition'];
   const documentCheck = input['api-document-checking'];
-  const documentsComplete = documentCheck.outcome === 'DOCUMENT_CHECKED';
+  // A person overrode a held document check (API_DOCUMENTS_REVIEW → API_DOCUMENTS_VERIFIED): the documents are fine.
+  const documentsComplete = documentCheck.outcome === 'DOCUMENT_CHECKED' || input['case-override']?.from === 'API_DOCUMENTS_REVIEW';
   const { barcode, ...suppBarcodes } = barcodeFields(input['api-material-download'].documents);
 
   const prepared = await checkCase({
@@ -81,6 +82,7 @@ const job = {
   // Both document-check outcomes continue here (incomplete → isSuspense=Y).
   inputStatus: ['API_DOCUMENTS_VERIFIED', 'API_INCOMPLETE'],
   inputs: ['api-claim-intake', 'api-material-download', 'api-claim-recognition', 'api-member-verification', 'api-document-checking'],
+  optionalInputs: ['case-override'],
   batchLimit: config.iasClaimPreparation.batchLimit,
   process: processCase,
 };

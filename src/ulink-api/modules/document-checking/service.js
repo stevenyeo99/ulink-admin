@@ -5,6 +5,8 @@ const { entityMatch } = require('./identityJudgment');
 const { queueDedupedTask } = require('../shared/emailTaskQueue');
 const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment-summary/summary');
 const { overridesFromEvents } = require('../case-override/override');
+const { getSettings } = require('../settings/settings');
+const { unsureDocumentPoints } = require('./holdForReview');
 
 const BLOCK_NAME = 'document-checking';
 
@@ -118,9 +120,10 @@ async function queueMissingDocumentsEmail(transaction, caseId, result) {
 // Internal copy (17/09 meeting notes, item 4): the team sees which documents the customer was asked
 // for and why the case went this way, without opening the console. Same dedupe key as the customer
 // email, so the team hears about the same missing list once.
-async function queueDocumentsIncompleteEmail(transaction, caseRecord, result) {
+// held: the AI's unsure points when the customer email is held for review (else null).
+async function queueDocumentsIncompleteEmail(transaction, caseRecord, result, { status = 'INCOMPLETE', held = null } = {}) {
   const events = await CaseEvent.findAll({ where: { caseId: caseRecord.id, reasonCode: 'MANUAL_OVERRIDE' }, transaction });
-  const fields = { ...(caseRecord.toJSON ? caseRecord.toJSON() : caseRecord), currentStatus: 'INCOMPLETE', documentCheckResult: result };
+  const fields = { ...(caseRecord.toJSON ? caseRecord.toJSON() : caseRecord), currentStatus: status, documentCheckResult: result };
   await queueDedupedTask(transaction, {
     caseId: caseRecord.id,
     taskType: 'DOCUMENTS_INCOMPLETE',
@@ -128,6 +131,7 @@ async function queueDocumentsIncompleteEmail(transaction, caseRecord, result) {
     payload: {
       caseId: caseRecord.id,
       issues: result.issues,
+      held,
       assessment: assessmentSummaryText(buildAssessmentSummary(fields, { overrides: overridesFromEvents(events) })),
     },
   });
@@ -145,9 +149,13 @@ const OUTCOME_TO_STATUS = {
 };
 
 async function persistOutcome(caseRecord, outcome) {
+  // Missing documents the AI wasn't sure about wait for a person before the customer is emailed —
+  // only with the switch on (settings.holdUnsureMissingDocsEmail); off, exactly as before.
+  const unsure = outcome.result.passed ? [] : unsureDocumentPoints(outcome.result);
+  const held = unsure.length > 0 && (await getSettings()).holdUnsureMissingDocsEmail;
   return sequelize.transaction(async (transaction) => {
     const prevStatus = caseRecord.currentStatus;
-    const newStatus = OUTCOME_TO_STATUS[outcome.outcome];
+    const newStatus = held ? 'DOCUMENTS_REVIEW' : OUTCOME_TO_STATUS[outcome.outcome];
     await Case.update(
       { currentStatus: newStatus, documentCheckResult: outcome.result },
       { where: { id: caseRecord.id }, transaction }
@@ -157,14 +165,15 @@ async function persistOutcome(caseRecord, outcome) {
       prevStatus,
       newStatus,
       reasonCode: outcome.result.passed ? null : 'DOCUMENT_ISSUES_FOUND',
-      message: outcome.result.passed ? 'All document checks passed' : outcome.result.issues.join('; '),
+      message: outcome.result.passed ? 'All document checks passed'
+        : `${outcome.result.issues.join('; ')}${held ? ` — customer email held: the AI was unsure (${unsure.join('; ')})` : ''}`,
     });
 
     // A pass sends nothing: the customer was already acknowledged at claim recognition
     // (17/09 meeting, action 6).
     if (!outcome.result.passed) {
-      await queueMissingDocumentsEmail(transaction, caseRecord.id, outcome.result);
-      await queueDocumentsIncompleteEmail(transaction, caseRecord, outcome.result);
+      if (!held) await queueMissingDocumentsEmail(transaction, caseRecord.id, outcome.result);
+      await queueDocumentsIncompleteEmail(transaction, caseRecord, outcome.result, { status: newStatus, held: held ? unsure : null });
     }
   });
 }
@@ -192,4 +201,17 @@ async function run() {
   return { processed, errors };
 }
 
-module.exports = { run, checkCase };
+// A person checked a held case and the documents really are missing: send the customer the request
+// the check prepared, and move the case to "Documents incomplete". Only from DOCUMENTS_REVIEW, and only
+// if nothing moved the case meanwhile. operator: who (for the case history).
+async function releaseMissingDocumentsEmail(caseRecord, operator) {
+  return sequelize.transaction(async (transaction) => {
+    const [moved] = await Case.update({ currentStatus: 'INCOMPLETE' }, { where: { id: caseRecord.id, currentStatus: 'DOCUMENTS_REVIEW' }, transaction });
+    if (moved !== 1) return false;
+    await logEvent(transaction, { caseId: caseRecord.id, prevStatus: 'DOCUMENTS_REVIEW', newStatus: 'INCOMPLETE', reasonCode: 'MISSING_DOCUMENTS_RELEASED', message: `Missing-documents email sent to the customer by ${operator} after review` });
+    await queueMissingDocumentsEmail(transaction, caseRecord.id, caseRecord.documentCheckResult);
+    return true;
+  });
+}
+
+module.exports = { run, checkCase, persistOutcome, releaseMissingDocumentsEmail, issuesDedupeKey };

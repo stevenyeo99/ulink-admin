@@ -1,4 +1,5 @@
 const { StpRule, StpBlockedDiagnosis } = require('../../db/models');
+const { getSettings, setSettings } = require('../../modules/settings/settings');
 
 // STP rules edited from the console Settings page — read by ias-claim-preparation/stpEligibility.js.
 // A change applies to cases whose claim is prepared after it.
@@ -21,7 +22,8 @@ async function getStpSettings(req, res) {
     StpRule.findAll({ order: [['caseSource', 'ASC'], ['benefitType', 'ASC']] }),
     StpBlockedDiagnosis.findAll({ order: [['codePrefix', 'ASC']] }),
   ]);
-  res.json({ rules: rules.map(ruleView), blockedDiagnoses: blockedDiagnoses.map(diagnosisView) });
+  // switches: the human-in-the-loop switches (modules/settings/settings.js).
+  res.json({ rules: rules.map(ruleView), blockedDiagnoses: blockedDiagnoses.map(diagnosisView), switches: await getSettings() });
 }
 
 async function updateStpRule(req, res) {
@@ -54,4 +56,13 @@ async function removeBlockedDiagnosis(req, res) {
   res.json({ removed: true });
 }
 
-module.exports = { getStpSettings, updateStpRule, addBlockedDiagnosis, removeBlockedDiagnosis };
+// PUT /api/stp-settings/switches — { stpBlockOnReviewPoints?, holdUnsureMissingDocsEmail? } (true/false).
+async function updateSwitches(req, res) {
+  try {
+    res.json({ switches: await setSettings(req.body || {}, req.user.username) });
+  } catch (error) {
+    bad(res, error.message);
+  }
+}
+
+module.exports = { getStpSettings, updateStpRule, addBlockedDiagnosis, removeBlockedDiagnosis, updateSwitches };

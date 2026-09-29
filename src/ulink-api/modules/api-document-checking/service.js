@@ -1,6 +1,10 @@
 const config = require('../../config');
 const { runApiJob } = require('../api-pipeline/runApiJob');
 const { checkCase } = require('../document-checking/service');
+const { getSettings } = require('../settings/settings');
+const { unsureDocumentPoints } = require('../document-checking/holdForReview');
+const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment-summary/summary');
+const { caseBasics } = require('../assessment-summary/journey');
 
 // api-document-checking: API case workflow job 5 (docs/imp/day1/api-case-workflow.md section 6.5).
 //
@@ -32,9 +36,32 @@ const OUTCOME_TO_STATUS = {
 async function processCase({ caseRecord, input }) {
   const { extractedFields, recognizedType } = input['api-claim-recognition'];
   const { outcome, result } = await checkCase({ id: caseRecord.id, extractedFields, recognizedType });
-  const nextStatus = OUTCOME_TO_STATUS[outcome];
-  if (!nextStatus) throw new Error(`Unexpected document check outcome: ${outcome}`);
+  if (!OUTCOME_TO_STATUS[outcome]) throw new Error(`Unexpected document check outcome: ${outcome}`);
 
+  // Switch "hold the missing-documents email when the AI is unsure" (settings): the case waits for a
+  // person (API_DOCUMENTS_REVIEW) instead of going on to a suspended revision; the customer email is kept
+  // aside (heldEmail) and sent only if the person confirms (POST /api/cases/:id/release-missing-documents).
+  const unsure = result.passed ? [] : unsureDocumentPoints(result);
+  if (unsure.length && (await getSettings()).holdUnsureMissingDocsEmail) {
+    const issuesKey = [...result.issues].sort().join('|');
+    const assessment = assessmentSummaryText(buildAssessmentSummary({
+      ...caseBasics(caseRecord), recognizedType, currentStatus: 'API_DOCUMENTS_REVIEW', documentCheckResult: result,
+      memberVerifyResult: input['api-member-verification']?.memberVerifyResult,
+    }));
+    return {
+      output: {
+        outcome,
+        documentCheckResult: result,
+        checkedAt: new Date().toISOString(),
+        heldEmail: emailFor(result),
+        email: { taskType: 'DOCUMENTS_INCOMPLETE', audience: 'internal', payload: { caseId: caseRecord.id, claimNo: caseRecord.claimNo, issues: result.issues, held: unsure, assessment }, dedupeKey: `held|${issuesKey}` },
+      },
+      nextStatus: 'API_DOCUMENTS_REVIEW',
+      message: `Documents incomplete: ${result.issues.join('; ')} — customer email held: the AI was unsure (${unsure.join('; ')})`,
+    };
+  }
+
+  const nextStatus = OUTCOME_TO_STATUS[outcome];
   return {
     output: {
       outcome,
@@ -52,6 +79,7 @@ const job = {
   name: 'api-document-checking',
   inputStatus: 'API_READY_FOR_DOCUMENT_CHECKING',
   inputs: ['api-claim-recognition'],
+  optionalInputs: ['api-member-verification'],
   batchLimit: config.documentChecking.batchLimit,
   process: processCase,
 };

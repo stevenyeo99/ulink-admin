@@ -7,6 +7,7 @@ const documentCheckingService = require('../../modules/document-checking/service
 const emailSenderService = require('../../modules/email-sender/service');
 const memberVerificationService = require('../../modules/member-verification/service');
 const consoleUploadService = require('../../modules/console-upload/service');
+const consoleBarcodeService = require('../../modules/console-barcode/service');
 const iasClaimPreparationService = require('../../modules/ias-claim-preparation/service');
 const iasClaimCreationService = require('../../modules/ias-claim-creation/service');
 const iasClaimStpService = require('../../modules/ias-claim-stp/service');
@@ -651,6 +652,23 @@ router.use('/document-checking', createJobRouter('document-checking', documentCh
 router.use('/email-sender', createJobRouter('email-sender', emailSenderService));
 router.use('/member-verification', createJobRouter('member-verification', memberVerificationService));
 router.use('/console-upload', createJobRouter('console-upload', consoleUploadService));
+/**
+ * @openapi
+ * /api/jobs/console-barcode/run:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Start the console-barcode job (fire-and-forget)
+ *     description: >
+ *       Email cases uploaded by cl-upload wait at CONSOLE_BARCODE_PENDING for the console to create their
+ *       barcode (about every 15 minutes). Asks the console middleware for scanId API-<TpaCaseNumber>; once
+ *       a barcode newer than the upload is there, saves every barcode of the case (barcode + suppBarcode1..5)
+ *       and moves the case to DOCUMENTS_UPLOADED. After CONSOLE_BARCODE_WAIT_MINUTES without one:
+ *       CONSOLE_BARCODE_MISSING (needs review, internal email) — still checked on every run.
+ *     responses:
+ *       200:
+ *         description: Started, or skipped because a prior run is still in progress
+ */
+router.use('/console-barcode', createJobRouter('console-barcode', consoleBarcodeService));
 router.use('/ias-claim-preparation', createJobRouter('ias-claim-preparation', iasClaimPreparationService));
 router.use('/ias-claim-creation', createJobRouter('ias-claim-creation', iasClaimCreationService));
 router.use('/ias-claim-stp', createJobRouter('ias-claim-stp', iasClaimStpService));

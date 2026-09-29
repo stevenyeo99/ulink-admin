@@ -21,7 +21,8 @@ const { render } = require('../email-sender/templates');
 // client drops the reply headers.
 
 const JOB = 'api-email-sender';
-const SOURCE_JOBS = ['api-material-download', 'api-member-verification', 'api-document-checking', 'api-reply-intake', 'api-claim-revision', 'api-claim-stp'];
+// case-review: a person released a held missing-documents email (POST /api/cases/:id/release-missing-documents).
+const SOURCE_JOBS = ['api-material-download', 'api-member-verification', 'api-document-checking', 'api-reply-intake', 'api-claim-revision', 'api-claim-stp', 'case-review'];
 const API_ROUTE_KEY = 'ayas_member_claim';
 
 // Customer templates have no subject of their own (email cases reply under the customer's

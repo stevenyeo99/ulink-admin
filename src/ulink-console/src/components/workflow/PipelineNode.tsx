@@ -1,6 +1,6 @@
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
 import clsx from 'clsx';
-import { Mail, ScanSearch, ClipboardCheck, UserCheck, SendHorizonal, FileText, ShieldCheck, FolderUp, FileDown, ListChecks, Images, Reply, type LucideIcon } from 'lucide-react';
+import { Mail, ScanSearch, ClipboardCheck, UserCheck, SendHorizonal, FileText, ShieldCheck, FolderUp, Barcode, FileDown, ListChecks, Images, Reply, type LucideIcon } from 'lucide-react';
 import type { BlockName } from '../../types/pipeline';
 import type { PipelineNodeData } from '../../graph/mergeStatus';
 import { StatusBadge } from './StatusBadge';
@@ -12,6 +12,7 @@ const ICONS: Record<BlockName, LucideIcon> = {
   'member-verification': UserCheck,
   'email-sender': SendHorizonal,
   'console-upload': FolderUp,
+  'console-barcode': Barcode,
   'ias-claim-preparation': FileText,
   'ias-claim-creation': ShieldCheck,
   'ias-claim-stp': FileDown,

@@ -1,6 +1,6 @@
 const express = require('express');
 const { requireRole } = require('../modules/auth/auth');
-const { getCaseStatuses, getOverview, getReviewQueue, getApprovals, listCases, getCase, getAttachment, getDocument, overrideCase, resetCase } = require('../controllers/cases/casesController');
+const { getCaseStatuses, getOverview, getReviewQueue, getApprovals, listCases, getCase, getAttachment, getDocument, overrideCase, resetCase, releaseMissingDocuments } = require('../controllers/cases/casesController');
 
 const router = express.Router();
 
@@ -269,5 +269,24 @@ router.post('/:id/override', requireRole('super_admin'), overrideCase);
  *         description: Case already has a real IAS claim number — refusing to reset
  */
 router.post('/:id/reset', requireRole('super_admin'), resetCase);
+
+/**
+ * @openapi
+ * /api/cases/{id}/release-missing-documents:
+ *   post:
+ *     tags: [cases]
+ *     summary: Send a held missing-documents email to the customer (after a person checked the documents)
+ *     description: >
+ *       Only for a case held by the switch "hold the missing-documents email when the AI is unsure"
+ *       (DOCUMENTS_REVIEW / API_DOCUMENTS_REVIEW). Email case → INCOMPLETE; API case → API_INCOMPLETE
+ *       (then the suspended revision in IAS). Super admin. If the documents are fine, use /override instead.
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Email queued, case moved on }
+ *       400: { description: Case is not held }
+ *       409: { description: The case changed meanwhile }
+ */
+router.post('/:id/release-missing-documents', requireRole('super_admin'), releaseMissingDocuments);
 
 module.exports = router;

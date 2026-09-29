@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import * as AlertDialog from '@radix-ui/react-alert-dialog';
 import { AlertTriangle } from 'lucide-react';
-import { overrideCase } from '../../api/casesApi';
+import { overrideCase, releaseMissingDocuments } from '../../api/casesApi';
 import { Button } from '../common/Button';
 import type { AssessmentSummary, CaseDetail, CaseOverrideInfo } from '../../types/case';
 
@@ -44,6 +44,8 @@ export function CaseOverridePanel({
   }
 
   const isMemberCheck = caseRecord.currentStatus.endsWith('MEMBER_REVIEW_REQUIRED');
+  // Held by the switch "hold the missing-documents email when the AI is unsure": the customer hasn't been emailed.
+  const isHeld = caseRecord.currentStatus.endsWith('DOCUMENTS_REVIEW');
   const checkName = isMemberCheck ? 'member check' : 'document check';
   // A bank mismatch is a payment risk even when another problem was found first.
   const memberResult = caseRecord.memberVerifyResult;
@@ -52,6 +54,7 @@ export function CaseOverridePanel({
 
   return (
     <section className="mb-6 rounded-xl2 border border-ulink-orange/25 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
+      {isHeld && <HeldEmailActions caseId={caseRecord.id} />}
       <h2 className="text-sm font-semibold text-slate-800">Override and continue</h2>
       <p className="mb-4 mt-1 text-sm text-slate-600">
         If the AI flagged the {checkName} wrongly, you can let the case continue as if it had passed. Your name, your choice below
@@ -128,5 +131,33 @@ export function CaseOverridePanel({
         </AlertDialog.Portal>
       </AlertDialog.Root>
     </section>
+  );
+}
+
+/**
+ * The customer has NOT been emailed yet: the AI was unsure a document is missing. If a person checks and
+ * the documents really are missing, this sends the customer the request the check prepared. If the
+ * documents are fine, the override below is the other choice.
+ */
+function HeldEmailActions({ caseId }: { caseId: string }) {
+  const queryClient = useQueryClient();
+  const release = useMutation({
+    mutationFn: () => releaseMissingDocuments(caseId),
+    onSuccess: () => {
+      for (const key of ['case', 'cases', 'review-queue', 'cases-overview']) queryClient.invalidateQueries({ queryKey: [key] });
+    },
+  });
+  return (
+    <div className="mb-5 rounded-lg border border-ulink-orange/30 bg-ulink-orange/5 p-4">
+      <h2 className="text-sm font-semibold text-slate-800">Check before emailing the customer</h2>
+      <p className="mb-3 mt-1 text-sm text-slate-600">
+        The AI wasn't sure some documents are missing, so the customer has not been emailed. Look at the documents: if they really are
+        missing, send the request; if they are fine, override the check below.
+      </p>
+      <Button onClick={() => release.mutate()} disabled={release.isPending}>
+        {release.isPending ? 'Sending…' : 'Documents are missing — send the request to the customer'}
+      </Button>
+      {release.isError && <p className="mt-2 text-sm text-red-600">{(release.error as Error).message}</p>}
+    </div>
   );
 }

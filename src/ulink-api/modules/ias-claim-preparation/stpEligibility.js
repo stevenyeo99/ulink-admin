@@ -1,4 +1,5 @@
 const { StpRule, StpBlockedDiagnosis } = require('../../db/models');
+const { getSettings } = require('../settings/settings');
 
 const amount = (n) => Number(n).toLocaleString('en-US');
 
@@ -10,11 +11,13 @@ const amount = (n) => Number(n).toLocaleString('en-US');
  * - a line has no IAS benefit type (the AI couldn't pick one) — no rule can apply;
  * - no rule for the case type + benefit type + currency, or the rule says STP not allowed;
  * - the case's lines of one benefit type add up to more than that type's limit;
- * - the diagnosis code starts with a blocked prefix (R69 = diagnosis not found).
+ * - the diagnosis code starts with a blocked prefix (R69 = diagnosis not found);
+ * - switch "open review point blocks STP" on (settings) and the case has an open review point — the
+ *   AI was unsure, a possible exclusion, … (openReviewPoints: [{ decision, reason }]) — a person checks first.
  *
  * Returns { isStp, source, currency, diagCode, benefits: [{ benefitType, total, allowed, limit }], reasons }.
  */
-function evaluateStp({ rules, blockedDiagnoses }, { source, currency, lines, diagCode }) {
+function evaluateStp({ rules, blockedDiagnoses, blockOnReviewPoints = false }, { source, currency, lines, diagCode, openReviewPoints = [] }) {
   const reasons = [];
   const totals = new Map();
   for (const { benefitType, subtotal } of lines) {
@@ -41,12 +44,16 @@ function evaluateStp({ rules, blockedDiagnoses }, { source, currency, lines, dia
   const blocked = diagCode && blockedDiagnoses.find((d) => diagCode.toUpperCase().startsWith(d.codePrefix.toUpperCase()));
   if (blocked) reasons.push(`Diagnosis ${diagCode} is on the never-STP list (${blocked.codePrefix}${blocked.note ? `: ${blocked.note}` : ''}).`);
 
+  if (blockOnReviewPoints && openReviewPoints.length) {
+    reasons.push(`Open review point${openReviewPoints.length > 1 ? 's' : ''}: ${openReviewPoints.map((p) => `${p.decision} (${p.reason})`).join('; ')} — a person checks first.`);
+  }
+
   return { isStp: reasons.length === 0, source, currency, diagCode: diagCode ?? null, benefits, reasons };
 }
 
 async function stpDecision(input) {
-  const [rules, blockedDiagnoses] = await Promise.all([StpRule.findAll(), StpBlockedDiagnosis.findAll()]);
-  return evaluateStp({ rules, blockedDiagnoses }, input);
+  const [rules, blockedDiagnoses, settings] = await Promise.all([StpRule.findAll(), StpBlockedDiagnosis.findAll(), getSettings()]);
+  return evaluateStp({ rules, blockedDiagnoses, blockOnReviewPoints: settings.stpBlockOnReviewPoints }, input);
 }
 
 module.exports = { stpDecision, evaluateStp };
