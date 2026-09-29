@@ -58,7 +58,7 @@ Size: S ≤ ½ day · M ≈ 1–2 days · L > 2 days.
 |---|---|---|---|
 | S1 | Jobs as separate workers (per-job cron or a queue) instead of one sequential orchestrator | Pipeline run takes longer than its interval | M |
 | S2 | Parallel LLM calls with a concurrency cap; more LLM capacity | LLM time per case is the bottleneck | M |
-| S3 | Roles (CSR / Ops / JD2) with per-action permissions | B5 decided | M |
+| S3 | Roles (CSR / Ops / JD3) with per-action permissions | B5 decided | M |
 | S4 | Second claim route (another claim type or insurer): route row, schema, checklist, IAS mapping; remove the hard-coded route in console-upload | A new product to automate | L |
 | S5 | Multi-currency (currency from the documents + exchange rate) | Foreign-currency claims | M |
 | S6 | Object storage behind the storage adapter | B7 decided | M |

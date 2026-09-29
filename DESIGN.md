@@ -18,7 +18,7 @@ Why the system is built the way it is, and what changes when it scales. How each
                         │  Postgres + pgvector (Sequelize)    ├──► SMTP (replies, team emails)
                         └────────▲────────────────────────────┘    cl-upload (console upload by API)
                                  │ REST (JWT)
-                        ulink-console (React/Vite) — CSR / Ops / JD2 / super admin
+                        ulink-console (React/Vite) — CSR / Ops / JD3 / super admin
 ```
 
 - **ulink-api** — one Node process: the REST API for the console, every job, and two orchestrators
@@ -68,7 +68,7 @@ outputs onto the email field names so the console and summary read one shape.
 Principles:
 - **One confidence bar (0.5)** across judges, so "AI unsure" means one thing everywhere.
 - **The AI proposes, rules decide the money.** STP is a rule decision (limits, never-STP diagnoses, optional
-  review-point block); JD2 approves everything else in IAS.
+  review-point block); JD3 approves everything else in IAS.
 - **Explanations are not generated.** The assessment summary and "why the case went this way" are built by rules
   from stored results (`modules/assessment-summary/`), so the same case always explains the same way, costs no LLM
   call, and can be sent to IAS (`AiSummaryRemark`) and emails.
@@ -84,7 +84,7 @@ Principles:
   recorded with person, finding and reason; overridden points stay visible, marked handled, everywhere.
 - **Switches** (`ulink_settings`, console, off by default): open review point blocks STP; hold the customer's
   missing-documents email when the AI is unsure.
-- **JD2** approves non-STP claims in IAS with the assessment in the approval email.
+- **JD3** approves non-STP claims in IAS with the assessment in the approval email.
 
 Roles: one role today, `super_admin`, for every action (override, reset, settings). Finer roles wait on the
 "who can act" decision (backlog).
@@ -125,7 +125,7 @@ What holds today, and what to change first as volume or scope grows.
 | Scheduling | Cron → orchestrator endpoints | One trigger interval for all steps | Per-job cron lines (endpoints exist) or a queue; the status chain doesn't change |
 | New claim types / insurers | Routes table (`ulink_claim_routes`), one route enabled (`ayas_member_claim`); console-upload hard-codes it | Each route needs its own checklist, schema and IAS mapping | Add a route row + its field schema + checklist; STP rules already keyed by case type and benefit type |
 | Currency | MMK only (payload hard-codes it) | Foreign-currency claims | Currency from extraction + exchange rate; STP rules already carry a currency column |
-| Roles | `super_admin` only | CSR / Ops / JD2 need different rights | Role on `ulink_users` + `requireRole` per action once "who can act" is decided |
+| Roles | `super_admin` only | CSR / Ops / JD3 need different rights | Role on `ulink_users` + `requireRole` per action once "who can act" is decided |
 | Storage | Local disk | Retention, sharing, backups | Storage adapter interface exists (`src/ulink-api/storage`); add S3/other behind it |
 | Audit | Case history + snapshots; STP rule changes not recorded | Compliance review | Change history for settings/rules (parked A1) |
 | Learning | Overrides recorded with a finding | No accuracy numbers yet | Reviewer actions → accuracy per confidence band → calibrated STP confidence rule |

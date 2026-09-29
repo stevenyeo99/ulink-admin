@@ -33,10 +33,15 @@ _Avoid_: company (ambiguous)
 Whoever receives our customer-facing emails for a case — the claimant for email cases.
 
 **JD1**:
-First-level claims processing: checking a claim and preparing it in IAS. What this system automates.
+The intake stage: receiving the claim and checking its documents are complete. Automated by this system.
 
 **JD2**:
-The claims approver who approves a non-STP claim in IAS. The system never approves; it hands over to JD2.
+The claim-processing stage: member, policy and benefit eligibility, payment details, claim coding, and creating the
+claim in IAS. Automated by this system.
+_Avoid_: JD2 for the approver
+
+**JD3**:
+The claims approver who approves a non-STP claim in IAS. The system never approves; it hands over to JD3.
 
 **CSR / Ops**:
 The team that handles cases needing a person (review queue, internal emails). Here "CSR" means this team only when
@@ -114,7 +119,7 @@ A claim paid to someone other than the member, which needs a delegation letter.
 
 **Exclusion clause**:
 A clause of the policy wording that excludes (or caps) a kind of treatment, e.g. 6.22 weight loss. A possible match is
-a warning for JD2, never a rejection.
+a warning for JD3, never a rejection.
 
 **Policy holder override**:
 A policy holder's agreed exception to the standard wording, e.g. vaccinations covered.
@@ -127,7 +132,7 @@ The IAS category a claim line is paid under: **IP** inpatient, **OP** outpatient
 **PA** personal accident. Each has *benefit heads* below it.
 
 **STP**:
-Straight-through processing: a claim that passes every STP rule is paid by IAS without JD2 approval.
+Straight-through processing: a claim that passes every STP rule is paid by IAS without JD3 approval.
 
 **STP rule**:
 Whether STP is allowed, and up to what amount, for one case source (email / API) and benefit type.
@@ -185,4 +190,4 @@ The IAS claim field that stores the assessment, so the explanation is kept in IA
 Every case waiting for a person, with the reason, oldest first.
 
 **Approvals**:
-Non-STP claims in IAS waiting for JD2.
+Non-STP claims in IAS waiting for JD3.

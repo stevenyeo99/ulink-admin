@@ -2,15 +2,15 @@
 
 AI claims automation for AYA Sompo (via ULINK, the TPA). Claims arrive by **email** or as **API cases** (created in
 IAS), go through one set of checks (AI reading, IAS member check, document check, diagnosis/benefit, STP), and end in
-IAS with every decision explained. JD2 approves non-STP claims in IAS; STP claims pay straight through.
+IAS with every decision explained. JD3 approves non-STP claims in IAS; STP claims pay straight through.
 
 - `src/ulink-api/` — Express + Sequelize (Postgres, pgvector) + local LLM. Scripts: its `package.json`.
-- `src/ulink-console/` — React/Vite dashboard for CSR / Ops / JD2 (`npm run build` type-checks).
+- `src/ulink-console/` — React/Vite dashboard for CSR / Ops / JD3 (`npm run build` type-checks).
 - `docs/imp/` — requirements, demo material, status tracking.
 
 ## Read before changing behaviour
 
-- **Domain words** (TPA case number vs claim number, suspense, barcode, JD2, …): `CONTEXT.md` — use its terms in
+- **Domain words** (TPA case number vs claim number, suspense, barcode, JD1–JD3, …): `CONTEXT.md` — use its terms in
   code, docs and replies.
 - **How it works now:** `docs/imp/CLAIM_FLOW_END_TO_END.md` — every job, status, email, human checkpoint, setting.
 - **Running, fixing, deploying:** `OPERATIONS.md`.

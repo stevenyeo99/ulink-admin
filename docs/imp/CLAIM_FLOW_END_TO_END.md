@@ -34,7 +34,7 @@ customer emails the claim                         a claim is created in IAS (cus
  Console upload (cl-upload) + wait for barcode      (images are already in the console)
  IAS claim CREATION                                 IAS claim REVISION (claim already exists)
         │                                                  │
- non-STP → JD2 approves in IAS            STP → settlement report emailed to the customer
+ non-STP → JD3 approves in IAS            STP → settlement report emailed to the customer
 ```
 
 **How jobs connect.** No job calls another. Each job picks up the cases sitting at *its* status, works on them, and
@@ -51,7 +51,7 @@ statuses, so email jobs can never pick them up and the other way round (enforced
 
 Pipeline order (email): email-intake → claim-recognition → *email: claim received* → member-verification →
 document-checking → *email: member / documents* → console-upload → console-barcode → *email: console upload issue* →
-ias-claim-preparation → ias-claim-creation → *email: JD2 / IAS rejection* → ias-claim-stp → *email: settlement report*.
+ias-claim-preparation → ias-claim-creation → *email: JD3 / IAS rejection* → ias-claim-stp → *email: settlement report*.
 
 ### 2.1 Email intake — `email-intake`
 | | |
@@ -81,7 +81,7 @@ ias-claim-preparation → ias-claim-creation → *email: JD2 / IAS rejection* �
 | **Decided by** | Rule (comparisons); **AI** (exclusion check, name judgments) |
 | **Status** | `READY_FOR_DOCUMENT_CHECKING` *Checking documents* · `MEMBER_REVIEW_REQUIRED` *Member check issue* |
 | **Emails** | Member check issue → **internal** "Member verification hold" (every problem + required action + AI assessment). Never to the customer. |
-| **Warnings, not stops** | A possible policy exclusion or a benefit not on the plan is a **warning for JD2** — the case continues. The case page shows the clause's own words and the AI's reason. |
+| **Warnings, not stops** | A possible policy exclusion or a benefit not on the plan is a **warning for JD3** — the case continues. The case page shows the clause's own words and the AI's reason. |
 | **Human** | *Override and continue* (reason + finding, recorded under the reviewer's name). Not possible when the member isn't in IAS at all. |
 
 ### 2.4 Document check — `document-checking`
@@ -127,7 +127,7 @@ ias-claim-preparation → ias-claim-creation → *email: JD2 / IAS rejection* �
 | **Reads** | `CLAIM_PAYLOAD_PREPARED` |
 | **Does** | Creates the claim in IAS. |
 | **Status** | `CLAIM_CREATED` *Created in IAS* (claim number saved) · `CLAIM_SUBMIT_FAILED` *IAS rejected the claim* |
-| **Emails** | Non-STP → internal **JD2 approval** email (claim number + AI assessment + review points). IAS rejection → internal email with IAS's reason. STP → no email here (settlement report next). |
+| **Emails** | Non-STP → internal **JD3 approval** email (claim number + AI assessment + review points). IAS rejection → internal email with IAS's reason. STP → no email here (settlement report next). |
 | **On failure** | Network / server error → retried next run. A rejection from IAS (e.g. "Claim already exists") is **not** retried. |
 | **Audit** | STP claims: the AI assessment is saved on the case history. |
 
@@ -140,7 +140,7 @@ ias-claim-preparation → ias-claim-creation → *email: JD2 / IAS rejection* �
 | **Emails** | The settlement report (PDF attached) to the **customer**. |
 | **Audit** | The final AI assessment (the whole journey) is saved on the case history. |
 
-A **non-STP** claim ends at *Created in IAS*: JD2 approves it in IAS. ULINK can't see that approval.
+A **non-STP** claim ends at *Created in IAS*: JD3 approves it in IAS. ULINK can't see that approval.
 
 ---
 
@@ -161,7 +161,7 @@ Only what differs from the email case is described; the checks themselves are th
 | 5 | **Member check** | Same as 2.3 (internal email on an issue). | `API_READY_FOR_DOCUMENT_CHECKING` · `API_MEMBER_REVIEW_REQUIRED` |
 | 6 | **Document check** | Same checklist. Missing documents: customer emailed, and — unlike email — the case **continues** so the IAS claim can be suspended. Switch #2 on and the AI unsure: waits at *Check before emailing customer* instead. | `API_DOCUMENTS_VERIFIED` *Documents complete* · `API_INCOMPLETE` *Documents missing* · `API_DOCUMENTS_REVIEW` *Check before emailing customer* |
 | 7 | **Claim preparation** | Same builder as 2.7, plus the API flags: documents missing → `isSuspense=Y`; STP → `isValidation=Y, isCSR=Y`; otherwise `N`. All the customer's console barcodes → `barcode` + `suppBarcode1–5`. | `API_CLAIM_PAYLOAD_PREPARED` *Revision prepared* |
-| 8 | **Claim revision** | The claim already exists in IAS, so it is **revised** (never created). Complete + STP → settlement report next. Complete, not STP → JD2 email. Documents missing → **suspense** in IAS + internal "Documents incomplete" email; the customer's reply restarts the case and the next revision lifts the suspense. | `API_AWAITING_CSR` *Waiting for settlement report* · `API_CLAIM_REVISED` *Revised in IAS* · `API_CLAIM_SUSPENDED` *Documents incomplete* · `API_CLAIM_REVISION_FAILED` *IAS rejected the revision* |
+| 8 | **Claim revision** | The claim already exists in IAS, so it is **revised** (never created). Complete + STP → settlement report next. Complete, not STP → JD3 email. Documents missing → **suspense** in IAS + internal "Documents incomplete" email; the customer's reply restarts the case and the next revision lifts the suspense. | `API_AWAITING_CSR` *Waiting for settlement report* · `API_CLAIM_REVISED` *Revised in IAS* · `API_CLAIM_SUSPENDED` *Documents incomplete* · `API_CLAIM_REVISION_FAILED` *IAS rejected the revision* |
 | 9 | **Settlement report** | Same as 2.9. | `API_CSR_SENT` *Settlement report sent* |
 | — | **API email sender** | Sends every email the API jobs asked for. API emails start their own thread (subject "AYA Sompo claim … (Ref: …)"); customer and internal emails are kept in separate threads. | — |
 
@@ -206,12 +206,12 @@ A claim goes STP only if **all** hold (console **STP settings**):
 5. switch #1 on → **no open review point** (AI unsure, possible exclusion, …).
 
 Every block is written as the reason (e.g. "IP is not allowed for STP. (email case rules)"). A rule change applies to
-claims prepared after it. STP → `isValidation=Y, isCSR=Y` in IAS and the settlement report; not STP → JD2.
+claims prepared after it. STP → `isValidation=Y, isCSR=Y` in IAS and the settlement report; not STP → JD3.
 
 ### 4.5 Human checks when the AI is unsure (switches, both off by default)
 | Switch (STP settings page) | On |
 |---|---|
-| **#1 Don't pay automatically when the AI was unsure** | Any open review point stops STP → JD2 approves. |
+| **#1 Don't pay automatically when the AI was unsure** | Any open review point stops STP → JD3 approves. |
 | **#2 Don't email the customer when the AI is unsure a document is missing** | Customer email held; *Check before emailing customer*; the team sends the request or overrides. |
 
 Both only catch cases where the AI **knows** it is unsure. STP limits cap the risk of a "confidently wrong" case.
@@ -230,7 +230,7 @@ See 2.5–2.6. Normal wait 15–30 minutes; flagged after 2 hours; always keeps 
 | *Documents incomplete* | Case page | **Override and continue** if the documents are fine |
 | *Check before emailing customer* | Case page | **Send the request to the customer**, or **Override and continue** |
 | *Needs manual reading*, *Case number unclear*, *Console upload refused*, *Console barcode not received* | Case page / internal email | Check and fix; *Reset* reprocesses a case from reading (not allowed once it has an IAS claim number) |
-| Non-STP claim in IAS | **Approvals** page + JD2 email | JD2 approves in IAS |
+| Non-STP claim in IAS | **Approvals** page + JD3 email | JD3 approves in IAS |
 | STP rules and switches | **STP settings** (super admin) | Limits, never-STP diagnoses, the two switches |
 
 Every override is recorded in the case history with the person, the finding and the reason; the overridden points
@@ -258,8 +258,8 @@ stay visible, marked *✔ Overridden by … — why*, in the console, the emails
 | Console upload refused | `CONSOLE_UPLOAD_FAILED` | Email | **Person** |
 | Documents uploaded | `DOCUMENTS_UPLOADED` | Email | System |
 | Claim prepared / Revision prepared | `CLAIM_PAYLOAD_PREPARED` / `API_CLAIM_PAYLOAD_PREPARED` | Both | System |
-| Created in IAS | `CLAIM_CREATED` | Email | JD2 (non-STP) / System (STP) |
-| Revised in IAS | `API_CLAIM_REVISED` | API | JD2 |
+| Created in IAS | `CLAIM_CREATED` | Email | JD3 (non-STP) / System (STP) |
+| Revised in IAS | `API_CLAIM_REVISED` | API | JD3 |
 | IAS rejected the claim / revision | `CLAIM_SUBMIT_FAILED` / `API_CLAIM_REVISION_FAILED` | Both | **Person** |
 | Waiting for settlement report | `API_AWAITING_CSR` | API | IAS |
 | Settlement report sent | `CSR_SENT` / `API_CSR_SENT` | Both | — (done) |
@@ -278,7 +278,7 @@ stay visible, marked *✔ Overridden by … — why*, in the console, the emails
 | Settlement report (PDF) | Customer | STP claim, report ready in IAS |
 | Member verification hold | **Team** | Member check issue |
 | Documents incomplete / Check before emailing the customer | **Team** | Documents incomplete / held by switch #2 |
-| Claim ready for review (JD2) | **Team** | Non-STP claim created / revised in IAS |
+| Claim ready for review (JD3) | **Team** | Non-STP claim created / revised in IAS |
 | IAS rejected | **Team** | IAS rejected the claim / revision |
 | Console upload — … | **Team** | Case number unclear, upload refused, barcode not received |
 
@@ -294,7 +294,7 @@ Team emails go to `INTERNAL_REVIEW_EMAIL` (+ the route's CC), start with "(ULINK
 | **Case page** | *Why the case went this way* (one line per stage, reason, where it is now) and the *AI assessment* (every decision: result, why, confidence, how checked — *Rule*, *Cross-checked*, *AI self-rated* — review points, who might be wrong) |
 | **Team emails** | The same text |
 | **IAS** | `AiSummaryRemark` on every claim creation and revision |
-| **Audit copy** | Saved with the case: non-STP in the JD2 email; STP at claim creation and again at the settlement report |
+| **Audit copy** | Saved with the case: non-STP in the JD3 email; STP at claim creation and again at the settlement report |
 | **Case history** | Every status change, email sent, override and reset, with who and why |
 
 ---
