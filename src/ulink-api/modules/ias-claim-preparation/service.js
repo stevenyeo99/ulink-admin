@@ -73,11 +73,14 @@ async function checkCase(caseRecord) {
     lineMeta.push({ voucherType: null, subtotal: extractedFields.claim?.total_claim_amount ?? null, ...benefitPick });
   }
 
-  // Same currency payloadBuilder.js hardcodes for every line (PresentedCurrency: 'MMK') —
-  // no multi-currency support anywhere in this system yet, so this is the only currency an
-  // STP limit could ever be checked against today.
-  const presentedAmt = lines.reduce((sum, line) => sum + (line.subtotal ?? 0), 0);
-  const stpResult = await stpDecision({ routeKey: caseRecord.recognizedType, currency: 'MMK', presentedAmt });
+  // STP rules (console Settings) apply per case type + the IAS benefit type each line is submitted
+  // with. Currency: the same MMK payloadBuilder.js hardcodes — no multi-currency support yet.
+  const stpResult = await stpDecision({
+    source: caseRecord.source,
+    currency: 'MMK',
+    lines: lines.map((line) => ({ benefitType: line.benefit?.benefitType ?? null, subtotal: line.subtotal })),
+    diagCode: diagnosisPick.pick?.diagCode ?? null,
+  });
   const stp = stpResult.isStp;
 
   const payload = buildPayload({
@@ -99,7 +102,7 @@ async function checkCase(caseRecord) {
     // text: what the pick actually searched with (English); translation: the Burmese original, when translated.
     diagnosis: { text: diagnosisText || null, translation, ...diagnosisPick },
     lines: lineMeta,
-    stp: { total: stpResult.total, limit: stpResult.limit, currency: stpResult.currency },
+    stp: stpResult,
   };
 
   return { caseId: caseRecord.id, payload, diagnosis: diagnosisPick.pick, lines, isStp: stp, claimPrepMeta };

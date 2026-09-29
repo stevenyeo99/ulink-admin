@@ -53,6 +53,7 @@ async function processCase({ caseRecord, input }) {
 
   const prepared = await checkCase({
     id: caseRecord.id,
+    source: caseRecord.source,
     extractedFields,
     recognizedType,
     iasMemberInfoResponse: input['api-member-verification'].iasMemberInfoResponse,

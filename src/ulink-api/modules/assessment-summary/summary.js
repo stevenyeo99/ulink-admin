@@ -215,6 +215,19 @@ function documentLines(documentCheckResult) {
   return lines;
 }
 
+// STP rules (stpEligibility.js): reasons when blocked, else each benefit type's total against its limit.
+// Cases prepared before the rules (2026-09-29) stored only { total, limit, currency }.
+function stpWhy(stp, isStp) {
+  if (!stp) return null;
+  const rulesFor = stp.source ? ` (${stp.source === 'API' ? 'API' : 'email'} case rules)` : '';
+  if (stp.reasons) {
+    if (stp.reasons.length > 0) return stp.reasons.join(' ') + rulesFor;
+    return stp.benefits.map((b) => `${b.benefitType} ${amount(b.total)} ${stp.currency} ≤ limit ${amount(b.limit)}`).join('; ') + rulesFor;
+  }
+  return stp.limit == null ? `No STP limit is configured for this claim type${stp.currency ? ` in ${stp.currency}` : ''}, so it is not STP.`
+    : `Claimed ${amount(stp.total)} ${stp.currency || ''} ${isStp ? '≤' : '>'} limit ${amount(stp.limit)}`.replace(/\s+/g, ' ').trim();
+}
+
 function preparationLines(claimPrepMeta, isStp) {
   const lines = [];
   const diagnosis = claimPrepMeta?.diagnosis;
@@ -260,9 +273,7 @@ function preparationLines(claimPrepMeta, isStp) {
       decision: 'STP',
       result: isStp ? 'Yes' : 'No',
       status: 'ok',
-      why: !stp ? null
-        : stp.limit == null ? `No STP limit is configured for this claim type${stp.currency ? ` in ${stp.currency}` : ''}, so it is not STP.`
-          : `Claimed ${amount(stp.total)} ${stp.currency || ''} ${isStp ? '≤' : '>'} limit ${amount(stp.limit)}`.replace(/\s+/g, ' ').trim(),
+      why: stpWhy(stp, isStp),
       verified: VERIFIED.RULE,
     }));
   }

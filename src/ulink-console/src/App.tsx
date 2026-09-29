@@ -9,6 +9,7 @@ import { CaseDetailPage } from './pages/CaseDetailPage';
 import { OverviewPage } from './pages/OverviewPage';
 import { ReviewQueuePage } from './pages/ReviewQueuePage';
 import { ApprovalsPage } from './pages/ApprovalsPage';
+import { StpSettingsPage } from './pages/StpSettingsPage';
 import { LoginPage } from './pages/LoginPage';
 import { useReviewQueue } from './hooks/useCases';
 import { getSession } from './lib/session';
@@ -59,6 +60,7 @@ function Shell() {
             <Route path="/approvals" element={<ApprovalsPage />} />
             <Route path="/cases" element={<CasesPage />} />
             <Route path="/cases/:id" element={<CaseDetailPage />} />
+            <Route path="/stp-settings" element={<StpSettingsPage />} />
           </Routes>
         </div>
       </div>

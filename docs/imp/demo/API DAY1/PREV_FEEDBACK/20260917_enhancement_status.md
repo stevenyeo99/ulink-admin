@@ -19,7 +19,7 @@ Legend: ✅ done · 🟡 partly done · 🔴 not started / minimal · ⏸ later 
 | 4 | Acknowledgement trigger | ✅ Done | Check live in the demo rehearsal |
 | 5 | Internal review | 🟡 Review queue, JD2 email, AI summary + case link in internal emails done | Decide email vs dashboard (#8) |
 | 6 | AI assessment history | 🟡 Done inside our system; not in iAS; STP not saved | Save STP summary; iAS field from iAS team |
-| 7 | STP governance | 🔴 Amount only | Plan below — decisions from Ulink |
+| 7 | STP governance | 🟡 Configurable rules built (demo) | Real values + decisions from Ulink |
 | 8 | API / integration | 🟡 API case workflow built; documents still via console | `cl-upload` (3rd demo) |
 | — | Console upload (action #12) | 🗣 To discuss | Questions below |
 
@@ -90,7 +90,20 @@ Legend: ✅ done · 🟡 partly done · 🔴 not started / minimal · ⏸ later 
 - ❌ **Kept in iAS** — needs a field or API from the iAS team.
 - Detail: [SUMMARY_REQUIREMENT.md](SUMMARY_REQUIREMENT.md).
 
-### 7. STP governance — 🔴 amount only
+### 7. STP governance — 🟡 configurable rules built for the demo (2026-09-29)
+- ✅ **Console → Admin → STP settings**: per **case type (Email / API)** and **IAS benefit type**
+  (IP / OP / DT / VS, the `BenefitType` sent to IAS): STP allowed yes/no + max amount (MMK). Plus a
+  **never-STP diagnosis list** (ICD-10 code or prefix, e.g. `C`); **R69** (diagnosis not found) is on it,
+  which closes the `AYA-CL-26034912` gap. Tables `ulink_stp_rules`, `ulink_stp_blocked_diagnoses`
+  (replace `ulink_stp_limits`); logic `ias-claim-preparation/stpEligibility.js`.
+- A case is STP only if every line's benefit type is allowed and its total for that type is within the
+  limit, and the diagnosis isn't blocked. A line with no benefit type, or a type with no rule (e.g. **PA**,
+  seen in IAS data), is not STP. The AI assessment's STP line gives the reason.
+- Seeded amounts are demo values (email: OP 50,000 / DT 30,000 / VS 30,000; API: OP 100,000 /
+  DT 50,000, VS off; IP off for both). Editing is super admin only; a change applies to claims prepared after it.
+- Not yet: AI confidence rule, "any open review point" rule (phases 1/3 below).
+
+_Original note:_ amount only
 - **Asked:** STP must not rely on amount alone; configurable rules (amount, diagnosis, AI confidence, others).
 - **Today:** STP = total ≤ **50,000 MMK** (a demo value, per route + currency, table `ulink_stp_limits`).
   Real example of the risk: `AYA-CL-26034912` went STP with a **defaulted diagnosis (R69, AI confidence 0)**.

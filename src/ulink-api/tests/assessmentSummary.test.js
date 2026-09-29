@@ -126,6 +126,15 @@ it('uses the STP numbers and a decision reason once they are stored', () => {
   expect(find(noLimit, 'STP').why).toBe('No STP limit is configured for this claim type in MMK, so it is not STP.');
 });
 
+it('explains the STP rules decision per benefit type, or why it was blocked', () => {
+  const stp = { source: 'API', currency: 'MMK', benefits: [{ benefitType: 'OP', total: 30000, allowed: true, limit: 100000 }], reasons: [] };
+  expect(find(buildAssessmentSummary({ claimPrepMeta: { stp }, isStp: true }), 'STP').why)
+    .toBe('OP 30,000 MMK ≤ limit 100,000 (API case rules)');
+  const blocked = { ...stp, source: 'EMAIL', reasons: ['IP is not allowed for STP.'] };
+  expect(find(buildAssessmentSummary({ claimPrepMeta: { stp: blocked }, isStp: false }), 'STP').why)
+    .toBe('IP is not allowed for STP. (email case rules)');
+});
+
 it('handles a case with no results yet', () => {
   const summary = buildAssessmentSummary({});
   expect(summary).toEqual({ lines: [], reviewPoints: [], needsReview: false });
