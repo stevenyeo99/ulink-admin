@@ -47,7 +47,7 @@ async function checkCase(caseRecord) {
   // Only run the exclusion-possibility check (SOP §6.3) and benefit-eligibility check (SOP
   // §6.4) once the hard member/policy checks already pass — a case still failing on e.g. a
   // DOB mismatch will be re-evaluated on a later run anyway (see run()'s retry loop), so
-  // spending these now would surface a result JD2 won't see until the case clears those
+  // spending these now would surface a result JD3 won't see until the case clears those
   // first. checkBenefitEligibility itself is free (no LLM), gated here for the same
   // noise-reduction reason as exclusions, not cost.
   if (result.outcome === 'MEMBER_VERIFIED') {
@@ -60,7 +60,7 @@ async function checkCase(caseRecord) {
     result.flags = [];
   }
 
-  // Benefit-limit info (SOP §6.5) is informational for JD2, not a gate — populate it
+  // Benefit-limit info (SOP §6.5) is informational for JD3, not a gate — populate it
   // whenever IAS actually returned plan data, regardless of hard-check pass/fail, since
   // it's useful context either way (e.g. explaining why a claim looks out of scope).
   result.benefitLimits = iasResponse.success ? summarizeBenefitLimits(iasResponse.payload?.memberPlans) : [];

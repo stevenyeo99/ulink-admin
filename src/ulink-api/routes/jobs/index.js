@@ -518,8 +518,8 @@ const router = express.Router();
  *       (modules/ias-claim-creation/iasClaimClient.js). On success, sets
  *       Case.currentStatus=CLAIM_CREATED, Case.claimNo (the real assigned claim number),
  *       Case.iasClaimResult, logs a CaseEvent, and queues an INTERNAL-ONLY
- *       CLAIM_APPROVAL_REVIEW EmailTask (SOP §13 "ready for JD2 handover" signal, sent to
- *       INTERNAL_REVIEW_EMAIL — this system can't detect JD2's later approval, so the
+ *       CLAIM_APPROVAL_REVIEW EmailTask (hand-over to JD3 (approval in IAS), sent to
+ *       INTERNAL_REVIEW_EMAIL — this system can't detect JD3's later approval, so the
  *       customer's claim-number notice is now a manual step outside this system, not
  *       automatic; the claim-received DOCUMENT_COMPLETE_ACK, sent at claim recognition, is
  *       unrelated and unaffected). On a real business rejection from IAS (success:false

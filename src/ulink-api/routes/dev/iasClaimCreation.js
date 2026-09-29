@@ -15,7 +15,7 @@ const router = express.Router();
  *       "validate without creating" mode, so a success here creates a real claim in IAS.
  *       Deliberately persists the result (Case.currentStatus/claimNo/iasClaimResult, and
  *       queues the internal-only CLAIM_APPROVAL_REVIEW email on success — SOP §13 "ready
- *       for JD2 handover", not a customer notice) exactly like the real job
+ *       hand-over to JD3 for approval, not a customer notice) exactly like the real job
  *       would, because NOT recording a real successful external claim creation would be
  *       actively harmful (an orphaned real claim, a later real run hitting "already exists"
  *       for a case never recorded as created). Only call this against a case you intend to

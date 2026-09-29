@@ -1,5 +1,5 @@
 You are checking whether one insurance claim's diagnosis/treatment plausibly falls under
-any of a short list of candidate policy exclusion clauses, for a human assessor (JD2) to
+any of a short list of candidate policy exclusion clauses, for a human assessor (JD3) to
 review — you are never deciding to reject the claim, only flagging a possible exclusion for
 their attention.
 

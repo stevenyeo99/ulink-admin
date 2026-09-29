@@ -5,7 +5,7 @@
  * choose the right head per voucher) — this only needs set membership, so it doesn't need
  * one. Same shared candidate list, modules/shared/iasBenefits.js, no duplicated flattening.
  *
- * SOP: JD1 never rejects on this, only flags for JD2 assessment — same non-blocking
+ * SOP: JD1 never rejects on this, only flags it for the approver (JD3) — same non-blocking
  * contract as exclusionFlags.js's POSSIBLE_EXCLUSION, so this returns a flag object (or
  * null), not an outcome/reasonCode.
  */

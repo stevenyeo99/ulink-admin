@@ -131,9 +131,9 @@ export const EMAIL_BADGES: EmailBadgeMeta[] = [
   },
   // ias-claim-creation's emails are internal-only, not the customer-facing
   // CLAIM_CREATED_NOTIFICATION this used to be — that taskType was removed (2026-09-14):
-  // this system can't detect JD2's later approval, so the customer's claim-number notice
+  // this system can't detect JD3's later approval, so the customer's claim-number notice
   // is now a manual step for ops, not automatic. CLAIM_APPROVAL_REVIEW is the SOP §13
-  // "ready for JD2 handover" signal instead.
+  // hand-over to JD3 (approval in IAS) instead.
   {
     id: 'email-badge-ias-claim-creation',
     producer: 'ias-claim-creation',

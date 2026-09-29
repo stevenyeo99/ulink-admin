@@ -5,14 +5,14 @@ const { findOverrides } = require('../policy-exclusion/overrideLookup');
 /**
  * Composes the policy-exclusion RAG-judge check into the flags array attached to
  * member-verification's result (see checks.js's evaluate()) — this never changes
- * outcome/reasonCode, per SOP §6.3/§14: JD1 flags a possible exclusion for JD2 to review,
+ * outcome/reasonCode, per SOP §6.3/§14: the automated checks (JD1/JD2) flag a possible exclusion for the approver, JD3, to review,
  * it never rejects on this.
  *
  * Policyholder overrides (modules/policy-exclusion/overrideLookup.js) are only looked up
  * once a base clause is actually flagged, attached as context on that same flag — not
  * surfaced unconditionally on every case. Several override rows apply broadly ("Both
  * individual and group policies"), so querying them independent of an actual flag would
- * put the same generic note on every single case regardless of relevance; JD2 already has
+ * put the same generic note on every single case regardless of relevance; JD3 already has
  * the full override sheet as reference, this only needs to point them at it when there's
  * something to weigh it against.
  */

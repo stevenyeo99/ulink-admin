@@ -112,7 +112,7 @@ router.get('/review-queue', getReviewQueue);
  * /api/cases/approvals:
  *   get:
  *     tags: [cases]
- *     summary: Approvals — non-STP claims waiting for JD2 in IAS, oldest first, with the AI's review points
+ *     summary: Approvals — non-STP claims waiting for JD3 in IAS, oldest first, with the AI's review points
  *     parameters:
  *       - name: source
  *         in: query

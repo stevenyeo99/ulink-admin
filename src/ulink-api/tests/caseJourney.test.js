@@ -22,7 +22,7 @@ it('tells an STP API case from receipt to the settlement report', () => {
   expect(journey.at(-1)).toMatchObject({ stage: 'Now', result: 'Settlement report sent' });
 });
 
-it('says why a case is on hold, and that a non-STP claim waits for JD2', () => {
+it('says why a case is on hold, and that a non-STP claim waits for JD3', () => {
   const hold = journeyOf({
     createdAt: '2026-09-29T01:00:00Z', recognizedType: 'ayas_member_claim', currentStatus: 'MEMBER_REVIEW_REQUIRED',
     memberVerifyResult: { outcome: 'MEMBER_REVIEW_REQUIRED', reasonCode: 'BANK_DETAILS_MISMATCH', reason: 'Bank details do not match IAS record.' },
@@ -32,7 +32,7 @@ it('says why a case is on hold, and that a non-STP claim waits for JD2', () => {
 
   const jd2 = journeyOf({ createdAt: '2026-09-29T01:00:00Z', currentStatus: 'CLAIM_CREATED', claimNo: 'CL-1', isStp: false });
   expect(jd2.at(-2)).toMatchObject({ stage: 'IAS', why: 'Claim CL-1 created in IAS.' });
-  expect(jd2.at(-1).why).toBe('Waiting for JD2 approval in IAS.');
+  expect(jd2.at(-1).why).toBe('Waiting for JD3 approval in IAS.');
 });
 
 it('puts the journey first in the email text', () => {
@@ -50,11 +50,11 @@ it('explains a possible exclusion with the clause wording and the AI reason', ()
   const exclusion = summary.lines.find((l) => l.decision === 'Policy exclusion');
   expect(exclusion).toMatchObject({
     result: 'Possible exclusion (clause 6.22)',
-    why: 'Clause 6.22: "Weight loss or weight problems". AI: Treatment is Tirzepatide with BMI 30.2. Only a warning for JD2 — the case is not stopped.',
+    why: 'Clause 6.22: "Weight loss or weight problems". AI: Treatment is Tirzepatide with BMI 30.2. Only a warning for JD3 — the case is not stopped.',
     review: { check: 'Read clause 6.22 and decide whether it applies to this claim.' },
   });
   expect(summary.journey.find((s) => s.stage === 'Policy check'))
-    .toEqual({ stage: 'Policy check', result: 'Possible exclusion (clause 6.22)', why: 'Treatment is Tirzepatide with BMI 30.2. A warning for JD2, not a stop.' });
+    .toEqual({ stage: 'Policy check', result: 'Possible exclusion (clause 6.22)', why: 'Treatment is Tirzepatide with BMI 30.2. A warning for JD3, not a stop.' });
 
   // A flag stored before the clause text was kept: the wording comes from the policy clause list.
   const older = buildAssessmentSummary({ memberVerifyResult: { ...verified, flags: [{ code: 'POSSIBLE_EXCLUSION', clauseRef: '6.22', confidence: 0.85 }] } });

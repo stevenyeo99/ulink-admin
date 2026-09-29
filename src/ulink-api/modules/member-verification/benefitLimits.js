@@ -4,7 +4,7 @@
  * integration that doesn't exist yet (2026-09-14 decision: ship a placeholder now, full
  * integration later). This is a straight passthrough of the plan's own filed limits
  * (memberPlans[0].coverageLimits[]), NOT a computed remaining balance — every entry is
- * explicitly labeled as such so JD2 never mistakes it for a live, usage-adjusted figure.
+ * explicitly labeled as such so JD3 never mistakes it for a live, usage-adjusted figure.
  */
 const LIMIT_NOTE = 'Plan limit as filed — not adjusted for prior usage; real-time balance integration pending.';
 

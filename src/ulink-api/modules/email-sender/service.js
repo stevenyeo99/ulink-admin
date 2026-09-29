@@ -25,7 +25,7 @@ async function logEvent(transaction, { caseId, newStatus, reasonCode = null, mes
 // issue") are "hold and verify/escalate", never a direct customer request — unlike
 // MISSING_DOCUMENTS, which SOP frames as "request [documents] from customer". So
 // MEMBER_VERIFY_ISSUE goes to internal ops, not the case's own sender.
-// CLAIM_APPROVAL_REVIEW (SOP §13 "ready for JD2 handover") and CLAIM_SUBMIT_ISSUE (a real
+// CLAIM_APPROVAL_REVIEW (hand-over to JD3 for approval in IAS) and CLAIM_SUBMIT_ISSUE (a real
 // IAS rejection — ops needs the actual reason, not a customer-safe placeholder) get the
 // same treatment, same reasoning.
 const INTERNAL_ONLY_TASK_TYPES = new Set(['MEMBER_VERIFY_ISSUE', 'CLAIM_APPROVAL_REVIEW', 'CLAIM_SUBMIT_ISSUE', 'DOCUMENTS_INCOMPLETE', 'CONSOLE_UPLOAD_ISSUE']);

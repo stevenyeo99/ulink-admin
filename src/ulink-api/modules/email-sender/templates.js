@@ -26,7 +26,7 @@
  * the customer directly" per SOP: member-verification/claim-submission findings are "hold
  * and verify/escalate" (§11), and claim approval itself happens outside JD1 entirely (§14)
  * — this system can't even detect when it happens, so CLAIM_APPROVAL_REVIEW is the "ready
- * for JD2 handover" signal (§13), not a customer notice. Unlike every other renderer here,
+ * hand-over to JD3 (approval in IAS), not a customer notice. Unlike every other renderer here,
  * their content is written for an ops reader and can freely include raw diagnostic detail
  * (extracted-vs-IAS values, the real IAS rejection reason) — exactly what every *other*
  * template in this file deliberately keeps away from customers.
@@ -171,8 +171,8 @@ function renderSubmissionNotRecognized() {
 }
 
 // Internal-only (see this file's header comment) — replaces the old customer-facing
-// CLAIM_CREATED_NOTIFICATION. This is the SOP §13 "ready for JD2 handover" signal: JD1's
-// automated work is done, a human now needs to review/approve before the customer is ever
+// CLAIM_CREATED_NOTIFICATION. This is the hand-over to JD3 (approval in IAS): the automated JD1/JD2
+// work is done, a human now needs to review/approve before the customer is ever
 // told a claim number (which happens outside this system, manually, once approved).
 function renderClaimApprovalReview(payload) {
   const { claimNo } = payload;

@@ -37,7 +37,7 @@ describe('renderMemberVerifyIssue (internal-only, SOP §11)', () => {
 });
 
 // CLAIM_APPROVAL_REVIEW replaces the old customer-facing CLAIM_CREATED_NOTIFICATION — SOP
-// §13 "ready for JD2 handover" signal, internal-only since this system can't detect JD2's
+// The hand-over to JD3 (approval in IAS), internal-only since this system can't detect JD3's
 // later approval.
 describe('renderClaimApprovalReview (internal-only, SOP §13)', () => {
   it('renders claim/case detail and explicitly states the customer was not notified', () => {

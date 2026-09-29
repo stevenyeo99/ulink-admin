@@ -10,7 +10,7 @@ const PAGE_SIZE = 25;
 const EMPTY: ApprovalItem[] = [];
 
 /**
- * JD2's list (docs/imp/demo/API DAY1/PREV_FEEDBACK/CONSOLE_DASHBOARD_DESIGN.md, step 6): non-STP claims
+ * JD3's list (docs/imp/demo/API DAY1/PREV_FEEDBACK/CONSOLE_DASHBOARD_DESIGN.md, step 6): non-STP claims
  * waiting for approval in IAS, oldest first, with what the AI flagged. The system can't see the
  * approval itself in IAS, so a claim stays here until something moves it on.
  */

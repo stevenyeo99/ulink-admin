@@ -63,10 +63,10 @@ const listRow = (c) => ({
 });
 
 /**
- * GET /api/cases/approvals — non-STP claims waiting for JD2 to approve in IAS, oldest first, each with
- * its AI assessment's review points (what JD2 should look at before approving). Email cases: created
+ * GET /api/cases/approvals — non-STP claims waiting for JD3 to approve in IAS, oldest first, each with
+ * its AI assessment's review points (what JD3 should look at before approving). Email cases: created
  * in IAS and not STP; API cases: revised in IAS with documents complete (API STP goes on to the CSR
- * instead). The system can't see JD2's approval in IAS, so a case stays here until something moves it.
+ * instead). The system can't see JD3's approval in IAS, so a case stays here until something moves it.
  */
 async function getApprovals(req, res) {
   const source = req.query.source ? String(req.query.source).toUpperCase() : null;
@@ -437,7 +437,7 @@ async function overrideCase(req, res) {
         job: 'case-override',
         status: 'DONE',
         input: { username: req.user.username, finding, reason: reason.trim() },
-        // note: the same text as the case-history entry — later API jobs read it (e.g. the JD2 email).
+        // note: the same text as the case-history entry — later API jobs read it (e.g. the JD3 email).
         output: { from: prevStatus, to: targetStatus, waived, note: `Overridden by ${operator} — ${OVERRIDE_FINDINGS[finding]}: ${reason.trim()}` },
         startedAt: now,
         finishedAt: now,

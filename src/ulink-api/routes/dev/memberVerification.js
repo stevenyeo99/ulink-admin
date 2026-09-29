@@ -38,7 +38,7 @@ const router = express.Router();
  *                     flags:
  *                       type: array
  *                       description: >
- *                         Non-blocking JD2-review flags, only populated once the hard checks
+ *                         Non-blocking JD3-review flags, only populated once the hard checks
  *                         pass — e.g. POSSIBLE_EXCLUSION (SOP §6.3) or BENEFIT_NOT_ELIGIBLE
  *                         (SOP §6.4, claimed benefit type not found on the member's own plan).
  *                       items: { type: object }

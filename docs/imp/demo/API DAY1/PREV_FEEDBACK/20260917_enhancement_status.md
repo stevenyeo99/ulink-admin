@@ -22,7 +22,7 @@ Legend: ✅ done · 🟡 partly done · 🔴 not started / minimal · ⏸ later 
 | 2 | AYAS delegation rule | ⏸ Later | Waiting for the AYAS exception list |
 | 3 | Customer communication | 🟡 Numbered list done; Burmese not | Decide Burmese scope |
 | 4 | Acknowledgement trigger | ✅ Done | Check live in the demo rehearsal |
-| 5 | Internal review | 🟡 Review queue, JD2 email, AI summary + case link + "why the case went this way" in internal emails and console; internal email for incomplete documents; switch to hold the customer email when the AI is unsure | Decide email vs dashboard for the rest (#8); whether to switch the hold on |
+| 5 | Internal review | 🟡 Review queue, JD3 email, AI summary + case link + "why the case went this way" in internal emails and console; internal email for incomplete documents; switch to hold the customer email when the AI is unsure | Decide email vs dashboard for the rest (#8); whether to switch the hold on |
 | 6 | AI assessment history | ✅ Saved in our system (STP + non-STP) and sent to iAS (`AiSummaryRemark`) | Check it in iAS on the next submission |
 | 7 | STP governance | 🟡 Configurable rules built (demo); switch "open review point blocks STP" | Real values + decisions from Ulink (incl. whether to switch on) |
 | 8 | API / integration | 🟡 API case workflow built; `cl-upload` for email cases built (off by default) | Live check with `AYA-CL-26031486`, then switch on |
@@ -69,15 +69,15 @@ Legend: ✅ done · 🟡 partly done · 🔴 not started / minimal · ⏸ later 
 ### 5. Internal review — 🟡 partly
 - ✅ **Review queue** on the dashboard — cases needing a person, grouped by reason, oldest first
   (case-level exceptions for CSR/Ops; the meeting's "dashboard for monitoring").
-- ✅ **JD2 approval email includes the AI assessment** (action #10) — what was decided, why, and what to
+- ✅ **JD3 approval email includes the AI assessment** (action #10) — what was decided, why, and what to
   check first.
-- ✅ **Approvals page** for JD2 — non-STP claims waiting for approval, with the AI's review points.
+- ✅ **Approvals page** for JD3 — non-STP claims waiting for approval, with the AI's review points.
 - ✅ **Override and continue** — a reviewer can let a case past a wrongly flagged document / member check,
   with "why was the check wrong" + reason, recorded against their login. The overridden points stay visible
-  but are marked "✔ Overridden by … — why: reason" on the case page and in the JD2 / IAS-rejection emails,
+  but are marked "✔ Overridden by … — why: reason" on the case page and in the JD3 / IAS-rejection emails,
   and no longer count as open (Review queue, needs-review colour).
 - ✅ **Action #7, for the existing internal emails (built 2026-09-28):** the member-issue and IAS-rejection
-  emails (email and API cases) now carry the **AI assessment** (review points first), like the JD2 email;
+  emails (email and API cases) now carry the **AI assessment** (review points first), like the JD3 email;
   all three internal emails have an **"Open this case" link** to the console (`CONSOLE_URL`).
 - ✅ **Member check reports every problem (A2, built 2026-09-29)** — before, only the first failure was named
   (a DOB mismatch hid a bank mismatch). Now the reason lists each one (numbered), the member-issue email
@@ -87,7 +87,7 @@ Legend: ✅ done · 🟡 partly done · 🔴 not started / minimal · ⏸ later 
   shows its path, one line per stage with the result and the reason: received → recognised → member check →
   documents → diagnosis → benefit → STP → IAS → where it is now (and who acts next). On the case page (panel
   above the AI assessment) and at the top of the AI assessment in every internal email (member issue,
-  documents incomplete, JD2 approval, IAS rejection). Built from stored results, no extra AI call
+  documents incomplete, JD3 approval, IAS rejection). Built from stored results, no extra AI call
   (`assessment-summary/journey.js`). The STP audit snapshot is now also refreshed when the settlement report
   is sent, so it covers the whole journey.
 - ✅ **Internal email when documents are incomplete (meeting notes item 4, built 2026-09-29)** — "(ULINK AI)
@@ -97,7 +97,7 @@ Legend: ✅ done · 🟡 partly done · 🔴 not started / minimal · ⏸ later 
   IAS with suspense. Covered by decision #8 — easy to switch off if Ulink says "dashboard only".
 - ✅ **Human checks when the AI is unsure (built 2026-09-29, two switches, both off by default)** — console
   STP settings → "Human checks when the AI is unsure": **#1** a claim with an open review point never goes STP
-  (goes to JD2, reason shown); **#2** when the AI is unsure a document is missing (couldn't read it, or below 0.5
+  (goes to JD3, reason shown); **#2** when the AI is unsure a document is missing (couldn't read it, or below 0.5
   confidence) the customer's missing-documents email is held — status **Check before emailing customer**, team
   email "ACTION NEEDED"; the person sends the request or overrides (email and API cases). Covers B3's "open
   review point blocks STP" as a switch Ulink can turn on.
@@ -112,7 +112,7 @@ Legend: ✅ done · 🟡 partly done · 🔴 not started / minimal · ⏸ later 
 - ✅ Every case shows its **AI assessment** in the console (what was decided, why, how sure, how verified,
   review points, who might be wrong). Diagnosis / benefit picks now give a reason; STP shows the amount
   against the limit.
-- ✅ **Non-STP** claims keep a saved copy (the text in the JD2 email = audit snapshot).
+- ✅ **Non-STP** claims keep a saved copy (the text in the JD3 email = audit snapshot).
 - ✅ **STP** claims keep a saved copy too (built 2026-09-29), taken when the claim is created / revised in
   IAS — the point the STP decision is final: email cases on the `CLAIM_CREATED` case event (`rawRef`),
   API cases in the `api-claim-revision` step output (`assessment`). Not shown in the console (audit only).

@@ -19,7 +19,7 @@ const SWITCHES: { key: keyof Switches; title: string; text: string }[] = [
   {
     key: 'stpBlockOnReviewPoints',
     title: "Don't pay automatically when the AI was unsure",
-    text: 'A claim with an open review point (the AI unsure, a possible policy exclusion, …) never goes STP — it goes to JD2 for approval, and the STP reason says why.',
+    text: 'A claim with an open review point (the AI unsure, a possible policy exclusion, …) never goes STP — it goes to JD3 for approval, and the STP reason says why.',
   },
   {
     key: 'holdUnsureMissingDocsEmail',

@@ -6,14 +6,14 @@ const { assessmentFor } = require('../api-pipeline/assessment');
 // api-claim-revision: API case workflow job (docs/imp/day1/api-case-workflow.md section 6.7).
 //
 //   input:  { 'api-claim-preparation': { payload, documentsComplete, isStp, claimPrepMeta },
-//             'api-member-verification', 'api-document-checking' }   (their results go into the JD2 email's assessment)
+//             'api-member-verification', 'api-document-checking' }   (their results go into the JD3 email's assessment)
 //   output: { response, isSuspense, isStp, email }
 //
 // Sends the prepared revision body to IAS (POST /api/claim_revision). Always a revision, never a
 // new claim: the claim already exists in IAS. IAS answers like claim submission, and the outcome is
 // handled the same way as the email flow's ias-claim-creation:
 // - success, documents complete, STP → API_AWAITING_CSR (api-claim-stp fetches the settlement report)
-// - success, documents complete, non-STP → API_CLAIM_REVISED (internal CLAIM_APPROVAL_REVIEW email; JD2)
+// - success, documents complete, non-STP → API_CLAIM_REVISED (internal CLAIM_APPROVAL_REVIEW email; JD3)
 // - success, documents incomplete    → API_CLAIM_SUSPENDED — suspense set in IAS, the customer was
 //                                      asked for documents; their reply restarts the case, and the next
 //                                      revision (isSuspense=N) lifts the suspense
@@ -58,9 +58,9 @@ async function processCase({ caseRecord, input }) {
       response,
       isSuspense: payload.isSuspense,
       isStp: prepared.isStp,
-      // An STP claim gets no JD2 email, so its AI assessment is kept here as the audit snapshot.
+      // An STP claim gets no JD3 email, so its AI assessment is kept here as the audit snapshot.
       assessment: stpThrough ? assessment : null,
-      // Same as the email flow: a non-STP claim that's through is handed to JD2 for approval, with the
+      // Same as the email flow: a non-STP claim that's through is handed to JD3 for approval, with the
       // AI assessment (17/09 meeting, action 10) — kept in this output as the case's audit snapshot.
       email: suspended
         ? { taskType: 'DOCUMENTS_INCOMPLETE', audience: 'internal', payload: { caseId: caseRecord.id, claimNo, issues: missing, assessment }, dedupeKey: [...missing].sort().join('|') }

@@ -28,7 +28,7 @@ export function useReviewQueue(source?: Source) {
   return useQuery({ queryKey: ['review-queue', source ?? 'all'], queryFn: () => getReviewQueue(source), staleTime: 30_000 });
 }
 
-/** Claims waiting for JD2 approval in IAS. */
+/** Claims waiting for JD3 approval in IAS. */
 export function useApprovals(source?: Source) {
   return useQuery({ queryKey: ['approvals', source ?? 'all'], queryFn: () => getApprovals(source) });
 }

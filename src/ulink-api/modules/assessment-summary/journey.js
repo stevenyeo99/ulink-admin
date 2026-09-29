@@ -43,7 +43,7 @@ function buildCaseJourney(fields = {}, lines = []) {
   if (member) steps.push(step('Member check', member.result, `${member.why || ''}${handled(member)}`.trim()));
 
   // Advisory warnings from the member check (possible policy exclusion, benefit not on the plan): they
-  // don't stop the case, but JD2 should weigh them — so the path says so.
+  // don't stop the case, but JD3 should weigh them — so the path says so.
   for (const warning of lines.filter((l) => l.decision === 'Policy exclusion' || l.decision === 'Benefit eligibility')) {
     steps.push(step('Policy check', warning.result, `${warning.brief || warning.why}${handled(warning)}`));
   }
@@ -94,7 +94,7 @@ function buildCaseJourney(fields = {}, lines = []) {
   if (now) {
     // "Created in IAS" covers both paths; say which one this case is on.
     const next = status === 'CLAIM_CREATED'
-      ? (fields.isStp ? 'STP claim: waiting for the settlement report from IAS.' : 'Waiting for JD2 approval in IAS.')
+      ? (fields.isStp ? 'STP claim: waiting for the settlement report from IAS.' : 'Waiting for JD3 approval in IAS.')
       : now.description;
     steps.push(step('Now', now.label, next));
   }

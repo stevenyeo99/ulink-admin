@@ -158,7 +158,7 @@ function memberLines(memberVerifyResult) {
         ? [
           clauseText ? `Clause ${flag.clauseRef}: "${clauseText.replace(/\.$/, '')}".` : `Clause ${flag.clauseRef}.`,
           flag.reason ? `AI: ${flag.reason}` : null,
-          'Only a warning for JD2 — the case is not stopped.',
+          'Only a warning for JD3 — the case is not stopped.',
         ].filter(Boolean).join(' ')
         : flag.reason || flag.desc || null,
       confidence: formatConfidence(flag.confidence),
@@ -168,7 +168,7 @@ function memberLines(memberVerifyResult) {
         : byAi ? { ...REVIEW.RULE_HOLD, mightBeWrong: ['AI judgment'] } : REVIEW.RULE_HOLD,
       // Short form for "why the case went this way": the AI's reason, else the start of the clause.
       brief: exclusion
-        ? `${flag.reason || (clauseText ? `"${clauseText.length > 110 ? `${clauseText.slice(0, 110).trimEnd()}…` : clauseText}"` : `Clause ${flag.clauseRef}.`)} A warning for JD2, not a stop.`
+        ? `${flag.reason || (clauseText ? `"${clauseText.length > 110 ? `${clauseText.slice(0, 110).trimEnd()}…` : clauseText}"` : `Clause ${flag.clauseRef}.`)} A warning for JD3, not a stop.`
         : null,
     }));
   }

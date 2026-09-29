@@ -49,7 +49,7 @@ const CASE_STATUSES = {
   CONSOLE_UPLOAD_FAILED: status('claim', 'needs_review', 'Console upload refused', 'The console upload API refused the documents; the reason is in the case history.'),
   DOCUMENTS_UPLOADED: status('claim', 'in_progress', 'Documents uploaded', 'Documents are in the console; the IAS claim is being prepared.'),
   CLAIM_PAYLOAD_PREPARED: status('claim', 'in_progress', 'Claim prepared', 'The IAS claim is built and about to be submitted.'),
-  CLAIM_CREATED: status('claim', 'done', 'Created in IAS', 'The claim is in IAS. Non-STP: waiting for JD2 approval. STP: the settlement report follows.'),
+  CLAIM_CREATED: status('claim', 'done', 'Created in IAS', 'The claim is in IAS. Non-STP: waiting for JD3 approval. STP: the settlement report follows.'),
   CLAIM_SUBMIT_FAILED: status('claim', 'failed', 'IAS rejected the claim', 'IAS rejected the submission; the reason was emailed to the internal team.'),
   CSR_SENT: status('stp', 'done', 'Settlement report sent', 'STP claim: the settlement report was emailed to the customer.'),
 
@@ -67,7 +67,7 @@ const CASE_STATUSES = {
   API_DOCUMENTS_VERIFIED: status('documents', 'in_progress', 'Documents complete', 'Member and documents are checked; the IAS revision is being prepared.'),
   API_CLAIM_PAYLOAD_PREPARED: status('claim', 'in_progress', 'Revision prepared', 'The IAS claim revision is built and about to be sent.'),
   API_CLAIM_SUSPENDED: status('claim', 'waiting_customer', 'Documents incomplete', "Revised in IAS with suspense; the customer was asked for the missing documents and the case waits for their reply."),
-  API_CLAIM_REVISED: status('claim', 'done', 'Revised in IAS', 'Documents are complete; handed to JD2 for approval in IAS.'),
+  API_CLAIM_REVISED: status('claim', 'done', 'Revised in IAS', 'Documents are complete; handed to JD3 for approval in IAS.'),
   API_CLAIM_REVISION_FAILED: status('claim', 'failed', 'IAS rejected the revision', 'IAS rejected the revision; the reason was emailed to the internal team.'),
   API_AWAITING_CSR: status('stp', 'in_progress', 'Waiting for settlement report', 'STP claim: waiting for IAS to produce the settlement report.'),
   API_CSR_SENT: status('stp', 'done', 'Settlement report sent', 'STP claim: the settlement report was emailed to the customer.'),

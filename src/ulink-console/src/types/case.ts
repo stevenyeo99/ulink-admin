@@ -297,7 +297,7 @@ export interface ReviewQueueResponse {
   total: number;
 }
 
-// GET /api/cases/approvals — non-STP claims waiting for JD2 to approve in IAS.
+// GET /api/cases/approvals — non-STP claims waiting for JD3 to approve in IAS.
 export interface ApprovalItem {
   id: string;
   source: Source;

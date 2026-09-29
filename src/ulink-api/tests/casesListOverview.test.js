@@ -62,7 +62,7 @@ it('counts cases per group, and new today', async () => {
   expect(body).not.toHaveProperty('modules');
 });
 
-it('lists non-STP claims waiting for JD2, with the review points JD2 should look at', async () => {
+it('lists non-STP claims waiting for JD3, with the review points JD3 should look at', async () => {
   Case.findAll.mockResolvedValue([
     {
       id: 'c1', source: 'EMAIL', currentStatus: 'CLAIM_CREATED', claimNo: '26', isStp: false,

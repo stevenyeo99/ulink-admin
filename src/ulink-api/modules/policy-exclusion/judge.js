@@ -19,7 +19,7 @@ const SCHEMA = {
 
 // Below this, treat the judgment as "didn't really find a match" — same reasoning as
 // ias-claim-preparation's pickers (benefitPicker.js/diagnosisPicker.js) and
-// member-verification's null-means-can't-determine. This flag reaches a human (JD2) either
+// member-verification's null-means-can't-determine. This flag reaches a human (JD3) either
 // way, per SOP §6.3/§14 — never a rejection — so a low-confidence non-match is the safe
 // default, not a forced guess.
 const CONFIDENCE_THRESHOLD = 0.5;

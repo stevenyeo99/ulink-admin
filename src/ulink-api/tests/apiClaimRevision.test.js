@@ -21,7 +21,7 @@ it('receives the prepared payload and runs on API_CLAIM_PAYLOAD_PREPARED', () =>
   });
 });
 
-it('sends the prepared body as-is and marks a complete claim revised, handing non-STP to JD2', async () => {
+it('sends the prepared body as-is and marks a complete claim revised, handing non-STP to JD3', async () => {
   reviseClaim.mockResolvedValue({ success: true, payload: { claimNo: '2604050015' } });
   const input = inputWith({ isSuspense: 'N', isStp: false });
 
@@ -34,7 +34,7 @@ it('sends the prepared body as-is and marks a complete claim revised, handing no
   });
 });
 
-it("puts the AI assessment from the earlier jobs' results into the JD2 email", async () => {
+it("puts the AI assessment from the earlier jobs' results into the JD3 email", async () => {
   reviseClaim.mockResolvedValue({ success: true });
   const input = {
     ...inputWith({ isSuspense: 'N', isStp: false }),

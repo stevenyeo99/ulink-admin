@@ -32,11 +32,11 @@ async function checkCase(caseRecord) {
 }
 
 // Internal-only (see email-sender/service.js's INTERNAL_ONLY_TASK_TYPES) — replaces the old
-// CLAIM_CREATED_NOTIFICATION customer email. This system has no way to detect JD2's later
+// CLAIM_CREATED_NOTIFICATION customer email. This system has no way to detect JD3's later
 // approval (Case.currentStatus never advances past CLAIM_CREATED — final determination is
 // outside JD1 scope per SOP §14), so telling the customer their claim number is now a
 // manual step for ops once they've reviewed/approved, not automatic. This email is the
-// SOP §13 "ready for JD2 handover" signal, fired at exactly the point JD1's automated work
+// hand-over to JD3 (approval in IAS), fired at exactly the point the automated JD1/JD2 work
 // ends.
 // The case's AI assessment for an internal email, with any check a reviewer overrode marked as handled.
 // now: the case fields this step is about to write (status, claimNo, IAS answer), so the journey ends where the case will be.
@@ -46,7 +46,7 @@ async function assessmentText(transaction, caseRecord, now) {
   return assessmentSummaryText(buildAssessmentSummary(fields, { overrides: overridesFromEvents(events) }));
 }
 
-// The AI assessment goes with it (17/09 meeting, action 10): JD2 sees what was decided and why before
+// The AI assessment goes with it (17/09 meeting, action 10): JD3 sees what was decided and why before
 // approving, and the task payload keeps that text as the case's audit snapshot.
 async function queueClaimApprovalReviewEmail(transaction, caseRecord, claimNo) {
   await queueDedupedTask(transaction, {
@@ -83,8 +83,8 @@ async function persistOutcome(caseRecord, outcome) {
         { currentStatus: 'CLAIM_CREATED', claimNo, iasClaimResult: response },
         { where: { id: caseRecord.id }, transaction }
       );
-      // STP claims get no JD2 email, so the AI assessment is kept on this event (rawRef) as their
-      // audit snapshot; a non-STP claim's snapshot is the JD2 email task payload.
+      // STP claims get no JD3 email, so the AI assessment is kept on this event (rawRef) as their
+      // audit snapshot; a non-STP claim's snapshot is the JD3 email task payload.
       await logEvent(transaction, {
         caseId: caseRecord.id,
         prevStatus,

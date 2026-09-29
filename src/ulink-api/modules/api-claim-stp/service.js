@@ -15,7 +15,7 @@ const { assessmentFor } = require('../api-pipeline/assessment');
 // polls IAS claim status for the settlement report (CSR), and the PDF is downloaded to the same
 // CSR_UPLOAD_ROOT layout (csrDestination). The customer email (CSR_REPORT, PDF attached) is sent
 // by api-email-sender. Only STP claims get here — api-claim-revision moves them to
-// API_AWAITING_CSR; a non-STP claim ends at API_CLAIM_REVISED for JD2, as in the email flow.
+// API_AWAITING_CSR; a non-STP claim ends at API_CLAIM_REVISED for JD3, as in the email flow.
 
 async function writeToCsrRoot(key, bytes) {
   const root = path.resolve(config.csrUpload.root);
