@@ -3,6 +3,8 @@ const config = require('../../config');
 const { evaluateDocumentChecks, evaluateJudgmentDependentChecks } = require('./checklist');
 const { entityMatch } = require('./identityJudgment');
 const { queueDedupedTask } = require('../shared/emailTaskQueue');
+const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment-summary/summary');
+const { overridesFromEvents } = require('../case-override/override');
 
 const BLOCK_NAME = 'document-checking';
 
@@ -113,6 +115,24 @@ async function queueMissingDocumentsEmail(transaction, caseId, result) {
   });
 }
 
+// Internal copy (17/09 meeting notes, item 4): the team sees which documents the customer was asked
+// for and why the case went this way, without opening the console. Same dedupe key as the customer
+// email, so the team hears about the same missing list once.
+async function queueDocumentsIncompleteEmail(transaction, caseRecord, result) {
+  const events = await CaseEvent.findAll({ where: { caseId: caseRecord.id, reasonCode: 'MANUAL_OVERRIDE' }, transaction });
+  const fields = { ...(caseRecord.toJSON ? caseRecord.toJSON() : caseRecord), currentStatus: 'INCOMPLETE', documentCheckResult: result };
+  await queueDedupedTask(transaction, {
+    caseId: caseRecord.id,
+    taskType: 'DOCUMENTS_INCOMPLETE',
+    dedupeKey: issuesDedupeKey(result.issues),
+    payload: {
+      caseId: caseRecord.id,
+      issues: result.issues,
+      assessment: assessmentSummaryText(buildAssessmentSummary(fields, { overrides: overridesFromEvents(events) })),
+    },
+  });
+}
+
 // checkCase()'s own outcome names (DOCUMENT_CHECKED/INCOMPLETE) describe what this block
 // itself concluded — kept as-is (dev preview endpoint documents this exact enum, see
 // routes/dev/documentChecking.js) and are NOT the Case.currentStatus to write. Since this
@@ -144,6 +164,7 @@ async function persistOutcome(caseRecord, outcome) {
     // (17/09 meeting, action 6).
     if (!outcome.result.passed) {
       await queueMissingDocumentsEmail(transaction, caseRecord.id, outcome.result);
+      await queueDocumentsIncompleteEmail(transaction, caseRecord, outcome.result);
     }
   });
 }

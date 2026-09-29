@@ -1,0 +1,37 @@
+{
+    "Items": [
+        {
+            "PlanId": "2147",
+            "BankName": "AYA Bank",
+            "ClaimType": "M",
+            "InvoiceID": "NIL",
+            "BankAcctNo": "40038663086",
+            "PayeeEmail": "shinminn.thi@eastwestseed.com",
+            "BenefitHead": "",
+            "BenefitType": "",
+            "IncurDateTo": "08022026",
+            "SymptomDate": "07282026",
+            "BankAcctName": "Shin Minn Thi",
+            "ExchangeRate": 1,
+            "PresentedAmt": 375000,
+            "ProviderCode": null,
+            "ProviderName": "Patharda Hospital",
+            "ReceivedDate": "09292026",
+            "ContactNumber": "09978540910",
+            "DiagnosisCode": "",
+            "IncurDateFrom": "07282026",
+            "PaymentMethod": null,
+            "PaymentCurrency": "MMK",
+            "TreatmentCountry": "MYANMAR",
+            "DiagnosisCodeDesc": "",
+            "PresentedCurrency": "MMK",
+            "PaymentExchangeRate": 1,
+            "DiagnosisDescription": "",
+            "ReviseClaimReasonCode": ""
+        }
+    ],
+    "MemberRefNo": "8/PaPhaNa(N)119063",
+    "TpaCaseNumber": "AYA-CL-26031486",
+    "TpaClaimNumber": "CL/YGN/AYH/26024407",
+    "ProvPortalCaseNumber": ""
+}

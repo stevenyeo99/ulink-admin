@@ -11,6 +11,12 @@
 
 const { toYYYYMMDD, iasDateToYYYYMMDD } = require('../shared/iasDates');
 
+// Reasons are read by people (case page, member-issue email): dates as YYYY-MM-DD on both sides, so a
+// mismatch is visible at a glance. Anything that isn't a compact date is shown as it came.
+function readableDate(yyyymmdd) {
+  return /^\d{8}$/.test(yyyymmdd ?? '') ? `${yyyymmdd.slice(0, 4)}-${yyyymmdd.slice(4, 6)}-${yyyymmdd.slice(6, 8)}` : yyyymmdd;
+}
+
 function norm(value) {
   if (value == null) return null;
   const trimmed = String(value).trim().toLowerCase().replace(/\s+/g, ' ');
@@ -133,23 +139,23 @@ function evaluate(extractedFields, iasResponse) {
 
   const checks = { hard, soft };
 
+  // Every failed check is reported (enhancement A2, 2026-09-29) — a reviewer or customer fixing only
+  // the first problem would otherwise be flagged again for the next. Listed in priority order; the
+  // first one is the case's reasonCode, which drives routing, dedupe and the email subject as before.
+  const issues = [];
   if (hard.coverageActive === false) {
     const start = iasDateToYYYYMMDD(plan?.REINST_DATE) || iasDateToYYYYMMDD(plan?.EFF_DATE);
     const end = iasDateToYYYYMMDD(plan?.TERM_DATE) || iasDateToYYYYMMDD(plan?.EXP_DATE);
-    return {
-      outcome: 'MEMBER_REVIEW_REQUIRED',
+    issues.push({
       reasonCode: 'COVERAGE_NOT_ACTIVE',
-      checks,
-      reason: `Treatment date ${treatmentDate} falls outside the active coverage period (${start} to ${end}).`,
-    };
+      reason: `Treatment date ${readableDate(treatmentDate)} falls outside the active coverage period (${readableDate(start)} to ${readableDate(end)}).`,
+    });
   }
   if (hard.dobMatch === false) {
-    return {
-      outcome: 'MEMBER_REVIEW_REQUIRED',
+    issues.push({
       reasonCode: 'MEMBER_DETAILS_MISMATCH',
-      checks,
-      reason: `Claimant DOB "${extractedFields.claimant?.claimant_dob}" does not match IAS record DOB "${member.DOB}".`,
-    };
+      reason: `Claimant DOB "${extractedFields.claimant?.claimant_dob}" does not match IAS record DOB "${readableDate(iasDateToYYYYMMDD(member.DOB)) ?? member.DOB}".`,
+    });
   }
   if (hard.bankNameMatch === false || hard.bankAccountNameMatch === false || hard.bankAccountNumberMatch === false) {
     const mismatches = [];
@@ -162,19 +168,22 @@ function evaluate(extractedFields, iasResponse) {
     if (hard.bankAccountNumberMatch === false) {
       mismatches.push(`account number ("${extractedFields.bank?.bank_account_number}" vs IAS "${member.CL_PAY_ACCT_NO}")`);
     }
-    return {
-      outcome: 'MEMBER_REVIEW_REQUIRED',
-      reasonCode: 'BANK_DETAILS_MISMATCH',
-      checks,
-      reason: `Bank details do not match IAS record: ${mismatches.join('; ')}.`,
-    };
+    issues.push({ reasonCode: 'BANK_DETAILS_MISMATCH', reason: `Bank details do not match IAS record: ${mismatches.join('; ')}.` });
   }
   if (hard.policyNoMatch === false) {
+    issues.push({
+      reasonCode: 'MEMBER_DETAILS_MISMATCH',
+      reason: `Policy number "${extractedFields.policy?.policy_no}" does not match IAS record "${policy?.POCY_REF_NO}".`,
+    });
+  }
+
+  if (issues.length > 0) {
     return {
       outcome: 'MEMBER_REVIEW_REQUIRED',
-      reasonCode: 'MEMBER_DETAILS_MISMATCH',
+      reasonCode: issues[0].reasonCode,
       checks,
-      reason: `Policy number "${extractedFields.policy?.policy_no}" does not match IAS record "${policy?.POCY_REF_NO}".`,
+      reason: issues.length === 1 ? issues[0].reason : issues.map((issue, i) => `${i + 1}. ${issue.reason}`).join(' '),
+      issues,
     };
   }
 

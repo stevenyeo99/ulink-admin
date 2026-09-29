@@ -13,7 +13,7 @@ import { CaseOverridePanel } from '../components/cases/CaseOverridePanel';
 import { isSuperAdmin } from '../lib/session';
 import { JsonViewer } from '../components/panel/JsonViewer';
 import { ChecklistTable } from '../components/panel/ChecklistTable';
-import { AssessmentSummaryPanel } from '../components/panel/AssessmentSummaryPanel';
+import { AssessmentSummaryPanel, CaseJourneyPanel } from '../components/panel/AssessmentSummaryPanel';
 import { useCaseStatuses } from '../hooks/useCaseStatuses';
 import type { ChecklistItem } from '../types/case';
 
@@ -91,6 +91,7 @@ export function CaseDetailPage() {
         <p className="mt-1 text-sm text-slate-600">{info(caseRecord.currentStatus).description}</p>
       </header>
 
+      <CaseJourneyPanel summary={assessmentSummary} />
       <AssessmentSummaryPanel summary={assessmentSummary} />
 
       {isSuperAdmin() && <CaseOverridePanel caseRecord={caseRecord} override={override} summary={assessmentSummary} />}

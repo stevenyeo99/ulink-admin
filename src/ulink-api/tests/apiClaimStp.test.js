@@ -23,13 +23,16 @@ const { downloadFile } = require('../modules/ias-claim-stp/iasClaimStatusClient'
 const { job } = require('../modules/api-claim-stp/service');
 
 const caseRecord = { id: 'case-1', currentStatus: 'API_AWAITING_CSR' };
-const input = { 'api-claim-intake': { clNo: '2604050015', tpaCaseNumber: 'T' } };
+const input = {
+  'api-claim-intake': { clNo: '2604050015', tpaCaseNumber: 'T' },
+  'api-claim-preparation': { payload: { claimNo: '2604050015' }, isStp: true, claimPrepMeta: null },
+};
 
 beforeEach(() => jest.clearAllMocks());
 afterAll(() => fs.rmSync(config.csrUpload.root, { recursive: true, force: true }));
 
 it('runs on STP claims waiting for the settlement report', () => {
-  expect(job).toMatchObject({ inputStatus: 'API_AWAITING_CSR', inputs: ['api-claim-intake'] });
+  expect(job).toMatchObject({ inputStatus: 'API_AWAITING_CSR', inputs: ['api-claim-intake', 'api-claim-preparation'] });
 });
 
 it('waits while IAS has no settlement report yet', async () => {
@@ -54,6 +57,8 @@ it('downloads the report into the CSR folder and asks for the CSR_REPORT custome
     nextStatus: 'API_CSR_SENT',
     output: { email: { taskType: 'CSR_REPORT', audience: 'customer', payload: { csrFilePath, claimNo: '2604050015' }, dedupeKey: 'CSR_1.pdf' } },
   });
+  // The STP claim's final audit snapshot covers the whole path, up to the settlement report.
+  expect(result.output.assessment).toContain('Now — Settlement report sent');
 });
 
 it('lets an IAS failure throw, so the runner retries next run', async () => {

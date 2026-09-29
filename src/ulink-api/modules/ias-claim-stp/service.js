@@ -5,6 +5,8 @@ const config = require('../../config');
 const { getClaimStatus, downloadFile } = require('./iasClaimStatusClient');
 const { datePathSegments } = require('../shared/datePathSegments');
 const { queueDedupedTask } = require('../shared/emailTaskQueue');
+const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment-summary/summary');
+const { overridesFromEvents } = require('../case-override/override');
 
 const BLOCK_NAME = 'ias-claim-stp';
 
@@ -15,8 +17,8 @@ const BLOCK_NAME = 'ias-claim-stp';
 // filename".
 const READY_STATUS = 'CL_STATUS_FC';
 
-async function logEvent(transaction, { caseId, prevStatus = null, newStatus, message = null }) {
-  await CaseEvent.create({ caseId, blockName: BLOCK_NAME, prevStatus, newStatus, message }, { transaction });
+async function logEvent(transaction, { caseId, prevStatus = null, newStatus, message = null, rawRef = null }) {
+  await CaseEvent.create({ caseId, blockName: BLOCK_NAME, prevStatus, newStatus, message, rawRef }, { transaction });
 }
 
 // One-off format this endpoint alone wants ("01162026_00:00") — not added to
@@ -83,11 +85,15 @@ async function persistOutcome(caseRecord, outcome) {
       payload: { csrFilePath: outcome.csrFilePath, claimNo: caseRecord.claimNo },
     });
 
+    // The STP claim's audit snapshot, final: the whole path up to the settlement report (rawRef).
+    const overrides = overridesFromEvents(await CaseEvent.findAll({ where: { caseId: caseRecord.id, reasonCode: 'MANUAL_OVERRIDE' }, transaction }));
+    const fields = { ...(caseRecord.toJSON ? caseRecord.toJSON() : caseRecord), currentStatus: 'CSR_SENT' };
     await logEvent(transaction, {
       caseId: caseRecord.id,
       prevStatus,
       newStatus: 'CSR_SENT',
       message: `CSR downloaded to ${outcome.csrFilePath}`,
+      rawRef: assessmentSummaryText(buildAssessmentSummary(fields, { overrides })),
     });
   });
 }

@@ -7,8 +7,8 @@ const { overridesFromEvents } = require('../case-override/override');
 
 const BLOCK_NAME = 'ias-claim-creation';
 
-async function logEvent(transaction, { caseId, prevStatus = null, newStatus, reasonCode = null, message = null }) {
-  await CaseEvent.create({ caseId, blockName: BLOCK_NAME, prevStatus, newStatus, reasonCode, message }, { transaction });
+async function logEvent(transaction, { caseId, prevStatus = null, newStatus, reasonCode = null, message = null, rawRef = null }) {
+  await CaseEvent.create({ caseId, blockName: BLOCK_NAME, prevStatus, newStatus, reasonCode, message, rawRef }, { transaction });
 }
 
 /**
@@ -39,9 +39,11 @@ async function checkCase(caseRecord) {
 // SOP §13 "ready for JD2 handover" signal, fired at exactly the point JD1's automated work
 // ends.
 // The case's AI assessment for an internal email, with any check a reviewer overrode marked as handled.
-async function assessmentText(transaction, caseRecord) {
+// now: the case fields this step is about to write (status, claimNo, IAS answer), so the journey ends where the case will be.
+async function assessmentText(transaction, caseRecord, now) {
   const events = await CaseEvent.findAll({ where: { caseId: caseRecord.id, reasonCode: 'MANUAL_OVERRIDE' }, transaction });
-  return assessmentSummaryText(buildAssessmentSummary(caseRecord, { overrides: overridesFromEvents(events) }));
+  const fields = { ...(caseRecord.toJSON ? caseRecord.toJSON() : caseRecord), ...now };
+  return assessmentSummaryText(buildAssessmentSummary(fields, { overrides: overridesFromEvents(events) }));
 }
 
 // The AI assessment goes with it (17/09 meeting, action 10): JD2 sees what was decided and why before
@@ -51,7 +53,7 @@ async function queueClaimApprovalReviewEmail(transaction, caseRecord, claimNo) {
     caseId: caseRecord.id,
     taskType: 'CLAIM_APPROVAL_REVIEW',
     dedupeKey: null,
-    payload: { caseId: caseRecord.id, claimNo, assessment: await assessmentText(transaction, caseRecord) },
+    payload: { caseId: caseRecord.id, claimNo, assessment: await assessmentText(transaction, caseRecord, { currentStatus: 'CLAIM_CREATED', claimNo }) },
   });
 }
 
@@ -66,7 +68,7 @@ async function queueClaimSubmitIssueEmail(transaction, caseRecord, errorMessage)
     caseId: caseRecord.id,
     taskType: 'CLAIM_SUBMIT_ISSUE',
     dedupeKey: errorMessage || null,
-    payload: { caseId: caseRecord.id, errorMessage, assessment: await assessmentText(transaction, caseRecord) },
+    payload: { caseId: caseRecord.id, errorMessage, assessment: await assessmentText(transaction, caseRecord, { currentStatus: 'CLAIM_SUBMIT_FAILED', iasClaimResult: { error: errorMessage } }) },
   });
 }
 
@@ -81,11 +83,14 @@ async function persistOutcome(caseRecord, outcome) {
         { currentStatus: 'CLAIM_CREATED', claimNo, iasClaimResult: response },
         { where: { id: caseRecord.id }, transaction }
       );
+      // STP claims get no JD2 email, so the AI assessment is kept on this event (rawRef) as their
+      // audit snapshot; a non-STP claim's snapshot is the JD2 email task payload.
       await logEvent(transaction, {
         caseId: caseRecord.id,
         prevStatus,
         newStatus: 'CLAIM_CREATED',
         message: `Claim created, claimNo=${claimNo ?? 'null'}`,
+        rawRef: caseRecord.isStp === true ? await assessmentText(transaction, caseRecord, { currentStatus: 'CLAIM_CREATED', claimNo }) : null,
       });
       // STP claims are already approved through straight-through processing; only non-STP
       // claims need an internal review/approval notification. Null preserves the safe

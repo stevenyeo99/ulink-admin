@@ -9,6 +9,8 @@
 // documentCheckResult, claimPrepMeta, isStp. API cases pass apiCaseView(steps) (api-pipeline/caseView.js),
 // which maps their step outputs onto the same names. Any field may be missing (a case part-way through).
 
+const { buildCaseJourney, caseJourneyText } = require('./journey');
+
 // Same 0.5 every confidence-gated judge uses (identityJudgment, diagnosisPicker, benefitPicker,
 // policy-exclusion judge) and the console's ConfidenceSummary.
 const LOW_CONFIDENCE = 0.5;
@@ -315,12 +317,14 @@ function buildAssessmentSummary(fields = {}, { overrides = [] } = {}) {
       check: 'This claim went straight through; confirm the points below were right.',
     });
   }
-  return { lines, reviewPoints, needsReview: reviewPoints.some((p) => !p.overridden) };
+  // journey: the case's path with the reason at each stage (journey.js) — shown first, in the console and emails.
+  return { lines, reviewPoints, needsReview: reviewPoints.some((p) => !p.overridden), journey: buildCaseJourney(fields, lines) };
 }
 
 // Plain text for emails and logs. Review points first — what a reader should check before anything else.
 function assessmentSummaryText(summary) {
-  if (!summary.lines.length) return 'No assessment yet.';
+  const journey = summary.journey?.length ? `Why the case went this way:\n${caseJourneyText(summary.journey)}\n\n` : '';
+  if (!summary.lines.length) return `${journey}No assessment yet.`;
   const next = summary.reviewPoints.length
     ? `Next review points:\n${summary.reviewPoints
       .map((p, i) => `${i + 1}. ${p.decision} — ${p.overridden ? `already handled — ${p.overridden.note}` : p.check}`)
@@ -334,7 +338,7 @@ function assessmentSummaryText(summary) {
       : '';
     return `${i + 1}. ${l.decision}: ${l.result}\n   Why: ${l.why}\n   How: ${how}${review}`;
   }).join('\n');
-  return `${next}\n\nDecisions:\n${body}`;
+  return `${journey}${next}\n\nDecisions:\n${body}`;
 }
 
 module.exports = { buildAssessmentSummary, assessmentSummaryText, LOW_CONFIDENCE };

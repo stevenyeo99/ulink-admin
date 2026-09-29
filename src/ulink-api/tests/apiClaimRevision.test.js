@@ -17,7 +17,7 @@ it('receives the prepared payload and runs on API_CLAIM_PAYLOAD_PREPARED', () =>
   expect(job).toMatchObject({
     inputStatus: 'API_CLAIM_PAYLOAD_PREPARED',
     inputs: ['api-claim-preparation'],
-    optionalInputs: ['api-member-verification', 'api-document-checking', 'case-override'],
+    optionalInputs: ['api-claim-recognition', 'api-member-verification', 'api-document-checking', 'case-override'],
   });
 });
 
@@ -49,16 +49,37 @@ it("puts the AI assessment from the earlier jobs' results into the JD2 email", a
   expect(assessment).toContain('Next review points:');
 });
 
-it('sends an STP claim on to the settlement report (no approval email)', async () => {
+it('sends an STP claim on to the settlement report (no approval email), keeping its AI assessment', async () => {
   reviseClaim.mockResolvedValue({ success: true });
   const result = await job.process({ caseRecord, input: inputWith({ isSuspense: 'N', isStp: true }) });
   expect(result).toMatchObject({ nextStatus: 'API_AWAITING_CSR', output: { email: null } });
+  expect(result.output.assessment).toEqual(expect.any(String));
+
+  const nonStp = await job.process({ caseRecord, input: inputWith({ isSuspense: 'N', isStp: false }) });
+  expect(nonStp.output.assessment).toBeNull();
 });
 
-it('marks a revision with missing documents suspended (waits for the customer)', async () => {
+it('marks a revision with missing documents suspended, and tells the team what is missing and why', async () => {
   reviseClaim.mockResolvedValue({ success: true });
-  const result = await job.process({ caseRecord, input: inputWith({ isSuspense: 'Y', isStp: false }) });
-  expect(result).toMatchObject({ nextStatus: 'API_CLAIM_SUSPENDED', output: { isSuspense: 'Y', email: null } });
+  const input = {
+    ...inputWith({ isSuspense: 'Y', isStp: false }),
+    'api-document-checking': { documentCheckResult: { passed: false, issues: ['Medical record missing', 'Bank name unclear'], checklist: [], details: [] } },
+  };
+  const result = await job.process({ caseRecord, input });
+  expect(result).toMatchObject({
+    nextStatus: 'API_CLAIM_SUSPENDED',
+    output: {
+      isSuspense: 'Y',
+      email: {
+        taskType: 'DOCUMENTS_INCOMPLETE',
+        audience: 'internal',
+        payload: { caseId: 'case-1', claimNo: '2604050015', issues: ['Medical record missing', 'Bank name unclear'] },
+        dedupeKey: 'Bank name unclear|Medical record missing',
+      },
+    },
+  });
+  expect(result.output.email.payload.assessment).toMatch(/^Why the case went this way:\n/);
+  expect(result.output.email.payload.assessment).toContain('Now — Waiting for documents');
 });
 
 it("treats IAS's success:false as a rejection: not retried, internal email", async () => {

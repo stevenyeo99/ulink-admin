@@ -76,7 +76,8 @@ describe('getCase', () => {
 
     expect(body.case).toMatchObject({ id: 'case-1', source: 'API', recognizedType: 'ayas_member_claim', extractedFields: { v: 1 } });
     expect(body.apiSteps).toBe(steps);
-    expect(body.assessmentSummary).toEqual({ lines: [], reviewPoints: [], needsReview: false });
+    expect(body.assessmentSummary).toMatchObject({ lines: [], reviewPoints: [], needsReview: false });
+    expect(body.assessmentSummary.journey).toEqual([{ stage: 'Recognised', result: 'Read by AI', why: 'Read as ayas_member_claim.' }]);
   });
 
   it("builds the API case's assessment summary from its step outputs", async () => {

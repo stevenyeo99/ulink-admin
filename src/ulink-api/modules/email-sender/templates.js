@@ -112,18 +112,23 @@ const REASON_CODE_TO_SOP_ACTION = {
 
 function renderMemberVerifyIssue(payload) {
   const { caseId, reasonCode, reason } = payload;
-  const requiredAction = REASON_CODE_TO_SOP_ACTION[reasonCode] || 'Hold and review.';
+  // Every problem found (issues, A2 2026-09-29); tasks queued before that carry reasonCode only.
+  const codes = [...new Set((payload.issues || []).map((issue) => issue.reasonCode))];
+  if (codes.length === 0) codes.push(reasonCode);
+  const actions = [...new Set(codes.map((code) => REASON_CODE_TO_SOP_ACTION[code] || 'Hold and review.'))];
+  const requiredAction = actions.join(' ');
+  const more = codes.length > 1 ? ` (+${codes.length - 1} more)` : '';
 
   // Case ID is deliberately kept in the subject only, not repeated in the body — the
   // subject is what a reviewer scans in an ops inbox handling many cases; the body reads
   // as a friendly heads-up rather than a data dump (2026-09-16, at user's request).
   return {
-    subject: `${INTERNAL_SUBJECT_PREFIX}Member verification hold — Case ${caseId} — ${reasonCode}`,
+    subject: `${INTERNAL_SUBJECT_PREFIX}Member verification hold — Case ${caseId} — ${reasonCode}${more}`,
     bodyText: `Hi team,
 
 We weren't able to confirm this case's member/bank details against IAS yet, so please hold off replying to the customer until it's sorted out — member and bank findings need internal verification first.
 
-Reason code: ${reasonCode}
+Reason code: ${codes.join(', ')}
 Detail: ${reason}
 
 Required action: ${requiredAction}${internalExtras(payload)}
@@ -200,6 +205,25 @@ ${SIGN_OFF}`,
   };
 }
 
+// Internal copy of a missing-documents request (17/09 meeting notes, item 4): the customer was already
+// asked; nothing to do unless they don't reply. claimNo only on API cases (email cases have none yet).
+function renderDocumentsIncomplete(payload) {
+  const { caseId, claimNo, issues = [] } = payload;
+  const ref = claimNo ? `Claim ${claimNo}` : `Case ${caseId}`;
+  const list = issues.map((issue, i) => `${i + 1}. ${issue}`).join('\n');
+  return {
+    subject: `${INTERNAL_SUBJECT_PREFIX}Documents incomplete — ${ref} — ${issues.length} missing`,
+    bodyText: `Hi team,
+
+The customer has been asked for the missing documents below. No action is needed unless they don't reply.
+
+Missing:
+${list}${internalExtras(payload)}
+
+${SIGN_OFF}`,
+  };
+}
+
 const RENDERERS = {
   MISSING_DOCUMENTS: renderMissingDocuments,
   DOCUMENT_COMPLETE_ACK: renderDocumentCompleteAck,
@@ -208,6 +232,7 @@ const RENDERERS = {
   SUBMISSION_NOT_RECOGNIZED: renderSubmissionNotRecognized,
   CLAIM_APPROVAL_REVIEW: renderClaimApprovalReview,
   CSR_REPORT: renderCsrReport,
+  DOCUMENTS_INCOMPLETE: renderDocumentsIncomplete,
 };
 
 function render(taskType, payload) {

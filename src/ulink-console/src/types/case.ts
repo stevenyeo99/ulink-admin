@@ -75,6 +75,8 @@ export interface MemberVerifyHardChecks {
 export interface MemberVerifyResult {
   reasonCode?: string | null;
   reason?: string | null;
+  /** Every failed check, first = reasonCode (cases checked from 2026-09-29). */
+  issues?: { reasonCode: string; reason: string }[];
   checks?: { hard: MemberVerifyHardChecks; soft: Record<string, { extracted: unknown; ias: unknown }> };
   [key: string]: unknown;
 }
@@ -206,7 +208,16 @@ export interface AssessmentLine {
   review: AssessmentReview | null;
 }
 
+/** One stage of "why the case went this way" (ulink-api modules/assessment-summary/journey.js). */
+export interface JourneyStep {
+  stage: string;
+  result: string;
+  why: string | null;
+}
+
 export interface AssessmentSummary {
+  /** The case's path so far, one step per stage, with the reason; the last step is where it is now. */
+  journey?: JourneyStep[];
   lines: AssessmentLine[];
   reviewPoints: (AssessmentReview & { decision: string; overridden?: AssessmentOverride })[];
   needsReview: boolean;

@@ -69,5 +69,10 @@
     "exceljs": {
       "uuid": "^11.1.1"
     }
+  },
+  "jest": {
+    "roots": [
+      "<rootDir>/tests"
+    ]
   }
 }

@@ -1,9 +1,14 @@
 # 17/09 Meeting — Enhancement Status
 
 Source: `Ulink_AI_Claims_Automation_Meeting_Summary_Action.docx` (same folder), "Key Discussion Points".
-Status checked against the system on 2026-09-28.
+Status checked against the system on 2026-09-29.
 Related: [MEETING_20260917_ACTION_STATUS.md](MEETING_20260917_ACTION_STATUS.md) (action items),
 [SUMMARY_REQUIREMENT.md](SUMMARY_REQUIREMENT.md), [CONSOLE_DASHBOARD_DESIGN.md](CONSOLE_DASHBOARD_DESIGN.md).
+
+**This file is the tracker for system changes from the 17/09 meeting** — status per point (sections 1–3),
+what is still missing (section 4) and a dated change log (section 5). The related files are background;
+where they disagree, this file is current (e.g. `MEETING_20260917_ACTION_STATUS.md` still lists #7, #10, #11
+as open; `SUMMARY_REQUIREMENT.md` still lists its steps 6 and 7 as open — both done).
 
 Legend: ✅ done · 🟡 partly done · 🔴 not started / minimal · ⏸ later (by decision) · 🗣 to discuss
 
@@ -17,8 +22,8 @@ Legend: ✅ done · 🟡 partly done · 🔴 not started / minimal · ⏸ later 
 | 2 | AYAS delegation rule | ⏸ Later | Waiting for the AYAS exception list |
 | 3 | Customer communication | 🟡 Numbered list done; Burmese not | Decide Burmese scope |
 | 4 | Acknowledgement trigger | ✅ Done | Check live in the demo rehearsal |
-| 5 | Internal review | 🟡 Review queue, JD2 email, AI summary + case link in internal emails done | Decide email vs dashboard (#8) |
-| 6 | AI assessment history | 🟡 Done inside our system; not in iAS; STP not saved | Save STP summary; iAS field from iAS team |
+| 5 | Internal review | 🟡 Review queue, JD2 email, AI summary + case link + "why the case went this way" in internal emails and console; internal email for incomplete documents | Decide email vs dashboard for the rest (#8) |
+| 6 | AI assessment history | 🟡 Done inside our system (STP + non-STP saved); not in iAS | iAS field from iAS team |
 | 7 | STP governance | 🟡 Configurable rules built (demo) | Real values + decisions from Ulink |
 | 8 | API / integration | 🟡 API case workflow built; documents still via console | `cl-upload` (3rd demo) |
 | — | Console upload (action #12) | 🗣 To discuss | Questions below |
@@ -74,7 +79,23 @@ Legend: ✅ done · 🟡 partly done · 🔴 not started / minimal · ⏸ later 
 - ✅ **Action #7, for the existing internal emails (built 2026-09-28):** the member-issue and IAS-rejection
   emails (email and API cases) now carry the **AI assessment** (review points first), like the JD2 email;
   all three internal emails have an **"Open this case" link** to the console (`CONSOLE_URL`).
-- ❌ No internal email yet for other attention cases (AI couldn't read the documents, AI unsure) — see #8.
+- ✅ **Member check reports every problem (A2, built 2026-09-29)** — before, only the first failure was named
+  (a DOB mismatch hid a bank mismatch). Now the reason lists each one (numbered), the member-issue email
+  lists every reason code and its SOP action (subject "… (+1 more)"), and the override panel's payment-risk
+  warning shows whenever a bank mismatch is among them. The first problem still decides routing.
+- ✅ **"Why the case went this way" (meeting notes item 5, built 2026-09-29)** — every case (email and API)
+  shows its path, one line per stage with the result and the reason: received → recognised → member check →
+  documents → diagnosis → benefit → STP → IAS → where it is now (and who acts next). On the case page (panel
+  above the AI assessment) and at the top of the AI assessment in every internal email (member issue,
+  documents incomplete, JD2 approval, IAS rejection). Built from stored results, no extra AI call
+  (`assessment-summary/journey.js`). The STP audit snapshot is now also refreshed when the settlement report
+  is sent, so it covers the whole journey.
+- ✅ **Internal email when documents are incomplete (meeting notes item 4, built 2026-09-29)** — "(ULINK AI)
+  Documents incomplete — Case/Claim … — N missing": what the customer was asked for, the case link, why the
+  case went this way and the AI assessment. Sent once per missing-documents list. Email cases: with the
+  customer's missing-documents email (`DOCUMENTS_INCOMPLETE` task). API cases: when the claim is revised in
+  IAS with suspense. Covered by decision #8 — easy to switch off if Ulink says "dashboard only".
+- ❌ No internal email yet for the remaining attention cases (AI couldn't read the documents, AI unsure) — see #8.
 - ❌ **Action #8:** which cases email CSR/Ops vs dashboard only — **decision needed**.
 - **Next:** decide the email-vs-dashboard rule (#8). Proposal: email when work is blocked until a person
   acts (member / bank issue, IAS rejected, AI couldn't read the documents); dashboard only for the rest
@@ -86,7 +107,9 @@ Legend: ✅ done · 🟡 partly done · 🔴 not started / minimal · ⏸ later 
   review points, who might be wrong). Diagnosis / benefit picks now give a reason; STP shows the amount
   against the limit.
 - ✅ **Non-STP** claims keep a saved copy (the text in the JD2 email = audit snapshot).
-- ❌ **STP** claims have no saved copy yet — small fix (save at case end).
+- ✅ **STP** claims keep a saved copy too (built 2026-09-29), taken when the claim is created / revised in
+  IAS — the point the STP decision is final: email cases on the `CLAIM_CREATED` case event (`rawRef`),
+  API cases in the `api-claim-revision` step output (`assessment`). Not shown in the console (audit only).
 - ❌ **Kept in iAS** — needs a field or API from the iAS team.
 - Detail: [SUMMARY_REQUIREMENT.md](SUMMARY_REQUIREMENT.md).
 
@@ -101,23 +124,22 @@ Legend: ✅ done · 🟡 partly done · 🔴 not started / minimal · ⏸ later 
   seen in IAS data), is not STP. The AI assessment's STP line gives the reason.
 - Seeded amounts are demo values (email: OP 50,000 / DT 30,000 / VS 30,000; API: OP 100,000 /
   DT 50,000, VS off; IP off for both). Editing is super admin only; a change applies to claims prepared after it.
-- Not yet: AI confidence rule, "any open review point" rule (phases 1/3 below).
-
-_Original note:_ amount only
 - **Asked:** STP must not rely on amount alone; configurable rules (amount, diagnosis, AI confidence, others).
-- **Today:** STP = total ≤ **50,000 MMK** (a demo value, per route + currency, table `ulink_stp_limits`).
-  Real example of the risk: `AYA-CL-26034912` went STP with a **defaulted diagnosis (R69, AI confidence 0)**.
+- **Before 2026-09-29:** amount only (total ≤ 50,000 MMK per route, table `ulink_stp_limits`, now removed).
+  Real example of the risk: `AYA-CL-26034912` went STP with a **defaulted diagnosis (R69, AI confidence 0)** —
+  now blocked by R69 on the never-STP list.
 
 **Suggested plan**
 
-| Phase | What | Needs |
+| Phase | What | Status |
 |---|---|---|
-| 1. Safety rules now | Not STP if: diagnosis **defaulted**; **any open review point** (AI unsure, data mismatch, unreadable); a person **overrode** a check | Nothing new |
-| 2. Configurable | Dashboard Settings: amount limit per route; list of diagnosis codes that never go STP; switches for the phase-1 rules | Who can edit |
-| 3. AI confidence rule | Only once override / accuracy data shows which confidence is really trustworthy (the AI can be confidently wrong) | Real review data |
+| 1. Safety rules | Not STP if: diagnosis **defaulted** ✅ (R69 on the list); a line has **no benefit type** ✅; **any open review point** (AI unsure, data mismatch, unreadable) ❌; a person **overrode** a check ❌ | Last two wait for Ulink's decision |
+| 2. Configurable | ✅ Console STP settings: allowed + amount per case type and IAS benefit type; never-STP diagnosis list. ❌ switches for the phase-1 rules; ❌ history of rule changes (who / when) | Demo-ready; history needed for production |
+| 3. AI confidence rule | Only once override / accuracy data shows which confidence is really trustworthy (the AI can be confidently wrong) | Needs real review data |
 
-**Decisions for Ulink:** real amount limit · diagnoses / claim types that must never be STP · should "any
-open review point" block STP · who can change the rules.
+**Decisions for Ulink:** real amounts per case type and benefit type · diagnoses that must never be STP ·
+should **PA** (5th IAS benefit type seen in the data) ever be STP · should "any open review point" or an
+override block STP · who can change the rules.
 
 ### 8. API / integration — 🟡 partly (a different scope)
 - ✅ **API case workflow** built — claims created in IAS (`get_claim_api`) → document download from the
@@ -145,8 +167,67 @@ open review point" block STP · who can change the rules.
 
 - **Done:** 4 (acknowledgement); 3 inbound (Burmese diagnosis translated before the ICD-10 search);
   5 / #7 for existing internal emails (AI assessment + case link).
-- **Done for now:** 3 (numbered list), 6 (inside our system).
-- **Small fixes left:** saved summary for STP claims (6).
-- **Needs a decision:** Burmese scope (3); email vs dashboard (5 / #8); STP rules (7).
+- **Done for now:** 3 (numbered list), 6 (inside our system, STP and non-STP saved).
+- **Built for the demo:** 7 (STP settings in the console). Before the demo: check the page in a browser and
+  rehearse a rule change + re-running claim preparation.
+- **Small fixes left:** history of STP rule changes (7, before production).
+- **Needs a decision:** Burmese scope (3); email vs dashboard (5 / #8); real STP values, PA, review-point /
+  override rules, who edits (7).
 - **Needs the iAS team / a discussion:** assessment kept in iAS (6); `cl-upload` and console upload (8, #12).
 - **Later by decision:** attachment storage (1); AYAS delegation (2).
+
+---
+
+## 4. Still missing (as of 2026-09-29)
+
+**A. We can build now — no decision needed**
+
+| # | What | Point | Size |
+|---|---|---|---|
+| A1 | **History of STP rule changes** — who changed which rule, when, before → after; "Recent changes" on the STP settings page | 7 | Small (½ day) |
+| ~~A2~~ | ~~Member check reports every problem, not just the first~~ — ✅ done 2026-09-29 (see change log) | 5, 6 | — |
+
+**B. Waiting on a Ulink decision**
+
+| # | What is missing | Decision needed | Point |
+|---|---|---|---|
+| B1 | Internal email for the remaining attention cases (AI couldn't read the documents, AI unsure). Incomplete documents: built 2026-09-29 | Which cases email CSR/Ops vs dashboard only (#8); confirm the incomplete-documents email is wanted | 5 |
+| B2 | Burmese outbound emails | Full email or missing-documents part; approved wording | 3 |
+| B3 | Real STP values; PA; "open review point" / "overridden" block STP; who edits | Final STP parameters | 7 |
+| B4 | Random audit sample of STP claims | Audit % (e.g. 5–10%) | 6, 7 |
+| B5 | Reviewer actions on the dashboard (confirm / correct, beyond override) | Who can act, what they may correct, does iAS update | 5 |
+| B6 | AYAS delegation — different bank-account holder as a payment rule | AYAS exception list (Dr KP / Ulink) | 2 |
+| B7 | Attachment storage location and retention | Ulink + DRT/IT (later by decision) | 1 |
+
+**C. Needs the iAS team**
+
+| # | What is missing | Needed | Point |
+|---|---|---|---|
+| C1 | AI assessment kept in iAS | Field or API on the iAS side | 6 |
+| C2 | Document upload by API (`cl-upload`, 3rd demo) | Spec, test account, barcode owner | 8, #12 |
+
+**D. Later — needs data first**
+
+| # | What | Needs |
+|---|---|---|
+| D1 | Accuracy report — how often each AI decision is corrected, per confidence band | Reviewer actions (B5) running for a while |
+| D2 | STP rule on AI confidence | D1 |
+
+---
+
+## 5. Change log
+
+| Date | Point | Change |
+|---|---|---|
+| 2026-09-28 | 3 | Numbered missing-documents email; Burmese diagnosis translated before the ICD-10 search |
+| 2026-09-28 | 4 | "Claim received" email sent once, right after claim recognition |
+| 2026-09-28 | 5 | Review queue, Approvals page, override and continue; AI assessment + "Open this case" link in internal emails |
+| 2026-09-28 | 6 | AI assessment on every case; saved for non-STP claims (JD2 email) |
+| 2026-09-29 | 7 | Configurable STP rules: console **Admin → STP settings** — per case type (Email / API) + IAS benefit type (IP/OP/DT/VS): allowed + max amount; never-STP diagnosis list (R69 seeded). Tables `ulink_stp_rules`, `ulink_stp_blocked_diagnoses` replace `ulink_stp_limits`; API `/api/stp-settings` (edit: super admin) |
+| 2026-09-29 | 6 | AI assessment saved for STP claims too (email: `CLAIM_CREATED` event `rawRef`; API: `api-claim-revision` output `assessment`) |
+| 2026-09-29 | — | Tests: JD2 email test updated to the current wording; Jest limited to `tests/` (`openapi/spec.js` no longer run as a test). Full suite passes (225/225) |
+| 2026-09-29 | 5 | Member check reports every problem, not just the first (`member-verification/checks.js` → `issues` list; numbered reason; member-issue email lists every reason code + SOP action; override panel warns on any bank mismatch). First problem stays the `reasonCode` — routing unchanged. Applies to cases checked from now on. Tests 228/228 |
+| 2026-09-29 | 5 | Member-check reasons show dates as YYYY-MM-DD on both sides (IAS DOB and coverage period were raw `12031990` / `20260901`), in the case page, AI assessment and member-issue email. Tests 229/229 |
+| 2026-09-29 | 5 | **"Why the case went this way"** (meeting notes item 5): per-case path with the reason at each stage, on the case page and at the top of every internal email's AI assessment, email and API cases (`assessment-summary/journey.js`). STP audit snapshot refreshed at settlement report (email: `CSR_SENT` event `rawRef`; API: `api-claim-stp` output `assessment`) |
+| 2026-09-29 | 5 | **Internal "Documents incomplete" email** (meeting notes item 4): new internal task type `DOCUMENTS_INCOMPLETE` (migration `20260929110000`); email cases with the customer's missing-documents email, API cases at the suspense revision. Tests 233/233 |
+

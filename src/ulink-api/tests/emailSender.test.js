@@ -43,11 +43,11 @@ describe('renderClaimApprovalReview (internal-only, SOP §13)', () => {
   it('renders claim/case detail and explicitly states the customer was not notified', () => {
     const rendered = render('CLAIM_APPROVAL_REVIEW', { caseId: 'case-123', claimNo: 'CL-999' });
 
-    expect(rendered.subject).toContain('case-123');
-    expect(rendered.subject).toContain('CL-999');
+    // The case is reached through the "Open this case" link (tested below), not the subject.
+    expect(rendered.subject).toBe('(ULINK AI) Claim ready for review — Claim CL-999');
     expect(rendered.bodyText).not.toContain('Dear Valued Customer');
-    expect(rendered.bodyText).toContain('ready for JD2 review/approval');
-    expect(rendered.bodyText).toContain('customer has NOT been told their claim number');
+    expect(rendered.bodyText).toContain('ready for review and approval');
+    expect(rendered.bodyText).toContain('before communicating the claim number to the customer');
   });
 });
 
@@ -132,5 +132,38 @@ describe('internal emails: AI assessment and case link (17/09 meeting, action #7
     const member = render('MEMBER_VERIFY_ISSUE', { caseId: 'c9', reasonCode: 'BANK_DETAILS_MISMATCH', reason: 'x' });
     expect(member.bodyText).not.toContain('Open this case');
     expect(member.bodyText).not.toContain('AI assessment');
+  });
+});
+
+// Enhancement A2 (2026-09-29): a member hold with several problems names each one and its SOP action.
+describe('renderMemberVerifyIssue with several problems', () => {
+  it('lists every reason code and required action; the subject keeps the first', () => {
+    const rendered = render('MEMBER_VERIFY_ISSUE', {
+      caseId: 'c1',
+      reasonCode: 'MEMBER_DETAILS_MISMATCH',
+      reason: '1. DOB differs. 2. Bank differs.',
+      issues: [{ reasonCode: 'MEMBER_DETAILS_MISMATCH' }, { reasonCode: 'BANK_DETAILS_MISMATCH' }],
+    });
+    expect(rendered.subject).toBe('(ULINK AI) Member verification hold — Case c1 — MEMBER_DETAILS_MISMATCH (+1 more)');
+    expect(rendered.bodyText).toContain('Reason code: MEMBER_DETAILS_MISMATCH, BANK_DETAILS_MISMATCH');
+    expect(rendered.bodyText).toContain('Hold payment-related verification and clarify required bank information.');
+
+    const old = render('MEMBER_VERIFY_ISSUE', { caseId: 'c1', reasonCode: 'BANK_DETAILS_MISMATCH', reason: 'x' });
+    expect(old.subject).toBe('(ULINK AI) Member verification hold — Case c1 — BANK_DETAILS_MISMATCH');
+  });
+});
+
+
+// 17/09 meeting notes, item 4 (2026-09-29): internal copy of a missing-documents request.
+describe('renderDocumentsIncomplete (internal)', () => {
+  it('lists what the customer was asked for; refers to the claim when there is one', () => {
+    const rendered = render('DOCUMENTS_INCOMPLETE', { caseId: 'c1', issues: ['Medical record missing', 'Bank name unclear'], assessment: 'Why the case went this way:\n1. Received — Claim email' });
+    expect(rendered.subject).toBe('(ULINK AI) Documents incomplete — Case c1 — 2 missing');
+    expect(rendered.bodyText).toContain('Missing:\n1. Medical record missing\n2. Bank name unclear');
+    expect(rendered.bodyText).toContain('AI assessment — what the system decided and why:\n\nWhy the case went this way:');
+    expect(rendered.bodyText).not.toContain('Dear Valued Customer');
+
+    expect(render('DOCUMENTS_INCOMPLETE', { caseId: 'c1', claimNo: '2609170003', issues: ['x'] }).subject)
+      .toBe('(ULINK AI) Documents incomplete — Claim 2609170003 — 1 missing');
   });
 });

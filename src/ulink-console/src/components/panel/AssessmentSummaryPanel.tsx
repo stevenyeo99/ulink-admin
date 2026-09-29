@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Route } from 'lucide-react';
 import clsx from 'clsx';
 import type { AssessmentLine, AssessmentOverride, AssessmentSummary } from '../../types/case';
 
@@ -15,6 +15,40 @@ function OverriddenNote({ override }: { override: AssessmentOverride }) {
       ✔ {override.note}
       {override.at && <span className="text-slate-500"> · {new Date(override.at).toLocaleString()}</span>}
     </span>
+  );
+}
+
+/**
+ * "Why the case went this way": each stage the case reached, its result and the reason, ending with
+ * where it is now — the same list the internal emails start with. The detail behind each step is in
+ * the assessment below. Display only; the API builds it (modules/assessment-summary/journey.js).
+ */
+export function CaseJourneyPanel({ summary }: { summary: AssessmentSummary | undefined }) {
+  const journey = summary?.journey ?? [];
+  if (journey.length === 0) return null;
+
+  return (
+    <section className="mb-6 rounded-xl2 border border-slate-900/10 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
+      <div className="mb-3 flex items-center gap-2">
+        <Route size={16} className="text-slate-500" />
+        <h2 className="text-sm font-semibold text-slate-800">Why the case went this way</h2>
+      </div>
+      <ol className="space-y-2">
+        {journey.map((step, index) => {
+          const isNow = index === journey.length - 1 && step.stage === 'Now';
+          return (
+            <li key={index} className="grid grid-cols-[1.5rem_7rem_1fr] gap-x-2 text-sm sm:grid-cols-[1.5rem_8rem_1fr]">
+              <span className="text-slate-400">{index + 1}.</span>
+              <span className={clsx('font-medium', isNow ? 'text-ulink-orange-dark' : 'text-slate-700')}>{step.stage}</span>
+              <span className="min-w-0 text-slate-700">
+                <span className="font-medium">{step.result}</span>
+                {step.why && <span className="text-slate-500"> — {step.why}</span>}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
   );
 }
 

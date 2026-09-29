@@ -4,6 +4,7 @@ const config = require('../../config');
 const { runApiJob } = require('../api-pipeline/runApiJob');
 const { checkClaimStatus, csrDestination } = require('../ias-claim-stp/service');
 const { downloadFile } = require('../ias-claim-stp/iasClaimStatusClient');
+const { assessmentFor } = require('../api-pipeline/assessment');
 
 // api-claim-stp: API case workflow, last job (docs/imp/day1/api-case-workflow.md section 6.8).
 //
@@ -38,6 +39,8 @@ async function processCase({ caseRecord, input }) {
       filename: status.filename,
       filepath: status.filepath,
       csrFilePath,
+      // The STP claim's audit snapshot, final: the whole path up to the settlement report.
+      assessment: assessmentFor(input, caseRecord, { currentStatus: 'API_CSR_SENT' }),
       // Same task and payload as the email flow's CSR_REPORT.
       email: { taskType: 'CSR_REPORT', audience: 'customer', payload: { csrFilePath, claimNo }, dedupeKey: status.filename },
     },
@@ -49,7 +52,8 @@ async function processCase({ caseRecord, input }) {
 const job = {
   name: 'api-claim-stp',
   inputStatus: 'API_AWAITING_CSR',
-  inputs: ['api-claim-intake'],
+  inputs: ['api-claim-intake', 'api-claim-preparation'],
+  optionalInputs: ['api-claim-recognition', 'api-member-verification', 'api-document-checking', 'case-override'],
   batchLimit: config.csrUpload.batchLimit,
   process: processCase,
 };

@@ -7,6 +7,7 @@ const { checkBenefitEligibility } = require('./benefitEligibility');
 const { summarizeBenefitLimits } = require('./benefitLimits');
 const { queueDedupedTask } = require('../shared/emailTaskQueue');
 const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment-summary/summary');
+const { caseBasics } = require('../assessment-summary/journey');
 
 const BLOCK_NAME = 'member-verification';
 
@@ -76,13 +77,14 @@ async function checkCase(caseRecord) {
  * ISSUES.* line. dedupeKey is the reasonCode itself — a re-check that finds the exact same
  * problem doesn't requeue a duplicate notice.
  */
-async function queueReviewRequiredEmail(transaction, caseId, result) {
+async function queueReviewRequiredEmail(transaction, caseRecord, result) {
+  const caseId = caseRecord.id;
   await queueDedupedTask(transaction, {
     caseId,
     taskType: 'MEMBER_VERIFY_ISSUE',
     dedupeKey: result.reasonCode,
     // The AI assessment of what is known so far (the member check) — 17/09 meeting action #7.
-    payload: { caseId, reasonCode: result.reasonCode, reason: result.reason, assessment: assessmentSummaryText(buildAssessmentSummary({ memberVerifyResult: result })) },
+    payload: { caseId, reasonCode: result.reasonCode, reason: result.reason, issues: result.issues, assessment: assessmentSummaryText(buildAssessmentSummary({ ...caseBasics(caseRecord), currentStatus: 'MEMBER_REVIEW_REQUIRED', memberVerifyResult: result })) },
   });
 }
 
@@ -120,7 +122,7 @@ async function persistOutcome(caseRecord, outcome) {
     // No email queued on a pass here — the customer was already acknowledged at claim
     // recognition (DOCUMENT_COMPLETE_ACK, claim-recognition/service.js persistOutcome).
     if (outcome.outcome !== 'MEMBER_VERIFIED') {
-      await queueReviewRequiredEmail(transaction, caseRecord.id, outcome.result);
+      await queueReviewRequiredEmail(transaction, caseRecord, outcome.result);
     }
   });
 }

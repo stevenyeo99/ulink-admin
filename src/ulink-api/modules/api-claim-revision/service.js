@@ -1,8 +1,7 @@
 const config = require('../../config');
 const { runApiJob } = require('../api-pipeline/runApiJob');
 const { reviseClaim } = require('./iasClient');
-const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment-summary/summary');
-const { OVERRIDE_AREAS } = require('../case-override/override');
+const { assessmentFor } = require('../api-pipeline/assessment');
 
 // api-claim-revision: API case workflow job (docs/imp/day1/api-case-workflow.md section 6.7).
 //
@@ -22,20 +21,6 @@ const { OVERRIDE_AREAS } = require('../case-override/override');
 // - network error / timeout / non-2xx → thrown: FAILED step, retried next run
 // Revising the same claimNo again is safe (confirmed 2026-09-24).
 
-// Same case fields the email flow keeps on ulink_cases, taken from this case's earlier job outputs.
-function assessmentFor(input) {
-  const prepared = input['api-claim-preparation'];
-  // A reviewer's override (the case's latest case-override step) marks that check's points as handled.
-  const override = input['case-override'];
-  const overrides = override && OVERRIDE_AREAS[override.from] ? [{ area: OVERRIDE_AREAS[override.from], at: null, note: override.note }] : [];
-  return assessmentSummaryText(buildAssessmentSummary({
-    memberVerifyResult: input['api-member-verification']?.memberVerifyResult,
-    documentCheckResult: input['api-document-checking']?.documentCheckResult,
-    claimPrepMeta: prepared.claimPrepMeta,
-    isStp: prepared.isStp,
-  }, { overrides }));
-}
-
 async function processCase({ caseRecord, input }) {
   const prepared = input['api-claim-preparation'];
   const { payload } = prepared;
@@ -52,7 +37,7 @@ async function processCase({ caseRecord, input }) {
         email: {
           taskType: 'CLAIM_SUBMIT_ISSUE',
           audience: 'internal',
-          payload: { caseId: caseRecord.id, errorMessage, assessment: assessmentFor(input) },
+          payload: { caseId: caseRecord.id, errorMessage, assessment: assessmentFor(input, caseRecord, { currentStatus: 'API_CLAIM_REVISION_FAILED', iasClaimResult: { error: errorMessage } }) },
           dedupeKey: errorMessage,
         },
       },
@@ -62,18 +47,28 @@ async function processCase({ caseRecord, input }) {
   }
 
   const suspended = payload.isSuspense === 'Y';
+  const stpThrough = !suspended && prepared.isStp;
+  const nextStatus = suspended ? 'API_CLAIM_SUSPENDED' : (prepared.isStp ? 'API_AWAITING_CSR' : 'API_CLAIM_REVISED');
+  const assessment = assessmentFor(input, caseRecord, { currentStatus: nextStatus, iasClaimResult: response });
+  // Missing documents: the customer was already asked (api-document-checking); the team is told too,
+  // with why the case went this way (17/09 meeting notes, item 4) — same email as the email flow's.
+  const missing = input['api-document-checking']?.documentCheckResult?.issues || [];
   return {
     output: {
       response,
       isSuspense: payload.isSuspense,
       isStp: prepared.isStp,
+      // An STP claim gets no JD2 email, so its AI assessment is kept here as the audit snapshot.
+      assessment: stpThrough ? assessment : null,
       // Same as the email flow: a non-STP claim that's through is handed to JD2 for approval, with the
       // AI assessment (17/09 meeting, action 10) — kept in this output as the case's audit snapshot.
-      email: !suspended && !prepared.isStp
-        ? { taskType: 'CLAIM_APPROVAL_REVIEW', audience: 'internal', payload: { caseId: caseRecord.id, claimNo, assessment: assessmentFor(input) }, dedupeKey: null }
-        : null,
+      email: suspended
+        ? { taskType: 'DOCUMENTS_INCOMPLETE', audience: 'internal', payload: { caseId: caseRecord.id, claimNo, issues: missing, assessment }, dedupeKey: [...missing].sort().join('|') }
+        : !prepared.isStp
+          ? { taskType: 'CLAIM_APPROVAL_REVIEW', audience: 'internal', payload: { caseId: caseRecord.id, claimNo, assessment }, dedupeKey: null }
+          : null,
     },
-    nextStatus: suspended ? 'API_CLAIM_SUSPENDED' : (prepared.isStp ? 'API_AWAITING_CSR' : 'API_CLAIM_REVISED'),
+    nextStatus,
     message: suspended
       ? `Claim ${claimNo} revised with suspense (documents missing); waiting for the customer`
       : `Claim ${claimNo} revised${prepared.isStp ? ' (STP)' : ''}`,
@@ -84,7 +79,7 @@ const job = {
   name: 'api-claim-revision',
   inputStatus: 'API_CLAIM_PAYLOAD_PREPARED',
   inputs: ['api-claim-preparation'],
-  optionalInputs: ['api-member-verification', 'api-document-checking', 'case-override'],
+  optionalInputs: ['api-claim-recognition', 'api-member-verification', 'api-document-checking', 'case-override'],
   // One real IAS write per case — same modest batch as claim creation.
   batchLimit: config.iasClaimCreation.batchLimit,
   process: processCase,

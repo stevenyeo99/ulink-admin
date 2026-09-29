@@ -147,7 +147,7 @@ Other facts:
 |---|---|---|---|---|---|
 | [x] | 1 | **L0** (done 2026-09-28) — store a reason for diagnosis / benefit picks (`reason` in the picker results); store STP total + limit (`claimPrepMeta.stp`) | R1 | Small | — |
 | [x] | 2 | **L1** (built 2026-09-28, `modules/assessment-summary/summary.js`) — explanation builder: result, why, confidence, how verified, review reason, who might be wrong; plain-language document reasons | R1, R2 | Small–Medium | — |
-| [ ] | 3 | **L1b** — save the summary snapshot with the case. **Non-STP done** 2026-09-28 (JD2 email task payload / api-claim-revision output); **STP still open** (no JD2 email → save at case end, CSR sent) | R3 | Small | — |
+| [x] | 3 | **L1b** — save the summary snapshot with the case. **Non-STP done** 2026-09-28 (JD2 email task payload / api-claim-revision output); **STP done** 2026-09-29 (at claim created / revised, when STP is final: `CLAIM_CREATED` event `rawRef` / api-claim-revision output `assessment`) | R3 | Small | — |
 | [x] | 4 | **L3** (built 2026-09-28) — summary in the JD2 approval email | R4 (#10) | Small | — |
 | [x] | 5 | **L2** (built 2026-09-28, `AssessmentSummaryPanel.tsx`) — explanation panel on the case page | R4 | Small–Medium | — |
 | [ ] | 6 | Summary in the internal member-issue email | R4 (#7 part) | Small | — |
@@ -175,7 +175,7 @@ Status 2026-09-28: summary CR steps 1–5 built (L0, L1, L1b non-STP, L2, L3).
    points) and the JD2 email if non-STP. Existing cases show "Reason not recorded" until prepared again.
 
 **Next to build (small, no decision needed)**
-4. Save a summary snapshot for STP claims at case end (CSR sent) — finishes step 3.
+4. ~~Save a summary snapshot for STP claims~~ — done 2026-09-29 (at claim created / revised, not CSR sent: the assessment can't change after that).
 5. Summary in the internal member-issue email — step 6.
 
 **After that (bigger, no decision needed)**

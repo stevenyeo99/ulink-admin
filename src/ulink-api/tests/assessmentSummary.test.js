@@ -137,9 +137,9 @@ it('explains the STP rules decision per benefit type, or why it was blocked', ()
 
 it('handles a case with no results yet', () => {
   const summary = buildAssessmentSummary({});
-  expect(summary).toEqual({ lines: [], reviewPoints: [], needsReview: false });
+  expect(summary).toEqual({ lines: [], reviewPoints: [], needsReview: false, journey: [] });
   expect(assessmentSummaryText(summary)).toBe('No assessment yet.');
-  expect(buildAssessmentSummary()).toEqual({ lines: [], reviewPoints: [], needsReview: false });
+  expect(buildAssessmentSummary()).toEqual({ lines: [], reviewPoints: [], needsReview: false, journey: [] });
 });
 
 it('shows a diagnosis that was translated from Burmese, and marks it as AI translated', () => {

@@ -45,7 +45,9 @@ export function CaseOverridePanel({
 
   const isMemberCheck = caseRecord.currentStatus.endsWith('MEMBER_REVIEW_REQUIRED');
   const checkName = isMemberCheck ? 'member check' : 'document check';
-  const paymentRisk = caseRecord.memberVerifyResult?.reasonCode === 'BANK_DETAILS_MISMATCH';
+  // A bank mismatch is a payment risk even when another problem was found first.
+  const memberResult = caseRecord.memberVerifyResult;
+  const paymentRisk = [memberResult?.reasonCode, ...(memberResult?.issues ?? []).map((i) => i.reasonCode)].includes('BANK_DETAILS_MISMATCH');
   const canSubmit = finding !== '' && reason.trim() !== '' && !mutation.isPending;
 
   return (
