@@ -16,14 +16,13 @@ async function getSettings() {
   return { ...DEFAULTS, ...Object.fromEntries(rows.map((r) => [r.key, r.value])) };
 }
 
-// Only known keys, only true/false. Returns the full settings after the change.
-async function setSettings(changes, updatedBy) {
+// Only known keys, only true/false. transaction: to save with other changes (the STP settings form).
+async function setSettings(changes, updatedBy, { transaction } = {}) {
   for (const [key, value] of Object.entries(changes)) {
     if (!(key in DEFAULTS)) throw new Error(`Unknown setting: ${key}`);
     if (typeof value !== 'boolean') throw new Error(`${key} must be true or false`);
-    await Setting.upsert({ key, value, updatedBy });
+    await Setting.upsert({ key, value, updatedBy }, { transaction });
   }
-  return getSettings();
 }
 
 module.exports = { getSettings, setSettings, DEFAULTS };

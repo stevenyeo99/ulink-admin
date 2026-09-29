@@ -84,7 +84,8 @@ queued. If the process died mid-run, the lock stays: clear it with `POST /api/jo
 ## 5. Settings that change behaviour
 
 - **Console → STP settings** (super admin): STP rules per case source and benefit type, never-STP diagnoses, and the
-  two human-check switches. Changes apply to cases processed after the change.
+  two human-check switches. One form, one Save: edits are marked until **Review & save**, which lists every change
+  and saves all of it or nothing (**Discard** drops them). Changes apply to cases processed after the save.
 - **`.env`**: `CONSOLE_UPLOAD_METHOD` (`folder` / `cl-upload`), wait times, batch limits, URLs. Restart after a change.
 
 ---

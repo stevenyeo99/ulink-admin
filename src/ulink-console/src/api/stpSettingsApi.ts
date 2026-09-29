@@ -22,22 +22,23 @@ export interface Switches {
   holdUnsureMissingDocsEmail: boolean;
 }
 
-export function updateSwitches(changes: Partial<Switches>): Promise<{ switches: Switches }> {
-  return request('/api/stp-settings/switches', { method: 'PUT', body: JSON.stringify(changes) });
+export interface StpSettings {
+  rules: StpRule[];
+  blockedDiagnoses: StpBlockedDiagnosis[];
+  switches: Switches;
 }
 
-export function getStpSettings(): Promise<{ rules: StpRule[]; blockedDiagnoses: StpBlockedDiagnosis[]; switches: Switches }> {
+// What the one Save sends: the rules, the complete never-STP list, the switches (saved all or nothing).
+export interface StpSettingsForm {
+  rules: { id: string; stpAllowed: boolean; amountLimit: number | null }[];
+  blockedDiagnoses: { codePrefix: string; note: string | null }[];
+  switches: Switches;
+}
+
+export function getStpSettings(): Promise<StpSettings> {
   return request('/api/stp-settings');
 }
 
-export function updateStpRule(id: string, body: { stpAllowed: boolean; amountLimit: number | null }): Promise<{ rule: StpRule }> {
-  return request(`/api/stp-settings/rules/${id}`, { method: 'PUT', body: JSON.stringify(body) });
-}
-
-export function addBlockedDiagnosis(codePrefix: string, note: string): Promise<{ blockedDiagnosis: StpBlockedDiagnosis }> {
-  return request('/api/stp-settings/blocked-diagnoses', { method: 'POST', body: JSON.stringify({ codePrefix, note }) });
-}
-
-export function removeBlockedDiagnosis(id: string): Promise<{ removed: boolean }> {
-  return request(`/api/stp-settings/blocked-diagnoses/${id}`, { method: 'DELETE' });
+export function saveStpSettings(form: StpSettingsForm): Promise<StpSettings> {
+  return request('/api/stp-settings', { method: 'PUT', body: JSON.stringify(form) });
 }

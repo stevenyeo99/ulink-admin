@@ -101,9 +101,9 @@ it('the team email says the customer has not been emailed and what to check', ()
   expect(email.bodyText).toContain('ACTION NEEDED — the customer has NOT been emailed yet. The AI was unsure about: Medical report present (AI confidence 0.3).');
 });
 
-it('switches accept only known keys and true/false', async () => {
-  Setting.findAll.mockResolvedValue([{ key: 'stpBlockOnReviewPoints', value: true }]);
-  expect(await setSettings({ stpBlockOnReviewPoints: true }, 'admin')).toEqual({ stpBlockOnReviewPoints: true, holdUnsureMissingDocsEmail: false });
+it('switches accept only known keys and true/false, saved with the rest of the form', async () => {
+  await setSettings({ stpBlockOnReviewPoints: true }, 'admin', { transaction: 'tx' });
+  expect(Setting.upsert).toHaveBeenCalledWith({ key: 'stpBlockOnReviewPoints', value: true, updatedBy: 'admin' }, { transaction: 'tx' });
   await expect(setSettings({ somethingElse: true })).rejects.toThrow('Unknown setting');
   await expect(setSettings({ stpBlockOnReviewPoints: 'yes' })).rejects.toThrow('true or false');
 });
