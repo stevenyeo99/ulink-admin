@@ -49,3 +49,4 @@ status; the pipeline orchestrator runs every job in order (`modules/pipeline/ser
 - Real side effects need a go-ahead: sending email, calling IAS create/revise, uploading to the console, deleting data.
   Read-only checks against the dev DB and the console middleware are fine.
 - Commit only files with real changes: many docs differ only in line endings (`git diff --ignore-cr-at-eol`).
+  Commit message: one short line, no `Co-Authored-By` trailer. Leave Word lock files (`~$…docx`) out.
