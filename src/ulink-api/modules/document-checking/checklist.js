@@ -419,44 +419,45 @@ function reasonForIssue(issue, fields) {
       .filter(({ item }) => predicate(item))
       .map(({ i }) => `#${i + 1}`)
       .join(', ');
+  const mmk = (amount) => `${Number(amount).toLocaleString('en-US')} MMK`;
 
   switch (issue) {
     case ISSUES.INCOMPLETE_CLAIM_FORM:
       return {
         code: 'INCOMPLETE_CLAIM_FORM',
-        reason: 'medical.detail_of_illness_injury and medical.full_description_of_treatment are both empty on the claim form.',
+        reason: 'The claim form does not describe the illness/injury or the treatment (section B is empty).',
       };
     case ISSUES.MISSING_VOUCHER:
-      return { code: 'MISSING_VOUCHER', reason: 'invoices.present is false — no voucher/invoice was submitted.' };
+      return { code: 'MISSING_VOUCHER', reason: 'No voucher or invoice was attached to the claim.' };
     case ISSUES.NO_MEDICAL_REPORT:
-      return { code: 'NO_MEDICAL_REPORT', reason: 'medical_record.present is false — no medical record document was submitted.' };
+      return { code: 'NO_MEDICAL_REPORT', reason: 'No medical report or doctor\'s record was attached to the claim.' };
     case ISSUES.UNCLEAR_VOUCHER:
       return {
         code: 'UNCLEAR_VOUCHER',
-        reason: `Voucher(s) ${indexed((item) => item.legible === false)} are marked illegible (legible: false).`,
+        reason: `Voucher(s) ${indexed((item) => item.legible === false)} cannot be read clearly.`,
       };
     case ISSUES.INCORRECT_VOUCHER:
       return {
         code: 'INCORRECT_VOUCHER',
-        reason: `Voucher(s) ${indexed((item) => item.has_clinic_stamp_or_doctor_signature !== true)} have no confirmed clinic stamp or doctor signature (has_clinic_stamp_or_doctor_signature is not true).`,
+        reason: `Voucher(s) ${indexed((item) => item.has_clinic_stamp_or_doctor_signature !== true)} do not show a clinic/hospital stamp or the doctor's signature.`,
       };
     case ISSUES.MISSING_VOUCHER_BREAKDOWN:
       return {
         code: 'MISSING_VOUCHER_BREAKDOWN',
-        reason: `Pharmacy voucher(s) ${indexed((item) => item.voucher_type === 'pharmacy' && item.has_itemized_breakdown === false)} have no itemized breakdown (has_itemized_breakdown: false).`,
+        reason: `Pharmacy voucher(s) ${indexed((item) => item.voucher_type === 'pharmacy' && item.has_itemized_breakdown === false)} do not list the individual medicines and their prices.`,
       };
     case ISSUES.VOUCHER_AMOUNT_MISMATCH: {
       const subtotals = invoiceItems.map((item) => item.subtotal).filter((amount) => amount != null);
       const voucherTotal = subtotals.reduce((sum, amount) => sum + amount, 0);
       return {
         code: 'VOUCHER_AMOUNT_MISMATCH',
-        reason: `Sum of voucher subtotals (${voucherTotal}) does not match claim.total_claim_amount (${fields.claim.total_claim_amount}).`,
+        reason: `The vouchers add up to ${mmk(voucherTotal)}, but the claimed amount is ${mmk(fields.claim.total_claim_amount)}.`,
       };
     }
     case ISSUES.INCOMPLETE_MEDICAL_REPORT:
-      return { code: 'INCOMPLETE_MEDICAL_REPORT', reason: 'medical_record.present is true but medical_record.legible is false.' };
+      return { code: 'INCOMPLETE_MEDICAL_REPORT', reason: 'The medical report is attached but cannot be read clearly.' };
     case ISSUES.MISSING_BANK_INFO:
-      return { code: 'MISSING_BANK_INFO', reason: 'bank.bank_name, bank.bank_account_name, and bank.bank_account_number are all missing.' };
+      return { code: 'MISSING_BANK_INFO', reason: 'The bank name, account holder name and account number are all missing.' };
     // DELEGATION_LETTER_REQUIRED is no longer decided in EVALUATORS (see
     // evaluateJudgmentDependentChecks) — this function is only ever called on issues that
     // fired from EVALUATORS, so that case can't reach here; its own reason/details are
