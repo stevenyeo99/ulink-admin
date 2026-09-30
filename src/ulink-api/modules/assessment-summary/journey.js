@@ -7,6 +7,7 @@
 // case hasn't reached yet is left out; the last step says where the case is now and who acts next.
 
 const { CASE_STATUSES } = require('../case-status/catalog');
+const { describeBarcodes } = require('../shared/barcodeFields');
 
 const IAS_ACCEPTED = {
   CLAIM_CREATED: 'Claim {claimNo} created in IAS.',
@@ -66,10 +67,10 @@ function buildCaseJourney(fields = {}, lines = []) {
   const upload = fields.consoleUploadResult;
   if (upload?.method === 'cl-upload') {
     const at = `${String(upload.uploadedAt).slice(0, 16).replace('T', ' ')} UTC`;
-    const [first, ...more] = upload.barcodes || [];
-    steps.push(first
-      ? step('Console upload', 'Barcode received', `Uploaded ${at} as ${upload.file}; barcode ${first.barcodeId}${more.length ? ` (+${more.length} supplementary)` : ''}.`)
-      : step('Console upload', 'Waiting for barcode', `Uploaded ${at} as ${upload.file}; the console creates barcodes about every 15 minutes.`));
+    const as = `${upload.file}${upload.scanId ? ` (scan ${upload.scanId})` : ''}`;
+    steps.push(upload.barcodes?.length
+      ? step('Console upload', 'Barcode received', `Uploaded ${at} as ${as}; ${describeBarcodes(upload.barcodes, upload.scanId)}.`)
+      : step('Console upload', 'Waiting for barcode', `Uploaded ${at} as ${as}; the console creates barcodes about every 15 minutes.`));
   }
 
   const diagnosis = find('Diagnosis code');

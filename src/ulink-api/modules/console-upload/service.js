@@ -156,6 +156,14 @@ async function queueConsoleUploadIssue(transaction, caseRecord, { status, proble
   });
 }
 
+// The console files each upload of a case number under its own folder, API-<TpaCaseNumber>-NN, and the
+// barcodes it creates later carry that same scan id — so it tells our upload apart from earlier ones.
+// null when the path doesn't show it (console-barcode then falls back to the upload time).
+function scanIdFromPath(consolePath, tpaCaseNumber) {
+  const prefix = `API-${tpaCaseNumber}-`;
+  return String(consolePath || '').split('/').find((part) => part.startsWith(prefix) && /^\d+$/.test(part.slice(prefix.length))) ?? null;
+}
+
 async function uploadByApi(caseRecord, tpaCaseNumber) {
   const attachments = await gatherAttachments(caseRecord.id);
   const storage = getStorageAdapter();
@@ -174,6 +182,7 @@ async function uploadByApi(caseRecord, tpaCaseNumber) {
     // Read back as the claim's docCompleteDate (ias-claim-preparation), same as the folder method.
     completedAt: uploadedAt.toISOString(),
     path: consolePath,
+    scanId: scanIdFromPath(consolePath, tpaCaseNumber),
     file,
     sizeBytes: pdf.length,
     pageCount,
@@ -240,4 +249,4 @@ async function run() {
   return { processed, errors };
 }
 
-module.exports = { run, planUpload, uploadCase, buildFolder, generateBarcode, sanitize, queueConsoleUploadIssue, CASE_NUMBER };
+module.exports = { run, planUpload, uploadCase, buildFolder, generateBarcode, sanitize, queueConsoleUploadIssue, scanIdFromPath, CASE_NUMBER };

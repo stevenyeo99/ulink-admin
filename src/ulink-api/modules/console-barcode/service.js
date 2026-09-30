@@ -2,6 +2,7 @@ const { sequelize, Case, CaseEvent } = require('../../db/models');
 const config = require('../../config');
 const { listBarcodes } = require('../api-material-download/middlewareClient');
 const { queueConsoleUploadIssue } = require('../console-upload/service');
+const { describeBarcodes } = require('../shared/barcodeFields');
 
 // console-barcode: email cases uploaded by cl-upload wait here for the console to create their barcode
 // (docs/imp/demo/API DAY1/CL-UPLOAD SPEC/console_upload_requirement.md). Like ordering food and waiting
@@ -19,15 +20,21 @@ const BLOCK_NAME = 'console-barcode';
 const CLOCK_SLACK_MS = 5 * 60 * 1000;
 
 /**
- * Pure. items: the middleware's barcodes for the case (every upload of it: -01, -02, …).
- * - found: a barcode created after our upload is there → every barcode of the case, earliest first
+ * Pure. items: the middleware's barcodes for the case number (every upload of it: -01, -02, …).
+ * - found: a barcode of OUR upload is there → every barcode of the case number, earliest first
  *   (the claim's barcode + suppBarcode1..5 — shared/barcodeFields.js)
  * - overdue: none yet and the wait is over; waiting: none yet.
+ * Ours = the barcode with our upload's scanId (API-<TpaCaseNumber>-NN, from the upload response), so an
+ * earlier upload's barcode — another case with the same case number — never lets ours go on early.
+ * Uploads saved before scanId was kept: ours = created after our upload time.
  */
-function decideBarcode({ items, uploadedAt, now, waitMinutes }) {
+function decideBarcode({ items, uploadedAt, scanId, now, waitMinutes }) {
   const uploaded = new Date(uploadedAt).getTime();
   const sorted = [...items].sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
-  if (sorted.some((item) => new Date(item.createdAt).getTime() >= uploaded - CLOCK_SLACK_MS)) {
+  const isOurs = scanId
+    ? (item) => item.scanId === scanId
+    : (item) => new Date(item.createdAt).getTime() >= uploaded - CLOCK_SLACK_MS;
+  if (sorted.some(isOurs)) {
     return { state: 'found', barcodes: sorted.map(({ barcodeId, scanId, createdAt }) => ({ barcodeId, scanId, createdAt })) };
   }
   return { state: now.getTime() - uploaded > waitMinutes * 60 * 1000 ? 'overdue' : 'waiting' };
@@ -40,11 +47,11 @@ async function logEvent(transaction, { caseId, prevStatus, newStatus, reasonCode
 async function checkCase(caseRecord, now = new Date()) {
   const upload = caseRecord.consoleUploadResult || {};
   const { items = [] } = await listBarcodes(`API-${upload.tpaCaseNumber}`);
-  const decision = decideBarcode({ items, uploadedAt: upload.uploadedAt, now, waitMinutes: config.clUpload.barcodeWaitMinutes });
+  const decision = decideBarcode({ items, uploadedAt: upload.uploadedAt, scanId: upload.scanId, now, waitMinutes: config.clUpload.barcodeWaitMinutes });
   const prevStatus = caseRecord.currentStatus;
 
   if (decision.state === 'found') {
-    const [first, ...more] = decision.barcodes;
+    const [first] = decision.barcodes;
     await sequelize.transaction(async (transaction) => {
       await Case.update(
         {
@@ -58,7 +65,7 @@ async function checkCase(caseRecord, now = new Date()) {
         caseId: caseRecord.id,
         prevStatus,
         newStatus: 'DOCUMENTS_UPLOADED',
-        message: `Console barcode ${first.barcodeId} received${more.length ? ` (+${more.length} supplementary: ${more.map((b) => b.barcodeId).join(', ')})` : ''}`,
+        message: `Console barcode received: ${describeBarcodes(decision.barcodes, upload.scanId)}`,
       });
     });
     return 'found';
@@ -68,7 +75,7 @@ async function checkCase(caseRecord, now = new Date()) {
   if (decision.state === 'overdue' && prevStatus !== 'CONSOLE_BARCODE_PENDING') return 'overdue';
   if (decision.state === 'overdue') {
     const minutes = Math.round((now.getTime() - new Date(upload.uploadedAt).getTime()) / 60000);
-    const detail = `Uploaded to the console as ${upload.file} ${minutes} minutes ago (scan id API-${upload.tpaCaseNumber}); no barcode yet. The console normally creates it within 15-30 minutes. The system keeps checking every run.`;
+    const detail = `Uploaded to the console as ${upload.file} ${minutes} minutes ago (scan id ${upload.scanId || `API-${upload.tpaCaseNumber}`}); no barcode for it yet. The console normally creates it within 15-30 minutes. The system keeps checking every run.`;
     await sequelize.transaction(async (transaction) => {
       await Case.update({ currentStatus: 'CONSOLE_BARCODE_MISSING' }, { where: { id: caseRecord.id }, transaction });
       await logEvent(transaction, { caseId: caseRecord.id, prevStatus, newStatus: 'CONSOLE_BARCODE_MISSING', reasonCode: 'CONSOLE_BARCODE_MISSING', message: detail });

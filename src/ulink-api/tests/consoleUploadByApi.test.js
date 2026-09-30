@@ -93,7 +93,7 @@ describe('console-upload job with CONSOLE_UPLOAD_METHOD=cl-upload', () => {
     expect(await runWith(caseWith('AYA-CL-26031486'))).toEqual({ processed: 1, errors: [] });
     expect(statusSet()).toMatchObject({
       currentStatus: 'CONSOLE_BARCODE_PENDING',
-      consoleUploadResult: { method: 'cl-upload', tpaCaseNumber: 'AYA-CL-26031486', file: 'AYA-CL-26031486.pdf', pageCount: 2, files: ['form.pdf', 'bill.png'] },
+      consoleUploadResult: { method: 'cl-upload', tpaCaseNumber: 'AYA-CL-26031486', scanId: 'API-AYA-CL-26031486-01', file: 'AYA-CL-26031486.pdf', pageCount: 2, files: ['form.pdf', 'bill.png'] },
     });
     expect(queueDedupedTask).not.toHaveBeenCalled();
   });
@@ -117,4 +117,12 @@ describe('console-upload job with CONSOLE_UPLOAD_METHOD=cl-upload', () => {
     expect(result.errors).toHaveLength(1);
     expect(Case.update).not.toHaveBeenCalled();
   });
+});
+
+it('reads our scan id (API-<TpaCaseNumber>-NN) from the console path, or null', () => {
+  const { scanIdFromPath } = consoleUpload;
+  expect(scanIdFromPath('/home/hcbase/ulink-tr-api/outbox/API-AYA-CL-26031486-02/DAY1 AYA-CL-26031486.pdf', 'AYA-CL-26031486')).toBe('API-AYA-CL-26031486-02');
+  expect(scanIdFromPath('/outbox/API-AYA-CL-26031486/x.pdf', 'AYA-CL-26031486')).toBeNull();
+  expect(scanIdFromPath('/outbox/API-AYA-CL-11111111-01/x.pdf', 'AYA-CL-26031486')).toBeNull();
+  expect(scanIdFromPath(null, 'AYA-CL-26031486')).toBeNull();
 });

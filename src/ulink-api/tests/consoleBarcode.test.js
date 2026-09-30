@@ -44,6 +44,17 @@ describe('decideBarcode', () => {
     expect(decide([item('B1', '2026-09-29T08:57:00Z')], '2026-09-29T09:20:00Z').state).toBe('found');
   });
 
+  it('with our scan id: waits for OUR upload\'s barcode, even when another upload\'s is newer', () => {
+    const mine = (items, now) => decideBarcode({ items, uploadedAt, scanId: 'API-AYA-CL-26031486-02', now: at(now), waitMinutes: 120 });
+    // -01 created after our upload (another case, same case number) — not ours, so keep waiting.
+    expect(mine([item('OTHER1', '2026-09-29T09:10:00Z')], '2026-09-29T09:20:00Z')).toEqual({ state: 'waiting' });
+    expect(mine([item('OTHER1', '2026-09-29T09:10:00Z')], '2026-09-29T11:01:00Z')).toEqual({ state: 'overdue' });
+    // Ours arrives → all barcodes of the case number go into barcode + suppBarcode1..5, earliest first.
+    const result = mine([item('OURS2', '2026-09-29T09:16:00Z', '02'), item('OTHER1', '2026-09-29T09:10:00Z')], '2026-09-29T09:20:00Z');
+    expect(result.state).toBe('found');
+    expect(barcodeFields(result.barcodes)).toMatchObject({ barcode: 'OTHER1', suppBarcode1: 'OURS2', suppBarcode2: null });
+  });
+
   it('is overdue past the wait time', () => {
     expect(decide([], '2026-09-29T11:01:00Z')).toEqual({ state: 'overdue' });
   });
@@ -65,6 +76,18 @@ describe('checkCase', () => {
       currentStatus: 'DOCUMENTS_UPLOADED',
       consoleBarcode: 'VSQ9T11875',
       consoleUploadResult: expect.objectContaining({ barcodes: [expect.objectContaining({ barcodeId: 'VSQ9T11875' })] }),
+    }), expect.anything());
+  });
+
+  it('with a scan id: looks up the case number, says which barcode is ours', async () => {
+    const record = pending();
+    record.consoleUploadResult.scanId = 'API-AYA-CL-26031486-02';
+    listBarcodes.mockResolvedValue({ items: [item('OTHER1', '2026-09-28T10:00:00Z'), item('OURS2', '2026-09-29T09:18:00Z', '02')], hasMore: false });
+    expect(await checkCase(record, at('2026-09-29T09:30:00Z'))).toBe('found');
+    expect(listBarcodes).toHaveBeenCalledWith('API-AYA-CL-26031486');
+    expect(Case.update).toHaveBeenCalledWith(expect.objectContaining({ consoleBarcode: 'OTHER1' }), expect.anything());
+    expect(CaseEvent.create).toHaveBeenCalledWith(expect.objectContaining({
+      message: 'Console barcode received: our barcode OURS2 (-02); sent to IAS with 1 barcode(s) from other uploads of this case number: OTHER1 (-01)',
     }), expect.anything());
   });
 
@@ -99,4 +122,14 @@ it('shows the wait in "why the case went this way", then the barcode', () => {
   ]);
   const done = buildAssessmentSummary({ consoleUploadResult: { ...upload, barcodes: [item('B1', uploadedAt), item('B2', uploadedAt, '02')] } }).journey;
   expect(done[0]).toMatchObject({ result: 'Barcode received', why: 'Uploaded 2026-09-29 09:00 UTC as AYA-CL-26031486.pdf; barcode B1 (+1 supplementary).' });
+});
+
+it('names our scan and our barcode in the journey once the scan id is known', () => {
+  const upload = { method: 'cl-upload', uploadedAt, file: 'AYA-CL-26031486.pdf', scanId: 'API-AYA-CL-26031486-02' };
+  const waiting = buildAssessmentSummary({ currentStatus: 'CONSOLE_BARCODE_PENDING', consoleUploadResult: upload }).journey;
+  expect(waiting[0].why).toBe('Uploaded 2026-09-29 09:00 UTC as AYA-CL-26031486.pdf (scan API-AYA-CL-26031486-02); the console creates barcodes about every 15 minutes.');
+  const many = ['1', '2', '3', '4', '5', '6'].map((n) => item(`B${n}`, uploadedAt, `0${n}`)).concat(item('B7', uploadedAt, '02'));
+  const done = buildAssessmentSummary({ consoleUploadResult: { ...upload, barcodes: many } }).journey;
+  expect(done[0].why).toContain('our barcode B2 (-02), B7 (-02)');
+  expect(done[0].why).toContain('only the first 6 fit in barcode + suppBarcode1-5');
 });
