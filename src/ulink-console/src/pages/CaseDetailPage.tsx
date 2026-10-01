@@ -142,7 +142,7 @@ export function CaseDetailPage() {
             <p className="mt-1 font-mono text-xs text-slate-600">Status code {caseRecord.currentStatus}</p>
           </Section>
           <Section title="Member check (each IAS comparison)">
-            {caseRecord.memberVerifyResult?.checks ? (
+            {caseRecord.memberVerifyResult?.checks?.hard ? (
               <>
                 <ChecklistTable
                   items={Object.entries(caseRecord.memberVerifyResult.checks.hard).map(
@@ -152,7 +152,7 @@ export function CaseDetailPage() {
                 {caseRecord.memberVerifyResult.reason && <p className="mt-3 text-xs text-slate-500">{caseRecord.memberVerifyResult.reason}</p>}
               </>
             ) : (
-              <p className="text-sm text-slate-500">Not checked yet.</p>
+              <p className="text-sm text-slate-500">{caseRecord.memberVerifyResult?.reason ?? 'Not checked yet.'}</p>
             )}
           </Section>
 

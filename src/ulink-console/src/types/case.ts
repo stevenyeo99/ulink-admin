@@ -77,7 +77,8 @@ export interface MemberVerifyResult {
   reason?: string | null;
   /** Every failed check, first = reasonCode (cases checked from 2026-09-29). */
   issues?: { reasonCode: string; reason: string }[];
-  checks?: { hard: MemberVerifyHardChecks; soft: Record<string, { extracted: unknown; ias: unknown }> };
+  // Empty ({}) when IAS found no member (MEMBER_NOT_FOUND) — no comparison was made.
+  checks?: { hard?: MemberVerifyHardChecks; soft?: Record<string, { extracted: unknown; ias: unknown }> };
   [key: string]: unknown;
 }
 
