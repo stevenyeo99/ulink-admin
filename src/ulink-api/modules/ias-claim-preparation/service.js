@@ -44,7 +44,7 @@ async function checkCase(caseRecord) {
     illnessText && `Diagnosis/illness: ${illnessText}`,
     treatmentText && `Treatment: ${treatmentText}`,
   ].filter(Boolean).join('\n');
-  const diagnosisPick = await pickDiagnosis(diagnosisText);
+  const diagnosisPick = await pickDiagnosis(diagnosisText, { searchText: illnessText });
 
   const memberPlansRaw = iasMemberInfoResponse?.payload?.memberPlans;
   const benefitContext = {

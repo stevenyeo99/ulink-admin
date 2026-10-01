@@ -41,11 +41,17 @@ const DEFAULT_DIAGNOSIS = { diagCode: 'R69', diagDesc: 'Unknown and unspecified 
  * when that happened. `confidence` and `candidates` are still returned in every case
  * (empty/null where the LLM was never reached) so the caller can persist *why* a pick did or
  * didn't happen, not just the outcome. See db/migrations/20260916100000-add-claim-prep-meta.js.
+ *
+ * `searchText` (2026-10-01): what the ICD-10 search uses, when given — the illness text alone.
+ * Drug names in the treatment text drowned the symptoms (case 42214c2a: "Coughing dizziness" +
+ * "Im b12 Ampoxin Para…" found only diabetes / vitamin B12 codes, so it fell back to R69; the
+ * illness text alone finds R42 Dizziness / R05 Cough). The pick itself still sees `freeText`,
+ * treatment included, as context.
  */
-async function pickDiagnosis(freeText) {
+async function pickDiagnosis(freeText, { searchText } = {}) {
   if (!freeText || !freeText.trim()) return { pick: DEFAULT_DIAGNOSIS, defaulted: true, confidence: null, reason: null, candidates: [] };
 
-  const candidates = await findCandidates(freeText, { topK: 5 });
+  const candidates = await findCandidates(searchText?.trim() || freeText, { topK: 5 });
   if (candidates.length === 0) return { pick: DEFAULT_DIAGNOSIS, defaulted: true, confidence: null, reason: null, candidates: [] };
 
   const userText = [
