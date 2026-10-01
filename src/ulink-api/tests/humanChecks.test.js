@@ -50,6 +50,19 @@ describe('#2 what counts as "the AI is unsure a document is missing"', () => {
       { code: 'UNCLEAR_VOUCHER', label: 'Voucher readable', passed: true },
     ] })).toEqual(['Medical report legible (could not read clearly)', 'Medical report present (AI confidence 0.3)']);
   });
+
+  it('exactly 0.5 confidence, and any date mismatch, is unsure (2026-10-01, cases 04759562 / 42214c2a)', () => {
+    expect(unsureDocumentPoints({ checklist: [
+      { code: 'NO_MEDICAL_REPORT', label: 'Medical report present', passed: false, confidence: 0.5 },
+      { code: 'INVOICE_DATE_INCONSISTENT', label: 'Invoice date(s) are consistent with medical record date', passed: false, confidence: 1 },
+      { code: 'TREATMENT_DATE_INCONSISTENT', label: 'Treatment date is consistent with medical record date', passed: false, confidence: null },
+      { code: 'INVOICE_DATE_INCONSISTENT', label: 'Invoice date(s) are consistent with medical record date', passed: true, confidence: 1 },
+    ] })).toEqual([
+      'Medical report present (AI confidence 0.5)',
+      'Invoice date(s) are consistent with medical record date (AI confidence 1)',
+      'Treatment date is consistent with medical record date (could not read clearly)',
+    ]);
+  });
 });
 
 describe('#2 email case: holding the customer email', () => {

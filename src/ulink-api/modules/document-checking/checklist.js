@@ -100,10 +100,13 @@ function checkMissingVoucherBreakdown(fields) {
  * case can have more than one voucher (e.g. a hospital receipt + a separate pharmacy
  * receipt), and the claimed total is meant to match their combined subtotal, not any
  * single one of them (verified against real data: 45,000 + 9,690 = 54,690).
+ * A zero/negative subtotal is a refund or cash-return slip, not a voucher (2026-10-01, case
+ * df3ec579: a -5,250 return slip was summed as the voucher total) — skipped here and in the two
+ * sums below, which must agree with this one.
  */
 function checkVoucherAmountMismatch(fields) {
   if (fields.invoices?.present !== true) return null;
-  const subtotals = (fields.invoices.items || []).map((item) => item.subtotal).filter((amount) => amount != null);
+  const subtotals = (fields.invoices.items || []).map((item) => item.subtotal).filter((amount) => amount > 0);
   if (subtotals.length === 0) return null; // no readable amount on any voucher — nothing to compare
   const voucherTotal = subtotals.reduce((sum, amount) => sum + amount, 0);
   const claimedAmount = fields.claim.total_claim_amount;
@@ -125,7 +128,7 @@ function checkVoucherAmountMismatch(fields) {
  */
 function voucherAmountAgreement(fields) {
   if (fields.invoices?.present !== true) return null;
-  const subtotals = (fields.invoices.items || []).map((item) => item.subtotal).filter((amount) => amount != null);
+  const subtotals = (fields.invoices.items || []).map((item) => item.subtotal).filter((amount) => amount > 0);
   if (subtotals.length === 0) return null;
   const voucherTotal = subtotals.reduce((sum, amount) => sum + amount, 0);
   const claimedAmount = fields.claim?.total_claim_amount;
@@ -447,7 +450,7 @@ function reasonForIssue(issue, fields) {
         reason: `Pharmacy voucher(s) ${indexed((item) => item.voucher_type === 'pharmacy' && item.has_itemized_breakdown === false)} do not list the individual medicines and their prices.`,
       };
     case ISSUES.VOUCHER_AMOUNT_MISMATCH: {
-      const subtotals = invoiceItems.map((item) => item.subtotal).filter((amount) => amount != null);
+      const subtotals = invoiceItems.map((item) => item.subtotal).filter((amount) => amount > 0);
       const voucherTotal = subtotals.reduce((sum, amount) => sum + amount, 0);
       return {
         code: 'VOUCHER_AMOUNT_MISMATCH',
