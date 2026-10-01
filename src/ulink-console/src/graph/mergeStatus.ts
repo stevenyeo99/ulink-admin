@@ -91,7 +91,7 @@ export function mergeStatus(steps: PipelineRunStep[], source: Source = 'EMAIL'):
     type: 'emailBadgeNode',
     position: { x: badge.x, y: badge.y },
     width: 220,
-    height: 64,
+    height: 76,
     data: {
       label: badge.label,
       blockName: badge.blockName,

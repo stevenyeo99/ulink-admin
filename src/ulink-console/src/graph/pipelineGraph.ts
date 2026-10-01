@@ -84,19 +84,31 @@ export const EDGES: StaticEdge[] = [
 // plain horizontal branch, never crossing the main chain). Previously these were one shared
 // "email-sender" box at a distant fixed position with 3 long edges converging into it
 // (confusing which producer a given email actually came from) — see this file's git history
-// for that version. Labels name the actual EmailTask.taskType(s) each producer queues (see
-// modules/email-sender/templates.js's RENDERERS), and `audience` is who receives it
+// for that version. Labels name, in plain words (2026-10-01), the EmailTask.taskType(s) each
+// producer queues (see modules/email-sender/templates.js's RENDERERS and CLAIM_FLOW_END_TO_END.md
+// §7 for the same names), and `audience` is who receives it
 // (SOP §11/§13: several findings are held/escalated internally, never sent to the customer
 // directly — see modules/email-sender/service.js's INTERNAL_ONLY_TASK_TYPES). Each producer
 // here is uniformly one audience today, so one badge per producer is enough.
 export const EMAIL_BADGES: EmailBadgeMeta[] = [
+  // A customer reply without attachments while documents are incomplete gets a reminder (email-intake
+  // queues it; the document-checking sender step sends it).
+  {
+    id: 'email-badge-email-intake',
+    producer: 'email-intake',
+    blockName: 'email-sender-document-checking',
+    label: 'Reminder: please attach your documents',
+    audience: 'customer',
+    x: 300,
+    y: 0,
+  },
   // Claim-received acknowledgement as soon as the claim is recognised (17/09 meeting, action
   // 6), and the "not recognised" notice — both to the sender.
   {
     id: 'email-badge-claim-recognition',
     producer: 'claim-recognition',
     blockName: 'email-sender-claim-recognition',
-    label: 'DOCUMENT_COMPLETE_ACK · SUBMISSION_NOT_RECOGNIZED',
+    label: 'Claim received, or "not a claim we handle"',
     audience: 'customer',
     x: 300,
     y: 190,
@@ -105,7 +117,7 @@ export const EMAIL_BADGES: EmailBadgeMeta[] = [
     id: 'email-badge-member-verification',
     producer: 'member-verification',
     blockName: 'email-sender-member-verification',
-    label: 'MEMBER_VERIFY_ISSUE',
+    label: 'Member verification hold',
     audience: 'internal',
     x: 300,
     y: 380,
@@ -114,17 +126,27 @@ export const EMAIL_BADGES: EmailBadgeMeta[] = [
     id: 'email-badge-document-checking',
     producer: 'document-checking',
     blockName: 'email-sender-document-checking',
-    label: 'MISSING_DOCUMENTS · DOCUMENTS_INCOMPLETE (team)',
+    label: 'Missing documents list + copy to the team',
     audience: 'customer',
     x: 300,
     y: 570,
   },
-  // cl-upload problems (case number unclear, upload refused, no barcode in time) — internal only.
+  // cl-upload problems — internal only. Console Upload queues "case number unclear" / "upload refused",
+  // Console Barcode queues "no barcode in time"; one sender step after both.
+  {
+    id: 'email-badge-console-upload',
+    producer: 'console-upload',
+    blockName: 'email-sender-console-upload',
+    label: 'Console upload problem',
+    audience: 'internal',
+    x: 300,
+    y: 760,
+  },
   {
     id: 'email-badge-console-barcode',
     producer: 'console-barcode',
     blockName: 'email-sender-console-upload',
-    label: 'CONSOLE_UPLOAD_ISSUE',
+    label: 'Console barcode not received',
     audience: 'internal',
     x: 300,
     y: 950,
@@ -138,7 +160,7 @@ export const EMAIL_BADGES: EmailBadgeMeta[] = [
     id: 'email-badge-ias-claim-creation',
     producer: 'ias-claim-creation',
     blockName: 'email-sender-claim-approval-review',
-    label: 'CLAIM_APPROVAL_REVIEW · CLAIM_SUBMIT_ISSUE',
+    label: 'Claim ready for review, or IAS rejected',
     audience: 'internal',
     x: 300,
     y: 1330,
@@ -149,7 +171,7 @@ export const EMAIL_BADGES: EmailBadgeMeta[] = [
     id: 'email-badge-ias-claim-stp',
     producer: 'ias-claim-stp',
     blockName: 'email-sender-csr-report',
-    label: 'CSR_REPORT',
+    label: 'Settlement report',
     audience: 'customer',
     x: 300,
     y: 1520,
@@ -192,14 +214,14 @@ export const API_EDGES: StaticEdge[] = API_BLOCKS.slice(1).map((block, i) => api
 // one api-email-sender step that sends them all (the email pipeline splits its sender per
 // category; the API pipeline runs it once, so every API badge shows that same step).
 export const API_EMAIL_BADGES: EmailBadgeMeta[] = [
-  { id: 'api-email-badge-material-download', producer: 'api-material-download', blockName: 'api-email-sender', label: 'MISSING_DOCUMENTS (no images)', audience: 'customer', x: 300, y: 190 },
-  { id: 'api-email-badge-reply-intake', producer: 'api-reply-intake', blockName: 'api-email-sender', label: 'MISSING_DOCUMENTS (reminder)', audience: 'customer', x: 300, y: 570 },
+  { id: 'api-email-badge-material-download', producer: 'api-material-download', blockName: 'api-email-sender', label: 'Missing documents (no images received)', audience: 'customer', x: 300, y: 190 },
+  { id: 'api-email-badge-reply-intake', producer: 'api-reply-intake', blockName: 'api-email-sender', label: 'Reminder: please attach your documents', audience: 'customer', x: 300, y: 570 },
   // "Claim received" goes out right after recognition, as on the email tab (api-claim-recognition queues it).
-  { id: 'api-email-badge-claim-recognition', producer: 'api-claim-recognition', blockName: 'api-email-sender', label: 'DOCUMENT_COMPLETE_ACK', audience: 'customer', x: 300, y: 760 },
-  { id: 'api-email-badge-member-verification', producer: 'api-member-verification', blockName: 'api-email-sender', label: 'MEMBER_VERIFY_ISSUE', audience: 'internal', x: 300, y: 950 },
-  { id: 'api-email-badge-document-checking', producer: 'api-document-checking', blockName: 'api-email-sender', label: 'MISSING_DOCUMENTS · DOCUMENTS_INCOMPLETE (team)', audience: 'customer', x: 300, y: 1140 },
-  { id: 'api-email-badge-claim-revision', producer: 'api-claim-revision', blockName: 'api-email-sender', label: 'CLAIM_APPROVAL_REVIEW · CLAIM_SUBMIT_ISSUE · DOCUMENTS_INCOMPLETE', audience: 'internal', x: 300, y: 1520 },
-  { id: 'api-email-badge-claim-stp', producer: 'api-claim-stp', blockName: 'api-email-sender', label: 'CSR_REPORT', audience: 'customer', x: 300, y: 1710 },
+  { id: 'api-email-badge-claim-recognition', producer: 'api-claim-recognition', blockName: 'api-email-sender', label: 'Claim received', audience: 'customer', x: 300, y: 760 },
+  { id: 'api-email-badge-member-verification', producer: 'api-member-verification', blockName: 'api-email-sender', label: 'Member verification hold', audience: 'internal', x: 300, y: 950 },
+  { id: 'api-email-badge-document-checking', producer: 'api-document-checking', blockName: 'api-email-sender', label: 'Missing documents list + copy to the team', audience: 'customer', x: 300, y: 1140 },
+  { id: 'api-email-badge-claim-revision', producer: 'api-claim-revision', blockName: 'api-email-sender', label: 'Ready for review, IAS rejected, or documents incomplete', audience: 'internal', x: 300, y: 1520 },
+  { id: 'api-email-badge-claim-stp', producer: 'api-claim-stp', blockName: 'api-email-sender', label: 'Settlement report', audience: 'customer', x: 300, y: 1710 },
 ];
 
 export const API_EMAIL_BADGE_EDGES: EmailBadgeEdge[] = API_EMAIL_BADGES.map((badge) => ({

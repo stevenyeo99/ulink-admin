@@ -19,7 +19,7 @@ const AUDIENCE_TEXT: Record<'customer' | 'internal', string> = {
  */
 export function EmailBadgeNode({ data }: NodeProps<Node<EmailBadgeNodeData>>) {
   return (
-    <div className="w-[220px] rounded-full border border-slate-900/5 bg-white/90 px-3 py-2 shadow-sm backdrop-blur-xl">
+    <div className="w-[220px] rounded-2xl border border-slate-900/5 bg-white/90 px-3 py-2 shadow-sm backdrop-blur-xl">
       <Handle type="target" id="target-left" position={Position.Left} className="!h-0 !w-0 !min-w-0 !border-0 !bg-transparent" />
 
       <div className="flex items-center gap-2">
@@ -31,7 +31,7 @@ export function EmailBadgeNode({ data }: NodeProps<Node<EmailBadgeNodeData>>) {
         </span>
         <StatusBadge status={data.status} className="ml-auto shrink-0" />
       </div>
-      <p className="mt-1 truncate text-[10px] leading-tight text-slate-500" title={data.label}>
+      <p className="mt-1 line-clamp-2 break-words text-[10px] leading-tight text-slate-500" title={data.label}>
         {data.label}
       </p>
     </div>
