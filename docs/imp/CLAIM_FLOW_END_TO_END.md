@@ -88,11 +88,11 @@ ias-claim-preparation → ias-claim-creation → *email: JD3 / IAS rejection* �
 | | |
 |---|---|
 | **Reads** | `READY_FOR_DOCUMENT_CHECKING` |
-| **Does** | Checklist over the extracted fields: claim form complete, mandatory fields, medical report present and legible, voucher(s) present, clear, correct, with breakdown, voucher total = claimed amount, bank information, and consistency across documents (patient name, hospital, dates, diagnosis vs treatment; delegation letter when someone else is paid). |
+| **Does** | Checklist over the extracted fields: claim form complete, mandatory fields, medical report present and legible, voucher(s) present, clear, correct, with breakdown, voucher total = claimed amount (refund / cash-return slips — zero or negative amounts — are left out of the total), bank information, and consistency across documents (patient name, hospital, dates, diagnosis vs treatment; delegation letter when someone else is paid). |
 | **Decided by** | Rule, plus **AI** judgments (e.g. names written differently, medical record legible) |
 | **Status** | `MEMBER_VERIFIED` *Checks passed* · `INCOMPLETE` *Documents incomplete* · `DOCUMENTS_REVIEW` *Check before emailing customer* (switch #2, below) |
 | **Emails** | *Incomplete:* to the **customer** a numbered list of what is missing, with the reason under each; to the **team** "Documents incomplete" (the list + why the case went this way). Once per list of missing items. |
-| **Switch #2 on** | If the AI was **unsure** about a missing item (a document it couldn't read, or judged below 0.5 confidence): the customer is **not** emailed; the case waits at *Check before emailing customer*; the team gets "ACTION NEEDED". |
+| **Switch #2 on** | If the AI was **unsure** about a missing item (a document it couldn't read, a date that differs from the medical record, or judged at or below 0.5 confidence): the customer is **not** emailed; the case waits at *Check before emailing customer*; the team gets "ACTION NEEDED". |
 | **Human** | *Documents incomplete*: *Override and continue* (the documents are fine). *Check before emailing customer*: **send the request to the customer**, or *Override and continue*. |
 
 ### 2.5 Console upload — `console-upload`
@@ -117,7 +117,7 @@ ias-claim-preparation → ias-claim-creation → *email: JD3 / IAS rejection* �
 | | |
 |---|---|
 | **Reads** | `DOCUMENTS_UPLOADED` |
-| **Does** | 1. **Diagnosis:** Burmese text is translated to clinical English first; ICD-10 candidates by search; the AI picks one with a reason. No confident pick → `R69` (unknown). 2. **Benefit:** one IAS claim line per voucher; the AI picks the benefit type and head from the member's own plan. 3. **STP decision** by the rules (section 4.4). 4. Builds the IAS payload: claim lines, barcode(s) (`barcode` + `suppBarcode1–5`), and **`AiSummaryRemark`** (the AI assessment, up to 10,000 characters). |
+| **Does** | 1. **Diagnosis:** Burmese text is translated to clinical English first; ICD-10 candidates by search on the **illness text only** (drug names in the treatment text would drown the symptoms); the AI picks one with a reason, seeing the treatment too. No confident pick → `R69` (unknown). 2. **Benefit:** one IAS claim line per voucher; the AI picks the benefit type and head from the member's own plan. 3. **STP decision** by the rules (section 4.4). 4. Builds the IAS payload: claim lines, barcode(s) (`barcode` + `suppBarcode1–5`), and **`AiSummaryRemark`** (the AI assessment, up to 10,000 characters). |
 | **Decided by** | **AI** (translation, diagnosis, benefit) + Rule (STP) |
 | **Status** | `CLAIM_PAYLOAD_PREPARED` *Claim prepared* |
 
@@ -193,7 +193,7 @@ judgments (legibility, names written differently, delegation) which are **AI** w
 ### 4.3 Diagnosis and benefit
 - Burmese diagnosis/treatment → translated to clinical English (marked *AI translated*); the IAS payload keeps the
   original text.
-- Diagnosis: ICD-10 search + AI pick with reason. Not confident → `R69` (unknown), which never goes STP.
+- Diagnosis: ICD-10 search on the illness text only + AI pick (illness and treatment) with reason. Not confident → `R69` (unknown), which never goes STP.
 - Benefit: per voucher, from the member's own plan (IAS benefit types: IP inpatient, OP outpatient, DT dental,
   VS vision, PA). No confident pick → blank, which never goes STP.
 
