@@ -166,8 +166,7 @@ export const EMAIL_BADGE_EDGES: EmailBadgeEdge[] = EMAIL_BADGES.map((badge) => (
 }));
 
 // API case workflow (modules/pipeline/service.js API_STEPS, docs/imp/day1/api-case-workflow.md).
-// Its own chain on the console's API tab — grows as each API job ships. No email badges yet:
-// API emails arrive with document/member checking (Phase 6).
+// Its own chain on the console's API tab — grows as each API job ships.
 export const API_BLOCKS: BlockMeta[] = [
   { id: 'api-claim-intake', label: 'API Claim Intake', description: "Retrieve today's IAS API Claims Created", x: 0, y: 0 },
   { id: 'api-material-download', label: 'Console Material Download', description: 'Downloads IAS Console Submission Materials', x: 0, y: 190 },
@@ -195,9 +194,11 @@ export const API_EDGES: StaticEdge[] = API_BLOCKS.slice(1).map((block, i) => api
 export const API_EMAIL_BADGES: EmailBadgeMeta[] = [
   { id: 'api-email-badge-material-download', producer: 'api-material-download', blockName: 'api-email-sender', label: 'MISSING_DOCUMENTS (no images)', audience: 'customer', x: 300, y: 190 },
   { id: 'api-email-badge-reply-intake', producer: 'api-reply-intake', blockName: 'api-email-sender', label: 'MISSING_DOCUMENTS (reminder)', audience: 'customer', x: 300, y: 570 },
+  // "Claim received" goes out right after recognition, as on the email tab (api-claim-recognition queues it).
+  { id: 'api-email-badge-claim-recognition', producer: 'api-claim-recognition', blockName: 'api-email-sender', label: 'DOCUMENT_COMPLETE_ACK', audience: 'customer', x: 300, y: 760 },
   { id: 'api-email-badge-member-verification', producer: 'api-member-verification', blockName: 'api-email-sender', label: 'MEMBER_VERIFY_ISSUE', audience: 'internal', x: 300, y: 950 },
-  { id: 'api-email-badge-document-checking', producer: 'api-document-checking', blockName: 'api-email-sender', label: 'MISSING_DOCUMENTS · DOCUMENT_COMPLETE_ACK', audience: 'customer', x: 300, y: 1140 },
-  { id: 'api-email-badge-claim-revision', producer: 'api-claim-revision', blockName: 'api-email-sender', label: 'CLAIM_APPROVAL_REVIEW · CLAIM_SUBMIT_ISSUE', audience: 'internal', x: 300, y: 1520 },
+  { id: 'api-email-badge-document-checking', producer: 'api-document-checking', blockName: 'api-email-sender', label: 'MISSING_DOCUMENTS · DOCUMENTS_INCOMPLETE (team)', audience: 'customer', x: 300, y: 1140 },
+  { id: 'api-email-badge-claim-revision', producer: 'api-claim-revision', blockName: 'api-email-sender', label: 'CLAIM_APPROVAL_REVIEW · CLAIM_SUBMIT_ISSUE · DOCUMENTS_INCOMPLETE', audience: 'internal', x: 300, y: 1520 },
   { id: 'api-email-badge-claim-stp', producer: 'api-claim-stp', blockName: 'api-email-sender', label: 'CSR_REPORT', audience: 'customer', x: 300, y: 1710 },
 ];
 

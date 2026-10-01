@@ -37,7 +37,7 @@ Size: S ≤ ½ day · M ≈ 1–2 days · L > 2 days.
 
 | ID | Item | Decision | Owner |
 |---|---|---|---|
-| B1 | Team email for "Needs manual reading" | Email vs dashboard (#8) | Ulink |
+| B1 | Which cases email the team vs dashboard only (#8). Today a team email goes only when a person must act (member hold, documents incomplete / held, JD3 review, IAS rejected, console upload); **STP claims send none** — their summary is only in IAS (`AiSummaryRemark`) and the console. Choices to put to Ulink: (1) as now; (2) + a "Paid straight through" team email per STP claim with the AI assessment (S–M: new email type + migration, email and API); (3) + one daily summary email: every case processed that day, one-line AI summary + link (M). Recommend 2 or 3 — not an email per step. Also: team email for "Needs manual reading" | Choice 1 / 2 / 3 | Ulink |
 | B2 | Burmese customer emails | Scope + approved wording | Ulink |
 | B3 | Real STP values; PA; switch #1 on or off; who edits | Final STP parameters | Ulink |
 | B4 | Random audit sample of STP claims | Audit % | Ulink |
