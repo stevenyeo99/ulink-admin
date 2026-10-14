@@ -11,6 +11,7 @@ import { EmailThreadSection } from '../components/cases/EmailThreadSection';
 import { CaseAdminActions } from '../components/cases/CaseAdminActions';
 import { CaseOverridePanel } from '../components/cases/CaseOverridePanel';
 import { LlmCallsSection } from '../components/cases/LlmCallsSection';
+import { CaseUploadPanel } from '../components/cases/CaseUploadPanel';
 import { isSuperAdmin } from '../lib/session';
 import { JsonViewer } from '../components/panel/JsonViewer';
 import { ChecklistTable } from '../components/panel/ChecklistTable';
@@ -118,6 +119,7 @@ export function CaseDetailPage() {
         {nextAction ? <NextActionBox next={nextAction} /> : <p className="mt-1 text-sm text-slate-600">{info(caseRecord.currentStatus).description}</p>}
       </header>
 
+      <CaseUploadPanel caseRecord={caseRecord} />
       <CaseJourneyPanel summary={assessmentSummary} />
       <AssessmentSummaryPanel summary={assessmentSummary} />
 

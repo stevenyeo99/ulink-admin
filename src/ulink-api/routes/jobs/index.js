@@ -13,6 +13,7 @@ const iasClaimCreationService = require('../../modules/ias-claim-creation/servic
 const iasClaimStpService = require('../../modules/ias-claim-stp/service');
 const apiClaimIntakeService = require('../../modules/api-claim-intake/service');
 const apiMaterialDownloadService = require('../../modules/api-material-download/service');
+const apiConsoleWatchService = require('../../modules/api-console-watch/service');
 const apiClaimRecognitionService = require('../../modules/api-claim-recognition/service');
 const apiMemberVerificationService = require('../../modules/api-member-verification/service');
 const apiDocumentCheckingService = require('../../modules/api-document-checking/service');
@@ -746,6 +747,32 @@ router.use('/api-claim-intake', createJobRouter('api-claim-intake', apiClaimInta
  *         description: Lock cleared
  */
 router.use('/api-material-download', createJobRouter('api-material-download', apiMaterialDownloadService));
+
+/**
+ * @openapi
+ * /api/jobs/api-console-watch/run:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Start the api-console-watch job (fire-and-forget) — new console documents for API cases waiting on them
+ *     description: >
+ *       For each API case waiting on documents (API_NO_DOCUMENTS, API_CLAIM_SUSPENDED, API_DOCUMENTS_REVIEW,
+ *       API_DOCUMENTS_UNSURE, API_DOCUMENTS_UPLOADED, API_UPLOAD_NOT_IN_CONSOLE), lists console scan API-{tpaCaseNumber}
+ *       and looks for a submission the case doesn't have yet. Found → API_NEW_DOCUMENTS (api-material-download fetches it
+ *       and the case is checked again). An upload from the case page not in the console after
+ *       CONSOLE_BARCODE_WAIT_MINUTES → API_UPLOAD_NOT_IN_CONSOLE. SYSTEM_4 E4-04.
+ *     responses:
+ *       200:
+ *         description: Started, or skipped because a prior run is still in progress
+ *
+ * /api/jobs/api-console-watch/release:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Manually clear a stuck api-console-watch lock
+ *     responses:
+ *       200:
+ *         description: Lock cleared
+ */
+router.use('/api-console-watch', createJobRouter('api-console-watch', apiConsoleWatchService));
 
 /**
  * @openapi

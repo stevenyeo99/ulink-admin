@@ -101,8 +101,9 @@ describe('withinGrace', () => {
 });
 
 describe('job.process', () => {
-  it('receives api-claim-intake output and runs only on API_RECEIVED', () => {
-    expect(job).toMatchObject({ inputStatus: 'API_RECEIVED', inputs: ['api-claim-intake'] });
+  // + API_NEW_DOCUMENTS: new console documents for a case waiting on them (api-console-watch, SYSTEM_4 E4-04).
+  it('receives api-claim-intake output and runs on API_RECEIVED and on new console documents', () => {
+    expect(job).toMatchObject({ inputStatus: ['API_RECEIVED', 'API_NEW_DOCUMENTS'], inputs: ['api-claim-intake'] });
   });
 
   it("stores every image of the scan's own submissions as case documents", async () => {

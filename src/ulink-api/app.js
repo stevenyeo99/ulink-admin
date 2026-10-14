@@ -49,6 +49,8 @@ app.use(
     stream: { write: (message) => logger.info(message.trim()) },
   })
 );
+// Uploading documents from the case page sends the files in the body (base64, up to 20 MB of files) — SYSTEM_4 E4-04.
+app.use('/api/cases/:id/documents', express.json({ limit: '30mb' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());

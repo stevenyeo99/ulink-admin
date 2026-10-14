@@ -60,11 +60,19 @@ function nextAction(fields = {}, summary = null, events = []) {
     case 'API_CLAIM_SUSPENDED': {
       const what = status === 'API_NO_DOCUMENTS' ? 'no claim documents were received' : missing || 'the missing documents';
       // Missing-documents email switched off (SYSTEM_4 E4-03): nobody emailed the customer — ULINK has to.
+      // Documents the customer sends can be uploaded on the case page (SYSTEM_4 E4-04).
+      const upload = ' When the documents come in, upload them on this page.';
       if (!lastReadSettings().apiSendMissingDocumentsEmail) {
-        return act(`ULINK contacts the customer: ${what}.${status === 'API_CLAIM_SUSPENDED' ? ' The claim is suspended in IAS.' : ''}`);
+        return act(`ULINK contacts the customer: ${what}.${status === 'API_CLAIM_SUSPENDED' ? ' The claim is suspended in IAS.' : ''}${upload}`);
       }
-      return wait(`Waiting for the customer: ${what}.${status === 'API_CLAIM_SUSPENDED' ? ' The claim is suspended in IAS.' : ''}`, 'Customer');
+      return wait(`Waiting for the customer: ${what}.${status === 'API_CLAIM_SUSPENDED' ? ' The claim is suspended in IAS.' : ''}${upload}`, 'Customer');
     }
+    case 'API_DOCUMENTS_UPLOADED':
+      return wait('Nothing to do — the uploaded documents get a barcode in the IAS console (usually 15–30 minutes), then the case is checked again.');
+    case 'API_NEW_DOCUMENTS':
+      return wait('Nothing to do — the new documents are downloaded and the case is checked again on the next run.');
+    case 'API_UPLOAD_NOT_IN_CONSOLE':
+      return act("The uploaded documents haven't appeared in the IAS console. Check the console (or upload again); the case continues once they appear.");
     case 'CLAIM_CREATED':
     case 'API_CLAIM_REVISED':
       if (fields.isStp) return wait('Nothing to do — STP; the settlement report follows.');

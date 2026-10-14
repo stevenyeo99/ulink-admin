@@ -1,6 +1,6 @@
 const express = require('express');
 const { requireRole } = require('../modules/auth/auth');
-const { getCaseStatuses, getOverview, getReviewQueue, getApprovals, listCases, getCase, getLlmCalls, getAttachment, getDocument, overrideCase, resetCase, releaseMissingDocuments } = require('../controllers/cases/casesController');
+const { getCaseStatuses, getOverview, getReviewQueue, getApprovals, listCases, getCase, getLlmCalls, getAttachment, getDocument, overrideCase, resetCase, releaseMissingDocuments, uploadCaseDocuments } = require('../controllers/cases/casesController');
 
 const router = express.Router();
 
@@ -326,5 +326,46 @@ router.post('/:id/reset', requireRole('super_admin'), resetCase);
  *       409: { description: The case changed meanwhile }
  */
 router.post('/:id/release-missing-documents', requireRole('super_admin'), releaseMissingDocuments);
+
+/**
+ * @openapi
+ * /api/cases/{id}/documents:
+ *   post:
+ *     tags: [cases]
+ *     summary: Upload missing documents to the IAS console for an API case waiting on them (SYSTEM_4 E4-04)
+ *     description: >
+ *       Any logged-in user. Only for an API case at API_NO_DOCUMENTS, API_CLAIM_SUSPENDED, API_DOCUMENTS_REVIEW,
+ *       API_DOCUMENTS_UNSURE, API_DOCUMENTS_UPLOADED or API_UPLOAD_NOT_IN_CONSOLE. 1–10 PDF / JPG / PNG files, 20 MB in
+ *       total, merged into one PDF and sent through cl-upload with the case's TPA case number. The case moves to
+ *       API_DOCUMENTS_UPLOADED; api-console-watch picks the documents up once the console has them, and the case is
+ *       checked again. A comment is required and kept in the case history.
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [comment, files]
+ *             properties:
+ *               comment: { type: string, minLength: 3 }
+ *               files:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     filename: { type: string }
+ *                     contentType: { type: string }
+ *                     data: { type: string, description: base64 }
+ *     responses:
+ *       200: { description: Uploaded; the case waits for the console }
+ *       400: { description: No comment, wrong files, or the case isn't waiting on documents }
+ *       413: { description: Over 20 MB }
+ *       422: { description: The console refused the upload }
+ *       502: { description: Console upload failed (network / server) — nothing changed }
+ *       503: { description: Console upload not set up on this server }
+ */
+router.post('/:id/documents', uploadCaseDocuments);
 
 module.exports = router;

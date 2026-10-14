@@ -87,6 +87,9 @@ Source: Vundick 2.
 - **Added 2026-10-14 (A1b, owner):** setting *Read the mailbox (IMAP)* (STP settings, default on). Off: the inbox
   step is skipped with "mailbox switched off (STP settings)" — no `.env` edit or restart; useful when two
   environments share one mailbox. Sending email is not affected.
+- **Added 2026-10-14 (owner):** with the mailbox not read (switch off or no IMAP), the API pipeline's **Email Reply
+  Intake** (api-reply-intake) is skipped too — the API pipeline runs without both mail steps at go-live; one switch
+  brings them back.
 - **Acceptance:** API pipeline run with no IMAP settings ends `COMPLETED`, the inbox step shows SKIPPED.
 
 #### E4-03 Missing-documents email to customer: switch off — P1, S
@@ -118,7 +121,18 @@ Source: Vundick 3. Also fixes the gap E4-02 creates: with no inbox, a suspended 
   - The case history shows the upload and the new results.
 - **Acceptance:** an `API_CLAIM_SUSPENDED` case with an uploaded medical report is re-checked on the next pipeline run
   and, if complete, revised in IAS without suspense.
-- **Open:** Q1, Q2 (do uploads also go to the IAS console; who may upload).
+- **Answered 2026-10-14 (owner):** Q1 yes — uploads go to the IAS console; Q2 all users; Q5 yes — revise IAS
+  automatically; Q12 only while waiting on documents (no documents, or a documents check).
+- **Built 2026-10-14 (E1, as recommended):** (1) new API job **api-console-watch** (before the download): a case waiting
+  on documents (*No documents*, *Documents incomplete* / suspended, *Check before emailing customer*, *Check the AI's
+  documents finding*, *Uploaded — waiting for the console*, *Upload not in the console*) whose console scan has a
+  submission it doesn't have yet → `API_NEW_DOCUMENTS` → api-material-download fetches only the new images → read,
+  member check, document check, preparation, revision (suspense lifted when complete). Works for documents put in
+  the console by anyone (owner's point), not only our upload. (2) **Upload documents** on the case page (any user,
+  comment required): 1–10 PDF/JPG/PNG, ≤ 20 MB, merged into one PDF, sent through cl-upload with the TPA case number
+  → `API_DOCUMENTS_UPLOADED`; not in the console after 2 h (`CONSOLE_BARCODE_WAIT_MINUTES`) →
+  `API_UPLOAD_NOT_IN_CONSOLE` (needs review, still watched). Refused by cl-upload → the reason, case unchanged; network
+  failure → try again, unchanged. Needs `CL_UPLOAD_URL` / `CL_UPLOAD_API_KEY`. No migration.
 
 #### E4-05 Deploy Burmese translation — P1, XS
 Source: demo 8.
@@ -472,18 +486,18 @@ Go-live (production) values: Email off, API on, mailbox off, missing-documents e
 
 | # | Question | For |
 |---|---|---|
-| Q1 | Uploaded documents (E4-04): only for our AI check, or also uploaded to the IAS console against the claim barcode? | ULINK |
-| Q2 | Who may upload / override (CSR, Ops, JD3, super admin)? | ULINK |
+| Q1 | ~~Uploaded documents (E4-04): only for our AI check, or also uploaded to the IAS console against the claim barcode?~~ **Answered:** yes, also to the IAS console. | ULINK |
+| Q2 | ~~Who may upload / override (CSR, Ops, JD3, super admin)?~~ **Answered:** all users. | ULINK |
 | Q3 | Is outgoing email (SMTP) on at go-live? Acknowledgement, settlement report (CSR) and team emails depend on it. What Reply-To address should customers see? | ULINK |
 | Q4 | ~~Threshold: "≤ 70%" or "< 70%"?~~ **≤** (Vundick). One for all items for now; per item later from data (E4-15 step 3). | ULINK |
-| Q5 | After an upload re-check finds documents complete, revise the IAS claim automatically (lift suspense), as the email reply route does? | ULINK |
+| Q5 | ~~After an upload re-check finds documents complete, revise the IAS claim automatically (lift suspense), as the email reply route does?~~ **Answered:** yes. | ULINK |
 | Q6 | Manual reject: entered in our console and sent to IAS, or entered in IAS directly? Does the IAS API take the fields? | ULINK / IAS |
 | Q7 | Policy Event / Member Event examples: what should the system do with them? | ULINK |
 | Q8 | Burmese support: only diagnosis translation, or also console / email wording? | ULINK |
 | Q9 | ~~Keep the two existing human-check switches once E4-09 makes unsure always go to a person?~~ **Kept** (2026-10-14): #1 still guards STP for unsure member / diagnosis / benefit results. | DRT |
 | Q10 | Go-live: is Batch 1 enough, or must Batch 2 (confidence gate) be in too? Without it STP can run on low-confidence findings. Target date? | ULINK |
 | Q11 | Which ULINK team / mailbox gets the internal "documents incomplete" email and contacts the customer (E4-03)? | ULINK |
-| Q12 | Upload (E4-04) only while the case waits for documents — not after JD3 approval or STP? | ULINK |
+| Q12 | ~~Upload (E4-04) only while the case waits for documents — not after JD3 approval or STP?~~ **Answered:** only while waiting on documents (no documents / documents check). | ULINK |
 | Q13 | ~~Confidence threshold: document checklist only, or also member check and diagnosis / benefit pick?~~ **Answered 2026-10-14:** every AI output (E4-08). | ULINK |
 | Q14 | Workload at 70%: measure on past cases how many would go to review at 50 / 60 / 70% before fixing the number? | DRT → ULINK |
 | Q15 | Vitamins (E4-10): whole claim to JD3, or only the vitamin amount rejected and the rest paid (needs E4-17)? | ULINK |
@@ -525,7 +539,7 @@ sending email, changing data in a shared DB.
 | **B. Confidence gate** | E4-09 unsure never passes, E4-10 vitamins → review / no STP, E4-27 token budget | ≈ 3 days | Nothing unsure, no vitamin claim, no over-long claim goes STP or passes unchecked | Q4, Q9 (Q14 optional) | **Done — awaiting review** (B1, B2, B3) |
 | **C. Console basics** | E4-21 case header next action, E4-23 confidence badge, E4-11 comment on every action | ≈ 3–4 days | Users see why a case is here and what to do; every action explained | — | **Done — awaiting review** (C1, C2, C3) |
 | **D. Measurement baseline** | E4-26 AI call log + prompt versions (migration `ulink_llm_calls`) | ≈ 2–3 days | Every AI answer traceable to prompt and model; "before" numbers for E3 | — | **Done — awaiting review** (D1, D2, D3; run the baseline on UAT) |
-| **E1. Upload → re-check** | E4-04 | M | Incomplete API case recovers without an inbox | Q1, Q2, Q5, Q12 | Not started |
+| **E1. Upload → re-check** | E4-04 | M | Incomplete API case recovers without an inbox | Q1, Q2, Q5, Q12 | **Done — awaiting review** |
 | **E2. Work queue** | E4-22 claim / assign, ordering, search | M | No two people on one case; oldest first; find any case fast | Q21 | Not started |
 | **E3. Confidence everywhere** | E4-08 confidence + reason + source page on every AI output (prompt changes, checked against D) | M | Every AI answer explained, with its page | D done | Not started |
 | **E4. Per-item correction** | E4-12 + E4-15 steps 0–1 (migration `ulink_ai_feedback`, trusted mark) | M | Reviewers fix single findings; corrections stored for learning | E3; Q16, Q17 | Not started |
@@ -566,7 +580,7 @@ Ticked when the item is done; the phase status above changes when all are done a
 - [x] D3 · Baseline report `npm run report:baseline` (read-only, no AI calls) → `baseline_<date>.md`; dev has 1 case — run on UAT for real numbers
 
 **Phase E — Main features** (each sub-item approved on its own)
-- [ ] E1 · E4-04 Upload missing documents → re-check (Q1, Q2, Q5, Q12)
+- [x] E1 · E4-04 Upload missing documents → re-check: console watch (any uploader) + case-page upload via cl-upload (Q1, Q2, Q5, Q12 answered)
 - [ ] E2 · E4-22 Work queue: claim / assign, ordering, search (Q21)
 - [ ] E3 · E4-08 Confidence + reason + source page on every AI output; format checks
 - [ ] E4 · E4-12 Per-item correction + E4-15 steps 0–1 (`ulink_ai_feedback`, trusted mark) (Q16, Q17)

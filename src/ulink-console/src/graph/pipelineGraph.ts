@@ -191,16 +191,18 @@ export const EMAIL_BADGE_EDGES: EmailBadgeEdge[] = EMAIL_BADGES.map((badge) => (
 // Its own chain on the console's API tab — grows as each API job ships.
 export const API_BLOCKS: BlockMeta[] = [
   { id: 'api-claim-intake', label: 'API Claim Intake', description: "Retrieve today's IAS API Claims Created", x: 0, y: 0 },
-  { id: 'api-material-download', label: 'Console Material Download', description: 'Downloads IAS Console Submission Materials', x: 0, y: 190 },
+  // Cases waiting on documents: new ones in the IAS console (uploaded on the case page or by anyone) → checked again.
+  { id: 'api-console-watch', label: 'Console Watch', description: 'New documents for cases waiting on them', x: 0, y: 190 },
+  { id: 'api-material-download', label: 'Console Material Download', description: 'Downloads IAS Console Submission Materials', x: 0, y: 380 },
   // Shared with the email tab: the one inbox reader. Replies to API emails land on the API case.
-  { id: 'email-intake', label: 'Email Intake (API Only)', description: 'Reads the inbox (Reply API Case)', x: 0, y: 380 },
-  { id: 'api-reply-intake', label: 'API Email Reply Intake', description: 'Download Email Attachments for API Cases', x: 0, y: 570 },
-  { id: 'api-claim-recognition', label: 'Claim Recognition', description: 'AI OCR Document Processing', x: 0, y: 760 },
-  { id: 'api-member-verification', label: 'Member Verification', description: 'Verifies the IAS member information', x: 0, y: 950 },
-  { id: 'api-document-checking', label: 'Document Checking', description: 'AI Document Completeness Check', x: 0, y: 1140 },
-  { id: 'api-claim-preparation', label: 'Claim Preparation', description: 'IAS Claim Revision Preparation', x: 0, y: 1330 },
-  { id: 'api-claim-revision', label: 'Claim Revision', description: 'Revises the IAS Claim', x: 0, y: 1520 },
-  { id: 'api-claim-stp', label: 'Claim STP', description: 'Downloads CSR, emails customer (STP claims only)', x: 0, y: 1710 },
+  { id: 'email-intake', label: 'Email Intake (API Only)', description: 'Reads the inbox (Reply API Case)', x: 0, y: 570 },
+  { id: 'api-reply-intake', label: 'API Email Reply Intake', description: 'Download Email Attachments for API Cases', x: 0, y: 760 },
+  { id: 'api-claim-recognition', label: 'Claim Recognition', description: 'AI OCR Document Processing', x: 0, y: 950 },
+  { id: 'api-member-verification', label: 'Member Verification', description: 'Verifies the IAS member information', x: 0, y: 1140 },
+  { id: 'api-document-checking', label: 'Document Checking', description: 'AI Document Completeness Check', x: 0, y: 1330 },
+  { id: 'api-claim-preparation', label: 'Claim Preparation', description: 'IAS Claim Revision Preparation', x: 0, y: 1520 },
+  { id: 'api-claim-revision', label: 'Claim Revision', description: 'Revises the IAS Claim', x: 0, y: 1710 },
+  { id: 'api-claim-stp', label: 'Claim STP', description: 'Downloads CSR, emails customer (STP claims only)', x: 0, y: 1900 },
 ];
 
 const apiEdge = (source: BlockName, target: BlockName): StaticEdge => ({
@@ -214,14 +216,14 @@ export const API_EDGES: StaticEdge[] = API_BLOCKS.slice(1).map((block, i) => api
 // one api-email-sender step that sends them all (the email pipeline splits its sender per
 // category; the API pipeline runs it once, so every API badge shows that same step).
 export const API_EMAIL_BADGES: EmailBadgeMeta[] = [
-  { id: 'api-email-badge-material-download', producer: 'api-material-download', blockName: 'api-email-sender', label: 'Missing documents (no images received)', audience: 'customer', x: 300, y: 190 },
-  { id: 'api-email-badge-reply-intake', producer: 'api-reply-intake', blockName: 'api-email-sender', label: 'Reminder: please attach your documents', audience: 'customer', x: 300, y: 570 },
+  { id: 'api-email-badge-material-download', producer: 'api-material-download', blockName: 'api-email-sender', label: 'Missing documents (no images received)', audience: 'customer', x: 300, y: 380 },
+  { id: 'api-email-badge-reply-intake', producer: 'api-reply-intake', blockName: 'api-email-sender', label: 'Reminder: please attach your documents', audience: 'customer', x: 300, y: 760 },
   // "Claim received" goes out right after recognition, as on the email tab (api-claim-recognition queues it).
-  { id: 'api-email-badge-claim-recognition', producer: 'api-claim-recognition', blockName: 'api-email-sender', label: 'Claim received', audience: 'customer', x: 300, y: 760 },
-  { id: 'api-email-badge-member-verification', producer: 'api-member-verification', blockName: 'api-email-sender', label: 'Member verification hold', audience: 'internal', x: 300, y: 950 },
-  { id: 'api-email-badge-document-checking', producer: 'api-document-checking', blockName: 'api-email-sender', label: 'Missing documents list + copy to the team', audience: 'customer', x: 300, y: 1140 },
-  { id: 'api-email-badge-claim-revision', producer: 'api-claim-revision', blockName: 'api-email-sender', label: 'Ready for review, IAS rejected, or documents incomplete', audience: 'internal', x: 300, y: 1520 },
-  { id: 'api-email-badge-claim-stp', producer: 'api-claim-stp', blockName: 'api-email-sender', label: 'Settlement report', audience: 'customer', x: 300, y: 1710 },
+  { id: 'api-email-badge-claim-recognition', producer: 'api-claim-recognition', blockName: 'api-email-sender', label: 'Claim received', audience: 'customer', x: 300, y: 950 },
+  { id: 'api-email-badge-member-verification', producer: 'api-member-verification', blockName: 'api-email-sender', label: 'Member verification hold', audience: 'internal', x: 300, y: 1140 },
+  { id: 'api-email-badge-document-checking', producer: 'api-document-checking', blockName: 'api-email-sender', label: 'Missing documents list + copy to the team', audience: 'customer', x: 300, y: 1330 },
+  { id: 'api-email-badge-claim-revision', producer: 'api-claim-revision', blockName: 'api-email-sender', label: 'Ready for review, IAS rejected, or documents incomplete', audience: 'internal', x: 300, y: 1710 },
+  { id: 'api-email-badge-claim-stp', producer: 'api-claim-stp', blockName: 'api-email-sender', label: 'Settlement report', audience: 'customer', x: 300, y: 1900 },
 ];
 
 export const API_EMAIL_BADGE_EDGES: EmailBadgeEdge[] = API_EMAIL_BADGES.map((badge) => ({

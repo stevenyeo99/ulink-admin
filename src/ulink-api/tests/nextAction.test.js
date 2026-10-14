@@ -38,12 +38,12 @@ it("uses the job's own words for manual reading and IAS refusals", () => {
 
 it('waits for the customer — or tells ULINK to contact them when the missing-documents email is off', async () => {
   const fields = { currentStatus: 'API_CLAIM_SUSPENDED', documentCheckResult: { issues: ['No medical report'] } };
-  expect(nextAction(fields)).toEqual({ text: 'Waiting for the customer: No medical report. The claim is suspended in IAS.', who: 'Customer', act: false });
+  expect(nextAction(fields)).toEqual({ text: 'Waiting for the customer: No medical report. The claim is suspended in IAS. When the documents come in, upload them on this page.', who: 'Customer', act: false });
 
   Setting.findAll.mockResolvedValue([{ key: 'apiSendMissingDocumentsEmail', value: false }]);
   await getSettings();
-  expect(nextAction(fields)).toEqual({ text: 'ULINK contacts the customer: No medical report. The claim is suspended in IAS.', who: 'Claims team', act: true });
-  expect(nextAction({ currentStatus: 'API_NO_DOCUMENTS' }).text).toBe('ULINK contacts the customer: no claim documents were received.');
+  expect(nextAction(fields)).toEqual({ text: 'ULINK contacts the customer: No medical report. The claim is suspended in IAS. When the documents come in, upload them on this page.', who: 'Claims team', act: true });
+  expect(nextAction({ currentStatus: 'API_NO_DOCUMENTS' }).text).toBe('ULINK contacts the customer: no claim documents were received. When the documents come in, upload them on this page.');
 });
 
 it('hands a non-STP claim to JD3 with the STP reason, and says nothing is left for STP', () => {

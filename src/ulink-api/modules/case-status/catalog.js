@@ -66,6 +66,11 @@ const CASE_STATUSES = {
   API_READY_FOR_DOCUMENT_CHECKING: status('documents', 'in_progress', 'Checking documents', 'The member check passed; the document checklist runs next.'),
   API_INCOMPLETE: status('documents', 'in_progress', 'Documents missing', 'Documents are missing; the claim will be revised with suspense and the customer asked.'),
   API_DOCUMENTS_REVIEW: status('documents', 'needs_review', 'Check before emailing customer', "Documents look incomplete, but the AI wasn't sure. The customer has NOT been emailed and IAS is unchanged: check the documents, then send the request or override the check."),
+  // New documents for a case waiting on them (SYSTEM_4 E4-04): uploaded from the case page, or put in the console by
+  // anyone — api-console-watch notices them, api-material-download fetches them, and the case is checked again.
+  API_DOCUMENTS_UPLOADED: status('documents', 'in_progress', 'Uploaded — waiting for the console', 'Documents were uploaded to the IAS console from the case page; the console gives them a barcode (usually 15–30 minutes), then they are read and the case is checked again.'),
+  API_NEW_DOCUMENTS: status('documents', 'in_progress', 'New documents in the console', 'New documents for this case appeared in the IAS console; they are downloaded and the case is checked again.'),
+  API_UPLOAD_NOT_IN_CONSOLE: status('documents', 'needs_review', 'Upload not in the console', 'Documents uploaded from the case page have not appeared in the IAS console after the waiting time. Check the console; the case keeps being checked and continues once they appear.'),
   API_DOCUMENTS_UNSURE: status('documents', 'needs_review', "Check the AI's documents finding", "All documents passed, but the AI wasn't sure about some of them (see the review points). Check them against the documents, then confirm to continue; IAS is unchanged."),
   API_DOCUMENTS_VERIFIED: status('documents', 'in_progress', 'Documents complete', 'Member and documents are checked; the IAS revision is being prepared.'),
   API_CLAIM_PAYLOAD_PREPARED: status('claim', 'in_progress', 'Revision prepared', 'The IAS claim revision is built and about to be sent.'),

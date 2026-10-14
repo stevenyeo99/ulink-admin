@@ -20,8 +20,8 @@ const DEFAULTS = {
   // its pipeline doesn't run and its tab is hidden on the work pages. Its cases are kept, untouched.
   emailCasesEnabled: true,
   apiCasesEnabled: true,
-  // Read the mailbox (IMAP) — off: the inbox step is skipped in both pipelines, without editing .env or a restart
-  // (SYSTEM_4 E4-02). Sending email is not affected.
+  // Read the mailbox (IMAP) — off: the inbox step (email-intake) is skipped in both pipelines, and the API pipeline's
+  // reply step (api-reply-intake) too, without editing .env or a restart (SYSTEM_4 E4-02). Sending email is not affected.
   mailboxEnabled: true,
   // API cases: the customer's missing-documents email (SYSTEM_4 E4-03). Off: ULINK staff contact the customer
   // themselves; the team is still emailed.

@@ -14,6 +14,7 @@ const iasClaimPreparationService = require('../ias-claim-preparation/service');
 const iasClaimCreationService = require('../ias-claim-creation/service');
 const iasClaimStpService = require('../ias-claim-stp/service');
 const apiClaimIntakeService = require('../api-claim-intake/service');
+const apiConsoleWatchService = require('../api-console-watch/service');
 const apiMaterialDownloadService = require('../api-material-download/service');
 const apiClaimRecognitionService = require('../api-claim-recognition/service');
 const apiMemberVerificationService = require('../api-member-verification/service');
@@ -77,6 +78,9 @@ const STEPS = [
 // source='API' cases, and the email STEPS above can't see them (DB check on ulink_cases).
 const API_STEPS = [
   ['api-claim-intake', apiClaimIntakeService],
+  // Cases waiting on documents: new ones in the console (uploaded from the case page, or by anyone) → downloaded
+  // next, and the case is checked again (SYSTEM_4 E4-04).
+  ['api-console-watch', apiConsoleWatchService],
   ['api-material-download', apiMaterialDownloadService],
   // The one inbox reader, shared with the email pipeline (same job, same lock — never both at
   // once). A reply to an API email lands on the API case's thread; api-reply-intake takes it

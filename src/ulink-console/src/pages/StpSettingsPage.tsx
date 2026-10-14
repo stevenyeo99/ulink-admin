@@ -53,7 +53,7 @@ const CASE_SWITCHES: { key: SwitchKey; title: string; text: string }[] = [
   {
     key: 'mailboxEnabled',
     title: 'Read the mailbox (IMAP)',
-    text: "Off: incoming email is not read — new email claims and customer replies to API emails stay in the mailbox. Sending email is not affected. (With no mailbox set up on the server, it isn't read either way.)",
+    text: "Off: incoming email is not read — Email Intake and Email Reply Intake are skipped in the pipelines; new email claims and customer replies stay in the mailbox. Sending email is not affected. (With no mailbox set up on the server, it isn't read either way.)",
   },
   {
     key: 'apiSendMissingDocumentsEmail',

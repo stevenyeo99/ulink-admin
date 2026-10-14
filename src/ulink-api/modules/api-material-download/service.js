@@ -171,10 +171,12 @@ async function processCase({ caseRecord, input }) {
 
 const job = {
   name: JOB,
-  inputStatus: 'API_RECEIVED',
+  // API_NEW_DOCUMENTS: new console documents for a case waiting on them (api-console-watch, SYSTEM_4 E4-04) —
+  // the ones not stored yet are downloaded, and the case is read and checked again with all of them.
+  inputStatus: ['API_RECEIVED', 'API_NEW_DOCUMENTS'],
   inputs: ['api-claim-intake'],
   batchLimit: config.apiMaterialDownload.batchLimit,
   process: processCase,
 };
 
-module.exports = { run: () => runApiJob(job), job, scanIdFor, belongsToScan, zipBatches, readZip, withinGrace };
+module.exports = { run: () => runApiJob(job), job, scanIdFor, belongsToScan, listScanItems, materialCount, zipBatches, readZip, withinGrace };

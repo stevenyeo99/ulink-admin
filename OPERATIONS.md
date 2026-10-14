@@ -49,7 +49,8 @@ queued. A pipeline whose cases are switched off (STP settings → *Work on email
 (`reason: source_disabled`) — no run is created.
 
 **No inbox** (API-only go-live): switch off *Read the mailbox (IMAP)* on the STP settings page, or leave `IMAP_HOST`
-empty. The email-intake step is then skipped in both pipelines with the reason; SMTP sending is not affected. The
+empty. The email-intake step is then skipped in both pipelines, and api-reply-intake in the API pipeline, with the
+reason; SMTP sending is not affected. The
 switch is the quick way to stop one environment reading a mailbox it shares with another (UAT and a dev machine). If the process died mid-run, the lock stays: clear it with `POST /api/jobs/<job or pipeline>/release`.
 
 ---
@@ -77,6 +78,8 @@ switch is the quick way to stop one environment reading a mailbox it shares with
 | *Waiting for console barcode* > 30 min | Console barcode job slow | Wait; after 2 h the case goes to *Console barcode not received* and the team is emailed; still checked every run |
 | *Case number unclear* | TPA case number read from the form isn't `AYA-CL-` + 8 digits | Check the form; reset, or fix the documents |
 | *Console upload refused* | cl-upload returned an error | Read the message in the case history; fix and reset |
+| *Uploaded — waiting for the console* > 30 min | The console hasn't given the upload a barcode yet | Wait; after 2 h → *Upload not in the console*; check the console |
+| Upload button says "not set up" | `CL_UPLOAD_URL` / `CL_UPLOAD_API_KEY` missing | Set them in `.env`, restart |
 | *IAS rejected the claim / revision* | IAS business answer (e.g. "Claim already exists") | Read IAS's reason (team email); fix in IAS; not retried automatically |
 | API claim not picked up | Same TPA case number already used by another API case | Intake reports the clash; resolve the duplicate |
 | Emails not arriving | SMTP settings, or `INTERNAL_REVIEW_EMAIL` unset (team emails fail) | Check the case history for "sent"; check the email task error |

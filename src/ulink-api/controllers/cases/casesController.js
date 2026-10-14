@@ -15,6 +15,7 @@ const { getStorageAdapter } = require('../../storage');
 const { resetOneCase } = require('../dev/casesController');
 const logger = require('../../utils/logger');
 const { releaseMissingDocumentsEmail } = require('../../modules/document-checking/service');
+const { uploadDocuments, UploadRefused } = require('../../modules/case-upload/upload');
 
 const BLOCK_NAME = 'case-review';
 
@@ -545,4 +546,32 @@ async function releaseMissingDocuments(req, res) {
   res.json({ caseId: caseRecord.id, currentStatus: 'API_INCOMPLETE' });
 }
 
-module.exports = { getCaseStatuses, getOverview, getReviewQueue, getApprovals, listCases, getCase, getLlmCalls, getAttachment, getDocument, overrideCase, resetCase, releaseMissingDocuments, OVERRIDE_TARGETS, REVIEWABLE_STATUSES };
+/**
+ * POST /api/cases/:id/documents — upload missing documents to the IAS console for an API case waiting on them
+ * (modules/case-upload/upload.js, SYSTEM_4 E4-04). Body: { comment, files: [{ filename, contentType, data (base64) }] }.
+ * Any logged-in user. The case then waits for the console (API_DOCUMENTS_UPLOADED) and is checked again once the
+ * documents are there.
+ */
+async function uploadCaseDocuments(req, res) {
+  const comment = requiredComment(req, res, 'you are uploading these documents');
+  if (comment === null) return undefined;
+  const files = (Array.isArray(req.body?.files) ? req.body.files : []).map((f) => ({
+    filename: typeof f?.filename === 'string' ? f.filename : null,
+    contentType: typeof f?.contentType === 'string' ? f.contentType : null,
+    bytes: Buffer.from(typeof f?.data === 'string' ? f.data : '', 'base64'),
+  }));
+  const caseRecord = await Case.findByPk(req.params.id);
+  if (!caseRecord) return res.status(404).json({ error: { message: `Case ${req.params.id} not found`, status: 404 } });
+  const operator = req.user.name ? `${req.user.name} (${req.user.username})` : req.user.username;
+  try {
+    const result = await uploadDocuments(caseRecord, files, { operator, username: req.user.username, comment });
+    logger.info('Documents uploaded to the console', { caseId: caseRecord.id, files: result.files, username: req.user.username });
+    return res.json({ caseId: caseRecord.id, currentStatus: result.status, files: result.files });
+  } catch (error) {
+    if (error instanceof UploadRefused) return res.status(error.status).json({ error: { message: error.message, status: error.status } });
+    logger.error('Console upload failed', { caseId: caseRecord.id, error: error.message });
+    return res.status(502).json({ error: { message: `The console upload didn't go through (${error.message}). Nothing changed — try again.`, status: 502 } });
+  }
+}
+
+module.exports = { getCaseStatuses, getOverview, getReviewQueue, getApprovals, listCases, getCase, getLlmCalls, getAttachment, getDocument, overrideCase, resetCase, releaseMissingDocuments, uploadCaseDocuments, OVERRIDE_TARGETS, REVIEWABLE_STATUSES };
