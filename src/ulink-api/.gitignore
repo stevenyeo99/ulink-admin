@@ -57,6 +57,7 @@ typings/
 
 # dotenv environment variables file
 .env
+.env.uat
 
 # Local attachment storage (Day-1 STORAGE_DRIVER=local) — contains real
 # claim documents/PII from inbound emails, must never be committed.
