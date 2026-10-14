@@ -1,4 +1,4 @@
-import { ClipboardCheck, FolderOpen, LayoutDashboard, SlidersHorizontal, Stamp, Workflow, type LucideIcon } from 'lucide-react';
+import { Activity, ClipboardCheck, FolderOpen, LayoutDashboard, SlidersHorizontal, Stamp, Workflow, type LucideIcon } from 'lucide-react';
 
 export interface NavItem {
   to: string;
@@ -6,6 +6,8 @@ export interface NavItem {
   icon: LucideIcon;
   /** Shows the Review Queue count next to the item. */
   showReviewCount?: boolean;
+  /** Shown to super admins only (the API refuses others too). */
+  superAdminOnly?: boolean;
 }
 
 // The dashboard's page list (docs/imp/demo/API DAY1/PREV_FEEDBACK/CONSOLE_DASHBOARD_DESIGN.md), grouped
@@ -26,6 +28,7 @@ export const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     items: [
       { to: '/pipeline', label: 'Pipeline', icon: Workflow },
       { to: '/stp-settings', label: 'STP settings', icon: SlidersHorizontal },
+      { to: '/ai-performance', label: 'AI performance', icon: Activity, superAdminOnly: true },
     ],
   },
 ];

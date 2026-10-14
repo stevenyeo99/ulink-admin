@@ -421,6 +421,10 @@ Source: DRT, 2026-10-14 (evaluation / observability).
   Stored: the AI's answer and its confidence, tokens; not the input text or images; embeddings not logged; no
   retention limit. A failed log write never breaks the call. Console: technical details → *AI calls*
   (`GET /api/cases/:id/llm-calls`).
+- **Built 2026-10-14 (D2, decisions as recommended):** console page **AI performance** (Admin, super admin only;
+  `GET /api/llm-calls/summary`) — one row per prompt and version: in use from–to, calls by status, average time,
+  tokens in / out, average confidence, share at or below the threshold; the version on the server marked *current*,
+  prompts with no calls listed. Read-only; no migration.
 
 #### E4-27 Long documents: token budget — P1, S
 Source: owner, 2026-10-14 (context-limit concern: documents differ in format and length).
@@ -520,7 +524,7 @@ sending email, changing data in a shared DB.
 | **A. Switches and quick wins** | E4-02 no inbox, E4-01 Email/API on/off, E4-03 missing-documents email off, E4-07 threshold setting; E4-05 Burmese (release), E4-06 chronic ICD (data entry) | ≈ 3–4 days | API cases run alone, without inbox or failing runs; staff email customers themselves; one adjustable threshold | — (Q3 wording only); ICD list for E4-06 | **Done — awaiting review** (A6 blocked on ULINK's ICD list) |
 | **B. Confidence gate** | E4-09 unsure never passes, E4-10 vitamins → review / no STP, E4-27 token budget | ≈ 3 days | Nothing unsure, no vitamin claim, no over-long claim goes STP or passes unchecked | Q4, Q9 (Q14 optional) | **Done — awaiting review** (B1, B2, B3) |
 | **C. Console basics** | E4-21 case header next action, E4-23 confidence badge, E4-11 comment on every action | ≈ 3–4 days | Users see why a case is here and what to do; every action explained | — | **Done — awaiting review** (C1, C2, C3) |
-| **D. Measurement baseline** | E4-26 AI call log + prompt versions (migration `ulink_llm_calls`) | ≈ 2–3 days | Every AI answer traceable to prompt and model; "before" numbers for E3 | — | **In progress** — D1 done |
+| **D. Measurement baseline** | E4-26 AI call log + prompt versions (migration `ulink_llm_calls`) | ≈ 2–3 days | Every AI answer traceable to prompt and model; "before" numbers for E3 | — | **In progress** — D1, D2 done |
 | **E1. Upload → re-check** | E4-04 | M | Incomplete API case recovers without an inbox | Q1, Q2, Q5, Q12 | Not started |
 | **E2. Work queue** | E4-22 claim / assign, ordering, search | M | No two people on one case; oldest first; find any case fast | Q21 | Not started |
 | **E3. Confidence everywhere** | E4-08 confidence + reason + source page on every AI output (prompt changes, checked against D) | M | Every AI answer explained, with its page | D done | Not started |
@@ -558,7 +562,7 @@ Ticked when the item is done; the phase status above changes when all are done a
 
 **Phase D — Measurement baseline**
 - [x] D1 · E4-26 `ulink_llm_calls` migration + logging in the LLM client (+ case page *AI calls*; prompt version automatic)
-- [ ] D2 · Prompt versions on every prompt
+- [x] D2 · Prompt versions on every prompt (automatic, from D1) + **AI performance** page: per prompt version — calls by status, avg time, tokens, avg confidence, unsure share; 7 / 30 days / all time; super admin
 - [ ] D3 · Baseline run on existing cases (read-only); tests, docs, log, tracker
 
 **Phase E — Main features** (each sub-item approved on its own)

@@ -3,6 +3,7 @@ import clsx from 'clsx';
 import { X } from 'lucide-react';
 import { Logo } from '../common/Logo';
 import { NAV_SECTIONS } from './navigation';
+import { isSuperAdmin } from '../../lib/session';
 
 interface SidebarProps {
   reviewCount?: number;
@@ -56,7 +57,7 @@ export function Sidebar({ reviewCount, open, onClose }: SidebarProps) {
             <div key={section.title}>
               <p className="mb-1.5 px-4 text-xs font-medium text-slate-400">{section.title}</p>
               <ul className="space-y-0.5">
-                {section.items.map((item) => (
+                {section.items.filter((item) => !item.superAdminOnly || isSuperAdmin()).map((item) => (
                   <li key={item.to}>
                     <NavLink to={item.to} className={itemClass} onClick={onClose}>
                       {({ isActive }) => (

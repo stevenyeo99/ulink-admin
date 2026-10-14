@@ -129,6 +129,8 @@ Change `LLM_CONTEXT_TOKENS` whenever the model's context length is changed, then
 
 Every call to the AI is a row in `ulink_llm_calls` (migration `20261014100000-create-llm-calls`): case, job, prompt name
 and version, model, status (`ok` / `error` / `timeout` / `too_long`), duration, tokens, the answer and its confidence.
-Per case: console → case → technical details → *AI calls*. The prompt version is the start of the prompt text's SHA-256,
+Per case: console → case → technical details → *AI calls*. Per prompt version: console → **AI performance** (super
+admin; `GET /api/llm-calls/summary?days=7|30`) — calls by status, time, tokens, average confidence and the share unsure,
+old and new versions side by side after a prompt change. The prompt version is the start of the prompt text's SHA-256,
 so an edited prompt shows up as a new version. A failed log write never stops a claim (server log: "AI call log write
 failed"). Kept with no time limit for now; it holds the AI's answers, which can contain medical details.

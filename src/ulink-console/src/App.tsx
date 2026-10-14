@@ -11,6 +11,7 @@ import { ReviewQueuePage } from './pages/ReviewQueuePage';
 import { ApprovalsPage } from './pages/ApprovalsPage';
 import { StpSettingsPage } from './pages/StpSettingsPage';
 import { LoginPage } from './pages/LoginPage';
+import { AiPerformancePage } from './pages/AiPerformancePage';
 import { useReviewQueue } from './hooks/useCases';
 import { getSession } from './lib/session';
 
@@ -61,6 +62,7 @@ function Shell() {
             <Route path="/cases" element={<CasesPage />} />
             <Route path="/cases/:id" element={<CaseDetailPage />} />
             <Route path="/stp-settings" element={<StpSettingsPage />} />
+            <Route path="/ai-performance" element={<AiPerformancePage />} />
           </Routes>
         </div>
       </div>

@@ -68,4 +68,7 @@ function recordCall({ callType, prompt, model = null, status, durationMs = null,
     .catch((e) => logger.warn('AI call log write failed', { error: e.message, job, promptName: row.promptName }));
 }
 
-module.exports = { forCase, recordCall, promptOf };
+// The prompts on this server now: [{ promptName, promptVersion }] — so a prompt with no calls yet still shows.
+const currentPrompts = () => [...PROMPTS].map(([promptVersion, promptName]) => ({ promptName, promptVersion }));
+
+module.exports = { forCase, recordCall, promptOf, currentPrompts };
