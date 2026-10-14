@@ -64,3 +64,7 @@ data/
 
 # next.js build output
 .next
+
+# Per-environment env files for the AWS server (contain secrets) — keep .env.example tracked
+.env.*
+!.env.example

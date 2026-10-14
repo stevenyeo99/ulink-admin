@@ -48,6 +48,7 @@ Size: S ≤ ½ day · M ≈ 1–2 days · L > 2 days.
 | C2 | cl-upload: `-01`/`-02` ordering, size limit (a case merges to 11 MB), production switch-over | Console team answers | Console team |
 | A1 | History of STP rule changes (parked 29/09) | Un-park when needed for production | Owner |
 | — | Switch #2 on or off | After the rehearsal | Ulink |
+| B9 | **Protect `/api/jobs/*` before prod.** Open by design for cron (2026-09-28), but the console also calls it from the browser, so nginx cannot block it (found on AWS UAT 2026-10-14) — anyone who can reach the console port can run pipelines. Fix: `requireAuth` on the job routes + let cron through (localhost-only exemption or a cron token in `.env`) (S) | Which cron exemption | Owner |
 
 ## Later — needs data first
 
