@@ -99,7 +99,9 @@ describe('#2 email case: holding the customer email', () => {
 
   it('a person confirms the documents are missing: the customer gets the request', async () => {
     const held = { id: 'case-1', documentCheckResult: result(true) };
-    expect(await documentChecking.releaseMissingDocumentsEmail(held, 'Ops (ops1)')).toBe(true);
+    expect(await documentChecking.releaseMissingDocumentsEmail(held, 'Ops (ops1)', 'Checked page 3')).toBe(true);
+    // SYSTEM_4 E4-11: what the person checked is kept in the case history.
+    expect(require('../db/models').CaseEvent.create.mock.calls[0][0].message).toBe('Missing-documents email sent to the customer by Ops (ops1) after review — comment: Checked page 3');
     expect(Case.update).toHaveBeenCalledWith({ currentStatus: 'INCOMPLETE' }, expect.objectContaining({ where: { id: 'case-1', currentStatus: 'DOCUMENTS_REVIEW' } }));
     expect(taskTypes()).toEqual(['MISSING_DOCUMENTS']);
 

@@ -254,15 +254,27 @@ router.post('/:id/override', requireRole('super_admin'), overrideCase);
  *       CaseEvent (reasonCode MANUAL_RESET). Refuses (409) if the case already has a real
  *       IAS claimNo — resetting would erase the only local record of an already-created,
  *       non-idempotent external claim. Single-case equivalent of POST /api/dev/cases/reset
- *       (to: READY_FOR_DOCUMENT_READING), reachable from the console UI.
+ *       (to: READY_FOR_DOCUMENT_READING), reachable from the console UI. A comment (why) is
+ *       required and kept in the case history (SYSTEM_4 E4-11).
  *     parameters:
  *       - name: id
  *         in: path
  *         required: true
  *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [comment]
+ *             properties:
+ *               comment: { type: string, minLength: 3, description: Why the case is reset }
  *     responses:
  *       200:
  *         description: Case reset
+ *       400:
+ *         description: No comment
  *       404:
  *         description: Case not found
  *       409:
@@ -280,11 +292,21 @@ router.post('/:id/reset', requireRole('super_admin'), resetCase);
  *       Only for a case held by the switch "hold the missing-documents email when the AI is unsure"
  *       (DOCUMENTS_REVIEW / API_DOCUMENTS_REVIEW). Email case → INCOMPLETE; API case → API_INCOMPLETE
  *       (then the suspended revision in IAS). Super admin. If the documents are fine, use /override instead.
+ *       A comment (what the person checked) is required and kept in the case history (SYSTEM_4 E4-11).
  *     parameters:
  *       - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [comment]
+ *             properties:
+ *               comment: { type: string, minLength: 3, description: What the person checked }
  *     responses:
  *       200: { description: Email queued, case moved on }
- *       400: { description: Case is not held }
+ *       400: { description: Case is not held, or no comment }
  *       409: { description: The case changed meanwhile }
  */
 router.post('/:id/release-missing-documents', requireRole('super_admin'), releaseMissingDocuments);

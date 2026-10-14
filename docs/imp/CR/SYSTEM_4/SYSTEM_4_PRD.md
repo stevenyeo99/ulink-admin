@@ -238,6 +238,12 @@ Source: Vundick 6, demo 2.
 - **Now:** a check override needs a finding code and a reason.
 - **Requirement:** every manual action — override, per-item correction, upload, releasing or editing a customer
   email, approval — asks for a comment; stored with user and time; shown in the case history.
+- **Built 2026-10-14 (C3, decisions as recommended):** the case actions that had none now require a comment (at least
+  3 characters; the API answers 400 without one): *Send the request to the customer* ("What did you check?") and
+  *Reset* ("Why?"). Kept in the case history ("… — comment: …"); for an API case also on the `case-review` step.
+  Override / confirm already required finding + reason. Upload (E1) and per-item correction (E4) get one when built.
+  Still super admin only (Q17). **Follow-up (not built):** a reason and a change history for STP settings saves —
+  needs a settings-history table (migration); approvals happen in IAS, outside this system.
 
 #### E4-12 Override or correct each checklist item — P1, M
 Source: Vundick 8, demo 4.
@@ -504,7 +510,7 @@ sending email, changing data in a shared DB.
 |---|---|---|---|---|---|
 | **A. Switches and quick wins** | E4-02 no inbox, E4-01 Email/API on/off, E4-03 missing-documents email off, E4-07 threshold setting; E4-05 Burmese (release), E4-06 chronic ICD (data entry) | ≈ 3–4 days | API cases run alone, without inbox or failing runs; staff email customers themselves; one adjustable threshold | — (Q3 wording only); ICD list for E4-06 | **Done — awaiting review** (A6 blocked on ULINK's ICD list) |
 | **B. Confidence gate** | E4-09 unsure never passes, E4-10 vitamins → review / no STP, E4-27 token budget | ≈ 3 days | Nothing unsure, no vitamin claim, no over-long claim goes STP or passes unchecked | Q4, Q9 (Q14 optional) | **Done — awaiting review** (B1, B2, B3) |
-| **C. Console basics** | E4-21 case header next action, E4-23 confidence badge, E4-11 comment on every action | ≈ 3–4 days | Users see why a case is here and what to do; every action explained | — | **In progress** — one item at a time; C1, C2 done |
+| **C. Console basics** | E4-21 case header next action, E4-23 confidence badge, E4-11 comment on every action | ≈ 3–4 days | Users see why a case is here and what to do; every action explained | — | **Done — awaiting review** (C1, C2, C3) |
 | **D. Measurement baseline** | E4-26 AI call log + prompt versions (migration `ulink_llm_calls`) | ≈ 2–3 days | Every AI answer traceable to prompt and model; "before" numbers for E3 | — | Not started |
 | **E1. Upload → re-check** | E4-04 | M | Incomplete API case recovers without an inbox | Q1, Q2, Q5, Q12 | Not started |
 | **E2. Work queue** | E4-22 claim / assign, ordering, search | M | No two people on one case; oldest first; find any case fast | Q21 | Not started |
@@ -538,8 +544,8 @@ Ticked when the item is done; the phase status above changes when all are done a
 **Phase C — Console basics**
 - [x] C1 · E4-21 Case header with next action (claimant · benefit · amount; Next box, who acts)
 - [x] C2 · E4-23 One confidence badge (assessment lines, document checklist)
-- [ ] C3 · E4-11 Comment required on every manual action
-- [ ] C4 · Tests, build, docs, log, tracker
+- [x] C3 · E4-11 Comment required on every manual action (send request, reset; override already had one)
+- [x] C4 · Tests, build, docs, log, tracker (with each item)
 
 **Phase D — Measurement baseline**
 - [ ] D1 · E4-26 `ulink_llm_calls` migration + logging in the LLM client

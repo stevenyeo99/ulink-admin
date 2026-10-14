@@ -209,12 +209,12 @@ async function run() {
 
 // A person checked a held case and the documents really are missing: send the customer the request
 // the check prepared, and move the case to "Documents incomplete". Only from DOCUMENTS_REVIEW, and only
-// if nothing moved the case meanwhile. operator: who (for the case history).
-async function releaseMissingDocumentsEmail(caseRecord, operator) {
+// if nothing moved the case meanwhile. operator: who, comment: why (SYSTEM_4 E4-11) — both for the case history.
+async function releaseMissingDocumentsEmail(caseRecord, operator, comment = null) {
   return sequelize.transaction(async (transaction) => {
     const [moved] = await Case.update({ currentStatus: 'INCOMPLETE' }, { where: { id: caseRecord.id, currentStatus: 'DOCUMENTS_REVIEW' }, transaction });
     if (moved !== 1) return false;
-    await logEvent(transaction, { caseId: caseRecord.id, prevStatus: 'DOCUMENTS_REVIEW', newStatus: 'INCOMPLETE', reasonCode: 'MISSING_DOCUMENTS_RELEASED', message: `Missing-documents email sent to the customer by ${operator} after review` });
+    await logEvent(transaction, { caseId: caseRecord.id, prevStatus: 'DOCUMENTS_REVIEW', newStatus: 'INCOMPLETE', reasonCode: 'MISSING_DOCUMENTS_RELEASED', message: `Missing-documents email sent to the customer by ${operator} after review${comment ? ` — comment: ${comment}` : ''}` });
     await queueMissingDocumentsEmail(transaction, caseRecord.id, caseRecord.documentCheckResult);
     return true;
   });

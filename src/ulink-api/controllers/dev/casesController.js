@@ -35,7 +35,8 @@ const VALID_STATUSES = Object.keys(RESET_FIELDS);
  * different caller/audit label so the CaseEvent message says where the reset actually came
  * from instead of always claiming "dev tool".
  */
-async function resetOneCase(caseId, to, { source = 'dev tool' } = {}) {
+// comment: why a person reset it (the console requires one — SYSTEM_4 E4-11); kept in the case history.
+async function resetOneCase(caseId, to, { source = 'dev tool', comment = null } = {}) {
   const caseRecord = await Case.findByPk(caseId);
   if (!caseRecord) {
     throw new Error(`Case ${caseId} not found`);
@@ -64,7 +65,7 @@ async function resetOneCase(caseId, to, { source = 'dev tool' } = {}) {
     prevStatus: previousStatus,
     newStatus: to,
     reasonCode: 'MANUAL_RESET',
-    message: `Reset via ${source}, cleared: ${clearedFields.join(', ')}`,
+    message: `Reset via ${source}${comment ? ` — comment: ${comment}` : ''}, cleared: ${clearedFields.join(', ')}`,
   });
 
   return { caseId, previousStatus, currentStatus: to, clearedFields };

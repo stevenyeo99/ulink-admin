@@ -248,7 +248,9 @@ See 2.5–2.6. Normal wait 15–30 minutes; flagged after 2 hours; always keeps 
 | Non-STP claim in IAS | **Approvals** page + JD3 email | JD3 approves in IAS |
 | STP rules and switches | **STP settings** (super admin) | Limits, never-STP diagnoses, the switches |
 
-Every override is recorded in the case history with the person, the finding and the reason; the overridden points
+Every manual action needs a comment, kept in the case history with the person: override / confirm (finding +
+reason), *Send the request to the customer* ("What did you check?"), *Reset* ("Why?"). Every override is recorded in
+the case history with the person, the finding and the reason; the overridden points
 stay visible, marked *✔ Overridden by … — why*, in the console, the emails and IAS.
 
 ---

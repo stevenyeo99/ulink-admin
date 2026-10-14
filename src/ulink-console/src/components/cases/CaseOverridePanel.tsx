@@ -146,8 +146,9 @@ export function CaseOverridePanel({
  */
 function HeldEmailActions({ caseId }: { caseId: string }) {
   const queryClient = useQueryClient();
+  const [comment, setComment] = useState('');
   const release = useMutation({
-    mutationFn: () => releaseMissingDocuments(caseId),
+    mutationFn: () => releaseMissingDocuments(caseId, comment.trim()),
     onSuccess: () => {
       for (const key of ['case', 'cases', 'review-queue', 'cases-overview']) queryClient.invalidateQueries({ queryKey: [key] });
     },
@@ -159,7 +160,17 @@ function HeldEmailActions({ caseId }: { caseId: string }) {
         The AI wasn't sure some documents are missing, so the customer has not been emailed. Look at the documents: if they really are
         missing, send the request; if they are fine, override the check below.
       </p>
-      <Button onClick={() => release.mutate()} disabled={release.isPending}>
+      <label className="mb-3 block">
+        <span className="mb-1 block text-sm font-medium text-slate-700">What did you check?</span>
+        <textarea
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          rows={2}
+          placeholder="e.g. Checked page 3 — the medical report really is missing."
+          className="w-full rounded-lg border border-slate-900/10 px-3 py-2 text-sm outline-none focus:border-ulink-orange focus:ring-2 focus:ring-ulink-orange/20"
+        />
+      </label>
+      <Button onClick={() => release.mutate()} disabled={release.isPending || comment.trim().length < 3}>
         {release.isPending ? 'Sending…' : 'Documents are missing — send the request to the customer'}
       </Button>
       {release.isError && <p className="mt-2 text-sm text-red-600">{(release.error as Error).message}</p>}

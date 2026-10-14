@@ -15,9 +15,10 @@ export function CaseAdminActions({ caseRecord }: { caseRecord: CaseDetail }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const [comment, setComment] = useState('');
 
   const resetMutation = useMutation({
-    mutationFn: () => resetCase(caseRecord.id),
+    mutationFn: () => resetCase(caseRecord.id, comment.trim()),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cases'] });
       queryClient.invalidateQueries({ queryKey: ['review-queue'] });
@@ -56,12 +57,22 @@ export function CaseAdminActions({ caseRecord }: { caseRecord: CaseDetail }) {
               This clears the recognised claim type, the extracted fields and every check result, and sends the case back to be
               read again. It is logged permanently and can't be undone automatically.
             </AlertDialog.Description>
+            <label className="mt-3 block">
+              <span className="mb-1 block text-xs font-medium text-slate-700">Why? (kept in the case history)</span>
+              <textarea
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                rows={2}
+                placeholder="e.g. Customer resent a clearer voucher."
+                className="w-full rounded-lg border border-slate-900/10 px-3 py-2 text-sm outline-none focus:border-ulink-orange focus:ring-2 focus:ring-ulink-orange/20"
+              />
+            </label>
             <div className="mt-4 flex justify-end gap-2">
               <AlertDialog.Cancel asChild>
                 <Button variant="ghost">Cancel</Button>
               </AlertDialog.Cancel>
               <AlertDialog.Action asChild>
-                <Button onClick={() => resetMutation.mutate()} disabled={resetMutation.isPending}>
+                <Button onClick={() => resetMutation.mutate()} disabled={resetMutation.isPending || comment.trim().length < 3}>
                   {resetMutation.isPending ? 'Resetting…' : 'Reset case'}
                 </Button>
               </AlertDialog.Action>

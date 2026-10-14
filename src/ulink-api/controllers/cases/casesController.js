@@ -462,6 +462,15 @@ async function overrideCase(req, res) {
   res.json({ caseId: caseRecord.id, previousStatus: prevStatus, currentStatus: targetStatus });
 }
 
+// Every manual action on a case says why (SYSTEM_4 E4-11) — the comment goes into the case history. Answers 400 and
+// returns null when it is missing or too short; why: what the comment should explain.
+function requiredComment(req, res, why) {
+  const comment = typeof req.body?.comment === 'string' ? req.body.comment.trim() : '';
+  if (comment.length >= 3) return comment;
+  res.status(400).json({ error: { message: `Add a comment: why ${why}.`, status: 400 } });
+  return null;
+}
+
 /**
  * POST /api/cases/:id/reset — always rewinds to READY_FOR_DOCUMENT_READING, clearing
  * recognizedType/extractedFields/documentCheckResult and everything downstream, so the next
@@ -471,8 +480,10 @@ async function overrideCase(req, res) {
  * reset tool, just single-case and reachable from the console UI without hitting /api/dev.
  */
 async function resetCase(req, res) {
+  const comment = requiredComment(req, res, 'you reset this case');
+  if (comment === null) return undefined;
   try {
-    const result = await resetOneCase(req.params.id, 'READY_FOR_DOCUMENT_READING', { source: `console by ${req.user.username}` });
+    const result = await resetOneCase(req.params.id, 'READY_FOR_DOCUMENT_READING', { source: `console by ${req.user.username}`, comment });
     logger.info('Case manually reset', { caseId: result.caseId, previousStatus: result.previousStatus, username: req.user.username });
     res.json(result);
   } catch (error) {
@@ -492,6 +503,8 @@ async function resetCase(req, res) {
  * case-review step. The other choice — the documents are fine — is the normal override.
  */
 async function releaseMissingDocuments(req, res) {
+  const comment = requiredComment(req, res, 'the documents really are missing');
+  if (comment === null) return undefined;
   const operator = req.user.name ? `${req.user.name} (${req.user.username})` : req.user.username;
   const caseRecord = await Case.findByPk(req.params.id);
   if (!caseRecord) return res.status(404).json({ error: { message: `Case ${req.params.id} not found`, status: 404 } });
@@ -499,7 +512,7 @@ async function releaseMissingDocuments(req, res) {
 
   if (caseRecord.source !== 'API') {
     if (caseRecord.currentStatus !== 'DOCUMENTS_REVIEW') return notHeld();
-    if (!(await releaseMissingDocumentsEmail(caseRecord, operator))) {
+    if (!(await releaseMissingDocumentsEmail(caseRecord, operator, comment))) {
       return res.status(409).json({ error: { message: 'The case changed while you were reviewing it. Reload the page and check again.', status: 409 } });
     }
     logger.info('Missing-documents email released', { caseId: caseRecord.id, username: req.user.username });
@@ -514,8 +527,8 @@ async function releaseMissingDocuments(req, res) {
   const moved = await sequelize.transaction(async (transaction) => {
     const [count] = await Case.update({ currentStatus: 'API_INCOMPLETE' }, { where: { id: caseRecord.id, currentStatus: 'API_DOCUMENTS_REVIEW' }, transaction });
     if (count !== 1) return false;
-    await CaseEvent.create({ caseId: caseRecord.id, blockName: BLOCK_NAME, prevStatus: 'API_DOCUMENTS_REVIEW', newStatus: 'API_INCOMPLETE', reasonCode: 'MISSING_DOCUMENTS_RELEASED', message: `Missing-documents email sent to the customer by ${operator} after review` }, { transaction });
-    await ApiCaseStep.create({ caseId: caseRecord.id, job: 'case-review', status: 'DONE', input: { username: req.user.username, action: 'release-missing-documents' }, output: { email: heldEmail }, startedAt: now, finishedAt: now }, { transaction });
+    await CaseEvent.create({ caseId: caseRecord.id, blockName: BLOCK_NAME, prevStatus: 'API_DOCUMENTS_REVIEW', newStatus: 'API_INCOMPLETE', reasonCode: 'MISSING_DOCUMENTS_RELEASED', message: `Missing-documents email sent to the customer by ${operator} after review — comment: ${comment}` }, { transaction });
+    await ApiCaseStep.create({ caseId: caseRecord.id, job: 'case-review', status: 'DONE', input: { username: req.user.username, action: 'release-missing-documents', comment }, output: { email: heldEmail }, startedAt: now, finishedAt: now }, { transaction });
     return true;
   });
   if (!moved) return res.status(409).json({ error: { message: 'The case changed while you were reviewing it. Reload the page and check again.', status: 409 } });
