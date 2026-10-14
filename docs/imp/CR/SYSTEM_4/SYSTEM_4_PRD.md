@@ -210,6 +210,12 @@ Source: Vundick 5, demo 3.
   emailing customer* / documents review for a person. It cannot reach "documents complete" or STP until a person
   confirms or corrects it (E4-12).
 - **Acceptance:** a case whose items all pass but one is at 65% stops at documents review; it is not STP.
+- **Built 2026-10-14 (B1, decisions as recommended):** switch #3 *Documents the AI passed but wasn't sure about: a
+  person confirms first* (STP settings, default off). New statuses `DOCUMENTS_UNSURE` / `API_DOCUMENTS_UNSURE`
+  *Check the AI's documents finding* (needs review, Review queue reason "AI unsure"), no email. The person
+  **confirms** (new finding "Checked: the AI's reading is right", offered only here) → `MEMBER_VERIFIED` /
+  `API_DOCUMENTS_VERIFIED`; the confirmed points no longer block STP. Switches #1 and #2 kept (Q9). Limit: no "mark
+  incomplete" from here until per-item correction (E4-12).
 - Replaces the need to turn on the two existing human-check switches; decide whether they remain (Q9).
 
 #### E4-10 Vitamins / supplements → manual approval — P2, S (flag) / M (per item)
@@ -434,7 +440,7 @@ Go-live (production) values: Email off, API on, mailbox off, missing-documents e
 | Q6 | Manual reject: entered in our console and sent to IAS, or entered in IAS directly? Does the IAS API take the fields? | ULINK / IAS |
 | Q7 | Policy Event / Member Event examples: what should the system do with them? | ULINK |
 | Q8 | Burmese support: only diagnosis translation, or also console / email wording? | ULINK |
-| Q9 | Keep the two existing human-check switches once E4-09 makes unsure always go to a person? | DRT |
+| Q9 | ~~Keep the two existing human-check switches once E4-09 makes unsure always go to a person?~~ **Kept** (2026-10-14): #1 still guards STP for unsure member / diagnosis / benefit results. | DRT |
 | Q10 | Go-live: is Batch 1 enough, or must Batch 2 (confidence gate) be in too? Without it STP can run on low-confidence findings. Target date? | ULINK |
 | Q11 | Which ULINK team / mailbox gets the internal "documents incomplete" email and contacts the customer (E4-03)? | ULINK |
 | Q12 | Upload (E4-04) only while the case waits for documents — not after JD3 approval or STP? | ULINK |
@@ -476,7 +482,7 @@ sending email, changing data in a shared DB.
 | Phase | Items | Effort | What it improves | Needs first | Status |
 |---|---|---|---|---|---|
 | **A. Switches and quick wins** | E4-02 no inbox, E4-01 Email/API on/off, E4-03 missing-documents email off, E4-07 threshold setting; E4-05 Burmese (release), E4-06 chronic ICD (data entry) | ≈ 3–4 days | API cases run alone, without inbox or failing runs; staff email customers themselves; one adjustable threshold | — (Q3 wording only); ICD list for E4-06 | **Done — awaiting review** (A6 blocked on ULINK's ICD list) |
-| **B. Confidence gate** | E4-09 unsure never passes, E4-10 vitamins → review / no STP, E4-27 token budget | ≈ 3 days | Nothing unsure, no vitamin claim, no over-long claim goes STP or passes unchecked | Q4, Q9 (Q14 optional) | Not started |
+| **B. Confidence gate** | E4-09 unsure never passes, E4-10 vitamins → review / no STP, E4-27 token budget | ≈ 3 days | Nothing unsure, no vitamin claim, no over-long claim goes STP or passes unchecked | Q4, Q9 (Q14 optional) | **In progress** — one item at a time; B1 done |
 | **C. Console basics** | E4-21 case header next action, E4-23 confidence badge, E4-11 comment on every action | ≈ 3–4 days | Users see why a case is here and what to do; every action explained | — | Not started |
 | **D. Measurement baseline** | E4-26 AI call log + prompt versions (migration `ulink_llm_calls`) | ≈ 2–3 days | Every AI answer traceable to prompt and model; "before" numbers for E3 | — | Not started |
 | **E1. Upload → re-check** | E4-04 | M | Incomplete API case recovers without an inbox | Q1, Q2, Q5, Q12 | Not started |
@@ -503,7 +509,7 @@ Ticked when the item is done; the phase status above changes when all are done a
 - [x] A7 · Tests, console build, docs (`CLAIM_FLOW_END_TO_END.md`, `OPERATIONS.md`, `.env.example`), log, tracker
 
 **Phase B — Confidence gate**
-- [ ] B1 · E4-09 Unsure (pass or fail) → documents review; never "documents complete" or STP (Q9)
+- [x] B1 · E4-09 Passed but unsure → *Check the AI's documents finding*, a person confirms (switch #3; Q9: keep #1, #2)
 - [ ] B2 · E4-10 Vitamins / supplements → review point, blocks STP (setting)
 - [ ] B3 · E4-27 Token budget before mapping → manual review if over; LM Studio overflow = stop (server change: go-ahead)
 - [ ] B4 · Tests, docs, log, tracker

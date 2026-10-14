@@ -5,7 +5,8 @@
 // Why only these: they are the checks that can stop a case where the AI may simply be wrong
 // (a misread document, a name/number read differently from IAS). An API case with missing
 // documents doesn't stop — it's already revised in IAS with a suspense — unless the switch "hold the
-// missing-documents email when the AI is unsure" held it for review (API_DOCUMENTS_REVIEW).
+// missing-documents email when the AI is unsure" held it for review (API_DOCUMENTS_REVIEW). A passed document check
+// the AI was unsure about (DOCUMENTS_UNSURE / API_DOCUMENTS_UNSURE, SYSTEM_4 E4-09) is confirmed the same way.
 
 // Where each overridable status goes: the status the check itself would have set on a pass.
 const OVERRIDE_TARGETS = {
@@ -14,6 +15,8 @@ const OVERRIDE_TARGETS = {
   API_MEMBER_REVIEW_REQUIRED: 'API_READY_FOR_DOCUMENT_CHECKING', // API: member check → document check next
   DOCUMENTS_REVIEW: 'MEMBER_VERIFIED', // email: held document check → "checks passed", no customer email
   API_DOCUMENTS_REVIEW: 'API_DOCUMENTS_VERIFIED', // API: held document check → revision with documents complete
+  DOCUMENTS_UNSURE: 'MEMBER_VERIFIED', // email: passed but the AI unsure, a person confirmed → "checks passed"
+  API_DOCUMENTS_UNSURE: 'API_DOCUMENTS_VERIFIED', // API: same → revision with documents complete
 };
 
 // Which check an override of each status skips — matches the assessment summary's `area`, so the
@@ -24,15 +27,29 @@ const OVERRIDE_AREAS = {
   API_MEMBER_REVIEW_REQUIRED: 'member',
   DOCUMENTS_REVIEW: 'documents',
   API_DOCUMENTS_REVIEW: 'documents',
+  DOCUMENTS_UNSURE: 'documents',
+  API_DOCUMENTS_UNSURE: 'documents',
 };
 
 // Why the reviewer thinks the check was wrong — one click, and the start of the AI accuracy data.
 const OVERRIDE_FINDINGS = {
+  // Confirming a passed check the AI was unsure about (DOCUMENTS_UNSURE): the AI read it right.
+  AI_CORRECT: "Checked: the AI's reading is right",
   AI_MISREAD: 'The AI misread the documents',
   CUSTOMER_CONFIRMED: "The customer's details were confirmed",
   IAS_OUTDATED: 'The IAS record is out of date',
   OTHER: 'Other (see reason)',
 };
+
+// A passed check the AI was unsure about (SYSTEM_4 E4-09) — the person confirms rather than overrides.
+const UNSURE_PASS_STATUSES = ['DOCUMENTS_UNSURE', 'API_DOCUMENTS_UNSURE'];
+
+// The findings a reviewer can pick at this status: "the AI's reading is right" only when confirming an unsure pass;
+// everywhere else the check stopped the case, so a finding says why it was wrong.
+function findingsFor(status) {
+  const { AI_CORRECT, ...wrong } = OVERRIDE_FINDINGS;
+  return UNSURE_PASS_STATUSES.includes(status) ? { AI_CORRECT, ...wrong } : wrong;
+}
 
 /**
  * Whether a case at this status, with these results, can be overridden.
@@ -65,4 +82,4 @@ function overridesFromEvents(events = []) {
     }));
 }
 
-module.exports = { OVERRIDE_TARGETS, OVERRIDE_AREAS, OVERRIDE_FINDINGS, overrideCheck, overridesFromEvents };
+module.exports = { OVERRIDE_TARGETS, OVERRIDE_AREAS, OVERRIDE_FINDINGS, findingsFor, overrideCheck, overridesFromEvents };

@@ -10,6 +10,9 @@ const DEFAULTS = {
   // When the AI is unsure a document is missing (low confidence / unreadable), the customer's
   // missing-documents email waits for a person: send it, or override the check.
   holdUnsureMissingDocsEmail: false,
+  // The document check passed, but the AI was unsure (at or below the threshold) about an item: the case stops for a
+  // person to confirm before claim preparation / the IAS revision (SYSTEM_4 E4-09). Off until turned on.
+  holdUnsureDocumentPass: false,
   // Which cases the system works on (SYSTEM_4 E4-01, 2026-10-14 — API cases go live first). A source switched off:
   // its pipeline doesn't run and its tab is hidden on the work pages. Its cases are kept, untouched.
   emailCasesEnabled: true,

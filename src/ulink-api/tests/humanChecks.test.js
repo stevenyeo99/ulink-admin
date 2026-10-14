@@ -41,7 +41,7 @@ describe('#1 open review point blocks STP', () => {
 });
 
 describe('#2 what counts as "the AI is unsure a document is missing"', () => {
-  it('a document it could not read, or a missing finding below 0.5 confidence — not a plainly missing item', () => {
+  it('a document it could not read, or a missing finding at or below the threshold — not a plainly missing item', () => {
     expect(unsureDocumentPoints({ checklist: [
       { code: 'INCOMPLETE_MEDICAL_REPORT', label: 'Medical report legible', passed: false },
       { code: 'NO_MEDICAL_REPORT', label: 'Medical report present', passed: false, confidence: 0.3 },

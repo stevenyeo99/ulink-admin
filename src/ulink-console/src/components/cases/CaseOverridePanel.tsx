@@ -46,6 +46,9 @@ export function CaseOverridePanel({
   const isMemberCheck = caseRecord.currentStatus.endsWith('MEMBER_REVIEW_REQUIRED');
   // Held by the switch "hold the missing-documents email when the AI is unsure": the customer hasn't been emailed.
   const isHeld = caseRecord.currentStatus.endsWith('DOCUMENTS_REVIEW');
+  // Passed, but the AI was unsure (SYSTEM_4 E4-09): the person confirms what the AI read, rather than overriding it.
+  const isUnsurePass = caseRecord.currentStatus.endsWith('DOCUMENTS_UNSURE');
+  const action = isUnsurePass ? 'Confirm and continue' : 'Override and continue';
   const checkName = isMemberCheck ? 'member check' : 'document check';
   // A bank mismatch is a payment risk even when another problem was found first.
   const memberResult = caseRecord.memberVerifyResult;
@@ -55,14 +58,16 @@ export function CaseOverridePanel({
   return (
     <section className="mb-6 rounded-xl2 border border-ulink-orange/25 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
       {isHeld && <HeldEmailActions caseId={caseRecord.id} />}
-      <h2 className="text-sm font-semibold text-slate-800">Override and continue</h2>
+      <h2 className="text-sm font-semibold text-slate-800">{action}</h2>
       <p className="mb-4 mt-1 text-sm text-slate-600">
-        If the AI flagged the {checkName} wrongly, you can let the case continue as if it had passed. Your name, your choice below
-        and your reason are kept in the case history.
+        {isUnsurePass
+          ? "The documents passed, but the AI wasn't sure about the review points on this page. Check them against the documents; if they're right, confirm and the case continues."
+          : `If the AI flagged the ${checkName} wrongly, you can let the case continue as if it had passed.`}{' '}
+        Your name, your choice below and your reason are kept in the case history.
       </p>
 
       <label className="mb-3 block">
-        <span className="mb-1 block text-sm font-medium text-slate-700">Why was the check wrong?</span>
+        <span className="mb-1 block text-sm font-medium text-slate-700">{isUnsurePass ? 'What did you find?' : 'Why was the check wrong?'}</span>
         <select
           value={finding}
           onChange={(e) => setFinding(e.target.value)}
@@ -89,17 +94,17 @@ export function CaseOverridePanel({
 
       <AlertDialog.Root open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialog.Trigger asChild>
-          <Button disabled={!canSubmit}>Override and continue</Button>
+          <Button disabled={!canSubmit}>{action}</Button>
         </AlertDialog.Trigger>
         <AlertDialog.Portal>
           <AlertDialog.Overlay className="fixed inset-0 z-40 bg-slate-900/30 backdrop-blur-sm" />
           <AlertDialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl2 bg-white p-5 shadow-glass">
-            <AlertDialog.Title className="text-sm font-semibold text-slate-900">Skip the {checkName}?</AlertDialog.Title>
+            <AlertDialog.Title className="text-sm font-semibold text-slate-900">{isUnsurePass ? `Confirm the ${checkName}?` : `Skip the ${checkName}?`}</AlertDialog.Title>
             <AlertDialog.Description asChild>
               <div className="mt-2 space-y-3 text-sm text-slate-600">
                 {summary.reviewPoints.length > 0 && (
                   <div>
-                    <p className="mb-1">These points will be skipped:</p>
+                    <p className="mb-1">{isUnsurePass ? 'These points are confirmed:' : 'These points will be skipped:'}</p>
                     <ul className="list-disc space-y-0.5 pl-5">
                       {summary.reviewPoints.map((p) => (
                         <li key={`${p.decision}-${p.reason}`}>
@@ -123,7 +128,7 @@ export function CaseOverridePanel({
                 <Button variant="ghost">Cancel</Button>
               </AlertDialog.Cancel>
               <Button onClick={() => mutation.mutate()} disabled={mutation.isPending}>
-                {mutation.isPending ? 'Overriding…' : 'Override and continue'}
+                {mutation.isPending ? 'Saving…' : action}
               </Button>
             </div>
             {mutation.isError && <p className="mt-3 text-sm text-red-600">{(mutation.error as Error).message}</p>}

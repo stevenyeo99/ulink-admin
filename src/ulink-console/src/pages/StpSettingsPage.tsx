@@ -14,12 +14,17 @@ const BENEFIT_LABELS: Record<string, string> = { IP: 'Inpatient', OP: 'Outpatien
 const SOURCE_LABEL: Record<Source, string> = { EMAIL: 'Email', API: 'API' };
 
 // When the AI itself says it is unsure, a person decides — before anything is paid, and before the
-// customer is asked for documents. Both off until Ulink decides; off, the system works as before.
+// customer is asked for documents. All off until Ulink decides; off, the system works as before.
 const SWITCHES: { key: SwitchKey; title: string; text: string }[] = [
   {
     key: 'stpBlockOnReviewPoints',
     title: "Don't pay automatically when the AI was unsure",
     text: 'A claim with an open review point (the AI unsure, a possible policy exclusion, …) never goes STP — it goes to JD3 for approval, and the STP reason says why.',
+  },
+  {
+    key: 'holdUnsureDocumentPass',
+    title: "Documents the AI passed but wasn't sure about: a person confirms first",
+    text: 'When every document check passed but the AI was unsure about one (at or below the threshold above), the case waits for a person to confirm before anything goes to IAS.',
   },
   {
     key: 'holdUnsureMissingDocsEmail',

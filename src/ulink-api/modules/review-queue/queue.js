@@ -30,6 +30,8 @@ const STATUS_REASONS = {
   CASE_NUMBER_UNCLEAR: 'Unreadable',
   DOCUMENTS_REVIEW: 'AI unsure',
   API_DOCUMENTS_REVIEW: 'AI unsure',
+  DOCUMENTS_UNSURE: 'AI unsure',
+  API_DOCUMENTS_UNSURE: 'AI unsure',
 };
 
 const rank = (reason) => {

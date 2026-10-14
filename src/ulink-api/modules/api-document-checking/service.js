@@ -2,7 +2,7 @@ const config = require('../../config');
 const { runApiJob } = require('../api-pipeline/runApiJob');
 const { checkCase } = require('../document-checking/service');
 const { getSettings } = require('../settings/settings');
-const { unsureDocumentPoints } = require('../document-checking/holdForReview');
+const { unsureDocumentPoints, unsurePassedPoints } = require('../document-checking/holdForReview');
 const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment-summary/summary');
 const { caseBasics } = require('../assessment-summary/journey');
 
@@ -58,6 +58,17 @@ async function processCase({ caseRecord, input }) {
       },
       nextStatus: 'API_DOCUMENTS_REVIEW',
       message: `Documents incomplete: ${result.issues.join('; ')} — customer email held: the AI was unsure (${unsure.join('; ')})`,
+    };
+  }
+
+  // Passed, but the AI was unsure about an item (settings.holdUnsureDocumentPass, SYSTEM_4 E4-09): a person confirms
+  // (API_DOCUMENTS_UNSURE) before the IAS revision; confirmed, it continues as documents complete.
+  const unsurePassed = result.passed ? unsurePassedPoints(result) : [];
+  if (unsurePassed.length && (await getSettings()).holdUnsureDocumentPass) {
+    return {
+      output: { outcome, documentCheckResult: result, checkedAt: new Date().toISOString(), email: null },
+      nextStatus: 'API_DOCUMENTS_UNSURE',
+      message: `Documents complete — a person confirms first: the AI was unsure about ${unsurePassed.join('; ')}`,
     };
   }
 

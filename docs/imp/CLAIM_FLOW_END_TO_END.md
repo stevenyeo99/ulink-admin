@@ -90,10 +90,11 @@ ias-claim-preparation → ias-claim-creation → *email: JD3 / IAS rejection* �
 | **Reads** | `READY_FOR_DOCUMENT_CHECKING` |
 | **Does** | Checklist over the extracted fields: claim form complete, mandatory fields, medical report present and legible, voucher(s) present, clear, correct, with breakdown, voucher total = claimed amount (refund / cash-return slips — zero or negative amounts — are left out of the total), bank information, and consistency across documents (patient name, hospital, dates, diagnosis vs treatment; delegation letter when someone else is paid). |
 | **Decided by** | Rule, plus **AI** judgments (e.g. names written differently, medical record legible) |
-| **Status** | `MEMBER_VERIFIED` *Checks passed* · `INCOMPLETE` *Documents incomplete* · `DOCUMENTS_REVIEW` *Check before emailing customer* (switch #2, below) |
+| **Status** | `MEMBER_VERIFIED` *Checks passed* · `INCOMPLETE` *Documents incomplete* · `DOCUMENTS_REVIEW` *Check before emailing customer* (switch #2, below) · `DOCUMENTS_UNSURE` *Check the AI's documents finding* (switch #3, below) |
 | **Emails** | *Incomplete:* to the **customer** a numbered list of what is missing, with the reason under each; to the **team** "Documents incomplete" (the list + why the case went this way). Once per list of missing items. |
-| **Switch #2 on** | If the AI was **unsure** about a missing item (a document it couldn't read, a date that differs from the medical record, or judged at or below 0.5 confidence): the customer is **not** emailed; the case waits at *Check before emailing customer*; the team gets "ACTION NEEDED". |
-| **Human** | *Documents incomplete*: *Override and continue* (the documents are fine). *Check before emailing customer*: **send the request to the customer**, or *Override and continue*. |
+| **Switch #2 on** | If the AI was **unsure** about a missing item (a document it couldn't read, a date that differs from the medical record, or judged at or below the AI confidence threshold): the customer is **not** emailed; the case waits at *Check before emailing customer*; the team gets "ACTION NEEDED". |
+| **Switch #3 on** | Every check **passed**, but the AI scored an item at or below the threshold: the case waits at *Check the AI's documents finding* (no email; it is in the Review queue) until a person confirms. |
+| **Human** | *Documents incomplete*: *Override and continue* (the documents are fine). *Check before emailing customer*: **send the request to the customer**, or *Override and continue*. *Check the AI's documents finding*: **Confirm and continue** (finding "the AI's reading is right", or what was wrong). |
 
 ### 2.5 Console upload — `console-upload`
 | | |
@@ -163,7 +164,7 @@ replies then never reach the case (SYSTEM_4, API go-live). Sending email is not 
 | 3 | **Reply intake** | A customer reply to our email with new attachments → the case is read again (console images + new attachments). | `API_REPLY_RECEIVED` *Customer replied* |
 | 4 | **Recognition** | Same as 2.2. | `API_RECOGNIZED` · `API_MANUAL_REVIEW` |
 | 5 | **Member check** | Same as 2.3 (internal email on an issue). | `API_READY_FOR_DOCUMENT_CHECKING` · `API_MEMBER_REVIEW_REQUIRED` |
-| 6 | **Document check** | Same checklist. Missing documents: customer emailed (unless switched off — 4.5), and — unlike email — the case **continues** so the IAS claim can be suspended. Switch #2 on and the AI unsure: waits at *Check before emailing customer* instead. | `API_DOCUMENTS_VERIFIED` *Documents complete* · `API_INCOMPLETE` *Documents missing* · `API_DOCUMENTS_REVIEW` *Check before emailing customer* |
+| 6 | **Document check** | Same checklist. Missing documents: customer emailed (unless switched off — 4.5), and — unlike email — the case **continues** so the IAS claim can be suspended. Switch #2 on and the AI unsure: waits at *Check before emailing customer* instead. Switch #3 on and all passed but the AI unsure: waits at *Check the AI's documents finding* before the IAS revision. | `API_DOCUMENTS_VERIFIED` *Documents complete* · `API_INCOMPLETE` *Documents missing* · `API_DOCUMENTS_REVIEW` *Check before emailing customer* · `API_DOCUMENTS_UNSURE` *Check the AI's documents finding* |
 | 7 | **Claim preparation** | Same builder as 2.7, plus the API flags: documents missing → `isSuspense=Y`; STP → `isValidation=Y, isCSR=Y`; otherwise `N`. All the customer's console barcodes → `barcode` + `suppBarcode1–5`. | `API_CLAIM_PAYLOAD_PREPARED` *Revision prepared* |
 | 8 | **Claim revision** | The claim already exists in IAS, so it is **revised** (never created). Complete + STP → settlement report next. Complete, not STP → JD3 email. Documents missing → **suspense** in IAS + internal "Documents incomplete" email; the customer's reply restarts the case and the next revision lifts the suspense. | `API_AWAITING_CSR` *Waiting for settlement report* · `API_CLAIM_REVISED` *Revised in IAS* · `API_CLAIM_SUSPENDED` *Documents incomplete* · `API_CLAIM_REVISION_FAILED` *IAS rejected the revision* |
 | 9 | **Settlement report** | Same as 2.9. | `API_CSR_SENT` *Settlement report sent* |
@@ -212,7 +213,7 @@ A claim goes STP only if **all** hold (console **STP settings**):
 Every block is written as the reason (e.g. "IP is not allowed for STP. (email case rules)"). A rule change applies to
 claims prepared after it. STP → `isValidation=Y, isCSR=Y` in IAS and the settlement report; not STP → JD3.
 
-### 4.5 Human checks when the AI is unsure (switches, both off by default)
+### 4.5 Human checks when the AI is unsure (switches, all off by default)
 **Unsure** = an AI result at or below the *AI confidence threshold* (STP settings, default **70%**): it becomes a review
 point on the case. The judges' own cut-off for dropping an answer as unusable stays at 0.5, so a 0.5–0.7 answer is
 kept and counts as unsure.
@@ -221,8 +222,9 @@ kept and counts as unsure.
 |---|---|
 | **#1 Don't pay automatically when the AI was unsure** | Any open review point stops STP → JD3 approves. |
 | **#2 Don't email the customer when the AI is unsure a document is missing** | Customer email held; *Check before emailing customer*; the team sends the request or overrides. |
+| **#3 Documents the AI passed but wasn't sure about: a person confirms first** | All document checks passed, but one was scored at or below the threshold: *Check the AI's documents finding*; a person confirms before claim preparation / the IAS revision. Confirmed points then no longer block STP under #1. |
 
-Both only catch cases where the AI **knows** it is unsure. STP limits cap the risk of a "confidently wrong" case.
+All only catch cases where the AI **knows** it is unsure. STP limits cap the risk of a "confidently wrong" case.
 
 ### 4.6 Console barcode wait
 See 2.5–2.6. Normal wait 15–30 minutes; flagged after 2 hours; always keeps checking.
@@ -237,9 +239,10 @@ See 2.5–2.6. Normal wait 15–30 minutes; flagged after 2 hours; always keeps 
 | *Member check issue* | Case page | **Override and continue** (reason + finding) — or fix IAS; the case re-checks every run |
 | *Documents incomplete* | Case page | **Override and continue** if the documents are fine |
 | *Check before emailing customer* | Case page | **Send the request to the customer**, or **Override and continue** |
+| *Check the AI's documents finding* | Case page | Check the review points against the documents, then **Confirm and continue** |
 | *Needs manual reading*, *Case number unclear*, *Console upload refused*, *Console barcode not received* | Case page / internal email | Check and fix; *Reset* reprocesses a case from reading (not allowed once it has an IAS claim number) |
 | Non-STP claim in IAS | **Approvals** page + JD3 email | JD3 approves in IAS |
-| STP rules and switches | **STP settings** (super admin) | Limits, never-STP diagnoses, the two switches |
+| STP rules and switches | **STP settings** (super admin) | Limits, never-STP diagnoses, the switches |
 
 Every override is recorded in the case history with the person, the finding and the reason; the overridden points
 stay visible, marked *✔ Overridden by … — why*, in the console, the emails and IAS.
@@ -258,6 +261,7 @@ stay visible, marked *✔ Overridden by … — why*, in the console, the emails
 | Checking documents | `READY_FOR_DOCUMENT_CHECKING` / `API_READY_FOR_DOCUMENT_CHECKING` | Both | System |
 | Documents incomplete | `INCOMPLETE` (email) / `API_CLAIM_SUSPENDED` (API) | Both | **Customer** |
 | Check before emailing customer | `DOCUMENTS_REVIEW` / `API_DOCUMENTS_REVIEW` | Both | **Person** |
+| Check the AI's documents finding | `DOCUMENTS_UNSURE` / `API_DOCUMENTS_UNSURE` | Both | **Person** |
 | Checks passed / Documents complete | `MEMBER_VERIFIED` / `API_DOCUMENTS_VERIFIED` | Both | System |
 | Documents missing | `API_INCOMPLETE` | API | System (→ suspense) |
 | Waiting for console barcode | `CONSOLE_BARCODE_PENDING` | Email | Console (15–30 min) |
@@ -313,7 +317,7 @@ Team emails go to `INTERNAL_REVIEW_EMAIL` (+ the route's CC), start with "(ULINK
 |---|---|---|---|
 | STP rules | Console → STP settings | Demo values | Allowed + max amount per case type (Email/API) and IAS benefit type |
 | Never-STP diagnoses | Console → STP settings | `R69` | ICD-10 codes or prefixes that never go STP |
-| Switch #1 / #2 | Console → STP settings | Off | Human checks when the AI is unsure (4.5) |
+| Switch #1 / #2 / #3 | Console → STP settings | Off | Human checks when the AI is unsure (4.5) |
 | AI confidence threshold | Console → STP settings | 70% | At or below: the AI counts as unsure (4.5) |
 | Work on email cases / API cases | Console → STP settings | On | Off: that pipeline doesn't run (cron or Run) and its tab is hidden on the work pages; its cases are kept |
 | API cases: email the customer about missing documents | Console → STP settings | On | Off: ULINK contacts the customer; team still emailed (section 3) |

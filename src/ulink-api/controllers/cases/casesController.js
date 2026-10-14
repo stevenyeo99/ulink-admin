@@ -1,6 +1,6 @@
 const { Op, fn, col, cast, where: sqlWhere, literal } = require('sequelize');
 const { sequelize, Case, CaseEvent, CaseDocument, ApiCaseStep, EmailThread, EmailMessage, EmailAttachment } = require('../../db/models');
-const { OVERRIDE_TARGETS, OVERRIDE_FINDINGS, overrideCheck, overridesFromEvents } = require('../../modules/case-override/override');
+const { OVERRIDE_TARGETS, OVERRIDE_FINDINGS, findingsFor, overrideCheck, overridesFromEvents } = require('../../modules/case-override/override');
 const { todayInIasTimezone } = require('../../modules/shared/iasDates');
 const { apiCaseView } = require('../../modules/api-pipeline/caseView');
 const { buildAssessmentSummary } = require('../../modules/assessment-summary/summary');
@@ -304,7 +304,7 @@ async function getCase(req, res) {
   // reviewer can let this case past its check, and if not, why (modules/case-override/override.js).
   const reviewInfo = (fields) => ({
     assessmentSummary: buildAssessmentSummary(fields, { overrides: overridesFromEvents(events) }),
-    override: { ...overrideCheck(fields.currentStatus, fields), findings: OVERRIDE_FINDINGS },
+    override: { ...overrideCheck(fields.currentStatus, fields), findings: findingsFor(fields.currentStatus) },
   });
   if (caseRecord.source !== 'API') {
     return res.json({ case: caseRecord, events, documents, ...reviewInfo(caseRecord) });
@@ -404,6 +404,9 @@ async function overrideCase(req, res) {
     ? apiCaseView(await ApiCaseStep.findAll({ where: { caseId: caseRecord.id } }))
     : caseRecord;
   const check = overrideCheck(caseRecord.currentStatus, fields);
+  if (check.allowed && !findingsFor(caseRecord.currentStatus)[finding]) {
+    return res.status(400).json({ error: { message: `Pick one of: ${Object.keys(findingsFor(caseRecord.currentStatus)).join(', ')}`, status: 400 } });
+  }
   if (!check.allowed) {
     return res.status(400).json({
       error: { message: check.reason || `This case is at "${caseRecord.currentStatus}", which can't be overridden.`, status: 400 },

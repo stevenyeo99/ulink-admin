@@ -6,7 +6,7 @@ const { queueDedupedTask } = require('../shared/emailTaskQueue');
 const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment-summary/summary');
 const { overridesFromEvents } = require('../case-override/override');
 const { getSettings } = require('../settings/settings');
-const { unsureDocumentPoints } = require('./holdForReview');
+const { unsureDocumentPoints, unsurePassedPoints } = require('./holdForReview');
 
 const BLOCK_NAME = 'document-checking';
 
@@ -153,9 +153,13 @@ async function persistOutcome(caseRecord, outcome) {
   // only with the switch on (settings.holdUnsureMissingDocsEmail); off, exactly as before.
   const unsure = outcome.result.passed ? [] : unsureDocumentPoints(outcome.result);
   const held = unsure.length > 0 && (await getSettings()).holdUnsureMissingDocsEmail;
+  // Passed, but the AI was unsure about an item: a person confirms before claim preparation — only with the switch on
+  // (settings.holdUnsureDocumentPass, SYSTEM_4 E4-09).
+  const unsurePassed = outcome.result.passed ? unsurePassedPoints(outcome.result) : [];
+  const confirm = unsurePassed.length > 0 && (await getSettings()).holdUnsureDocumentPass;
   return sequelize.transaction(async (transaction) => {
     const prevStatus = caseRecord.currentStatus;
-    const newStatus = held ? 'DOCUMENTS_REVIEW' : OUTCOME_TO_STATUS[outcome.outcome];
+    const newStatus = held ? 'DOCUMENTS_REVIEW' : confirm ? 'DOCUMENTS_UNSURE' : OUTCOME_TO_STATUS[outcome.outcome];
     await Case.update(
       { currentStatus: newStatus, documentCheckResult: outcome.result },
       { where: { id: caseRecord.id }, transaction }
@@ -165,7 +169,8 @@ async function persistOutcome(caseRecord, outcome) {
       prevStatus,
       newStatus,
       reasonCode: outcome.result.passed ? null : 'DOCUMENT_ISSUES_FOUND',
-      message: outcome.result.passed ? 'All document checks passed'
+      message: outcome.result.passed
+        ? `All document checks passed${confirm ? ` — a person confirms first: the AI was unsure about ${unsurePassed.join('; ')}` : ''}`
         : `${outcome.result.issues.join('; ')}${held ? ` — customer email held: the AI was unsure (${unsure.join('; ')})` : ''}`,
     });
 

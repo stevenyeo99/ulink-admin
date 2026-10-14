@@ -40,6 +40,8 @@ const CASE_STATUSES = {
   INCOMPLETE: status('documents', 'waiting_customer', 'Documents incomplete', "Documents are missing or unclear; the customer was emailed the list and the case waits for their reply."),
   // Switch "hold the missing-documents email when the AI is unsure" on: a person checks before the customer is emailed.
   DOCUMENTS_REVIEW: status('documents', 'needs_review', 'Check before emailing customer', "Documents look incomplete, but the AI wasn't sure. The customer has NOT been emailed: check the documents, then send the request or override the check."),
+  // Switch "documents the AI passed but wasn't sure about: a person confirms first" on (SYSTEM_4 E4-09).
+  DOCUMENTS_UNSURE: status('documents', 'needs_review', "Check the AI's documents finding", "All documents passed, but the AI wasn't sure about some of them (see the review points). Check them against the documents, then confirm to continue; nothing has been prepared for IAS yet."),
   MEMBER_VERIFIED: status('documents', 'in_progress', 'Checks passed', 'Member and documents are checked; documents go to the console next.'),
   // Console upload by API (cl-upload): the console creates the barcode later, about every 15 minutes
   // (docs/imp/demo/API DAY1/CL-UPLOAD SPEC/console_upload_requirement.md).
@@ -64,6 +66,7 @@ const CASE_STATUSES = {
   API_READY_FOR_DOCUMENT_CHECKING: status('documents', 'in_progress', 'Checking documents', 'The member check passed; the document checklist runs next.'),
   API_INCOMPLETE: status('documents', 'in_progress', 'Documents missing', 'Documents are missing; the claim will be revised with suspense and the customer asked.'),
   API_DOCUMENTS_REVIEW: status('documents', 'needs_review', 'Check before emailing customer', "Documents look incomplete, but the AI wasn't sure. The customer has NOT been emailed and IAS is unchanged: check the documents, then send the request or override the check."),
+  API_DOCUMENTS_UNSURE: status('documents', 'needs_review', "Check the AI's documents finding", "All documents passed, but the AI wasn't sure about some of them (see the review points). Check them against the documents, then confirm to continue; IAS is unchanged."),
   API_DOCUMENTS_VERIFIED: status('documents', 'in_progress', 'Documents complete', 'Member and documents are checked; the IAS revision is being prepared.'),
   API_CLAIM_PAYLOAD_PREPARED: status('claim', 'in_progress', 'Revision prepared', 'The IAS claim revision is built and about to be sent.'),
   API_CLAIM_SUSPENDED: status('claim', 'waiting_customer', 'Documents incomplete', "Revised in IAS with suspense; the customer was asked for the missing documents and the case waits for their reply."),

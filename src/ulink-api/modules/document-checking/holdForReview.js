@@ -20,4 +20,13 @@ function unsureDocumentPoints(documentCheckResult) {
     .map((item) => `${item.label || item.code}${item.confidence != null ? ` (AI confidence ${item.confidence})` : ' (could not read clearly)'}`);
 }
 
-module.exports = { unsureDocumentPoints };
+// Switch "documents the AI passed but wasn't sure about: a person confirms first" (settings.holdUnsureDocumentPass,
+// SYSTEM_4 E4-09): the passed checklist items the AI scored at or below the threshold. Items decided by a rule alone
+// carry no score and never count here.
+function unsurePassedPoints(documentCheckResult) {
+  return (documentCheckResult?.checklist || [])
+    .filter((item) => item.passed === true && isLowConfidence(item.confidence))
+    .map((item) => `${item.label || item.code} (AI confidence ${item.confidence})`);
+}
+
+module.exports = { unsureDocumentPoints, unsurePassedPoints };
