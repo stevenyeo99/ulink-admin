@@ -152,8 +152,9 @@ api-claim-stp → api-email-sender.
 
 Only what differs from the email case is described; the checks themselves are the same code.
 
-**No inbox:** when IMAP is not configured (`IMAP_HOST` empty), the email-intake step shows *Skipped: inbox not
-configured* and the run completes normally; customer replies then never reach the case (SYSTEM_4, API go-live).
+**No inbox:** when IMAP is not configured (`IMAP_HOST` empty), or *Read the mailbox (IMAP)* is switched off on the
+STP settings page, the email-intake step shows *Skipped* with the reason and the run completes normally; customer
+replies then never reach the case (SYSTEM_4, API go-live). Sending email is not affected.
 
 | # | Step | What happens | Status (label) |
 |---|---|---|---|
@@ -316,6 +317,7 @@ Team emails go to `INTERNAL_REVIEW_EMAIL` (+ the route's CC), start with "(ULINK
 | AI confidence threshold | Console → STP settings | 70% | At or below: the AI counts as unsure (4.5) |
 | Work on email cases / API cases | Console → STP settings | On | Off: that pipeline doesn't run (cron or Run) and its tab is hidden on the work pages; its cases are kept |
 | API cases: email the customer about missing documents | Console → STP settings | On | Off: ULINK contacts the customer; team still emailed (section 3) |
+| Read the mailbox (IMAP) | Console → STP settings | On | Off: email-intake is skipped in both pipelines (no `.env` change, no restart) |
 | `IMAP_HOST` | `.env` | — | Empty: no inbox — email-intake is skipped |
 | `CONSOLE_UPLOAD_METHOD` | `.env` | `folder` | `folder` or `cl-upload` |
 | `CL_UPLOAD_URL`, `CL_UPLOAD_API_KEY` | `.env` | — | cl-upload API |

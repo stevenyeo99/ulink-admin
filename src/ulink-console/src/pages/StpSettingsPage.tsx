@@ -41,6 +41,11 @@ const CASE_SWITCHES: { key: SwitchKey; title: string; text: string }[] = [
     text: "Off: the API pipeline doesn't run (scheduled or Run) and the API tab is hidden on the work pages. API cases already in the system are kept, untouched.",
   },
   {
+    key: 'mailboxEnabled',
+    title: 'Read the mailbox (IMAP)',
+    text: "Off: incoming email is not read — new email claims and customer replies to API emails stay in the mailbox. Sending email is not affected. (With no mailbox set up on the server, it isn't read either way.)",
+  },
+  {
     key: 'apiSendMissingDocumentsEmail',
     title: 'API cases: email the customer about missing documents',
     text: 'Off: the customer is not emailed — the team gets the list and contacts the customer. The claim is still suspended in IAS as usual.',

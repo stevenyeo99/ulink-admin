@@ -7,6 +7,7 @@ const { queueDedupedTask } = require('../shared/emailTaskQueue');
 const { datePathSegments } = require('../shared/datePathSegments');
 const { extractEmailBodyLinkedDocumentUrls, fetchLinkedDocument } = require('../claim-recognition/linkedDocuments');
 const logger = require('../../utils/logger');
+const { getSettings } = require('../settings/settings');
 
 const BLOCK_NAME = 'email-intake';
 
@@ -248,16 +249,18 @@ async function queueNoAttachmentReminder(transaction, caseId, triggeringMessageI
   });
 }
 
-// No inbox connected (SYSTEM_4 E4-02 — API-only go-live has no IMAP): with the IMAP driver and no
-// IMAP_HOST there is nothing to read. The pipelines skip this step on it (modules/pipeline/service.js);
-// a direct /run says so instead of failing on a connection error.
-function notConfiguredReason() {
-  return config.channel.driver === 'imap_smtp' && !config.imap.host ? 'inbox not configured' : null;
+// Why there is no mailbox to read here, or null (SYSTEM_4 E4-02 — API-only go-live has no inbox): the IMAP driver
+// with no IMAP_HOST, or *Read the mailbox* switched off on the STP settings page. The pipelines skip this step on
+// it (modules/pipeline/service.js); a direct /run says so instead of failing on a connection error.
+async function notConfiguredReason() {
+  if (config.channel.driver === 'imap_smtp' && !config.imap.host) return 'inbox not configured (IMAP_HOST is empty)';
+  if (!(await getSettings()).mailboxEnabled) return 'mailbox switched off (STP settings)';
+  return null;
 }
 
 async function run() {
-  const notConfigured = notConfiguredReason();
-  if (notConfigured) throw new Error(`email-intake: ${notConfigured} (IMAP_HOST is empty)`);
+  const notConfigured = await notConfiguredReason();
+  if (notConfigured) throw new Error(`email-intake: ${notConfigured}`);
   const results = await getChannelAdapter().fetchNewSubmissions(persistSubmission);
   const processed = results.filter((r) => r.ok).length;
   const errors = results.filter((r) => !r.ok).map((r) => ({ externalId: r.externalId, error: r.error }));

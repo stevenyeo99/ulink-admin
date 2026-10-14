@@ -84,6 +84,9 @@ Source: Vundick 2.
 - **Now:** the inbox reader (`email-intake`) is a step of the API pipeline; with no IMAP configured it fails every run.
 - **Requirement:** when IMAP is not configured on the server, the inbox step is skipped with the reason "inbox not
   configured"; the API pipeline completes normally.
+- **Added 2026-10-14 (A1b, owner):** setting *Read the mailbox (IMAP)* (STP settings, default on). Off: the inbox
+  step is skipped with "mailbox switched off (STP settings)" — no `.env` edit or restart; useful when two
+  environments share one mailbox. Sending email is not affected.
 - **Acceptance:** API pipeline run with no IMAP settings ends `COMPLETED`, the inbox step shows SKIPPED.
 
 #### E4-03 Missing-documents email to customer: switch off — P1, S
@@ -414,9 +417,10 @@ Source: owner, 2026-10-14 (context-limit concern: documents differ in format and
 | Vitamins/supplements block STP | on | E4-10 |
 | Ageing limit (case highlighted as overdue) | to agree, e.g. 2 working days (Q20) | E4-19, E4-22 |
 | Case claim time-out (released if no action) | to agree, e.g. 30 min (Q21) | E4-22 |
-| Inbox | from server config (IMAP set or not) — not a console setting | E4-02 |
+| Read the mailbox (IMAP) | on | E4-02 (A1b) |
+| Inbox | from server config (IMAP set or not) | E4-02 |
 
-Go-live (production) values: Email off, API on, missing-documents email off, no IMAP.
+Go-live (production) values: Email off, API on, mailbox off, missing-documents email off.
 
 ## 6. Open questions
 
@@ -490,6 +494,7 @@ Ticked when the item is done; the phase status above changes when all are done a
 
 **Phase A — Switches and quick wins** (approved 2026-10-14; decisions D1–D4 as recommended)
 - [x] A1 · E4-02 Skip the inbox step when IMAP is not configured (both pipelines; step SKIPPED "inbox not configured")
+- [x] A1b · E4-02 *Read the mailbox (IMAP)* switch on the STP settings page (owner, 2026-10-14)
 - [x] A2 · E4-01 Email / API cases on/off — settings, pipeline guard (cron + button), console tabs and page default
 - [x] A3 · E4-03 API missing-documents customer email off — skip with case event; team email for no-documents cases
 - [x] A4 · E4-07 Confidence threshold setting (default 70%, ≤) for review points and held emails

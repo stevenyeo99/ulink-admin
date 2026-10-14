@@ -118,9 +118,9 @@ async function runStep(pipelineRunId, blockName, service, sequence) {
     status: 'PENDING',
   });
 
-  // A step whose service isn't set up on this server (email-intake with no inbox) is SKIPPED with the
-  // reason, not FAILED — a run without an inbox is normal (SYSTEM_4 E4-02), not an error every time.
-  const notConfigured = service.notConfiguredReason?.();
+  // A step whose service isn't set up here (email-intake with no inbox, or the mailbox switched off) is SKIPPED
+  // with the reason, not FAILED — a run without an inbox is normal (SYSTEM_4 E4-02), not an error every time.
+  const notConfigured = await service.notConfiguredReason?.();
   if (notConfigured) {
     await step.update({ status: 'SKIPPED', skipReason: notConfigured, finishedAt: new Date() });
     return;
