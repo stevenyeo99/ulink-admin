@@ -234,12 +234,21 @@ export interface CaseOverrideInfo {
   findings: Record<string, string>;
 }
 
+/** "Next" at the top of the case page (ulink-api modules/assessment-summary/nextAction.js, SYSTEM_4 E4-21). */
+export interface NextAction {
+  text: string;
+  who: 'Claims team' | 'JD3' | 'Customer' | null;
+  /** A person has to do something now. */
+  act: boolean;
+}
+
 export interface GetCaseResponse {
   case: CaseDetail;
   events: CaseEvent[];
   documents: CaseDocument[];
   override: CaseOverrideInfo;
   assessmentSummary: AssessmentSummary;
+  nextAction: NextAction;
   /** API cases only. Their CaseDetail fields (extractedFields, …) are filled from these by the API. */
   apiSteps?: ApiCaseStep[];
 }

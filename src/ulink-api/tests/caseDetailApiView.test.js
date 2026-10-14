@@ -61,8 +61,9 @@ describe('getCase', () => {
 
     const body = await call();
 
-    expect(Object.keys(body)).toEqual(['case', 'events', 'documents', 'assessmentSummary', 'override']);
+    expect(Object.keys(body)).toEqual(['case', 'events', 'documents', 'assessmentSummary', 'nextAction', 'override']);
     expect(body.override).toMatchObject({ allowed: true, target: 'MEMBER_VERIFIED' });
+    expect(body.nextAction).toMatchObject({ who: 'Customer', act: false }); // SYSTEM_4 E4-21: "Next" on the case page
     expect(body.case).toBe(emailCase); // the model instance itself, untouched
     expect(ApiCaseStep.findAll).not.toHaveBeenCalled();
   });

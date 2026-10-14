@@ -363,6 +363,11 @@ confirm with ULINK.
   status, and **one line of next action** (e.g. "AI unsure about invoice date — check page 2, then accept or
   correct"), built from the existing journey / assessment summary (no LLM call).
 - **Acceptance:** a user knows what to do on a case without reading the history.
+- **Built 2026-10-14 (C1, decisions as recommended — case page only; no list column yet; English):** case header
+  shows claimant name, benefit type(s), claimed amount, received / updated, and a **Next** box — one sentence per
+  status from `assessment-summary/nextAction.js` (rules over the status, open review points with confidence, STP
+  reasons, the last event's message, the missing-documents setting), with who acts (Claims team / JD3 / Customer);
+  amber when a person must act. Returned as `nextAction` on `GET /api/cases/:id`.
 
 #### E4-22 Work queue: ownership, ordering, search — P1, M
 - **Requirement:**
@@ -376,6 +381,10 @@ confirm with ULINK.
 #### E4-23 One confidence look everywhere — P2, S
 - **Requirement:** one badge used on queue, case page and dashboard: green at or above the threshold, amber unsure,
   red failed — always the number and the reason (on hover / tap), never colour alone.
+- **Built 2026-10-14 (C2):** `ConfidenceBadge` (console) — "62% · unsure" (amber, at or below the threshold read from
+  the STP settings), "85% · sure" (green), "92% · issue" (red, the result itself failed); hover gives the threshold. Used
+  wherever a confidence is shown today: the assessment lines and the document checklist. Lists and the dashboard pick
+  it up when they show confidences (E2, E6). No console test runner — checked by type-check and lint.
 
 #### E4-24 Single case timeline — P2, S–M
 - **Requirement:** AI steps, human actions (who, what, comment), IAS calls, uploads and emails in one dated list on
@@ -495,7 +504,7 @@ sending email, changing data in a shared DB.
 |---|---|---|---|---|---|
 | **A. Switches and quick wins** | E4-02 no inbox, E4-01 Email/API on/off, E4-03 missing-documents email off, E4-07 threshold setting; E4-05 Burmese (release), E4-06 chronic ICD (data entry) | ≈ 3–4 days | API cases run alone, without inbox or failing runs; staff email customers themselves; one adjustable threshold | — (Q3 wording only); ICD list for E4-06 | **Done — awaiting review** (A6 blocked on ULINK's ICD list) |
 | **B. Confidence gate** | E4-09 unsure never passes, E4-10 vitamins → review / no STP, E4-27 token budget | ≈ 3 days | Nothing unsure, no vitamin claim, no over-long claim goes STP or passes unchecked | Q4, Q9 (Q14 optional) | **Done — awaiting review** (B1, B2, B3) |
-| **C. Console basics** | E4-21 case header next action, E4-23 confidence badge, E4-11 comment on every action | ≈ 3–4 days | Users see why a case is here and what to do; every action explained | — | Not started |
+| **C. Console basics** | E4-21 case header next action, E4-23 confidence badge, E4-11 comment on every action | ≈ 3–4 days | Users see why a case is here and what to do; every action explained | — | **In progress** — one item at a time; C1, C2 done |
 | **D. Measurement baseline** | E4-26 AI call log + prompt versions (migration `ulink_llm_calls`) | ≈ 2–3 days | Every AI answer traceable to prompt and model; "before" numbers for E3 | — | Not started |
 | **E1. Upload → re-check** | E4-04 | M | Incomplete API case recovers without an inbox | Q1, Q2, Q5, Q12 | Not started |
 | **E2. Work queue** | E4-22 claim / assign, ordering, search | M | No two people on one case; oldest first; find any case fast | Q21 | Not started |
@@ -527,8 +536,8 @@ Ticked when the item is done; the phase status above changes when all are done a
 - [x] B4 · Tests, docs, log, tracker (with each item)
 
 **Phase C — Console basics**
-- [ ] C1 · E4-21 Case header with next action
-- [ ] C2 · E4-23 One confidence badge everywhere
+- [x] C1 · E4-21 Case header with next action (claimant · benefit · amount; Next box, who acts)
+- [x] C2 · E4-23 One confidence badge (assessment lines, document checklist)
 - [ ] C3 · E4-11 Comment required on every manual action
 - [ ] C4 · Tests, build, docs, log, tracker
 

@@ -239,7 +239,7 @@ See 2.5–2.6. Normal wait 15–30 minutes; flagged after 2 hours; always keeps 
 
 | When | Where | What the person does |
 |---|---|---|
-| Any case needing a person | **Review queue** (grouped by reason, oldest first) | Open the case, read "why the case went this way" and the review points |
+| Any case needing a person | **Review queue** (grouped by reason, oldest first) | Open the case: the header shows the claimant, benefit, amount and **Next** — what to do and who does it (amber when a person must act); then "why the case went this way" and the review points |
 | *Member check issue* | Case page | **Override and continue** (reason + finding) — or fix IAS; the case re-checks every run |
 | *Documents incomplete* | Case page | **Override and continue** if the documents are fine |
 | *Check before emailing customer* | Case page | **Send the request to the customer**, or **Override and continue** |

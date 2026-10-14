@@ -15,7 +15,7 @@ import { JsonViewer } from '../components/panel/JsonViewer';
 import { ChecklistTable } from '../components/panel/ChecklistTable';
 import { AssessmentSummaryPanel, CaseJourneyPanel } from '../components/panel/AssessmentSummaryPanel';
 import { useCaseStatuses } from '../hooks/useCaseStatuses';
-import type { ChecklistItem } from '../types/case';
+import type { CaseDetail, ChecklistItem, NextAction } from '../types/case';
 
 // Labels for member-verification's checks.hard object (modules/member-verification/checks.js)
 // — that module is deliberately pure/no-I/O, so display wording belongs here, not there.
@@ -41,6 +41,31 @@ function Section({ title, children, className }: { title: string; children: Reac
   );
 }
 
+// The case at a glance (SYSTEM_4 E4-21): who claims, which benefit(s), how much — each only once known.
+function caseFacts(c: CaseDetail): string[] {
+  const fields = (c.extractedFields ?? {}) as { claimant?: { claimant_name?: string | null }; claim?: { total_claim_amount?: number | null } };
+  const name = fields.claimant?.claimant_name;
+  const benefits = [...new Set((c.claimPrepMeta?.lines ?? []).map((l) => l.pick?.benefitType).filter((b): b is string => typeof b === 'string'))];
+  const amount = fields.claim?.total_claim_amount;
+  return [name, benefits.join(', '), amount != null ? `${Number(amount).toLocaleString('en-US')} MMK` : null].filter((f): f is string => Boolean(f));
+}
+
+// "Next": what has to happen to this case and who does it — amber when a person has to act, grey otherwise.
+function NextActionBox({ next }: { next: NextAction }) {
+  return (
+    <div
+      className={clsx(
+        'mt-3 rounded-lg border-l-4 px-4 py-3 text-sm',
+        next.act ? 'border-ulink-orange bg-ulink-orange/5 text-slate-800' : 'border-slate-300 bg-slate-50 text-slate-600'
+      )}
+    >
+      <span className="font-semibold">Next: </span>
+      {next.text}
+      {next.who && <span className="ml-2 whitespace-nowrap text-xs text-slate-500">({next.who})</span>}
+    </div>
+  );
+}
+
 /**
  * One case (docs/imp/demo/API DAY1/PREV_FEEDBACK/CONSOLE_DASHBOARD_DESIGN.md, step 5). The reviewer view comes
  * first — what the AI decided and why (the assessment already covers every check), the documents, the
@@ -62,7 +87,7 @@ export function CaseDetailPage() {
   if (isLoading) return <div className="p-6 text-sm text-slate-400">Loading…</div>;
   if (isError || !data) return <div className="p-6 text-sm text-red-600">Couldn't load this case. It may have been removed.</div>;
 
-  const { case: caseRecord, events, documents, apiSteps, assessmentSummary, override } = data;
+  const { case: caseRecord, events, documents, apiSteps, assessmentSummary, override, nextAction } = data;
   const isApi = caseRecord.source === 'API';
   const statusLabel = (code: string | null) => (code ? info(code).label : '—');
 
@@ -84,11 +109,12 @@ export function CaseDetailPage() {
           )}
           {caseRecord.tpaCaseNumber && <span className="text-sm text-slate-700">{caseRecord.tpaCaseNumber}</span>}
         </div>
-        <p className="mt-2 text-sm text-slate-500">
+        <p className="mt-2 text-sm text-slate-700">{caseFacts(caseRecord).join(' · ')}</p>
+        <p className="mt-1 text-sm text-slate-500">
           {isApi ? 'API case' : `Email case${caseRecord.recognizedType ? `, ${caseRecord.recognizedType}` : ''}`}. Received{' '}
           {formatTimestamp(caseRecord.createdAt)}, last updated {formatTimestamp(caseRecord.updatedAt)}.
         </p>
-        <p className="mt-1 text-sm text-slate-600">{info(caseRecord.currentStatus).description}</p>
+        {nextAction ? <NextActionBox next={nextAction} /> : <p className="mt-1 text-sm text-slate-600">{info(caseRecord.currentStatus).description}</p>}
       </header>
 
       <CaseJourneyPanel summary={assessmentSummary} />

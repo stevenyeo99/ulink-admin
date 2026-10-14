@@ -1,6 +1,7 @@
 import { AlertTriangle, CheckCircle2, Route } from 'lucide-react';
 import clsx from 'clsx';
 import type { AssessmentLine, AssessmentOverride, AssessmentSummary } from '../../types/case';
+import { ConfidenceBadge } from '../common/ConfidenceBadge';
 
 const STATUS_PILL: Record<AssessmentLine['status'], string> = {
   ok: 'bg-ulink-teal/15 text-ulink-teal-dark',
@@ -128,10 +129,8 @@ export function AssessmentSummaryPanel({ summary }: { summary: AssessmentSummary
               <span className={clsx('rounded-full px-2 py-0.5 text-xs font-semibold', STATUS_PILL[line.status])}>
                 {line.status === 'not_checked' ? 'Not checked' : line.status === 'issue' ? 'Issue' : 'OK'}
               </span>
-              <span className="text-[11px] text-slate-400">
-                {line.verified}
-                {line.confidence != null && ` · ${Math.round(Number(line.confidence) * 100)}%`}
-              </span>
+              <span className="text-[11px] text-slate-400">{line.verified}</span>
+              {line.confidence != null && <ConfidenceBadge confidence={line.confidence} failed={line.status === 'issue'} />}
             </div>
           </li>
         ))}

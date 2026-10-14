@@ -1,6 +1,7 @@
 import { Check, Minus, X } from 'lucide-react';
 import clsx from 'clsx';
 import type { ChecklistItem } from '../../types/case';
+import { ConfidenceBadge } from '../common/ConfidenceBadge';
 
 // `passed` is a tri-state, not a boolean: `null` means the check couldn't be evaluated
 // (e.g. a judgment that never ran because an upstream field was missing), which is a
@@ -24,7 +25,9 @@ function ChecklistRow({ item, reason }: { item: ChecklistItem; reason?: string |
         <p className="text-slate-700">
           {item.label}
           {item.confidence != null && (
-            <span className="ml-2 text-xs font-medium text-slate-400">{Math.round(item.confidence * 100)}% confidence</span>
+            <span className="ml-2">
+              <ConfidenceBadge confidence={item.confidence} failed={item.passed === false} />
+            </span>
           )}
         </p>
         {note && <p className="mt-0.5 text-xs text-slate-500">{note}</p>}

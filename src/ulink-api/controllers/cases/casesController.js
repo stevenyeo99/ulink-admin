@@ -4,6 +4,7 @@ const { OVERRIDE_TARGETS, OVERRIDE_FINDINGS, findingsFor, overrideCheck, overrid
 const { todayInIasTimezone } = require('../../modules/shared/iasDates');
 const { apiCaseView } = require('../../modules/api-pipeline/caseView');
 const { buildAssessmentSummary } = require('../../modules/assessment-summary/summary');
+const { nextAction } = require('../../modules/assessment-summary/nextAction');
 const { queueEntry, REASON_ORDER } = require('../../modules/review-queue/queue');
 const { CASE_STATUSES, MODULES, GROUPS, codesInGroup } = require('../../modules/case-status/catalog');
 
@@ -302,10 +303,15 @@ async function getCase(req, res) {
   // assessmentSummary: the explanation trail (what was decided, why, how sure) — built at read time
   // from the same case fields the page shows, so it is always current. override: whether a
   // reviewer can let this case past its check, and if not, why (modules/case-override/override.js).
-  const reviewInfo = (fields) => ({
-    assessmentSummary: buildAssessmentSummary(fields, { overrides: overridesFromEvents(events) }),
-    override: { ...overrideCheck(fields.currentStatus, fields), findings: findingsFor(fields.currentStatus) },
-  });
+  // nextAction: what has to happen next and who does it, in one sentence — the top of the case page (SYSTEM_4 E4-21).
+  const reviewInfo = (fields) => {
+    const assessmentSummary = buildAssessmentSummary(fields, { overrides: overridesFromEvents(events) });
+    return {
+      assessmentSummary,
+      nextAction: nextAction(fields, assessmentSummary, events),
+      override: { ...overrideCheck(fields.currentStatus, fields), findings: findingsFor(fields.currentStatus) },
+    };
+  };
   if (caseRecord.source !== 'API') {
     return res.json({ case: caseRecord, events, documents, ...reviewInfo(caseRecord) });
   }
