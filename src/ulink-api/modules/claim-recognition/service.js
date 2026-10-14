@@ -6,7 +6,7 @@ const config = require('../../config');
 const { getStorageAdapter } = require('../../storage');
 const { getEnabledRoutes } = require('./routeCatalog');
 const { preparePageImages } = require('./rasterize');
-const { transcribePage, synthesizeJson } = require('./llmClient');
+const { transcribePage, synthesizeJson, DocumentsTooLongError } = require('./llmClient');
 const { extractLinkedDocumentUrls, fetchLinkedDocument } = require('./linkedDocuments');
 const { queueDedupedTask } = require('../shared/emailTaskQueue');
 const { gatherAttachments } = require('../shared/gatherAttachments');
@@ -526,7 +526,7 @@ async function decideRoute(transcriptChunks, emailContext, routes) {
     transcriptChunks.join('\n\n'),
   ].join('\n');
 
-  const parsed = await synthesizeJson({ systemPrompt: ROUTE_DECISION_PROMPT, userText, jsonSchema: responseSchema });
+  const parsed = await synthesizeJson({ systemPrompt: ROUTE_DECISION_PROMPT, userText, jsonSchema: responseSchema, label: 'route-decision' });
 
   const validate = ajv.compile(responseSchema);
   if (!validate(parsed)) {
@@ -547,7 +547,7 @@ async function extractFields(transcriptChunks, matchedRoute) {
   const responseSchema = matchedRoute.extractionSchema;
   const userText = ['Page transcripts:', transcriptChunks.join('\n\n')].join('\n');
 
-  const parsed = await synthesizeJson({ systemPrompt: EXTRACT_FIELDS_PROMPT, userText, jsonSchema: responseSchema });
+  const parsed = await synthesizeJson({ systemPrompt: EXTRACT_FIELDS_PROMPT, userText, jsonSchema: responseSchema, label: 'extract-fields' });
 
   const validate = ajv.compile(responseSchema);
   if (!validate(parsed)) {
@@ -566,7 +566,18 @@ async function extractFields(transcriptChunks, matchedRoute) {
  * that isn't a Case at all (a dev-only local-file preview) can reuse the exact same logic
  * instead of a second, drifting copy of it.
  */
+// The whole claim's text is sent twice (route decision, field extraction). Too long for the model's context: a person
+// reads it ("Needs manual reading") — never a call with pages cut off (SYSTEM_4 E4-27).
 async function recognizeFromTranscripts(transcriptChunks, emailContext, routes) {
+  try {
+    return await recognizeWithinContext(transcriptChunks, emailContext, routes);
+  } catch (error) {
+    if (!(error instanceof DocumentsTooLongError)) throw error;
+    return { outcome: 'MANUAL_REVIEW', recognizedType: null, reasonCode: 'DOCUMENTS_TOO_LONG', message: error.message, extractedFields: null };
+  }
+}
+
+async function recognizeWithinContext(transcriptChunks, emailContext, routes) {
   const routeResult = await decideRoute(transcriptChunks, emailContext, routes);
   if (routeResult.schemaValidationError) {
     return {
@@ -744,6 +755,7 @@ module.exports = {
   run,
   recognizeCase,
   recognizeFromPdfPaths,
+  recognizeFromTranscripts,
   decideRoute,
   extractFields,
   transcribePages,

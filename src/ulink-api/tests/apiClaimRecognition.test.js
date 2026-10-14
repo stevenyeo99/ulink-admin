@@ -96,3 +96,14 @@ it('fails (retried next run) when the route is missing or a document is gone', a
   await expect(job.process({ caseRecord, input })).rejects.toThrow(/Expected 2 case documents, found 1/);
   expect(extractFields).not.toHaveBeenCalled();
 });
+
+// SYSTEM_4 E4-27: text too long for the model's context goes to a person — never an extraction with pages cut off.
+it('sends documents too long for the AI to manual review, with the size', async () => {
+  const { DocumentsTooLongError } = require('../modules/claim-recognition/llmClient');
+  extractFields.mockRejectedValue(new DocumentsTooLongError(31000, 24976));
+  const result = await job.process({ caseRecord, input });
+  expect(result).toMatchObject({
+    nextStatus: 'API_MANUAL_REVIEW',
+    output: { reasonCode: 'DOCUMENTS_TOO_LONG', pageCount: 2, estimatedTokens: 31000, message: 'Documents too long for the AI: about 31,000 tokens, limit 24,976. A person reads them.' },
+  });
+});

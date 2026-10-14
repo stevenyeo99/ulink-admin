@@ -153,7 +153,38 @@ async function transcribePage({ imageBuffer, instruction }) {
  * above. Judgment-type callers keep using the shared config value for now — that's a
  * separate tuning decision, not addressed by this claim-recognition-scoped change.
  */
-async function synthesizeJson({ systemPrompt, userText, jsonSchema, reasoningEffort = config.llm.reasoningEffort }) {
+// A text call too big for the model's context (SYSTEM_4 E4-27). Raised before anything is sent: claim recognition
+// turns it into "Needs manual reading" — never a call with part of the documents cut off.
+class DocumentsTooLongError extends Error {
+  constructor(estimatedTokens, limit) {
+    super(`Documents too long for the AI: about ${estimatedTokens.toLocaleString('en-US')} tokens, limit ${limit.toLocaleString('en-US')}. A person reads them.`);
+    this.name = 'DocumentsTooLongError';
+    this.estimatedTokens = estimatedTokens;
+    this.limit = limit;
+  }
+}
+
+// Token count without asking the model: Latin text ≈ 3.5 characters a token; Burmese and any other non-Latin
+// character counted as a whole token.
+// ponytail: a character estimate, not the model's tokenizer — calibrate from the "LLM call size" log; LM Studio's
+// overflow set to "stop at limit" is the backstop.
+function estimateTokens(text) {
+  let latin = 0;
+  let other = 0;
+  for (const ch of String(text ?? '')) {
+    if (ch.codePointAt(0) < 0x250) latin += 1;
+    else other += 1;
+  }
+  return Math.ceil(latin / 3.5) + other;
+}
+
+// label: names the call in the size log (claim recognition's two whole-claim calls); unlabelled calls are small.
+async function synthesizeJson({ systemPrompt, userText, jsonSchema, reasoningEffort = config.llm.reasoningEffort, label = null }) {
+  const estimatedTokens = estimateTokens(systemPrompt) + estimateTokens(userText) + estimateTokens(JSON.stringify(jsonSchema));
+  const limit = config.llm.contextTokens - config.llm.outputReserveTokens;
+  if (label) logger.info('LLM call size', { call: label, estimatedTokens, limit, userChars: userText.length });
+  if (estimatedTokens > limit) throw new DocumentsTooLongError(estimatedTokens, limit);
+
   const data = await postChatCompletion({
     model: config.llm.assistantModel,
     messages: [
@@ -240,4 +271,4 @@ function extractJson(content) {
   throw lastError || new Error('Unable to parse LLM JSON response');
 }
 
-module.exports = { transcribePage, synthesizeJson };
+module.exports = { transcribePage, synthesizeJson, estimateTokens, DocumentsTooLongError };

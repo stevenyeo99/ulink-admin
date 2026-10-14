@@ -48,6 +48,10 @@ module.exports = {
     timeoutMs: parseInt(process.env.LLM_TIMEOUT_MS, 10) || 120000,
     maxImages: parseInt(process.env.LLM_MAX_IMAGES, 10) || 6,
     maxRequestBytes: parseInt(process.env.LLM_MAX_REQUEST_BYTES, 10) || 25 * 1000 * 1000,
+    // The context length the model is loaded with in LM Studio, and the part of it kept for the answer. A text call
+    // that wouldn't fit is refused before it is sent (SYSTEM_4 E4-27) — LM Studio would otherwise cut the text.
+    contextTokens: parseInt(process.env.LLM_CONTEXT_TOKENS, 10) || 30976,
+    outputReserveTokens: parseInt(process.env.LLM_OUTPUT_RESERVE_TOKENS, 10) || 6000,
   },
 
   embedding: {

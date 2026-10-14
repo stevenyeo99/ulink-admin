@@ -70,7 +70,7 @@ switch is the quick way to stop one environment reading a mailbox it shares with
 | Symptom | Likely cause | Action |
 |---|---|---|
 | Stuck at *Waiting to be read* / any system status | Pipeline not running, step failing, or lock left by a crash | Check the latest run; fix the error; release the lock |
-| *Needs manual reading* | AI not confident about the claim type, or its reading didn't fit the form | Look at the documents; reset once fixed, or handle manually |
+| *Needs manual reading* | AI not confident about the claim type, its reading didn't fit the form, or "Documents too long for the AI" (the claim's text exceeds the model's context) | Look at the documents; reset once fixed, or handle manually |
 | *Member check issue* | Mismatch with IAS (every problem listed) | Fix IAS (the case re-checks every run) or *Override and continue* |
 | *Documents incomplete* | Missing items; customer emailed | Wait for the reply (it restarts the case), or override if the AI was wrong |
 | *Check before emailing customer* | AI unsure a document is missing (switch #2) | *Send the request to the customer*, or override |
@@ -114,3 +114,13 @@ Rollback: `npm run db:migrate:undo` steps back one migration at a time; check ea
 - `src/ulink-api/logs/combined.log` and `error.log` (Winston), plus the console output.
 - Pipeline and step results: `ulink_pipeline_runs`, `ulink_pipeline_run_steps`; API case steps: `ulink_api_case_steps`.
 - Per case: `ulink_case_events` (the case history).
+
+## LLM context (long claims)
+
+The whole claim's text goes to the model in one call. `LLM_CONTEXT_TOKENS` must equal the context length the model is
+loaded with in LM Studio (UAT: 30976); `LLM_OUTPUT_RESERVE_TOKENS` (6000) is kept for the answer. A claim estimated over
+the rest goes to *Needs manual reading* ("Documents too long for the AI") instead of being sent. The estimate counts
+characters, not the model's tokenizer; each whole-claim call logs `LLM call size` (`estimatedTokens`, `limit`) — check
+those lines to see real claim sizes. Backstop on the LM Studio machine: model settings → *Context Overflow* → **Stop at
+limit** (not *Truncate middle* / *Rolling window*), so an underestimate errors instead of silently cutting pages.
+Change `LLM_CONTEXT_TOKENS` whenever the model's context length is changed, then restart the API.

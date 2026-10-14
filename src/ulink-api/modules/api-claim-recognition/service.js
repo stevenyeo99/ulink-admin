@@ -3,6 +3,7 @@ const config = require('../../config');
 const { getStorageAdapter } = require('../../storage');
 const { runApiJob } = require('../api-pipeline/runApiJob');
 const { transcribePages, extractFields } = require('../claim-recognition/service');
+const { DocumentsTooLongError } = require('../claim-recognition/llmClient');
 
 // api-claim-recognition: API case workflow job 3 (docs/imp/day1/api-case-workflow.md section 6.4).
 //
@@ -67,7 +68,19 @@ async function processCase({ caseRecord, input }) {
     };
   }
 
-  const { extractedFields, schemaValidationError } = await extractFields(transcripts, route);
+  // Too long for the model's context (SYSTEM_4 E4-27): a person reads it — never a call with pages cut off.
+  let extraction;
+  try {
+    extraction = await extractFields(transcripts, route);
+  } catch (error) {
+    if (!(error instanceof DocumentsTooLongError)) throw error;
+    return {
+      output: { recognizedType: API_ROUTE_KEY, reasonCode: 'DOCUMENTS_TOO_LONG', message: error.message, pageCount: transcripts.length, estimatedTokens: error.estimatedTokens },
+      nextStatus: 'API_MANUAL_REVIEW',
+      message: `${transcripts.length} page(s): ${error.message}`,
+    };
+  }
+  const { extractedFields, schemaValidationError } = extraction;
   if (schemaValidationError) {
     return {
       output: { recognizedType: API_ROUTE_KEY, reasonCode: 'SCHEMA_VALIDATION_FAILED', message: schemaValidationError, transcripts },

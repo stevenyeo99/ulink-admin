@@ -69,7 +69,8 @@ ias-claim-preparation → ias-claim-creation → *email: JD3 / IAS rejection* �
 | **Reads** | `READY_FOR_DOCUMENT_READING` |
 | **Does** | The AI reads every page (vision), decides which claim type it is (today one route: AYAS member claim, `ayas_member_claim`) and extracts every field (claimant, policy, claim, medical, invoices, bank). |
 | **Decided by** | **AI** (with a confidence threshold) |
-| **Status** | `RECOGNIZED` *Read by AI* · `MANUAL_REVIEW` *Needs manual reading* (type matched but AI not confident, or the result didn't fit the form) · `NOT_RECOGNIZED` *Not a claim we handle* |
+| **Status** | `RECOGNIZED` *Read by AI* · `MANUAL_REVIEW` *Needs manual reading* (type matched but AI not confident, the result didn't fit the form, or the documents are too long for the AI) · `NOT_RECOGNIZED` *Not a claim we handle* |
+| **Too long** | The whole claim's text goes to the AI in one call (claim type, then fields). Before each, its size is estimated against the model's context (`LLM_CONTEXT_TOKENS` minus `LLM_OUTPUT_RESERVE_TOKENS`); too big → *Needs manual reading*, "Documents too long for the AI: about N tokens, limit M" (`DOCUMENTS_TOO_LONG`) — never a call with pages cut off. Same for API cases (`API_MANUAL_REVIEW`). |
 | **Emails** | *Recognised:* **"Claim received"** to the customer (once per case). *Not recognised:* "submission not recognised" to the sender. |
 | **Human** | *Needs manual reading* → review queue (reason *Unreadable*). |
 
@@ -334,6 +335,7 @@ Team emails go to `INTERNAL_REVIEW_EMAIL` (+ the route's CC), start with "(ULINK
 | `API_MATERIAL_GRACE_MINUTES` | `.env` | 120 | Time to wait for an API case's console images |
 | `INTERNAL_REVIEW_EMAIL` | `.env` | — | Where team emails go |
 | `CONSOLE_URL` | `.env` | — | Console address used in the "Open this case" link |
+| `LLM_CONTEXT_TOKENS` / `LLM_OUTPUT_RESERVE_TOKENS` | `.env` | 30976 / 6000 | Model context in LM Studio / part kept for the answer; a claim over the rest → *Needs manual reading* (2.2) |
 
 ---
 

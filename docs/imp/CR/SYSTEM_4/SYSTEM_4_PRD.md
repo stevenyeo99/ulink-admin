@@ -414,6 +414,13 @@ Source: owner, 2026-10-14 (context-limit concern: documents differ in format and
   - **Only if measurements show long claims are common:** label each page while reading (claim form / medical
     report / voucher / ID / other) and give each field group only its pages; map vouchers one at a time and merge.
 - **Acceptance:** a claim over budget goes to manual review with the reason; no mapping call is ever truncated.
+- **Built 2026-10-14 (B3, decisions as recommended):** `LLM_CONTEXT_TOKENS` (30976, the LM Studio model's context) and
+  `LLM_OUTPUT_RESERVE_TOKENS` (6000). Every text call estimates its size before sending (characters: Latin ≈ 3.5 a
+  token, Burmese / non-Latin one per character); over budget → `DocumentsTooLongError`, nothing sent. Claim recognition
+  (route decision + field extraction; email and API) turns it into *Needs manual reading* with reason
+  `DOCUMENTS_TOO_LONG` — "Documents too long for the AI: about N tokens, limit M. A person reads them." Each
+  whole-claim call logs `LLM call size`. API 60-page rule kept. LM Studio overflow → *Stop at limit*: documented in
+  `OPERATIONS.md`, server change for the owner. Splitting long claims only if the logged sizes show it's needed.
 
 **Not proposed:** bulk approve (risky for claims), mobile layout, per-user custom dashboards.
 
@@ -487,7 +494,7 @@ sending email, changing data in a shared DB.
 | Phase | Items | Effort | What it improves | Needs first | Status |
 |---|---|---|---|---|---|
 | **A. Switches and quick wins** | E4-02 no inbox, E4-01 Email/API on/off, E4-03 missing-documents email off, E4-07 threshold setting; E4-05 Burmese (release), E4-06 chronic ICD (data entry) | ≈ 3–4 days | API cases run alone, without inbox or failing runs; staff email customers themselves; one adjustable threshold | — (Q3 wording only); ICD list for E4-06 | **Done — awaiting review** (A6 blocked on ULINK's ICD list) |
-| **B. Confidence gate** | E4-09 unsure never passes, E4-10 vitamins → review / no STP, E4-27 token budget | ≈ 3 days | Nothing unsure, no vitamin claim, no over-long claim goes STP or passes unchecked | Q4, Q9 (Q14 optional) | **In progress** — one item at a time; B1, B2 done |
+| **B. Confidence gate** | E4-09 unsure never passes, E4-10 vitamins → review / no STP, E4-27 token budget | ≈ 3 days | Nothing unsure, no vitamin claim, no over-long claim goes STP or passes unchecked | Q4, Q9 (Q14 optional) | **Done — awaiting review** (B1, B2, B3) |
 | **C. Console basics** | E4-21 case header next action, E4-23 confidence badge, E4-11 comment on every action | ≈ 3–4 days | Users see why a case is here and what to do; every action explained | — | Not started |
 | **D. Measurement baseline** | E4-26 AI call log + prompt versions (migration `ulink_llm_calls`) | ≈ 2–3 days | Every AI answer traceable to prompt and model; "before" numbers for E3 | — | Not started |
 | **E1. Upload → re-check** | E4-04 | M | Incomplete API case recovers without an inbox | Q1, Q2, Q5, Q12 | Not started |
@@ -516,8 +523,8 @@ Ticked when the item is done; the phase status above changes when all are done a
 **Phase B — Confidence gate**
 - [x] B1 · E4-09 Passed but unsure → *Check the AI's documents finding*, a person confirms (switch #3; Q9: keep #1, #2)
 - [x] B2 · E4-10 Vitamins / supplements → review point, blocks STP (switch, default on)
-- [ ] B3 · E4-27 Token budget before mapping → manual review if over; LM Studio overflow = stop (server change: go-ahead)
-- [ ] B4 · Tests, docs, log, tracker
+- [x] B3 · E4-27 Token budget before mapping → manual review if over (30976 / 6000); LM Studio overflow = stop documented (owner's server change)
+- [x] B4 · Tests, docs, log, tracker (with each item)
 
 **Phase C — Console basics**
 - [ ] C1 · E4-21 Case header with next action
