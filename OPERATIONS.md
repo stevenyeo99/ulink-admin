@@ -134,3 +134,9 @@ admin; `GET /api/llm-calls/summary?days=7|30`) — calls by status, time, tokens
 old and new versions side by side after a prompt change. The prompt version is the start of the prompt text's SHA-256,
 so an edited prompt shows up as a new version. A failed log write never stops a claim (server log: "AI call log write
 failed"). Kept with no time limit for now; it holds the AI's answers, which can contain medical details.
+
+**AI baseline report:** `npm run report:baseline` (in `src/ulink-api`) writes `docs/imp/CR/SYSTEM_4/baseline_<date>.md`
+from the cases in the database it is pointed at — per checklist item how often it fails and how often the AI is unsure,
+review points, member-check results, diagnosis fallbacks, STP rate and reasons, overrides. Read-only (SELECTs only), no
+AI calls. Run it on the environment with real cases (UAT) before and after a prompt change; a different output path can
+be given: `npm run report:baseline -- /tmp/baseline.md`.
