@@ -10,6 +10,7 @@ const { transcribePage, synthesizeJson, DocumentsTooLongError } = require('./llm
 const { extractLinkedDocumentUrls, fetchLinkedDocument } = require('./linkedDocuments');
 const { queueDedupedTask } = require('../shared/emailTaskQueue');
 const { gatherAttachments } = require('../shared/gatherAttachments');
+const { forCase } = require('../llm-calls/log');
 
 const BLOCK_NAME = 'claim-recognition';
 const ajv = new Ajv({ allErrors: true });
@@ -734,7 +735,7 @@ async function run() {
   const results = [];
   for (const caseRecord of cases) {
     try {
-      const outcome = await recognizeCase(caseRecord, routes);
+      const outcome = await forCase(caseRecord.id, 'claim-recognition', () => recognizeCase(caseRecord, routes)); // AI call log: this case
       if (outcome.skipped) {
         results.push({ caseId: outcome.caseId, ok: true, skipped: true, reason: outcome.reason });
         continue;

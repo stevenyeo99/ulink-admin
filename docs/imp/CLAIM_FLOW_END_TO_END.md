@@ -314,6 +314,7 @@ Team emails go to `INTERNAL_REVIEW_EMAIL` (+ the route's CC), start with "(ULINK
 | **IAS** | `AiSummaryRemark` on every claim creation and revision |
 | **Audit copy** | Saved with the case: non-STP in the JD3 email; STP at claim creation and again at the settlement report |
 | **Case history** | Every status change, email sent, override and reset, with who and why |
+| **AI call log** (`ulink_llm_calls`) | Every call to the AI — case, job, prompt name and version (from the prompt text), model, status (ok / error / timeout / too long), time, tokens, the AI's answer and confidence. Case page → technical details → *AI calls*. Not the input text or images (already on the case). |
 
 ---
 

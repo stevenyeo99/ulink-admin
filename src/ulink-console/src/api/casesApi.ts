@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { ApprovalsResponse, CaseListQuery, CaseOverview, ReviewQueueResponse, CaseStatusCatalog, GetCaseResponse, ListCasesResponse, OverrideCaseResponse, ResetCaseResponse } from '../types/case';
+import type { ApprovalsResponse, CaseListQuery, CaseOverview, ReviewQueueResponse, CaseStatusCatalog, GetCaseResponse, ListCasesResponse, LlmCall, OverrideCaseResponse, ResetCaseResponse } from '../types/case';
 import type { Source } from '../types/pipeline';
 
 export function listCases(query: CaseListQuery = {}): Promise<ListCasesResponse> {
@@ -29,6 +29,11 @@ export function getCaseStatuses(): Promise<CaseStatusCatalog> {
 
 export function getCase(id: string): Promise<GetCaseResponse> {
   return request<GetCaseResponse>(`/api/cases/${id}`);
+}
+
+// The AI calls made for one case (casesController.js::getLlmCalls, SYSTEM_4 E4-26).
+export function getLlmCalls(id: string): Promise<{ calls: LlmCall[] }> {
+  return request<{ calls: LlmCall[] }>(`/api/cases/${id}/llm-calls`);
 }
 
 // finding: why the check was wrong (an id from the case's override.findings). Who overrode is the

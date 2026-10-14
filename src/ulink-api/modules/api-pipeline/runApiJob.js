@@ -1,4 +1,5 @@
 const { sequelize, Case, CaseEvent, ApiCaseStep } = require('../../db/models');
+const { forCase } = require('../llm-calls/log');
 
 /**
  * Runs one API case job over every case waiting at its input status. A job is a plain object:
@@ -69,7 +70,8 @@ async function runApiJob(job) {
     let input = null;
     try {
       input = await loadInputs(caseRecord.id, job.inputs, job.optionalInputs);
-      const result = await job.process({ caseRecord, input });
+      // AI calls made for this case are logged against it and this job (modules/llm-calls).
+      const result = await forCase(caseRecord.id, job.name, () => job.process({ caseRecord, input }));
       if (result.wait) {
         await recordRetryable(caseRecord.id, job.name, 'WAITING', { input, output: result.output, error: null, startedAt, finishedAt: new Date() });
         summary.waiting += 1;

@@ -124,3 +124,11 @@ characters, not the model's tokenizer; each whole-claim call logs `LLM call size
 those lines to see real claim sizes. Backstop on the LM Studio machine: model settings → *Context Overflow* → **Stop at
 limit** (not *Truncate middle* / *Rolling window*), so an underestimate errors instead of silently cutting pages.
 Change `LLM_CONTEXT_TOKENS` whenever the model's context length is changed, then restart the API.
+
+## AI call log
+
+Every call to the AI is a row in `ulink_llm_calls` (migration `20261014100000-create-llm-calls`): case, job, prompt name
+and version, model, status (`ok` / `error` / `timeout` / `too_long`), duration, tokens, the answer and its confidence.
+Per case: console → case → technical details → *AI calls*. The prompt version is the start of the prompt text's SHA-256,
+so an edited prompt shows up as a new version. A failed log write never stops a claim (server log: "AI call log write
+failed"). Kept with no time limit for now; it holds the AI's answers, which can contain medical details.

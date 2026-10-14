@@ -1,5 +1,5 @@
 const { Op, fn, col, cast, where: sqlWhere, literal } = require('sequelize');
-const { sequelize, Case, CaseEvent, CaseDocument, ApiCaseStep, EmailThread, EmailMessage, EmailAttachment } = require('../../db/models');
+const { sequelize, Case, CaseEvent, CaseDocument, ApiCaseStep, EmailThread, EmailMessage, EmailAttachment, LlmCall } = require('../../db/models');
 const { OVERRIDE_TARGETS, OVERRIDE_FINDINGS, findingsFor, overrideCheck, overridesFromEvents } = require('../../modules/case-override/override');
 const { todayInIasTimezone } = require('../../modules/shared/iasDates');
 const { apiCaseView } = require('../../modules/api-pipeline/caseView');
@@ -325,6 +325,15 @@ async function getCase(req, res) {
 }
 
 /**
+ * GET /api/cases/:id/llm-calls — every AI call made for this case, oldest first (SYSTEM_4 E4-26, modules/llm-calls):
+ * which job and prompt version, how it went, and what the AI answered. For the case page's technical details.
+ */
+async function getLlmCalls(req, res) {
+  const calls = await LlmCall.findAll({ where: { caseId: req.params.id }, order: [['createdAt', 'ASC']], limit: 500 });
+  res.json({ calls });
+}
+
+/**
  * GET /api/cases/:caseId/attachments/:attachmentId — streams one attachment's actual bytes.
  * The only place in this whole API that serves a file over HTTP; every other consumer
  * (claim-recognition's vision LLM call) reads storage internally, never over the network.
@@ -536,4 +545,4 @@ async function releaseMissingDocuments(req, res) {
   res.json({ caseId: caseRecord.id, currentStatus: 'API_INCOMPLETE' });
 }
 
-module.exports = { getCaseStatuses, getOverview, getReviewQueue, getApprovals, listCases, getCase, getAttachment, getDocument, overrideCase, resetCase, releaseMissingDocuments, OVERRIDE_TARGETS, REVIEWABLE_STATUSES };
+module.exports = { getCaseStatuses, getOverview, getReviewQueue, getApprovals, listCases, getCase, getLlmCalls, getAttachment, getDocument, overrideCase, resetCase, releaseMissingDocuments, OVERRIDE_TARGETS, REVIEWABLE_STATUSES };

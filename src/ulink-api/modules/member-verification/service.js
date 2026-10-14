@@ -8,6 +8,7 @@ const { summarizeBenefitLimits } = require('./benefitLimits');
 const { queueDedupedTask } = require('../shared/emailTaskQueue');
 const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment-summary/summary');
 const { caseBasics } = require('../assessment-summary/journey');
+const { forCase } = require('../llm-calls/log');
 
 const BLOCK_NAME = 'member-verification';
 
@@ -145,7 +146,7 @@ async function run() {
   const results = [];
   for (const caseRecord of cases) {
     try {
-      const outcome = await checkCase(caseRecord);
+      const outcome = await forCase(caseRecord.id, 'member-verification', () => checkCase(caseRecord)); // AI call log: this case
       await persistOutcome(caseRecord, outcome);
       results.push({ caseId: outcome.caseId, ok: true, outcome: outcome.outcome });
     } catch (error) {

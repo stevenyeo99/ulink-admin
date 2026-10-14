@@ -1,6 +1,6 @@
 const express = require('express');
 const { requireRole } = require('../modules/auth/auth');
-const { getCaseStatuses, getOverview, getReviewQueue, getApprovals, listCases, getCase, getAttachment, getDocument, overrideCase, resetCase, releaseMissingDocuments } = require('../controllers/cases/casesController');
+const { getCaseStatuses, getOverview, getReviewQueue, getApprovals, listCases, getCase, getLlmCalls, getAttachment, getDocument, overrideCase, resetCase, releaseMissingDocuments } = require('../controllers/cases/casesController');
 
 const router = express.Router();
 
@@ -146,6 +146,22 @@ router.get('/approvals', getApprovals);
  *         description: Case not found
  */
 router.get('/:id', getCase);
+
+/**
+ * @openapi
+ * /api/cases/{id}/llm-calls:
+ *   get:
+ *     tags: [cases]
+ *     summary: The AI calls made for one case, oldest first (SYSTEM_4 E4-26)
+ *     description: >
+ *       From ulink_llm_calls — job, prompt name and version, model, status (ok / error / timeout / too_long),
+ *       duration, tokens, the AI's answer and its confidence. Shown in the case page's technical details.
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: "{ calls: [...] }" }
+ */
+router.get('/:id/llm-calls', getLlmCalls);
 
 /**
  * @openapi

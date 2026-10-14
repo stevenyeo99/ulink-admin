@@ -7,6 +7,7 @@ const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment
 const { overridesFromEvents } = require('../case-override/override');
 const { getSettings } = require('../settings/settings');
 const { unsureDocumentPoints, unsurePassedPoints } = require('./holdForReview');
+const { forCase } = require('../llm-calls/log');
 
 const BLOCK_NAME = 'document-checking';
 
@@ -194,7 +195,7 @@ async function run() {
   const results = [];
   for (const caseRecord of cases) {
     try {
-      const outcome = await checkCase(caseRecord);
+      const outcome = await forCase(caseRecord.id, 'document-checking', () => checkCase(caseRecord)); // AI call log: this case
       await persistOutcome(caseRecord, outcome);
       results.push({ caseId: outcome.caseId, ok: true, outcome: outcome.outcome });
     } catch (error) {

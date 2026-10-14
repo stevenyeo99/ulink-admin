@@ -2,6 +2,9 @@
 // answer) is refused before anything is sent — LM Studio would otherwise cut the text and the AI would answer from
 // part of the documents. No LLM is called here: fetch is replaced and must never be reached.
 
+// The AI call log (modules/llm-calls) writes here — never to a real database from a test.
+jest.mock('../db/models', () => ({ LlmCall: { create: jest.fn() } }));
+
 const config = require('../config');
 const { synthesizeJson, estimateTokens, DocumentsTooLongError } = require('../modules/claim-recognition/llmClient');
 

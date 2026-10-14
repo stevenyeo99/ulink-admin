@@ -1,3 +1,6 @@
+// The AI call log (modules/llm-calls) writes here — never to a real database from a test.
+jest.mock('../db/models', () => ({ LlmCall: { create: jest.fn() } }));
+
 const { entityMatch, meaningMatch } = require('../modules/document-checking/identityJudgment');
 
 // Unlike documentChecking.test.js (fixture-based, instant, no network), this makes real

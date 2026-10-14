@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const config = require('../../config');
 const logger = require('../../utils/logger');
+const { recordCall } = require('../llm-calls/log');
 
 const CHAT_ENDPOINT = '/v1/chat/completions';
 
@@ -36,7 +37,10 @@ function redactImagesForLogging(body) {
  * calls concurrently and their log lines can interleave. debug level: on by default outside
  * production (config.logLevel), opt-in via LOG_LEVEL=debug in production.
  */
-async function postChatCompletion(body) {
+// call: { callType: 'vision' | 'text', prompt: the prompt text, estimatedTokens } — for the AI call log (every call is
+// recorded, success or failure: modules/llm-calls, SYSTEM_4 E4-26).
+async function postChatCompletion(body, call = {}) {
+  const record = (fields) => recordCall({ callType: call.callType || 'text', prompt: call.prompt, model: body.model, estimatedTokens: call.estimatedTokens ?? null, ...fields });
   if (!config.llm.baseUrl) {
     throw new Error('LLM_URL is required for claim-recognition');
   }
@@ -59,9 +63,11 @@ async function postChatCompletion(body) {
   } catch (error) {
     if (error.name === 'AbortError') {
       logger.debug('LLM response', { callId, durationMs: Date.now() - startedAt, error: 'timed out' });
+      record({ status: 'timeout', durationMs: Date.now() - startedAt, error: `timed out after ${config.llm.timeoutMs}ms` });
       throw new Error(`LLM request timed out after ${config.llm.timeoutMs}ms`);
     }
     logger.debug('LLM response', { callId, durationMs: Date.now() - startedAt, error: error.message });
+    record({ status: 'error', durationMs: Date.now() - startedAt, error: error.message });
     throw error;
   } finally {
     clearTimeout(timer);
@@ -70,11 +76,13 @@ async function postChatCompletion(body) {
   if (!response.ok) {
     const text = await response.text().catch(() => '');
     logger.debug('LLM response', { callId, durationMs: Date.now() - startedAt, status: response.status, body: text.slice(0, 2000) });
+    record({ status: 'error', durationMs: Date.now() - startedAt, error: `HTTP ${response.status}: ${text.slice(0, 500)}` });
     throw new Error(`LLM request failed (${response.status} ${response.statusText}): ${text.slice(0, 500)}`);
   }
 
   const data = await response.json();
   logger.debug('LLM response', { callId, durationMs: Date.now() - startedAt, payload: data });
+  record({ status: 'ok', durationMs: Date.now() - startedAt, usage: data?.usage, model: data?.model || body.model, output: data?.choices?.[0]?.message?.content ?? null });
   return data;
 }
 
@@ -127,7 +135,7 @@ async function transcribePage({ imageBuffer, instruction }) {
   };
 
   for (let attempt = 1; attempt <= TRANSCRIBE_MAX_ATTEMPTS; attempt += 1) {
-    const data = await postChatCompletion(request);
+    const data = await postChatCompletion(request, { callType: 'vision', prompt: instruction });
     const content = data?.choices?.[0]?.message?.content;
     if (typeof content === 'string' && content.trim()) {
       return content.trim();
@@ -183,7 +191,10 @@ async function synthesizeJson({ systemPrompt, userText, jsonSchema, reasoningEff
   const estimatedTokens = estimateTokens(systemPrompt) + estimateTokens(userText) + estimateTokens(JSON.stringify(jsonSchema));
   const limit = config.llm.contextTokens - config.llm.outputReserveTokens;
   if (label) logger.info('LLM call size', { call: label, estimatedTokens, limit, userChars: userText.length });
-  if (estimatedTokens > limit) throw new DocumentsTooLongError(estimatedTokens, limit);
+  if (estimatedTokens > limit) {
+    recordCall({ callType: 'text', prompt: systemPrompt, model: config.llm.assistantModel, status: 'too_long', estimatedTokens, error: `over the ${limit} token budget` });
+    throw new DocumentsTooLongError(estimatedTokens, limit);
+  }
 
   const data = await postChatCompletion({
     model: config.llm.assistantModel,
@@ -197,7 +208,7 @@ async function synthesizeJson({ systemPrompt, userText, jsonSchema, reasoningEff
       type: 'json_schema',
       json_schema: { name: 'claim_recognition_result', schema: jsonSchema, strict: true },
     },
-  });
+  }, { callType: 'text', prompt: systemPrompt, estimatedTokens });
 
   return extractJson(data?.choices?.[0]?.message?.content);
 }

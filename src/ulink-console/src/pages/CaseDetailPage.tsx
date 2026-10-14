@@ -10,6 +10,7 @@ import { JobStepsSection } from '../components/cases/JobStepsSection';
 import { EmailThreadSection } from '../components/cases/EmailThreadSection';
 import { CaseAdminActions } from '../components/cases/CaseAdminActions';
 import { CaseOverridePanel } from '../components/cases/CaseOverridePanel';
+import { LlmCallsSection } from '../components/cases/LlmCallsSection';
 import { isSuperAdmin } from '../lib/session';
 import { JsonViewer } from '../components/panel/JsonViewer';
 import { ChecklistTable } from '../components/panel/ChecklistTable';
@@ -201,6 +202,9 @@ export function CaseDetailPage() {
               <JobStepsSection steps={apiSteps ?? []} />
             </Section>
           )}
+          <Section title="AI calls">
+            <LlmCallsSection caseId={caseRecord.id} />
+          </Section>
           <Section title="Extracted fields">
             <JsonViewer value={caseRecord.extractedFields} />
           </Section>

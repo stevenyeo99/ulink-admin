@@ -234,6 +234,26 @@ export interface CaseOverrideInfo {
   findings: Record<string, string>;
 }
 
+/** One call to the AI (ulink-api ulink_llm_calls, SYSTEM_4 E4-26). */
+export interface LlmCall {
+  id: string;
+  caseId: string | null;
+  job: string | null;
+  callType: 'vision' | 'text';
+  promptName: string | null;
+  promptVersion: string | null;
+  model: string | null;
+  status: 'ok' | 'error' | 'timeout' | 'too_long';
+  durationMs: number | null;
+  promptTokens: number | null;
+  completionTokens: number | null;
+  estimatedTokens: number | null;
+  output: string | null;
+  confidence: number | null;
+  error: string | null;
+  createdAt: string;
+}
+
 /** "Next" at the top of the case page (ulink-api modules/assessment-summary/nextAction.js, SYSTEM_4 E4-21). */
 export interface NextAction {
   text: string;

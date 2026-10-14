@@ -9,6 +9,7 @@ const { aiSummaryRemark } = require('./aiSummaryRemark');
 const { overridesFromEvents } = require('../case-override/override');
 const { barcodeFields } = require('../shared/barcodeFields');
 const { buildAssessmentSummary } = require('../assessment-summary/summary');
+const { forCase } = require('../llm-calls/log');
 
 const BLOCK_NAME = 'ias-claim-preparation';
 
@@ -177,7 +178,7 @@ async function run() {
   const results = [];
   for (const caseRecord of cases) {
     try {
-      const outcome = await checkCase(caseRecord);
+      const outcome = await forCase(caseRecord.id, 'ias-claim-preparation', () => checkCase(caseRecord)); // AI call log: this case
       await persistOutcome(caseRecord, outcome);
       results.push({ caseId: outcome.caseId, ok: true });
     } catch (error) {
