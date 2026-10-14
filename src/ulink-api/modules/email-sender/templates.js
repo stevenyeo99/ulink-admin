@@ -210,15 +210,18 @@ ${SIGN_OFF}`,
 // held (switch "hold the missing-documents email when the AI is unsure"): the AI's unsure points — the
 // customer has NOT been emailed; a person decides: send the request, or override the check.
 function renderDocumentsIncomplete(payload) {
-  const { caseId, claimNo, issues = [], held } = payload;
+  const { caseId, claimNo, issues = [], held, contactCustomer } = payload;
   const ref = claimNo ? `Claim ${claimNo}` : `Case ${caseId}`;
   const list = issues.map((issue, i) => `${i + 1}. ${issue}`).join('\n');
   const intro = held?.length
     ? `ACTION NEEDED — the customer has NOT been emailed yet. The AI was unsure about: ${held.join('; ')}.
 Open the case and check the documents, then either send the customer the request below, or override the document check if the documents are fine.`
-    : "The customer has been asked for the missing documents below. No action is needed unless they don't reply.";
+    : contactCustomer
+      // API cases with the customer email switched off (SYSTEM_4 E4-03): ULINK contacts the customer.
+      ? 'ACTION NEEDED — the customer has NOT been emailed. Please contact them about the missing documents below.'
+      : "The customer has been asked for the missing documents below. No action is needed unless they don't reply.";
   return {
-    subject: `${INTERNAL_SUBJECT_PREFIX}${held?.length ? 'Check before emailing the customer' : 'Documents incomplete'} — ${ref} — ${issues.length} missing`,
+    subject: `${INTERNAL_SUBJECT_PREFIX}${held?.length ? 'Check before emailing the customer' : contactCustomer ? 'Contact the customer — documents incomplete' : 'Documents incomplete'} — ${ref} — ${issues.length} missing`,
     bodyText: `Hi team,
 
 ${intro}

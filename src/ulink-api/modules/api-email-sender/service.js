@@ -2,6 +2,7 @@ const { sequelize, Sequelize, Case, CaseEvent, ClaimRoute, EmailThread, EmailMes
 const config = require('../../config');
 const { getChannelAdapter } = require('../../channels');
 const { render } = require('../email-sender/templates');
+const { getSettings } = require('../settings/settings');
 
 // api-email-sender: sends the emails API case jobs ask for (docs/imp/day1/api-case-workflow.md 7.1).
 //
@@ -81,10 +82,46 @@ async function recordFailure(request, input, error) {
   return failed ? failed.update(fields) : ApiCaseStep.create({ caseId: request.caseId, job: JOB, status: 'FAILED', ...fields });
 }
 
+// Switch "API cases: email the customer about missing documents" off (SYSTEM_4 E4-03): ULINK staff contact the
+// customer themselves. The customer's missing-documents email is not sent — except that for a case with no console
+// images at all (api-material-download) no team email would follow, so the team gets one instead. The team's
+// documents-incomplete email (claim suspended) then says the customer was NOT emailed.
+// Returns the email to send, or null when nothing is sent.
+function withManualMissingDocuments(request, email, caseRecord) {
+  if (email.taskType === 'MISSING_DOCUMENTS') {
+    if (request.job !== 'api-material-download') return null;
+    return {
+      taskType: 'DOCUMENTS_INCOMPLETE',
+      audience: 'internal',
+      payload: { caseId: caseRecord.id, claimNo: caseRecord.claimNo, issues: email.payload?.issues || [], contactCustomer: true },
+      dedupeKey: email.dedupeKey,
+    };
+  }
+  if (email.taskType === 'DOCUMENTS_INCOMPLETE' && !email.payload?.held?.length) {
+    return { ...email, payload: { ...email.payload, contactCustomer: true } };
+  }
+  return email;
+}
+
 async function send(request) {
-  const { email } = request.output;
-  const input = { sourceStepId: request.id, sourceJob: request.job, email };
+  let { email } = request.output;
   const startedAt = new Date();
+
+  if (['MISSING_DOCUMENTS', 'DOCUMENTS_INCOMPLETE'].includes(email.taskType) && !(await getSettings()).apiSendMissingDocumentsEmail) {
+    const caseRecord = await Case.findByPk(request.caseId, { attributes: ['id', 'claimNo', 'tpaCaseNumber'] });
+    const manual = withManualMissingDocuments(request, email, caseRecord);
+    if (!manual) {
+      const input = { sourceStepId: request.id, sourceJob: request.job, email };
+      const reason = 'missing-documents request left to ULINK (manual)';
+      await sequelize.transaction(async (transaction) => {
+        await ApiCaseStep.create({ caseId: request.caseId, job: JOB, status: 'DONE', input, output: { skipped: reason }, startedAt, finishedAt: new Date() }, { transaction });
+        await CaseEvent.create({ caseId: request.caseId, blockName: JOB, newStatus: 'API_EMAIL_NOT_SENT', message: `Customer not emailed: ${reason}` }, { transaction });
+      });
+      return 'skipped';
+    }
+    email = manual;
+  }
+  const input = { sourceStepId: request.id, sourceJob: request.job, email };
 
   if (await isRepeat(request.caseId, email)) {
     await ApiCaseStep.create({ caseId: request.caseId, job: JOB, status: 'DONE', input, output: { skipped: 'same as the last one sent' }, startedAt, finishedAt: new Date() });

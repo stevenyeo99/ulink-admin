@@ -17,6 +17,7 @@ var debug = require('debug')('ulink-api:server');
 var http = require('http');
 var logger = require('../utils/logger');
 var { reconcileStaleRuns } = require('../modules/pipeline/reconcile');
+var { getSettings } = require('../modules/settings/settings');
 
 /**
  * Get port from environment and store in Express.
@@ -41,6 +42,12 @@ server.on('listening', onListening);
 
 // A PipelineRun still RUNNING at boot is stale — the process that owned it is gone by
 // definition. Fire-and-forget: must not block port binding on a DB round-trip.
+// The settings' in-memory copy (modules/settings) — read once now so the first case built after a restart uses the
+// saved AI confidence threshold, not the default.
+getSettings().catch((err) => {
+  logger.error('Settings could not be read at startup; defaults apply until the next read', { error: err.message });
+});
+
 reconcileStaleRuns().catch((err) => {
   logger.error('Pipeline stale-run reconciliation failed', { message: err.message, stack: err.stack });
 });

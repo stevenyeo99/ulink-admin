@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as AlertDialog from '@radix-ui/react-alert-dialog';
 import { X } from 'lucide-react';
 import clsx from 'clsx';
-import { getStpSettings, saveStpSettings, type StpSettings, type Switches } from '../api/stpSettingsApi';
+import { getStpSettings, saveStpSettings, type StpSettings, type SwitchKey, type Switches } from '../api/stpSettingsApi';
 import { SourceTabs } from '../components/common/SourceTabs';
 import { Button } from '../components/common/Button';
 import { isSuperAdmin } from '../lib/session';
@@ -15,7 +15,7 @@ const SOURCE_LABEL: Record<Source, string> = { EMAIL: 'Email', API: 'API' };
 
 // When the AI itself says it is unsure, a person decides — before anything is paid, and before the
 // customer is asked for documents. Both off until Ulink decides; off, the system works as before.
-const SWITCHES: { key: keyof Switches; title: string; text: string }[] = [
+const SWITCHES: { key: SwitchKey; title: string; text: string }[] = [
   {
     key: 'stpBlockOnReviewPoints',
     title: "Don't pay automatically when the AI was unsure",
@@ -27,6 +27,26 @@ const SWITCHES: { key: keyof Switches; title: string; text: string }[] = [
     text: "When the AI couldn't read a document, or wasn't sure it is missing, the customer's missing-documents email waits. The team checks, then sends the request or overrides the check.",
   },
 ];
+
+// Which cases the system works on, and the customer email ULINK may send by hand (SYSTEM_4, API go-live first).
+const CASE_SWITCHES: { key: SwitchKey; title: string; text: string }[] = [
+  {
+    key: 'emailCasesEnabled',
+    title: 'Work on email cases',
+    text: "Off: the email pipeline doesn't run (scheduled or Run) and the Email tab is hidden on the work pages. Email cases already in the system are kept, untouched.",
+  },
+  {
+    key: 'apiCasesEnabled',
+    title: 'Work on API cases',
+    text: "Off: the API pipeline doesn't run (scheduled or Run) and the API tab is hidden on the work pages. API cases already in the system are kept, untouched.",
+  },
+  {
+    key: 'apiSendMissingDocumentsEmail',
+    title: 'API cases: email the customer about missing documents',
+    text: 'Off: the customer is not emailed — the team gets the list and contacts the customer. The claim is still suspended in IAS as usual.',
+  },
+];
+const onOffSwitches = [...CASE_SWITCHES, ...SWITCHES];
 
 const card = 'mb-6 rounded-xl2 border border-slate-900/10 bg-white/80 p-5 shadow-glass backdrop-blur-xl';
 const input =
@@ -41,6 +61,7 @@ interface Draft {
   rules: Record<string, { stpAllowed: boolean; amount: string }>;
   diagnoses: { codePrefix: string; note: string | null }[];
   switches: Switches;
+  threshold: string; // aiConfidenceThreshold as a percentage, as typed
 }
 
 function draftFrom(data: StpSettings): Draft {
@@ -48,8 +69,15 @@ function draftFrom(data: StpSettings): Draft {
     rules: Object.fromEntries(data.rules.map((r) => [r.id, { stpAllowed: r.stpAllowed, amount: r.amountLimit == null ? '' : String(r.amountLimit) }])),
     diagnoses: data.blockedDiagnoses.map((d) => ({ codePrefix: d.codePrefix, note: d.note })),
     switches: { ...data.switches },
+    threshold: String(Math.round(data.switches.aiConfidenceThreshold * 100)),
   };
 }
+
+// The threshold box: a whole or decimal percentage 0–100, or null when it isn't one.
+const parsePercent = (text: string): number | null => {
+  const n = text.trim() === '' ? NaN : Number(text);
+  return Number.isFinite(n) && n >= 0 && n <= 100 ? n : null;
+};
 
 const parseAmount = (text: string): number | null => (text.trim() === '' ? null : Number(text));
 
@@ -96,8 +124,12 @@ function StpForm({ data, canEdit }: { data: StpSettings; canEdit: boolean }) {
     const drafted = draft.diagnoses.map((d) => d.codePrefix);
     for (const d of draft.diagnoses) if (!stored.includes(d.codePrefix)) list.push({ key: `+${d.codePrefix}`, text: `Never-STP diagnoses: add ${d.codePrefix}${d.note ? ` (${d.note})` : ''}` });
     for (const code of stored) if (!drafted.includes(code)) list.push({ key: `-${code}`, text: `Never-STP diagnoses: remove ${code}` });
-    for (const s of SWITCHES) {
+    for (const s of onOffSwitches) {
       if (draft.switches[s.key] !== data.switches[s.key]) list.push({ key: s.key, text: `"${s.title}": ${onOff(data.switches[s.key])} → ${onOff(draft.switches[s.key])}` });
+    }
+    const percent = parsePercent(draft.threshold);
+    if (percent !== null && percent / 100 !== data.switches.aiConfidenceThreshold) {
+      list.push({ key: 'aiConfidenceThreshold', text: `AI unsure at or below: ${Math.round(data.switches.aiConfidenceThreshold * 100)}% → ${percent}%` });
     }
     return list;
   }, [data, draft]);
@@ -113,7 +145,8 @@ function StpForm({ data, canEdit }: { data: StpSettings; canEdit: boolean }) {
     }
     return errors;
   }, [data, draft]);
-  const errorCount = Object.keys(ruleErrors).length;
+  const thresholdError = parsePercent(draft.threshold) === null ? 'Enter a percentage from 0 to 100.' : null;
+  const errorCount = Object.keys(ruleErrors).length + (thresholdError ? 1 : 0);
   const dirty = changes.length > 0;
 
   // Leaving with unsaved changes asks first.
@@ -128,13 +161,15 @@ function StpForm({ data, canEdit }: { data: StpSettings; canEdit: boolean }) {
     mutationFn: () => saveStpSettings({
       rules: data.rules.map((r) => ({ id: r.id, stpAllowed: draft.rules[r.id].stpAllowed, amountLimit: parseAmount(draft.rules[r.id].amount) })),
       blockedDiagnoses: draft.diagnoses,
-      switches: draft.switches,
+      switches: { ...draft.switches, aiConfidenceThreshold: (parsePercent(draft.threshold) ?? 0) / 100 },
     }),
     onSuccess: (saved) => {
       setConfirmOpen(false);
       queryClient.setQueryData(['stp-settings'], saved);
     },
   });
+
+  const setSwitch = (key: SwitchKey, on: boolean) => setDraft((d) => ({ ...d, switches: { ...d.switches, [key]: on } }));
 
   const setRule = (id: string, patch: Partial<Draft['rules'][string]>) =>
     setDraft((d) => ({ ...d, rules: { ...d.rules, [id]: { ...d.rules[id], ...patch } } }));
@@ -151,7 +186,7 @@ function StpForm({ data, canEdit }: { data: StpSettings; canEdit: boolean }) {
                 {SOURCE_LABEL[s]}: {countFor(s)} unsaved
               </span>
             ))}
-            <SourceTabs source={source} onChange={setSource} />
+            <SourceTabs source={source} onChange={setSource} showAll />
           </div>
         </div>
         <table className="w-full text-sm">
@@ -219,25 +254,34 @@ function StpForm({ data, canEdit }: { data: StpSettings; canEdit: boolean }) {
       <section className={card}>
         <h2 className="text-sm font-semibold text-slate-800">Human checks when the AI is unsure</h2>
         <p className="mb-4 mt-1 text-sm text-slate-600">Applies to email and API cases.</p>
-        <ul className="space-y-2">
-          {SWITCHES.map((s) => (
-            <li key={s.key} className={clsx('rounded-lg p-2', draft.switches[s.key] !== data.switches[s.key] && changedMark)}>
-              <label className="flex items-start gap-3">
-                <input
-                  type="checkbox"
-                  checked={draft.switches[s.key]}
-                  disabled={!canEdit}
-                  onChange={(e) => setDraft((d) => ({ ...d, switches: { ...d.switches, [s.key]: e.target.checked } }))}
-                  className="mt-0.5 h-4 w-4 accent-ulink-orange"
-                />
-                <span>
-                  <span className="block text-sm font-medium text-slate-800">{s.title}</span>
-                  <span className="block text-sm text-slate-600">{s.text}</span>
-                </span>
-              </label>
-            </li>
-          ))}
-        </ul>
+        <div className={clsx('mb-3 rounded-lg p-2', changes.some((c) => c.key === 'aiConfidenceThreshold') && changedMark)}>
+          <label className="flex flex-wrap items-center gap-3">
+            <span className="text-sm font-medium text-slate-800">The AI is unsure at or below</span>
+            <span className="inline-flex items-center gap-1">
+              <input
+                type="number"
+                min={0}
+                max={100}
+                inputMode="decimal"
+                value={draft.threshold}
+                disabled={!canEdit}
+                onChange={(e) => setDraft((d) => ({ ...d, threshold: e.target.value }))}
+                aria-label="AI confidence threshold, percent"
+                className={`${input} w-20`}
+              />
+              <span className="text-sm text-slate-600">% confidence</span>
+            </span>
+          </label>
+          <p className="mt-1 text-sm text-slate-600">An AI answer at or below this becomes a review point on the case; with the switches below on, a person decides.</p>
+          {thresholdError && <p className="mt-1 text-xs text-red-600">{thresholdError}</p>}
+        </div>
+        <SwitchList switches={SWITCHES} draft={draft} stored={data.switches} canEdit={canEdit} onToggle={setSwitch} />
+      </section>
+
+      <section className={card}>
+        <h2 className="text-sm font-semibold text-slate-800">Which cases the system works on</h2>
+        <p className="mb-4 mt-1 text-sm text-slate-600">For going live with one kind of case first. The STP rules above can be set for both either way.</p>
+        <SwitchList switches={CASE_SWITCHES} draft={draft} stored={data.switches} canEdit={canEdit} onToggle={setSwitch} />
       </section>
 
       {canEdit && dirty && (
@@ -287,6 +331,42 @@ function StpForm({ data, canEdit }: { data: StpSettings; canEdit: boolean }) {
         </AlertDialog.Portal>
       </AlertDialog.Root>
     </>
+  );
+}
+
+function SwitchList({
+  switches,
+  draft,
+  stored,
+  canEdit,
+  onToggle,
+}: {
+  switches: { key: SwitchKey; title: string; text: string }[];
+  draft: Draft;
+  stored: Switches;
+  canEdit: boolean;
+  onToggle: (key: SwitchKey, on: boolean) => void;
+}) {
+  return (
+    <ul className="space-y-2">
+      {switches.map((s) => (
+        <li key={s.key} className={clsx('rounded-lg p-2', draft.switches[s.key] !== stored[s.key] && changedMark)}>
+          <label className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              checked={draft.switches[s.key]}
+              disabled={!canEdit}
+              onChange={(e) => onToggle(s.key, e.target.checked)}
+              className="mt-0.5 h-4 w-4 accent-ulink-orange"
+            />
+            <span>
+              <span className="block text-sm font-medium text-slate-800">{s.title}</span>
+              <span className="block text-sm text-slate-600">{s.text}</span>
+            </span>
+          </label>
+        </li>
+      ))}
+    </ul>
   );
 }
 

@@ -14,9 +14,12 @@ const { buildCaseJourney, caseJourneyText } = require('./journey');
 // (2026-09-29). Static, hand-transcribed policy text (the same list the clause table is seeded from).
 const CLAUSE_TEXT = Object.fromEntries(require('../../scripts/seeds/ayaHealthExclusionClauses').clauses.map((c) => [c.clauseRef, c.clauseText]));
 
-// Same 0.5 every confidence-gated judge uses (identityJudgment, diagnosisPicker, benefitPicker,
-// policy-exclusion judge) and the console's ConfidenceSummary.
-const LOW_CONFIDENCE = 0.5;
+// At or below the AI confidence threshold (STP settings page, default 70% — SYSTEM_4 E4-07) an AI result is a review
+// point. Separate from the 0.5 below which the judges (identityJudgment, diagnosisPicker, benefitPicker,
+// policy-exclusion judge) drop an answer as unusable: a 0.5–0.7 answer is kept, and counts as unsure.
+const { lastReadSettings } = require('../settings/settings');
+
+const isLowConfidence = (confidence) => confidence != null && confidence <= lastReadSettings().aiConfidenceThreshold;
 
 // How a result was reached — how far a reviewer can trust it on its own.
 const VERIFIED = {
@@ -108,9 +111,9 @@ function line({ decision, result, status, why, confidence = null, verified, revi
   return { decision, result, status, why: why || NOT_RECORDED, confidence, verified, review, ...(brief ? { brief } : {}) };
 }
 
-// A result the AI rated below the threshold is worth a look even when it passed.
+// A result the AI rated at or below the threshold is worth a look even when it passed.
 function lowConfidenceReview(confidence) {
-  return confidence != null && confidence < LOW_CONFIDENCE ? REVIEW.AI_UNSURE : null;
+  return isLowConfidence(confidence) ? REVIEW.AI_UNSURE : null;
 }
 
 function memberLines(memberVerifyResult) {
@@ -360,4 +363,4 @@ function assessmentSummaryText(summary) {
   return `${journey}${next}\n\nDecisions:\n${body}`;
 }
 
-module.exports = { buildAssessmentSummary, assessmentSummaryText, LOW_CONFIDENCE };
+module.exports = { buildAssessmentSummary, assessmentSummaryText, isLowConfidence };

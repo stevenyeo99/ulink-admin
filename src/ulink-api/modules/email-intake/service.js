@@ -248,11 +248,20 @@ async function queueNoAttachmentReminder(transaction, caseId, triggeringMessageI
   });
 }
 
+// No inbox connected (SYSTEM_4 E4-02 — API-only go-live has no IMAP): with the IMAP driver and no
+// IMAP_HOST there is nothing to read. The pipelines skip this step on it (modules/pipeline/service.js);
+// a direct /run says so instead of failing on a connection error.
+function notConfiguredReason() {
+  return config.channel.driver === 'imap_smtp' && !config.imap.host ? 'inbox not configured' : null;
+}
+
 async function run() {
+  const notConfigured = notConfiguredReason();
+  if (notConfigured) throw new Error(`email-intake: ${notConfigured} (IMAP_HOST is empty)`);
   const results = await getChannelAdapter().fetchNewSubmissions(persistSubmission);
   const processed = results.filter((r) => r.ok).length;
   const errors = results.filter((r) => !r.ok).map((r) => ({ externalId: r.externalId, error: r.error }));
   return { processed, errors };
 }
 
-module.exports = { run };
+module.exports = { run, notConfiguredReason };

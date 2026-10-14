@@ -1,0 +1,20 @@
+# System Enhancement 4 — change log
+
+Requirements: `SYSTEM_4_PRD.md` (items E4-01 … E4-27); plan and status per phase in PRD section 8.
+
+| Date | Item | Change | Status |
+|---|---|---|---|
+| 2026-10-14 | — | PRD drafted from 02-Oct demo feedback and Vundick feedback (14-Oct). No code changes. | Requirements gathering |
+| 2026-10-14 | E4-15 | PRD: AI learning approach defined (lookup tables, pgvector retrieval of trusted corrections, threshold calibration, test set; no fine-tuning). | Requirements gathering |
+| 2026-10-14 | E4-15 | PRD: AI learning reworked into steps 0–5 with triggers and success measure (knowledge kept in DB; fine-tuning possible as phase 3). | Requirements gathering |
+| 2026-10-14 | E4-18, Q10–Q19 | PRD: combined dashboard defined as an All tab (Email + API) on Overview, Cases, Review queue, Approvals; 10 open questions added. | Requirements gathering |
+| 2026-10-14 | E4-19, Q20 | PRD: owner's main focus recorded (human review and correctness, learning from feedback, daily API dashboard); API daily operations dashboard added to Batch 1. | Requirements gathering |
+| 2026-10-14 | E4-08 | PRD: every checklist item must carry a confidence score and a reason, pass or fail; current coverage table added. | Requirements gathering |
+| 2026-10-14 | E4-08, Q13 | PRD: confidence score and reason required on every AI output (recognition, extraction, document check, member check, translation, diagnosis / benefit pick); inventory of current gaps added; Q13 answered. | Requirements gathering |
+| 2026-10-14 | E4-20 … E4-25, E4-08, Q21 | PRD: Batch 5 operations console for claim users added (review workspace, case header next action, work queue ownership and search, confidence look, single timeline, reviewer stats); E4-08 adds source page per AI field. | Requirements gathering |
+| 2026-10-14 | E4-15, E4-08, E4-26 | PRD: principle "human review drives accuracy; prompts change only on evidence"; provider-aware hints and correction-memory retrieval for extracted fields; multimodal retrieval as phase 3 option; format checks on extracted values; AI call log and prompt versioning (E4-26, Langfuse self-hosted only, optional). Reviewed against Codex HITL + RAG suggestion. | Requirements gathering |
+| 2026-10-14 | All | PRD: review-ready pass — confidence gate and human review raised to P1; users and settings tables updated; retention decision (no limit for now); release plan replaced by 6 implementation phases with what each improves; recommended go-live after phases 1–3. | Requirements gathering |
+| 2026-10-14 | E4-08, E4-15 | PRD corrected: the AI reads in two steps (vision OCR one page per call, then text-only field mapping); reading step must mark doubtful text; corrections record which step was wrong; multimodal note fixed (no 6-image limit applies). | Requirements gathering |
+| 2026-10-14 | E4-27, plan | PRD: E4-27 token budget added; section 8 replaced by the implementation plan (phases A–F, easiest first, status per phase, kept in sync with implementation). | Requirements gathering |
+| 2026-10-14 | Phase A | Phase A approved (D1 keep both STP rule tabs; D2 threshold default 70%; D3 team email for no-documents cases; D4 "answer usable" thresholds stay 0.5). PRD: item checklist per phase; E4-01, E4-03, E4-07 updated with the decisions; Q4 answered (≤). | In progress |
+| 2026-10-14 | Phase A (E4-01, E4-02, E4-03, E4-05, E4-07) | Implemented: inbox step skipped without IMAP; Email/API source switches (pipeline guard, console tabs and page default); API missing-documents customer email switch (team emailed instead for no-documents cases; team emails say to contact the customer); AI confidence threshold setting (default 70%, ≤) for review points and held emails, judges' 0.5 cut-off unchanged. E4-05 already released. E4-06 waits for ULINK's ICD list. | Done — awaiting review |

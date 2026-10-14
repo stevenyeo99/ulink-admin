@@ -49,6 +49,16 @@ describe('validateStpForm', () => {
       'holdUnsureMissingDocsEmail must be on or off.',
     ]);
   });
+  // SYSTEM_4 phase A: the source switches and the missing-documents switch are on/off; the threshold is a share 0–1.
+  it('checks each setting by its own type', () => {
+    const ok = validateStpForm({ switches: { emailCasesEnabled: false, apiSendMissingDocumentsEmail: false, aiConfidenceThreshold: 0.7 } }, rules);
+    expect(ok.errors).toEqual([]);
+    expect(ok.form.switches).toEqual({ emailCasesEnabled: false, apiSendMissingDocumentsEmail: false, aiConfidenceThreshold: 0.7 });
+
+    const { errors } = validateStpForm({ switches: { apiCasesEnabled: 0, aiConfidenceThreshold: 70 } }, rules);
+    expect(errors).toEqual(['apiCasesEnabled must be on or off.', 'aiConfidenceThreshold must be a percentage from 0 to 100.']);
+    expect(validateStpForm({ switches: { aiConfidenceThreshold: true } }, rules).errors).toHaveLength(1);
+  });
 });
 
 describe('saveStpSettings', () => {

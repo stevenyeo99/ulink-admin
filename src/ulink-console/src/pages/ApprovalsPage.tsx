@@ -1,10 +1,10 @@
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useApprovals } from '../hooks/useCases';
 import { SourceTabs } from '../components/common/SourceTabs';
+import { pickSource, useEnabledSources } from '../hooks/useSource';
 import { DataTable, type Column } from '../components/common/DataTable';
 import { relativeTime } from '../lib/relativeTime';
 import type { ApprovalItem } from '../types/case';
-import type { Source } from '../types/pipeline';
 
 const PAGE_SIZE = 25;
 const EMPTY: ApprovalItem[] = [];
@@ -17,7 +17,7 @@ const EMPTY: ApprovalItem[] = [];
 export function ApprovalsPage() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const source: Source = params.get('source')?.toUpperCase() === 'API' ? 'API' : 'EMAIL';
+  const source = pickSource(params.get('source'), useEnabledSources());
   const page = Math.max(0, Number(params.get('page')) || 0);
   const { data, isLoading, isFetching, isError } = useApprovals(source);
   const items = data?.items ?? EMPTY;

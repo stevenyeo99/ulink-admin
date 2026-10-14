@@ -24,6 +24,8 @@ jest.mock('../db/models', () => {
     Case: { findByPk: jest.fn(async (id) => ({ id, claimNo: '2604050015', tpaCaseNumber: 'STEVENEVERHILLC58' })) },
     ClaimRoute: { findOne: jest.fn(async () => ({ ccEmail: 'cc@test' })) },
     CaseEvent: { create: jest.fn(async (row) => state.events.push(row)) },
+    // The settings' defaults unless a test switches one: the customer missing-documents email is on.
+    Setting: { findAll: jest.fn(async () => []) },
     EmailThread: {
       findOne: jest.fn(async ({ where }) => state.threads.find((t) => t.caseId === where.caseId) ?? null),
       create: jest.fn(async (row) => { const t = { id: `thread-${state.threads.length + 1}`, ...row }; state.threads.push(t); return t; }),
@@ -125,4 +127,47 @@ it('keeps the customer chain separate from internal emails, and follows the cust
 
   // Replies to the customer's own reply, not to the newer internal email.
   expect(sendReply.mock.calls[1][0]).toEqual({ messageId: '<reply@cust>', references: firstCustomerEmail });
+});
+
+// SYSTEM_4 E4-03: with "API cases: email the customer about missing documents" off, ULINK contacts the customer.
+describe('customer missing-documents email switched off', () => {
+  const { Setting } = require('../db/models');
+  beforeEach(() => { Setting.findAll.mockResolvedValue([{ key: 'apiSendMissingDocumentsEmail', value: false }]); });
+  afterAll(() => { Setting.findAll.mockResolvedValue([]); });
+
+  it('does not email the customer, and says so in the case history', async () => {
+    state.requests.push(request('step-1', missingDocs(['No Medical Report(s)'])));
+
+    expect(await run()).toEqual({ sent: 0, skipped: 1, errors: [] });
+    expect(sendReply).not.toHaveBeenCalled();
+    expect(state.steps[0]).toMatchObject({ status: 'DONE', input: { sourceStepId: 'step-1' }, output: { skipped: 'missing-documents request left to ULINK (manual)' } });
+    expect(state.events).toEqual([expect.objectContaining({ caseId: 'case-1', newStatus: 'API_EMAIL_NOT_SENT', message: 'Customer not emailed: missing-documents request left to ULINK (manual)' })]);
+  });
+
+  it('emails the team instead when no console images arrived (no other team email follows)', async () => {
+    state.requests.push({ ...request('step-1', { taskType: 'MISSING_DOCUMENTS', audience: 'customer', payload: { issues: ['We did not receive any claim documents.'] }, dedupeKey: 'NO_DOCUMENTS' }), job: 'api-material-download' });
+
+    expect(await run()).toEqual({ sent: 1, skipped: 0, errors: [] });
+    const [, reply] = sendReply.mock.calls[0];
+    expect(reply.to).toBe('ops@test');
+    expect(reply.subject).toMatch(/^\(ULINK AI\) Contact the customer — documents incomplete — Claim 2604050015 — 1 missing/);
+    expect(reply.bodyText).toContain('the customer has NOT been emailed. Please contact them');
+    expect(reply.bodyText).toContain('1. We did not receive any claim documents.');
+  });
+
+  it("tells the team the customer was not emailed when the claim is suspended", async () => {
+    state.requests.push({ ...request('step-1', {
+      taskType: 'DOCUMENTS_INCOMPLETE', audience: 'internal', payload: { caseId: 'case-1', claimNo: '2604050015', issues: ['No Medical Report(s)'] }, dedupeKey: 'x',
+    }), job: 'api-claim-revision' });
+
+    await run();
+    expect(sendReply.mock.calls[0][1].bodyText).toContain('the customer has NOT been emailed. Please contact them');
+  });
+
+  it('sends the customer email as before when the switch is on', async () => {
+    Setting.findAll.mockResolvedValue([]);
+    state.requests.push(request('step-1', missingDocs(['No Medical Report(s)'])));
+    expect(await run()).toEqual({ sent: 1, skipped: 0, errors: [] });
+    expect(sendReply.mock.calls[0][1].to).toBe('customer@test');
+  });
 });

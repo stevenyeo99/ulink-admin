@@ -1,6 +1,7 @@
 const { PipelineRun, PipelineRunStep } = require('../../db/models');
 const jobLock = require('../../jobs/jobLock');
 const pipelineService = require('../../modules/pipeline/service');
+const { getSettings, SOURCE_SETTING } = require('../../modules/settings/settings');
 const logger = require('../../utils/logger');
 
 /**
@@ -29,6 +30,11 @@ function createPipelineController(pipeline, lockName) {
       }
     }
     const onlySteps = requested === undefined ? null : requested;
+
+    // A source switched off on the STP settings page (SYSTEM_4 E4-01): no run — not from cron, not from the console.
+    if (!(await getSettings())[SOURCE_SETTING[pipeline]]) {
+      return res.json({ block: lockName, skipped: true, reason: 'source_disabled' });
+    }
 
     const acquired = await jobLock.acquire(lockName);
     if (!acquired) {

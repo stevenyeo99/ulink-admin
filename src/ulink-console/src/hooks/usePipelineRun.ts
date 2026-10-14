@@ -88,7 +88,8 @@ export function usePipelineRun(source: Source) {
 
   const run = runQuery.data ?? null;
   const isRunning = run?.status === 'RUNNING' || triggerMutation.isPending;
-  const wasSkipped = triggerMutation.data?.skipped === true;
+  // Why the last Run started nothing ('already_running', 'source_disabled'), or null.
+  const skipReason = triggerMutation.data?.skipped ? triggerMutation.data.reason ?? 'already_running' : null;
   const isRateLimited = runQuery.error instanceof RateLimitedError || latestRunQuery.error instanceof RateLimitedError;
 
   return {
@@ -96,7 +97,7 @@ export function usePipelineRun(source: Source) {
     steps: run?.PipelineRunSteps ?? [],
     isRunning,
     isLoading: runQuery.isLoading && trackedRunId !== null,
-    wasSkipped,
+    skipReason,
     isRateLimited,
     trigger,
     runSteps,

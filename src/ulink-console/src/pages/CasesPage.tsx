@@ -7,9 +7,9 @@ import { useCaseStatuses } from '../hooks/useCaseStatuses';
 import { caseColumns } from '../components/cases/caseColumns';
 import { Button } from '../components/common/Button';
 import { SourceTabs } from '../components/common/SourceTabs';
+import { pickSource, useEnabledSources } from '../hooks/useSource';
 import { DataTable, type SortState } from '../components/common/DataTable';
 import type { CaseListQuery, CaseSummary } from '../types/case';
-import type { Source } from '../types/pipeline';
 
 const PAGE_SIZE = 25;
 const EMPTY: CaseSummary[] = [];
@@ -24,7 +24,7 @@ export function CasesPage() {
   const [params, setParams] = useSearchParams();
   const { data: catalog, info } = useCaseStatuses();
 
-  const source: Source = params.get('source')?.toUpperCase() === 'API' ? 'API' : 'EMAIL';
+  const source = pickSource(params.get('source'), useEnabledSources());
   const group = params.get('group') ?? '';
   const moduleId = params.get('module') ?? '';
   const q = params.get('q') ?? '';

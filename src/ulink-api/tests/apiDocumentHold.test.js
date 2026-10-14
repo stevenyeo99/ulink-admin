@@ -3,7 +3,7 @@
 // as complete (2026-09-29).
 
 jest.mock('../modules/document-checking/service', () => ({ checkCase: jest.fn() }));
-jest.mock('../modules/settings/settings', () => ({ getSettings: jest.fn() }));
+jest.mock('../modules/settings/settings', () => ({ getSettings: jest.fn(), lastReadSettings: () => ({ aiConfidenceThreshold: 0.7 }) }));
 jest.mock('../modules/ias-claim-preparation/service', () => ({ checkCase: jest.fn() }));
 
 const documentChecking = require('../modules/document-checking/service');

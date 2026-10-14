@@ -117,6 +117,7 @@ it('the team email says the customer has not been emailed and what to check', ()
 it('switches accept only known keys and true/false, saved with the rest of the form', async () => {
   await setSettings({ stpBlockOnReviewPoints: true }, 'admin', { transaction: 'tx' });
   expect(Setting.upsert).toHaveBeenCalledWith({ key: 'stpBlockOnReviewPoints', value: true, updatedBy: 'admin' }, { transaction: 'tx' });
-  await expect(setSettings({ somethingElse: true })).rejects.toThrow('Unknown setting');
-  await expect(setSettings({ stpBlockOnReviewPoints: 'yes' })).rejects.toThrow('true or false');
+  // Same messages as the STP settings form (one check for both, settingError — SYSTEM_4 phase A).
+  await expect(setSettings({ somethingElse: true })).rejects.toThrow('Unknown switch somethingElse.');
+  await expect(setSettings({ stpBlockOnReviewPoints: 'yes' })).rejects.toThrow('must be on or off');
 });

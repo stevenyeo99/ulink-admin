@@ -1,5 +1,5 @@
 const { sequelize, StpRule, StpBlockedDiagnosis } = require('../../db/models');
-const { getSettings, setSettings, DEFAULTS } = require('../../modules/settings/settings');
+const { getSettings, setSettings, settingError } = require('../../modules/settings/settings');
 
 // STP settings edited from the console (one form, one Save) — read by ias-claim-preparation/stpEligibility.js
 // and modules/settings. A change applies to cases whose claim is prepared after it.
@@ -62,8 +62,8 @@ function validateStpForm(body, existingRules) {
 
   const switches = {};
   for (const [key, value] of Object.entries(body?.switches || {})) {
-    if (!(key in DEFAULTS)) errors.push(`Unknown switch ${key}.`);
-    else if (typeof value !== 'boolean') errors.push(`${key} must be on or off.`);
+    const error = settingError(key, value);
+    if (error) errors.push(error);
     else switches[key] = value;
   }
 

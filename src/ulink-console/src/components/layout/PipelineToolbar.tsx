@@ -14,12 +14,12 @@ const RUN_STATUS_LABEL: Record<PipelineRun['status'], string> = {
 interface PipelineToolbarProps {
   run: PipelineRun | null;
   isRunning: boolean;
-  wasSkipped: boolean;
+  skipReason: string | null;
   isRateLimited: boolean;
   onRun: () => void;
 }
 
-export function PipelineToolbar({ run, isRunning, wasSkipped, isRateLimited, onRun }: PipelineToolbarProps) {
+export function PipelineToolbar({ run, isRunning, skipReason, isRateLimited, onRun }: PipelineToolbarProps) {
   return (
     <div className="flex items-center justify-end gap-3 px-6 py-3">
       {run && (
@@ -36,7 +36,11 @@ export function PipelineToolbar({ run, isRunning, wasSkipped, isRateLimited, onR
           <span className="font-medium text-slate-700">{RUN_STATUS_LABEL[run.status]}</span>
         </div>
       )}
-      {wasSkipped && <span className="text-xs font-medium text-ulink-orange-dark">A run is already in progress</span>}
+      {skipReason && (
+        <span className="text-xs font-medium text-ulink-orange-dark">
+          {skipReason === 'source_disabled' ? 'These cases are switched off (STP settings)' : 'A run is already in progress'}
+        </span>
+      )}
       {isRateLimited && (
         <span className="text-xs font-medium text-red-500" title="ulink-api's rate limit was hit — this console is backing off automatically">
           API rate limited — retrying shortly

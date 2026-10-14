@@ -16,11 +16,21 @@ export interface StpBlockedDiagnosis {
   note: string | null;
 }
 
-// Human-in-the-loop switches (ulink-api modules/settings/settings.js) — both off until Ulink decides.
+// Settings changed on this page (ulink-api modules/settings/settings.js DEFAULTS).
 export interface Switches {
+  // Human-in-the-loop switches — both off until Ulink decides.
   stpBlockOnReviewPoints: boolean;
   holdUnsureMissingDocsEmail: boolean;
+  // Which cases the system works on (SYSTEM_4 E4-01); a source switched off has no pipeline runs and no tab.
+  emailCasesEnabled: boolean;
+  apiCasesEnabled: boolean;
+  // API cases: the customer's missing-documents email (SYSTEM_4 E4-03).
+  apiSendMissingDocumentsEmail: boolean;
+  // At or below this (0–1) the AI counts as unsure (SYSTEM_4 E4-07).
+  aiConfidenceThreshold: number;
 }
+
+export type SwitchKey = { [K in keyof Switches]: Switches[K] extends boolean ? K : never }[keyof Switches];
 
 export interface StpSettings {
   rules: StpRule[];

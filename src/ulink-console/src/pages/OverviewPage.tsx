@@ -3,7 +3,7 @@ import clsx from 'clsx';
 import { useCaseOverview } from '../hooks/useCases';
 import { useCaseStatuses } from '../hooks/useCaseStatuses';
 import { SourceTabs } from '../components/common/SourceTabs';
-import type { Source } from '../types/pipeline';
+import { pickSource, useEnabledSources } from '../hooks/useSource';
 
 // Order of the cards: what needs people first, then what is moving, then outcomes.
 const CARD_ORDER = ['needs_review', 'waiting_customer', 'in_progress', 'done', 'failed'];
@@ -16,7 +16,7 @@ const CARD_ORDER = ['needs_review', 'waiting_customer', 'in_progress', 'done', '
  */
 export function OverviewPage() {
   const [params, setParams] = useSearchParams();
-  const source: Source = params.get('source')?.toUpperCase() === 'API' ? 'API' : 'EMAIL';
+  const source = pickSource(params.get('source'), useEnabledSources());
   const { data: catalog } = useCaseStatuses();
   const { data, isLoading, isError } = useCaseOverview(source);
 

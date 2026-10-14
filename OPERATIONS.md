@@ -45,7 +45,11 @@ Schedule both orchestrators with cron (API pipeline: every 30 minutes; email pip
 picked up). Job endpoints are open to cron; everything else needs a console login.
 
 Every call returns at once and works in the background. A trigger that overlaps a running one is **skipped**, not
-queued. If the process died mid-run, the lock stays: clear it with `POST /api/jobs/<job or pipeline>/release`.
+queued. A pipeline whose cases are switched off (STP settings → *Work on email / API cases*) is skipped too
+(`reason: source_disabled`) — no run is created.
+
+**No inbox** (API-only go-live): leave `IMAP_HOST` empty. The email-intake step is then skipped in both pipelines
+("inbox not configured"); SMTP sending is not affected. If the process died mid-run, the lock stays: clear it with `POST /api/jobs/<job or pipeline>/release`.
 
 ---
 
@@ -83,8 +87,10 @@ queued. If the process died mid-run, the lock stays: clear it with `POST /api/jo
 
 ## 5. Settings that change behaviour
 
-- **Console → STP settings** (super admin): STP rules per case source and benefit type, never-STP diagnoses, and the
-  two human-check switches. One form, one Save: edits are marked until **Review & save**, which lists every change
+- **Console → STP settings** (super admin): STP rules per case source and benefit type, never-STP diagnoses, the
+  two human-check switches, the AI confidence threshold (default 70%), which cases the system works on (email / API),
+  and whether API customers get the missing-documents email. Go-live (API only): email cases off, missing-documents
+  email off, no `IMAP_HOST`. One form, one Save: edits are marked until **Review & save**, which lists every change
   and saves all of it or nothing (**Discard** drops them). Changes apply to cases processed after the save.
 - **`.env`**: `CONSOLE_UPLOAD_METHOD` (`folder` / `cl-upload`), wait times, batch limits, URLs. Restart after a change.
 

@@ -17,7 +17,7 @@ export function PipelinePage() {
 }
 
 function PipelineView({ source, onSourceChange }: { source: Source; onSourceChange: (source: Source) => void }) {
-  const { run, steps, isRunning, wasSkipped, isRateLimited, trigger, runSteps } = usePipelineRun(source);
+  const { run, steps, isRunning, skipReason, isRateLimited, trigger, runSteps } = usePipelineRun(source);
   const [selectedNode, setSelectedNode] = useState<SelectedNode | null>(null);
 
   return (
@@ -25,7 +25,7 @@ function PipelineView({ source, onSourceChange }: { source: Source; onSourceChan
       <PipelineCompletionAlert run={run} />
       <div className="flex flex-wrap items-center justify-between gap-2 pl-6">
         <SourceTabs source={source} onChange={onSourceChange} />
-        <PipelineToolbar run={run} isRunning={isRunning} wasSkipped={wasSkipped} isRateLimited={isRateLimited} onRun={trigger} />
+        <PipelineToolbar run={run} isRunning={isRunning} skipReason={skipReason} isRateLimited={isRateLimited} onRun={trigger} />
       </div>
       <main className="relative flex-1">
         <ReactFlowProvider>

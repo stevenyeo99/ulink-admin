@@ -107,7 +107,8 @@ function withTimeout(promise, ms, blockName) {
  * Runs one step: acquires that block's own per-block lock (same one its individual
  * /run endpoint uses), so this can never run a block concurrently with either a
  * separate cron trigger of that same block or another pipeline run. If the lock is
- * held, the step is SKIPPED, not FAILED — that's expected/healthy, not an error.
+ * held, or the service isn't set up here (notConfiguredReason), the step is SKIPPED, not
+ * FAILED — that's expected/healthy, not an error.
  */
 async function runStep(pipelineRunId, blockName, service, sequence) {
   const step = await PipelineRunStep.create({
@@ -116,6 +117,14 @@ async function runStep(pipelineRunId, blockName, service, sequence) {
     sequence,
     status: 'PENDING',
   });
+
+  // A step whose service isn't set up on this server (email-intake with no inbox) is SKIPPED with the
+  // reason, not FAILED — a run without an inbox is normal (SYSTEM_4 E4-02), not an error every time.
+  const notConfigured = service.notConfiguredReason?.();
+  if (notConfigured) {
+    await step.update({ status: 'SKIPPED', skipReason: notConfigured, finishedAt: new Date() });
+    return;
+  }
 
   const acquired = await jobLock.acquire(blockName);
   if (!acquired) {

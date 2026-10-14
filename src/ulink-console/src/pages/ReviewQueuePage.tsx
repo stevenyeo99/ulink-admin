@@ -3,9 +3,9 @@ import clsx from 'clsx';
 import { useReviewQueue } from '../hooks/useCases';
 import { reviewColumns } from '../components/cases/reviewColumns';
 import { SourceTabs } from '../components/common/SourceTabs';
+import { pickSource, useEnabledSources } from '../hooks/useSource';
 import { DataTable } from '../components/common/DataTable';
 import type { ReviewQueueItem } from '../types/case';
-import type { Source } from '../types/pipeline';
 
 const PAGE_SIZE = 25;
 const EMPTY: ReviewQueueItem[] = [];
@@ -18,7 +18,7 @@ const EMPTY: ReviewQueueItem[] = [];
 export function ReviewQueuePage() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const source: Source = params.get('source')?.toUpperCase() === 'API' ? 'API' : 'EMAIL';
+  const source = pickSource(params.get('source'), useEnabledSources());
   const reason = params.get('reason') ?? '';
   const page = Math.max(0, Number(params.get('page')) || 0);
   const { data, isLoading, isFetching, isError } = useReviewQueue(source);
