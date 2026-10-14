@@ -35,6 +35,7 @@ const REVIEW = {
   DATA_MISMATCH: { reason: 'Data mismatch', mightBeWrong: ['Customer', 'AI vision', 'IAS record'], check: 'Compare the document, IAS and the customer; decide which is right.' },
   MISSING: { reason: 'Missing information', mightBeWrong: ['Customer', 'AI vision'], check: 'Confirm it is really missing, then ask the customer.' },
   RULE_HOLD: { reason: 'Rule hold', mightBeWrong: [], check: 'Apply the policy rule.' },
+  VITAMINS: { reason: 'Vitamins / supplements', mightBeWrong: ['AI vision'], check: 'Check the voucher items; a person approves the claim (no STP).' },
 };
 
 const MEMBER_REVIEW = {
@@ -203,6 +204,10 @@ function documentLines(documentCheckResult) {
   const notChecked = [];
   for (const item of checklist) {
     if (item.code === 'MISSING_MANDATORY_FIELD') continue;
+    if (item.code === 'VITAMIN_OR_SUPPLEMENT') {
+      lines.push(vitaminLine(item));
+      continue;
+    }
     const decision = DOCUMENT_DECISIONS[item.code] || item.label;
     if (item.passed === null || item.passed === undefined) {
       notChecked.push(decision);
@@ -237,6 +242,27 @@ function documentLines(documentCheckResult) {
     }));
   }
   return lines;
+}
+
+// Vitamins / supplements on the vouchers (SYSTEM_4 E4-10, document-checking/checklist.js vitaminCheck). Found: a
+// review point while the switch "vitamins / supplements: a person approves" is on (off: shown, nothing to do). The AI
+// couldn't tell: "AI unsure", so the switches for unsure points apply.
+function vitaminLine(item) {
+  const blocks = lastReadSettings().vitaminsBlockStp;
+  if (item.passed === false) {
+    return line({
+      decision: 'Vitamins / supplements',
+      result: 'Found',
+      status: blocks ? 'issue' : 'ok',
+      why: `${item.note}${blocks ? ' A person approves this claim; it does not go STP.' : ''}`,
+      verified: VERIFIED.AI,
+      review: blocks ? REVIEW.VITAMINS : null,
+    });
+  }
+  if (item.passed === null) {
+    return line({ decision: 'Vitamins / supplements', result: "Couldn't tell", status: 'ok', why: item.note, verified: VERIFIED.AI, review: REVIEW.AI_UNSURE });
+  }
+  return line({ decision: 'Vitamins / supplements', result: 'None', status: 'ok', why: 'No vitamins or supplements on the vouchers.', verified: VERIFIED.AI });
 }
 
 // STP rules (stpEligibility.js): reasons when blocked, else each benefit type's total against its limit.

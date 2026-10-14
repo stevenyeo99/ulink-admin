@@ -27,6 +27,11 @@ const SWITCHES: { key: SwitchKey; title: string; text: string }[] = [
     text: 'When every document check passed but the AI was unsure about one (at or below the threshold above), the case waits for a person to confirm before anything goes to IAS.',
   },
   {
+    key: 'vitaminsBlockStp',
+    title: 'Vitamins / supplements: a person approves (no STP)',
+    text: 'When the AI reads a vitamin or supplement on a voucher, the claim goes to JD3 for approval instead of STP, and the case shows which voucher.',
+  },
+  {
     key: 'holdUnsureMissingDocsEmail',
     title: "Don't email the customer when the AI is unsure a document is missing",
     text: "When the AI couldn't read a document, or wasn't sure it is missing, the customer's missing-documents email waits. The team checks, then sends the request or overrides the check.",

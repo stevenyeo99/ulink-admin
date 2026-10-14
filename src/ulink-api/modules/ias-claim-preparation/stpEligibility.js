@@ -15,9 +15,12 @@ const amount = (n) => Number(n).toLocaleString('en-US');
  * - switch "open review point blocks STP" on (settings) and the case has an open review point — the
  *   AI was unsure, a possible exclusion, … (openReviewPoints: [{ decision, reason }]) — a person checks first.
  *
+ * - switch "vitamins / supplements: a person approves" on (settings) and a voucher has them (vitaminVouchers: the
+ *   voucher numbers) — SYSTEM_4 E4-10.
+ *
  * Returns { isStp, source, currency, diagCode, benefits: [{ benefitType, total, allowed, limit }], reasons }.
  */
-function evaluateStp({ rules, blockedDiagnoses, blockOnReviewPoints = false }, { source, currency, lines, diagCode, openReviewPoints = [] }) {
+function evaluateStp({ rules, blockedDiagnoses, blockOnReviewPoints = false, blockVitamins = false }, { source, currency, lines, diagCode, openReviewPoints = [], vitaminVouchers = [] }) {
   const reasons = [];
   const totals = new Map();
   for (const { benefitType, subtotal } of lines) {
@@ -44,6 +47,10 @@ function evaluateStp({ rules, blockedDiagnoses, blockOnReviewPoints = false }, {
   const blocked = diagCode && blockedDiagnoses.find((d) => diagCode.toUpperCase().startsWith(d.codePrefix.toUpperCase()));
   if (blocked) reasons.push(`Diagnosis ${diagCode} is on the never-STP list (${blocked.codePrefix}${blocked.note ? `: ${blocked.note}` : ''}).`);
 
+  if (blockVitamins && vitaminVouchers.length) {
+    reasons.push(`Vitamins / supplements on voucher${vitaminVouchers.length > 1 ? 's' : ''} ${vitaminVouchers.join(', ')} — a person approves.`);
+  }
+
   if (blockOnReviewPoints && openReviewPoints.length) {
     reasons.push(`Open review point${openReviewPoints.length > 1 ? 's' : ''}: ${openReviewPoints.map((p) => `${p.decision} (${p.reason})`).join('; ')} — a person checks first.`);
   }
@@ -53,7 +60,7 @@ function evaluateStp({ rules, blockedDiagnoses, blockOnReviewPoints = false }, {
 
 async function stpDecision(input) {
   const [rules, blockedDiagnoses, settings] = await Promise.all([StpRule.findAll(), StpBlockedDiagnosis.findAll(), getSettings()]);
-  return evaluateStp({ rules, blockedDiagnoses, blockOnReviewPoints: settings.stpBlockOnReviewPoints }, input);
+  return evaluateStp({ rules, blockedDiagnoses, blockOnReviewPoints: settings.stpBlockOnReviewPoints, blockVitamins: settings.vitaminsBlockStp }, input);
 }
 
 module.exports = { stpDecision, evaluateStp };

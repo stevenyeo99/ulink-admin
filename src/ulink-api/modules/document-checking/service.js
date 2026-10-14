@@ -1,6 +1,6 @@
 const { sequelize, Case, CaseEvent } = require('../../db/models');
 const config = require('../../config');
-const { evaluateDocumentChecks, evaluateJudgmentDependentChecks } = require('./checklist');
+const { evaluateDocumentChecks, evaluateJudgmentDependentChecks, vitaminCheck } = require('./checklist');
 const { entityMatch } = require('./identityJudgment');
 const { queueDedupedTask } = require('../shared/emailTaskQueue');
 const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment-summary/summary');
@@ -87,7 +87,8 @@ async function checkCase(caseRecord) {
     details: [...stage1.details, ...stage2.details],
     flags: [...stage1.flags, ...stage2.flags],
     passed: stage1.issues.length + stage2.issues.length === 0,
-    checklist: [...stage1.checklist, ...stage2.checklist],
+    // + the vitamins / supplements line (SYSTEM_4 E4-10) — information for STP and the reviewer, never an issue.
+    checklist: [...stage1.checklist, ...stage2.checklist, ...[vitaminCheck(fields)].filter(Boolean)],
   };
 
   const outcome = result.passed ? 'DOCUMENT_CHECKED' : 'INCOMPLETE';

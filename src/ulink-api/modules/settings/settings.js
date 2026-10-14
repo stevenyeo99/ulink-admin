@@ -13,6 +13,9 @@ const DEFAULTS = {
   // The document check passed, but the AI was unsure (at or below the threshold) about an item: the case stops for a
   // person to confirm before claim preparation / the IAS revision (SYSTEM_4 E4-09). Off until turned on.
   holdUnsureDocumentPass: false,
+  // A voucher with vitamins / supplements: the claim is approved by a person (JD3), never STP (SYSTEM_4 E4-10).
+  // On from the start — ULINK asked for it at the 02-Oct demo.
+  vitaminsBlockStp: true,
   // Which cases the system works on (SYSTEM_4 E4-01, 2026-10-14 — API cases go live first). A source switched off:
   // its pipeline doesn't run and its tab is hidden on the work pages. Its cases are kept, untouched.
   emailCasesEnabled: true,

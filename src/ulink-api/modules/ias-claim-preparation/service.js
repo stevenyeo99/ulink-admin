@@ -102,6 +102,8 @@ async function checkCase(caseRecord) {
     currency: 'MMK',
     lines: lines.map((line) => ({ benefitType: line.benefit?.benefitType ?? null, subtotal: line.subtotal })),
     diagCode: diagnosisPick.pick?.diagCode ?? null,
+    // Vouchers the AI read vitamins / supplements on (SYSTEM_4 E4-10) — numbered like the document check's line.
+    vitaminVouchers: invoiceItems.map((item, i) => (item.has_vitamin_or_supplement === true ? i + 1 : null)).filter(Boolean),
   });
   const stp = stpResult.isStp;
   claimPrepMeta.stp = stpResult;

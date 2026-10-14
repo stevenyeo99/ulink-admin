@@ -23,6 +23,8 @@ export interface Switches {
   holdUnsureMissingDocsEmail: boolean;
   // Passed, but the AI unsure: a person confirms first (SYSTEM_4 E4-09).
   holdUnsureDocumentPass: boolean;
+  // A voucher with vitamins / supplements: a person approves, never STP (SYSTEM_4 E4-10). On by default.
+  vitaminsBlockStp: boolean;
   // Which cases the system works on (SYSTEM_4 E4-01); a source switched off has no pipeline runs and no tab.
   emailCasesEnabled: boolean;
   apiCasesEnabled: boolean;

@@ -224,6 +224,11 @@ Source: demo 5.
 - **Requirement:** a voucher with vitamins/supplements is a review point and blocks STP (switch on the STP settings
   page); the claim goes to JD3 approval with the reason shown.
 - **Later (with E4-17):** list the vitamin lines and their amount so they can be rejected while the rest is paid.
+- **Built 2026-10-14 (B2, decisions as recommended):** switch *Vitamins / supplements: a person approves (no STP)*,
+  **default on**. The document check adds one checklist line (*Vitamins / supplements*: found on voucher n / none /
+  couldn't tell) — never an issue, so the documents still pass. Found → review point "Vitamins / supplements" and STP
+  reason "Vitamins / supplements on voucher n — a person approves" → JD3. Couldn't tell → "AI unsure" point only
+  (switch #1 decides). Whole claim to JD3; rejecting only the vitamin amount waits for E4-17.
 - **Depends on:** ULINK vitamin/supplement sample case.
 
 ### Batch 3 — Human-in-the-loop
@@ -482,7 +487,7 @@ sending email, changing data in a shared DB.
 | Phase | Items | Effort | What it improves | Needs first | Status |
 |---|---|---|---|---|---|
 | **A. Switches and quick wins** | E4-02 no inbox, E4-01 Email/API on/off, E4-03 missing-documents email off, E4-07 threshold setting; E4-05 Burmese (release), E4-06 chronic ICD (data entry) | ≈ 3–4 days | API cases run alone, without inbox or failing runs; staff email customers themselves; one adjustable threshold | — (Q3 wording only); ICD list for E4-06 | **Done — awaiting review** (A6 blocked on ULINK's ICD list) |
-| **B. Confidence gate** | E4-09 unsure never passes, E4-10 vitamins → review / no STP, E4-27 token budget | ≈ 3 days | Nothing unsure, no vitamin claim, no over-long claim goes STP or passes unchecked | Q4, Q9 (Q14 optional) | **In progress** — one item at a time; B1 done |
+| **B. Confidence gate** | E4-09 unsure never passes, E4-10 vitamins → review / no STP, E4-27 token budget | ≈ 3 days | Nothing unsure, no vitamin claim, no over-long claim goes STP or passes unchecked | Q4, Q9 (Q14 optional) | **In progress** — one item at a time; B1, B2 done |
 | **C. Console basics** | E4-21 case header next action, E4-23 confidence badge, E4-11 comment on every action | ≈ 3–4 days | Users see why a case is here and what to do; every action explained | — | Not started |
 | **D. Measurement baseline** | E4-26 AI call log + prompt versions (migration `ulink_llm_calls`) | ≈ 2–3 days | Every AI answer traceable to prompt and model; "before" numbers for E3 | — | Not started |
 | **E1. Upload → re-check** | E4-04 | M | Incomplete API case recovers without an inbox | Q1, Q2, Q5, Q12 | Not started |
@@ -510,7 +515,7 @@ Ticked when the item is done; the phase status above changes when all are done a
 
 **Phase B — Confidence gate**
 - [x] B1 · E4-09 Passed but unsure → *Check the AI's documents finding*, a person confirms (switch #3; Q9: keep #1, #2)
-- [ ] B2 · E4-10 Vitamins / supplements → review point, blocks STP (setting)
+- [x] B2 · E4-10 Vitamins / supplements → review point, blocks STP (switch, default on)
 - [ ] B3 · E4-27 Token budget before mapping → manual review if over; LM Studio overflow = stop (server change: go-ahead)
 - [ ] B4 · Tests, docs, log, tracker
 

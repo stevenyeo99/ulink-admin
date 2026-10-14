@@ -710,4 +710,28 @@ function evaluateDocumentChecks(extractedFields) {
   return { issues, passed: issues.length === 0, details, flags, checklist };
 }
 
-module.exports = { ISSUES, evaluateDocumentChecks, evaluateJudgmentDependentChecks };
+// Vitamins / supplements on the vouchers (SYSTEM_4 E4-10), from the AI's own per-voucher reading
+// (invoices.items[].has_vitamin_or_supplement). Not a document problem — it is never an issue and never makes the
+// documents incomplete — but with the switch "vitamins / supplements: a person approves" on, the claim never goes STP
+// (stpEligibility.js) and the case shows a review point (assessment-summary). One checklist line:
+// passed true = none on any voucher; false = found (vouchers: the voucher numbers); null = none found, but the AI
+// couldn't tell for some voucher (unsureVouchers). No vouchers at all: no line.
+function vitaminCheck(fields) {
+  const items = fields.invoices?.items || [];
+  if (items.length === 0) return null;
+  const numbered = (pick) => items.map((item, i) => (pick(item.has_vitamin_or_supplement) ? i + 1 : null)).filter(Boolean);
+  const vouchers = numbered((v) => v === true);
+  const unsureVouchers = numbered((v) => v !== true && v !== false);
+  const list = (ns) => `voucher${ns.length > 1 ? 's' : ''} ${ns.join(', ')}`;
+  return {
+    code: 'VITAMIN_OR_SUPPLEMENT',
+    label: 'No vitamins / supplements on the vouchers',
+    passed: vouchers.length ? false : unsureVouchers.length ? null : true,
+    vouchers,
+    unsureVouchers,
+    note: vouchers.length ? `Vitamins / supplements on ${list(vouchers)}.`
+      : unsureVouchers.length ? `The AI couldn't tell for ${list(unsureVouchers)}.` : null,
+  };
+}
+
+module.exports = { ISSUES, evaluateDocumentChecks, evaluateJudgmentDependentChecks, vitaminCheck };

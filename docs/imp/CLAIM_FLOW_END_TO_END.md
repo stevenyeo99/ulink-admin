@@ -208,7 +208,10 @@ A claim goes STP only if **all** hold (console **STP settings**):
 2. the lines of each benefit type add up to **no more than its limit**;
 3. every line has a benefit type;
 4. the diagnosis code is **not on the never-STP list** (code or prefix; `R69` is on it);
-5. switch #1 on → **no open review point** (AI unsure, possible exclusion, …).
+5. switch #1 on → **no open review point** (AI unsure, possible exclusion, …);
+6. *Vitamins / supplements: a person approves* on (default **on**) → **no voucher with vitamins / supplements** (the
+   AI reads each voucher; the document check shows a *Vitamins / supplements* line — never a missing-document issue).
+   The AI couldn't tell → only an *AI unsure* point (#1 decides).
 
 Every block is written as the reason (e.g. "IP is not allowed for STP. (email case rules)"). A rule change applies to
 claims prepared after it. STP → `isValidation=Y, isCSR=Y` in IAS and the settlement report; not STP → JD3.
@@ -318,6 +321,7 @@ Team emails go to `INTERNAL_REVIEW_EMAIL` (+ the route's CC), start with "(ULINK
 | STP rules | Console → STP settings | Demo values | Allowed + max amount per case type (Email/API) and IAS benefit type |
 | Never-STP diagnoses | Console → STP settings | `R69` | ICD-10 codes or prefixes that never go STP |
 | Switch #1 / #2 / #3 | Console → STP settings | Off | Human checks when the AI is unsure (4.5) |
+| Vitamins / supplements: a person approves | Console → STP settings | On | A voucher with them → no STP, JD3 approves (4.4) |
 | AI confidence threshold | Console → STP settings | 70% | At or below: the AI counts as unsure (4.5) |
 | Work on email cases / API cases | Console → STP settings | On | Off: that pipeline doesn't run (cron or Run) and its tab is hidden on the work pages; its cases are kept |
 | API cases: email the customer about missing documents | Console → STP settings | On | Off: ULINK contacts the customer; team still emailed (section 3) |
