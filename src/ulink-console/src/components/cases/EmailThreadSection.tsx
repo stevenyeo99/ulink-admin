@@ -1,14 +1,11 @@
 import { useState } from 'react';
+import { formatTimestamp } from '../../lib/formatTimestamp';
 import { Paperclip, ChevronDown, ChevronRight } from 'lucide-react';
 import clsx from 'clsx';
 import { attachmentPath } from '../../api/casesApi';
 import { FileLink } from '../common/FileLink';
 import { formatBytes } from '../../lib/formatBytes';
 import type { EmailMessage, EmailThread } from '../../types/case';
-
-function formatTimestamp(iso: string | null): string {
-  return iso ? new Date(iso).toLocaleString() : '—';
-}
 
 function MessageRow({ caseId, message }: { caseId: string; message: EmailMessage }) {
   const [expanded, setExpanded] = useState(false);

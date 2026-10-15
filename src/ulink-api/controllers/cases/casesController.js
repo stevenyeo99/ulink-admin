@@ -1,5 +1,6 @@
 const { Op, fn, col, cast, where: sqlWhere, literal } = require('sequelize');
-const { sequelize, Case, CaseEvent, CaseDocument, ApiCaseStep, EmailThread, EmailMessage, EmailAttachment, LlmCall } = require('../../db/models');
+const { sequelize, Case, CaseEvent, CaseDocument, ApiCaseStep, EmailThread, EmailMessage, EmailAttachment, LlmCall, AiFeedback } = require('../../db/models');
+const { buildTimeline } = require('../../modules/case-timeline/timeline');
 const { OVERRIDE_TARGETS, OVERRIDE_FINDINGS, findingsFor, overrideCheck, overridesFromEvents } = require('../../modules/case-override/override');
 const { todayInIasTimezone } = require('../../modules/shared/iasDates');
 const { apiCaseView } = require('../../modules/api-pipeline/caseView');
@@ -395,6 +396,32 @@ async function getCase(req, res) {
 }
 
 /**
+ * GET /api/cases/:id/timeline — the case's single timeline, newest first (SYSTEM_4 E4-24): case history, AI calls (grouped
+ * per job run, no raw answers), "✓ Right" confirmations and trusted marks. modules/case-timeline/timeline.js.
+ */
+async function getTimeline(req, res, next) {
+  try {
+    const caseId = req.params.id;
+    if (!UUID.test(caseId) || !(await Case.findByPk(caseId, { attributes: ['id'] }))) {
+      return res.status(404).json({ error: { message: `Case ${caseId} not found`, status: 404 } });
+    }
+    // Oldest first, ties by id (the builder keeps that order for entries with the same time).
+    const oldestFirst = [['createdAt', 'ASC'], ['id', 'ASC']];
+    const [events, newestCalls, feedback] = await Promise.all([
+      CaseEvent.findAll({ where: { caseId }, attributes: ['id', 'blockName', 'prevStatus', 'newStatus', 'reasonCode', 'message', 'createdAt'], order: oldestFirst }),
+      // The newest 2000 AI calls (a case re-read many times can have more).
+      LlmCall.findAll({ where: { caseId }, attributes: ['id', 'job', 'promptName', 'status', 'durationMs', 'createdAt'], order: [['createdAt', 'DESC'], ['id', 'DESC']], limit: 2000 }),
+      AiFeedback.findAll({ where: { caseId }, attributes: ['id', 'kind', 'label', 'aiValue', 'reason', 'createdBy', 'trusted', 'trustedBy', 'trustedAt', 'createdAt'], order: oldestFirst }),
+    ]);
+    return res.json({ entries: buildTimeline({ events, llmCalls: [...newestCalls].reverse(), feedback }) });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
  * GET /api/cases/:id/llm-calls — every AI call made for this case, oldest first (SYSTEM_4 E4-26, modules/llm-calls):
  * which job and prompt version, how it went, and what the AI answered. For the case page's technical details.
  */
@@ -644,4 +671,4 @@ async function uploadCaseDocuments(req, res) {
   }
 }
 
-module.exports = { getCaseStatuses, getOverview, getReviewQueue, getNextCase, getApprovals, listCases, getCase, getLlmCalls, getAttachment, getDocument, overrideCase, resetCase, releaseMissingDocuments, uploadCaseDocuments, OVERRIDE_TARGETS, REVIEWABLE_STATUSES };
+module.exports = { getCaseStatuses, getOverview, getReviewQueue, getNextCase, getApprovals, listCases, getCase, getTimeline, getLlmCalls, getAttachment, getDocument, overrideCase, resetCase, releaseMissingDocuments, uploadCaseDocuments, OVERRIDE_TARGETS, REVIEWABLE_STATUSES };

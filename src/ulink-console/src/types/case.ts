@@ -292,6 +292,16 @@ export interface GetCaseResponse {
   claim: CaseClaim | null;
 }
 
+// One entry of a case's single timeline (SYSTEM_4 E4-24, ulink-api modules/case-timeline/timeline.js).
+export type TimelineKind = 'people' | 'ai' | 'email' | 'ias' | 'system';
+export interface TimelineEntry {
+  at: string;
+  kind: TimelineKind;
+  source: string;
+  what: string;
+  why: string | null;
+}
+
 // Who is reviewing a case right now (SYSTEM_4 E4-22, ulink-api modules/case-claim/claim.js); null = nobody.
 export interface CaseClaim {
   username: string;

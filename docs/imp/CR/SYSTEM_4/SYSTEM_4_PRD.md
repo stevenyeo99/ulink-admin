@@ -523,6 +523,11 @@ confirm with ULINK.
 #### E4-24 Single case timeline — P2, S–M
 - **Requirement:** AI steps, human actions (who, what, comment), IAS calls, uploads and emails in one dated list on
   the case page — answers "who changed what and why" for audits and disputes.
+- **Built 2026-10-15 (F1, decisions as recommended):** `GET /api/cases/:id/timeline` merges the case history (status
+  moves, overrides, corrections, claims, uploads, IAS steps, emails sent), the AI calls grouped per job run (no raw
+  answers — those stay in the technical details), *✓ Right* confirmations and trusted marks — newest first, each with a
+  kind (people / AI / emails / IAS / system). It replaces *Case history* on the case page, with filter chips; shown to
+  every user. No migration, no AI calls. `modules/case-timeline/timeline.js`.
 
 #### E4-25 Reviewer and AI-quality stats — P3, S
 - **Requirement:** on the dashboard (supervisors): cases reviewed per person, average review time, override rate per
@@ -660,7 +665,7 @@ sending email, changing data in a shared DB.
 | **E4. Per-item correction** | E4-12 + E4-15 steps 0–1 (migration `ulink_ai_feedback`, trusted mark) | M | Reviewers fix single findings; corrections stored for learning | E3; Q16, Q17 | **E4a committed; E4b done — awaiting review** |
 | **E5. Review workspace** | E4-20 | M–L | Check and decide next to the document page, one screen, Next case | E3, E4 | **E5a committed; E5b done — awaiting review** |
 | **E6. Daily dashboard** | E4-19 | M | One start page for the day's API work | Q20 | **Option B done — awaiting review** (overdue badge, pipeline health); full page parked (Q20) |
-| **F. Learning** | E4-24 timeline, E4-14 feedback report, E4-15 steps 2–4, E4-25 stats | M–L | Fewer repeat mistakes, proven by override rate and test set | Weeks of trusted corrections | Not started |
+| **F. Learning** | E4-24 timeline, E4-14 feedback report, E4-15 steps 2–4, E4-25 stats | M–L | Fewer repeat mistakes, proven by override rate and test set | Weeks of trusted corrections | **F1 done — awaiting review**; F2–F4 not started |
 | **Blocked** | E4-16, E4-17, E4-13, E4-18 | — | — | ULINK (Q6, Q15, Q18, Q19, E4-16 list) | Blocked (ULINK input) |
 
 ### Items per phase
@@ -708,7 +713,7 @@ Ticked when the item is done; the phase status above changes when all are done a
 - [x] E6 (option B) · E4-19 Overdue badge (setting `overdueWorkingDays`, default 2) + pipeline health line on the Overview — full dashboard parked until Q20
 
 **Phase F — Learning**
-- [ ] F1 · E4-24 Single case timeline
+- [x] F1 · E4-24 Single case timeline (`GET /api/cases/:id/timeline`; replaces *Case history* on the case page, filter by kind)
 - [ ] F2 · E4-14 Feedback report
 - [ ] F3 · E4-15 steps 2–4: test set, lookups / provider hints, correction memory (pgvector)
 - [ ] F4 · E4-25 Reviewer and AI-quality stats

@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, ChevronDown, Clock } from 'lucide-react';
+import { ArrowLeft, ChevronDown } from 'lucide-react';
 import clsx from 'clsx';
 import { getCase } from '../api/casesApi';
 import { CaseStatusPill } from '../components/cases/CaseStatusPill';
@@ -14,6 +14,8 @@ import { LlmCallsSection } from '../components/cases/LlmCallsSection';
 import { CaseUploadPanel } from '../components/cases/CaseUploadPanel';
 import { CaseCorrectionPanel } from '../components/cases/CaseCorrectionPanel';
 import { CaseClaimBar } from '../components/cases/CaseClaimBar';
+import { CaseTimeline } from '../components/cases/CaseTimeline';
+import { formatTimestamp } from '../lib/formatTimestamp';
 import { isSuperAdmin } from '../lib/session';
 import { JsonViewer } from '../components/panel/JsonViewer';
 import { ChecklistTable } from '../components/panel/ChecklistTable';
@@ -32,10 +34,6 @@ const HARD_CHECK_LABELS: Record<string, string> = {
   bankAccountNumberMatch: 'Bank account number matches IAS record',
   policyNoMatch: 'Policy number matches IAS record',
 };
-
-function formatTimestamp(iso: string): string {
-  return new Date(iso).toLocaleString();
-}
 
 function Section({ title, children, className }: { title: string; children: ReactNode; className?: string }) {
   return (
@@ -95,7 +93,6 @@ export function CaseDetailPage() {
   const { case: caseRecord, events, documents, apiSteps, assessmentSummary, override, nextAction, corrections, claim } = data;
   const fieldsRead = caseRecord.documentCheckResult?.checklist?.find((item) => item.code === 'FIELDS_READ')?.fields;
   const isApi = caseRecord.source === 'API';
-  const statusLabel = (code: string | null) => (code ? info(code).label : '—');
 
   return (
     <div className="mx-auto h-full w-full max-w-6xl overflow-y-auto px-4 py-6 sm:px-6">
@@ -153,23 +150,9 @@ export function CaseDetailPage() {
         <EmailThreadSection caseId={caseRecord.id} threads={caseRecord.EmailThreads} />
       </Section>
 
-      <Section title="Case history">
-        {events.length === 0 && <p className="text-sm text-slate-500">Nothing has happened to this case yet.</p>}
-        <ol className="space-y-3">
-          {events.map((event) => (
-            <li key={event.id} className="flex gap-3 text-sm">
-              <Clock size={14} className="mt-0.5 shrink-0 text-slate-300" />
-              <div>
-                <p className="text-slate-700">
-                  {event.prevStatus ? `${statusLabel(event.prevStatus)} → ` : ''}
-                  <span className="font-medium">{statusLabel(event.newStatus)}</span>
-                </p>
-                {event.message && <p className="mt-0.5 text-xs text-slate-500">{event.message}</p>}
-                <p className="mt-0.5 text-xs text-slate-400">{formatTimestamp(event.createdAt)}</p>
-              </div>
-            </li>
-          ))}
-        </ol>
+      {/* The single timeline (SYSTEM_4 E4-24): case history, people, AI, emails, IAS — newest first. */}
+      <Section title="Timeline">
+        <CaseTimeline caseId={caseRecord.id} />
       </Section>
 
       {/* Technical details (raw JSON, job steps, IAS payloads): super admin only (SYSTEM_4 E4-20). */}

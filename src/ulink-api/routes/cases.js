@@ -1,6 +1,6 @@
 const express = require('express');
 const { requireRole } = require('../modules/auth/auth');
-const { getCaseStatuses, getOverview, getReviewQueue, getNextCase, getApprovals, listCases, getCase, getLlmCalls, getAttachment, getDocument, overrideCase, resetCase, releaseMissingDocuments, uploadCaseDocuments } = require('../controllers/cases/casesController');
+const { getCaseStatuses, getOverview, getReviewQueue, getNextCase, getApprovals, listCases, getCase, getTimeline, getLlmCalls, getAttachment, getDocument, overrideCase, resetCase, releaseMissingDocuments, uploadCaseDocuments } = require('../controllers/cases/casesController');
 const { createCorrection, createConfirmation, trustCorrection } = require('../controllers/cases/correctionsController');
 const { claim, release } = require('../controllers/cases/claimController');
 const { requireNotHeldByOther } = require('../modules/case-claim/claim');
@@ -114,7 +114,7 @@ router.get('/review-queue', getReviewQueue);
  * @openapi
  * /api/cases/next:
  *   get:
- *     tags: [Cases]
+ *     tags: [cases]
  *     summary: The case to review next — oldest in the review queue, not held by someone else (SYSTEM_4 E4-20)
  *     parameters:
  *       - { name: after, in: query, schema: { type: string, format: uuid }, description: 'The case just reviewed (skipped)' }
@@ -178,7 +178,26 @@ router.get('/:id', getCase);
  *     responses:
  *       200: { description: "{ calls: [...] }" }
  */
+
 router.get('/:id/llm-calls', getLlmCalls);
+
+/**
+ * @openapi
+ * /api/cases/{id}/timeline:
+ *   get:
+ *     tags: [cases]
+ *     summary: The case's single timeline — who changed what and why (SYSTEM_4 E4-24)
+ *     description: >
+ *       Newest first: case history (status moves, overrides, corrections, claims, uploads, IAS steps, emails), AI calls
+ *       grouped per job run (no raw answers), "✓ Right" confirmations and trusted marks. Each entry: at, kind
+ *       (people / ai / email / ias / system), source, what, why.
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: '{ entries }' }
+ *       404: { description: Case not found }
+ */
+router.get('/:id/timeline', getTimeline);
 
 /**
  * @openapi
@@ -277,7 +296,7 @@ router.post('/:id/override', requireRole('super_admin'), requireNotHeldByOther, 
  * @openapi
  * /api/cases/{id}/corrections:
  *   post:
- *     tags: [Cases]
+ *     tags: [cases]
  *     summary: Correct one value the AI read, or one check's verdict (SYSTEM_4 E4-12)
  *     description: >
  *       Allowed while a member or document finding holds the case (the override statuses). Stores the correction
@@ -317,7 +336,7 @@ router.post('/:id/corrections', requireRole('super_admin'), requireNotHeldByOthe
  * @openapi
  * /api/cases/{id}/corrections/{feedbackId}/trust:
  *   post:
- *     tags: [Cases]
+ *     tags: [cases]
  *     summary: Mark a correction trusted, so it may teach the AI later (SYSTEM_4 E4-15)
  *     description: Super admin; never the person who made the correction.
  *     parameters:
@@ -332,7 +351,7 @@ router.post('/:id/corrections', requireRole('super_admin'), requireNotHeldByOthe
  * @openapi
  * /api/cases/{id}/confirmations:
  *   post:
- *     tags: [Cases]
+ *     tags: [cases]
  *     summary: "✓ Right" — the AI's value or verdict was checked and is right (SYSTEM_4 E4-20)
  *     description: >
  *       Learning data only (ulink_ai_feedback kind confirm: value, AI confidence, page, who); the case does not change.
@@ -476,7 +495,7 @@ router.post('/:id/documents', requireNotHeldByOther, uploadCaseDocuments);
  * @openapi
  * /api/cases/{id}/claim:
  *   post:
- *     tags: [Cases]
+ *     tags: [cases]
  *     summary: Claim a case — "Being reviewed by …" (SYSTEM_4 E4-22)
  *     description: >
  *       While one person holds a case, others can view it but their case actions (override, correct, reset, release
@@ -504,7 +523,7 @@ router.post('/:id/claim', requireRole('super_admin'), claim);
  * @openapi
  * /api/cases/{id}/release:
  *   post:
- *     tags: [Cases]
+ *     tags: [cases]
  *     summary: Give a claimed case back (SYSTEM_4 E4-22)
  *     parameters:
  *       - { name: id, in: path, required: true, schema: { type: string, format: uuid } }

@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { ApprovalsResponse, CaseClaim, Correction, WrongStep, CaseListQuery, CaseOverview, ReviewQueueResponse, CaseStatusCatalog, GetCaseResponse, ListCasesResponse, LlmCall, OverrideCaseResponse, ResetCaseResponse } from '../types/case';
+import type { ApprovalsResponse, CaseClaim, Correction, TimelineEntry, WrongStep, CaseListQuery, CaseOverview, ReviewQueueResponse, CaseStatusCatalog, GetCaseResponse, ListCasesResponse, LlmCall, OverrideCaseResponse, ResetCaseResponse } from '../types/case';
 import type { Source } from '../types/pipeline';
 
 export function listCases(query: CaseListQuery = {}): Promise<ListCasesResponse> {
@@ -29,6 +29,11 @@ export function getCaseStatuses(): Promise<CaseStatusCatalog> {
 
 export function getCase(id: string): Promise<GetCaseResponse> {
   return request<GetCaseResponse>(`/api/cases/${id}`);
+}
+
+// The case's single timeline, newest first (SYSTEM_4 E4-24).
+export function getTimeline(id: string): Promise<{ entries: TimelineEntry[] }> {
+  return request(`/api/cases/${id}/timeline`);
 }
 
 // The AI calls made for one case (casesController.js::getLlmCalls, SYSTEM_4 E4-26).
