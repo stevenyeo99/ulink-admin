@@ -199,8 +199,12 @@ function preferAffirmative(a, b) {
   return null;
 }
 
+// The first read's evidence / line_total (SYSTEM_4 E3b) are kept, as for subtotal; vitamin items from both reads.
 function mergeInvoiceItemPair(a, b) {
   return {
+    ...b,
+    ...a,
+    ...(a.vitamin_items || b.vitamin_items ? { vitamin_items: [...new Set([...(a.vitamin_items || []), ...(b.vitamin_items || [])])] } : {}),
     subtotal: a.subtotal,
     voucher_type: a.voucher_type,
     // Previously dropped entirely (neither a.date nor b.date was ever read here) — silently

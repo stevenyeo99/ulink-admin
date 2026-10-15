@@ -110,6 +110,9 @@ switch is the quick way to stop one environment reading a mailbox it shares with
 
 Rollback: `npm run db:migrate:undo` steps back one migration at a time; check each migration's `down` first.
 
+A migration that changes a claim route's `extraction_schema` (e.g. `20261015100000-add-field-evidence`) changes what
+the AI is asked to return: run it together with the matching prompt change, and try a few claims before go-live.
+
 ---
 
 ## 7. Logs

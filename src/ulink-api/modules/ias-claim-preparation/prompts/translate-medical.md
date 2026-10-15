@@ -6,6 +6,6 @@ The text may be Burmese (Myanmar script), English, or a mix of both. Rules:
 - If a part is unreadable or you are not sure what it means, write "unclear" for that part rather than guessing.
 - `diagnosis_en` / `treatment_en`: the English translation of each input, or null when that input is empty.
 - `confidence`: your honest 0.0–1.0 estimate that the translation keeps the original meaning.
-- `note`: one short sentence for a claims reviewer if something is uncertain or ambiguous; otherwise null.
+- `note`: always one short sentence for a claims reviewer saying what the translation rests on — and, if something is uncertain or ambiguous, what (e.g. "Clear handwriting; standard term for gastritis" or "Second word unreadable; translated the first only").
 
 Return ONLY JSON matching the provided schema.
