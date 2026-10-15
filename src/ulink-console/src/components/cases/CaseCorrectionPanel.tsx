@@ -57,7 +57,9 @@ export function CaseCorrectionPanel({ caseId, corrections, initialItem = '' }: {
   const trust = useMutation({ mutationFn: (feedbackId: string) => trustCorrection(caseId, feedbackId), onSuccess: refresh });
 
   const canCorrect = corrections.allowed && isSuperAdmin(); // the API requires super admin, as for override
-  if (!canCorrect && corrections.list.length === 0) return null;
+  // Confirmations ("✓ Right", E5b) are not corrections — the review workspace shows them on each finding.
+  const list = corrections.list.filter((c) => c.kind !== 'confirm');
+  if (!canCorrect && list.length === 0) return null;
   const me = getSession()?.user.username;
   const canSave = option && wrongStep && reason.trim().length >= 3 && (option.kind === 'verdict' ? passed !== '' : value.trim() !== '') && !save.isPending;
 
@@ -133,16 +135,16 @@ export function CaseCorrectionPanel({ caseId, corrections, initialItem = '' }: {
         <p className="mt-1 text-sm text-slate-600">Corrections are made while a member or document finding holds the case.</p>
       )}
 
-      {corrections.list.length > 0 && (
+      {list.length > 0 && (
         <ul className="mt-5 divide-y divide-slate-900/5 border-t border-slate-900/5">
-          {corrections.list.map((c) => (
+          {list.map((c) => (
             <li key={c.id} className="flex flex-wrap items-start justify-between gap-2 py-2 text-sm">
               <div>
                 <p className="text-slate-700">
                   {c.label}: AI <span className="font-medium">{shown(c.aiValue)}</span> → <span className="font-medium">{shown(c.correctedValue)}</span>
                 </p>
                 <p className="mt-0.5 text-xs text-slate-500">
-                  {c.createdBy} — {WRONG_STEPS[c.wrongStep].toLowerCase()}: {c.reason}
+                  {c.createdBy} — {c.wrongStep ? `${WRONG_STEPS[c.wrongStep].toLowerCase()}: ` : ''}{c.reason}
                   {c.page ? ` (${c.page})` : ''}
                 </p>
                 {!c.applied && <p className="mt-0.5 text-xs text-amber-700">No longer applied — the case was read again (e.g. new documents). Correct it again if it still applies.</p>}

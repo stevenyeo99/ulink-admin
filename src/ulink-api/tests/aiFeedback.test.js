@@ -40,8 +40,11 @@ const correct = (f, body, check = evaluateDocumentChecks(f)) => {
 beforeEach(() => jest.clearAllMocks());
 
 it('the model lists match the table constraints', () => {
-  const migration = fs.readFileSync(path.join(__dirname, '../db/migrations/20261015120000-create-ai-feedback.js'), 'utf8');
-  const constraint = (name) => migration.match(new RegExp(`${name} CHECK \\(\\w+ IN \\(([^)]*)\\)`))[1].split(',').map((v) => v.trim().replace(/'/g, ''));
+  // The latest migration that sets each constraint (kind: E5b added 'confirm'; wrong_step: unchanged since E4a).
+  const read = (file) => fs.readFileSync(path.join(__dirname, `../db/migrations/${file}`), 'utf8');
+  const latest = (name) => [read('20261015140000-ai-feedback-confirm.js'), read('20261015120000-create-ai-feedback.js')]
+    .map((m) => m.match(new RegExp(`${name} CHECK \\(\\w+ IN \\(([^)]*)\\)`))).find(Boolean)[1];
+  const constraint = (name) => latest(name).split(',').map((v) => v.trim().replace(/'/g, ''));
   const model = require('../db/models/aiFeedback')({ define: () => ({}) }, new Proxy({}, { get: () => () => ({}) }));
   expect(constraint('ulink_ai_feedback_kind_check')).toEqual(model.KINDS);
   expect(constraint('ulink_ai_feedback_wrong_step_check')).toEqual(model.WRONG_STEPS);
@@ -217,5 +220,63 @@ describe('code review 2026-10-15', () => {
     expect(correctionHold(failed, { corrections: [{ id: 'f1' }] })).toHaveLength(1);
     expect(correctionHold(failed, {})).toEqual([]);
     expect(correctionHold({ passed: true, issues: [] }, { corrections: [{ id: 'f1' }] })).toEqual([]);
+  });
+});
+
+describe('POST /api/cases/:id/confirmations — "✓ Right" (E5b)', () => {
+  const { createConfirmation } = require('../controllers/cases/correctionsController');
+  const user = { username: 'ulink', name: 'Ulink', role: 'super_admin' };
+  const send = async (body, caseRow) => {
+    Case.findByPk.mockResolvedValue({ ...caseRow, toJSON: () => caseRow });
+    const res = { status: jest.fn(() => res), json: jest.fn() };
+    await createConfirmation({ user, params: { id: 'c1' }, body }, res);
+    return { status: res.status.mock.calls[0]?.[0] ?? 200, body: res.json.mock.calls[0][0] };
+  };
+  const row = (over = {}) => ({ id: 'c1', source: 'EMAIL', currentStatus: 'CLAIM_CREATED', extractedFields: fields(), documentCheckResult: evaluateDocumentChecks(fields()), ...over });
+
+  it('records the value, the AI\'s confidence and page — and changes nothing on the case, even a decided one', async () => {
+    AiFeedback.findAll.mockResolvedValue([]);
+    const { status } = await send({ kind: 'value', item: 'claimant.claimant_nrc_passport' }, row());
+    expect(status).toBe(200);
+    expect(AiFeedback.create).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'confirm', item: 'claimant.claimant_nrc_passport', aiValue: '12/DAGAYA(N)08144', correctedValue: '12/DAGAYA(N)08144',
+      aiConfidence: 0.55, page: 'claim.pdf - page 1', wrongStep: null, reason: 'Checked against the document', createdBy: 'ulink',
+    }));
+    expect(Case.update).not.toHaveBeenCalled();
+    expect(CaseEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('a verdict too; a second click is the same answer, not a new row', async () => {
+    AiFeedback.findAll.mockResolvedValue([{ id: 'f8', correctedValue: false }, { id: 'f9', correctedValue: true }]);
+    const { body } = await send({ kind: 'verdict', item: 'MISSING_BANK_INFO' }, row());
+    expect(body.confirmation.id).toBe('f9');
+    expect(AiFeedback.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses an item not on the case, or a value the AI never read', async () => {
+    AiFeedback.findAll.mockResolvedValue([]);
+    expect((await send({ kind: 'value', item: 'claimant.phone_number' }, row())).status).toBe(400);
+    expect((await send({ kind: 'value', item: 'policy.policy_no' }, row())).status).toBe(400); // not read
+  });
+
+  it('refuses a value a person corrected (that is "Mark trusted"), and trusting a confirmation', async () => {
+    AiFeedback.findAll.mockResolvedValue([]);
+    const corrected = { ...fields(), corrections: [{ item: 'claimant.claimant_nrc_passport', kind: 'value' }] };
+    const { status, body } = await send({ kind: 'value', item: 'claimant.claimant_nrc_passport' }, row({ extractedFields: corrected }));
+    expect(status).toBe(400);
+    expect(body.error.message).toMatch('mark that correction trusted');
+
+    AiFeedback.findOne.mockResolvedValue({ id: 'f1', caseId: 'c1', kind: 'confirm', createdBy: 'ann', update: jest.fn() });
+    const res = { status: jest.fn(() => res), json: jest.fn() };
+    await trustCorrection({ user: { username: 'jd3' }, params: { id: 'c1', feedbackId: 'f1' } }, res);
+    expect(res.status).toHaveBeenCalledWith(400);
+  });
+
+  it('two clicks at once: the unique index keeps one, and both get it', async () => {
+    AiFeedback.findAll.mockResolvedValueOnce([]).mockResolvedValueOnce([{ id: 'f7', correctedValue: '12/DAGAYA(N)08144' }]);
+    AiFeedback.create.mockRejectedValueOnce(Object.assign(new Error('dup'), { name: 'SequelizeUniqueConstraintError' }));
+    const { status, body } = await send({ kind: 'value', item: 'claimant.claimant_nrc_passport' }, row());
+    expect(status).toBe(200);
+    expect(body.confirmation.id).toBe('f7');
   });
 });

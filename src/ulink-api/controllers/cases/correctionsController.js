@@ -30,7 +30,8 @@ async function correctionsInfo(caseRecord, fields) {
   const inForce = new Set((fields.extractedFields?.corrections || []).map((c) => c.id));
   const list = rows.map((row) => ({ ...(row.toJSON ? row.toJSON() : row), applied: inForce.has(row.id) }));
   const allowed = CORRECTABLE_STATUSES.includes(fields.currentStatus) && Boolean(fields.extractedFields);
-  return { allowed, options: allowed ? correctionOptions(fields.extractedFields, fields.documentCheckResult) : [], list };
+  // options: what can be corrected (when allowed) or confirmed (whenever the AI has read the case — E5b "✓ Right").
+  return { allowed, options: fields.extractedFields ? correctionOptions(fields.extractedFields, fields.documentCheckResult) : [], list };
 }
 
 /**
@@ -105,12 +106,60 @@ async function createCorrection(req, res) {
 }
 
 /**
+ * POST /api/cases/:id/confirmations — { kind: value|verdict, item, reason? }. "✓ Right" in the review workspace
+ * (SYSTEM_4 E4-20, E5b): the reviewer checked a value or verdict against the document and the AI was right. Stored as
+ * learning data (ulink_ai_feedback kind 'confirm': the value, the AI's confidence, the page, who) — it changes nothing
+ * on the case: no status move, no case history. Once per person per item and value (a second click is the same answer).
+ */
+async function createConfirmation(req, res) {
+  const caseRecord = await Case.findByPk(req.params.id);
+  if (!caseRecord) return res.status(404).json({ error: { message: `Case ${req.params.id} not found`, status: 404 } });
+  const { fields } = await caseFields(caseRecord);
+  if (!fields.extractedFields) return res.status(400).json({ error: { message: 'The AI has not read this case yet — nothing to confirm.', status: 400 } });
+
+  const option = correctionOptions(fields.extractedFields, fields.documentCheckResult)
+    .find((o) => o.kind === req.body?.kind && o.item === req.body?.item);
+  if (!option) return res.status(400).json({ error: { message: 'Pick a value or check of this case.', status: 400 } });
+  if (option.current == null) return res.status(400).json({ error: { message: `${option.label}: the AI read nothing to confirm.`, status: 400 } });
+
+  // A value a person corrected is no longer the AI's: confirming it would count a wrong AI read as right. Agreeing with
+  // a correction is "Mark trusted".
+  if ((fields.extractedFields.corrections || []).some((c) => c.item === option.item)) {
+    return res.status(400).json({ error: { message: `${option.label} was corrected by a person — mark that correction trusted instead.`, status: 400 } });
+  }
+  const original = aiOriginal(fields.extractedFields, option, fields.documentCheckResult);
+  const same = (row) => JSON.stringify(row.correctedValue) === JSON.stringify(option.current);
+  const mine = await AiFeedback.findAll({ where: { caseId: caseRecord.id, kind: 'confirm', item: option.item, createdBy: req.user.username } });
+  const existing = mine.find(same);
+  if (existing) return res.json({ confirmation: existing });
+
+  const reason = typeof req.body?.reason === 'string' && req.body.reason.trim() ? req.body.reason.trim() : 'Checked against the document';
+  let row;
+  try {
+    row = await AiFeedback.create({
+      caseId: caseRecord.id, kind: 'confirm', item: option.item, label: option.label,
+      aiValue: option.current, aiConfidence: original.aiConfidence, correctedValue: option.current,
+      reason, wrongStep: null, page: original.page, createdBy: req.user.username,
+    });
+  } catch (error) {
+    // Two clicks at once: the unique index (ulink_ai_feedback_confirm_once) kept one — that one is the answer.
+    if (error.name !== 'SequelizeUniqueConstraintError') throw error;
+    row = (await AiFeedback.findAll({ where: { caseId: caseRecord.id, kind: 'confirm', item: option.item, createdBy: req.user.username } })).find(same);
+  }
+  logger.info('AI finding confirmed', { caseId: caseRecord.id, item: option.item, username: req.user.username });
+  res.json({ confirmation: row });
+}
+
+/**
  * POST /api/cases/:id/corrections/:feedbackId/trust — a second person agrees with a correction, so it may be used to
  * teach the AI later (E4-15). Super admin; never the person who made it (Q17 default: four eyes).
  */
 async function trustCorrection(req, res) {
   const row = await AiFeedback.findOne({ where: { id: req.params.feedbackId, caseId: req.params.id } });
   if (!row) return res.status(404).json({ error: { message: 'Correction not found', status: 404 } });
+  if (row.kind === 'confirm') {
+    return res.status(400).json({ error: { message: 'A confirmation is not a correction — there is nothing to trust.', status: 400 } });
+  }
   if (row.createdBy === req.user.username) {
     return res.status(403).json({ error: { message: 'Another person marks a correction trusted — not the one who made it.', status: 403 } });
   }
@@ -120,4 +169,4 @@ async function trustCorrection(req, res) {
   res.json({ correction: row });
 }
 
-module.exports = { createCorrection, trustCorrection, correctionsInfo, CORRECTABLE_STATUSES };
+module.exports = { createCorrection, createConfirmation, trustCorrection, correctionsInfo, CORRECTABLE_STATUSES };

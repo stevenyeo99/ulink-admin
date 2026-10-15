@@ -54,6 +54,11 @@ export function createCorrection(
   return request(`/api/cases/${id}/corrections`, { method: 'POST', body: JSON.stringify(correction) });
 }
 
+// "✓ Right" (review workspace, SYSTEM_4 E5b): the AI's value or verdict was checked and is right — learning data only.
+export function confirmFinding(id: string, kind: 'value' | 'verdict', item: string): Promise<{ confirmation: Correction }> {
+  return request(`/api/cases/${id}/confirmations`, { method: 'POST', body: JSON.stringify({ kind, item }) });
+}
+
 // A second person agrees with a correction, so it may teach the AI later (super admin, not the one who made it).
 export function trustCorrection(id: string, feedbackId: string): Promise<{ correction: Correction }> {
   return request(`/api/cases/${id}/corrections/${feedbackId}/trust`, { method: 'POST' });

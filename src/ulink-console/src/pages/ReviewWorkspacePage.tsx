@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, ChevronRight } from 'lucide-react';
-import { claimCase, getCase, getNextCase, releaseCase } from '../api/casesApi';
-import { isSuperAdmin } from '../lib/session';
+import { claimCase, confirmFinding, getCase, getNextCase, releaseCase } from '../api/casesApi';
+import { getSession, isSuperAdmin } from '../lib/session';
 import { Button } from '../components/common/Button';
 import { CaseStatusPill } from '../components/cases/CaseStatusPill';
 import { CaseClaimBar } from '../components/cases/CaseClaimBar';
@@ -28,6 +28,8 @@ export function ReviewWorkspacePage() {
   const [queueEmpty, setQueueEmpty] = useState(false);
   const [moving, setMoving] = useState(false);
   const [nextError, setNextError] = useState<string | null>(null);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
   const [correctCount, setCorrectCount] = useState(0); // remounts the form even when the same item is chosen again
   const correctionRef = useRef<HTMLDivElement>(null);
   const claimTried = useRef<string | null>(null);
@@ -71,6 +73,27 @@ export function ReviewWorkspacePage() {
   const fields = (caseRecord.extractedFields ?? {}) as { claimant?: { claimant_name?: string | null }; claim?: { total_claim_amount?: number | null } };
   const unsureCount = assessmentSummary.reviewPoints.filter((p) => !p.overridden).length;
 
+  // "✓ Right" (E5b): recorded as learning data; the list refreshes to show it.
+  const me = getSession()?.user.username;
+  const kindOf = (item: string) => corrections.options.find((o) => o.item === item)?.kind;
+  const confirmed = new Map(corrections.list
+    .filter((c) => c.kind === 'confirm' && c.createdBy === me && kindOf(c.item))
+    .map((c) => [`${kindOf(c.item)}:${c.item}`, c.correctedValue]));
+  const confirm = async (keys: string[]) => {
+    setConfirming(true);
+    setConfirmError(null);
+    try {
+      for (const key of keys) {
+        const [kind, ...rest] = key.split(':');
+        await confirmFinding(id, kind as 'value' | 'verdict', rest.join(':'));
+      }
+    } catch (error) {
+      setConfirmError(`Couldn't record "Right": ${(error as Error).message}`);
+    } finally {
+      setConfirming(false);
+      queryClient.invalidateQueries({ queryKey: ['case', id] });
+    }
+  };
   const correct = (item: string) => {
     setCorrecting(item);
     setCorrectCount((n) => n + 1);
@@ -124,6 +147,7 @@ export function ReviewWorkspacePage() {
           <h2 className="mb-2 text-sm font-semibold text-slate-800">
             AI findings <span className="font-normal text-slate-500">— unsure means at or below {Math.round(threshold * 100)}%</span>
           </h2>
+          {confirmError && <p className="mb-2 text-sm text-red-600">{confirmError}</p>}
           <FindingsPanel
             checklist={checklist}
             lines={assessmentSummary.lines}
@@ -131,6 +155,9 @@ export function ReviewWorkspacePage() {
             files={files}
             onOpenPage={setOpen}
             onCorrect={corrections.allowed && isSuperAdmin() ? correct : null}
+            onConfirm={isSuperAdmin() ? confirm : null}
+            confirming={confirming}
+            confirmed={confirmed}
             documentsOverridden={assessmentSummary.lines.some((l) => l.area === 'documents' && l.overridden)}
           />
           <div ref={correctionRef}>

@@ -172,6 +172,8 @@ export function CaseDetailPage() {
         </ol>
       </Section>
 
+      {/* Technical details (raw JSON, job steps, IAS payloads): super admin only (SYSTEM_4 E4-20). */}
+      {isSuperAdmin() && (
       <button
         onClick={() => setShowTechnical((open) => !open)}
         aria-expanded={showTechnical}
@@ -181,8 +183,9 @@ export function CaseDetailPage() {
         <ChevronDown size={16} className={clsx('motion-safe:transition-transform', showTechnical && 'rotate-180')} />
         {showTechnical ? 'Hide technical details' : 'Show technical details'}
       </button>
+      )}
 
-      {showTechnical && (
+      {showTechnical && isSuperAdmin() && (
         <div id="technical-details">
           <Section title="Identifiers">
             <p className="font-mono text-xs text-slate-600">Case ID {caseRecord.id}</p>

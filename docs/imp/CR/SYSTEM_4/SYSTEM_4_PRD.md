@@ -442,6 +442,18 @@ confirm with ULINK.
   correction with the item chosen. Opening it **claims the case** (E4b); **Next case** releases it and opens the oldest
   unclaimed case in the queue (`GET /api/cases/next`). **Not in E5a (E5b):** Accept / Reject buttons with *Right*
   recorded as learning data, the Technical tab.
+- **Built 2026-10-15 (E5b):** each finding has **✓ Right** (learning data only: `ulink_ai_feedback` kind `confirm` —
+  value, AI confidence, page, who; the case doesn't change; once per person per item and value; allowed on any case the
+  AI has read, decided ones too) and **✗ Wrong — correct it** (opens the E4a correction with the item chosen; a verdict
+  is flipped there). The comment is optional for *Right* (default "Checked against the document") — it changes nothing
+  on the case, unlike the E4-11 actions. Migration `20261015140000-ai-feedback-confirm` (kind `confirm`; `wrong_step`
+  optional; run on dev). **Technical details** (raw JSON, job steps, IAS payloads) on the case page: super admin only
+  (kept as the existing collapsible section rather than a tab).
+  **After code review (same day):** *Right* is refused on an item a person corrected (agreeing with a correction is
+  *Mark trusted*); one confirmation per person per item and value (unique index `ulink_ai_feedback_confirm_once`, same
+  migration — re-run on dev); *Right* on a voucher confirms its amount and its date; a confirmation can't be trusted;
+  confirmations stay out of the correction list. **Follow-up (when CSR / JD3 roles exist, Q17):** the case API still
+  returns the technical data to every role — strip it server-side then; today every user is super admin.
 
 #### E4-21 Case header: why it is here, what to do — P1, S
 - **Requirement:** the top of every case shows TPA case number, claim number, member, benefit, amount, source,
@@ -622,7 +634,7 @@ sending email, changing data in a shared DB.
 | **E2. Work queue** | E4-22 claim / assign, ordering, search | M | No two people on one case; oldest first; find any case fast | Q21 (E2b) | **E2a done — awaiting review**; E2b parked (with E4) |
 | **E3. Confidence everywhere** | E4-08 confidence + reason + source page on every AI output (prompt changes, checked against D) | M | Every AI answer explained, with its page | D done | **E3a done — awaiting review**; **E3b-1 + E3b-2 built** — not verified against the AI yet |
 | **E4. Per-item correction** | E4-12 + E4-15 steps 0–1 (migration `ulink_ai_feedback`, trusted mark) | M | Reviewers fix single findings; corrections stored for learning | E3; Q16, Q17 | **E4a committed; E4b done — awaiting review** |
-| **E5. Review workspace** | E4-20 | M–L | Check and decide next to the document page, one screen, Next case | E3, E4 | **E5a done — awaiting review**; E5b (Right / Wrong, Technical tab) next |
+| **E5. Review workspace** | E4-20 | M–L | Check and decide next to the document page, one screen, Next case | E3, E4 | **E5a committed; E5b done — awaiting review** |
 | **E6. Daily dashboard** | E4-19 | M | One start page for the day's API work | Q20 | Not started |
 | **F. Learning** | E4-24 timeline, E4-14 feedback report, E4-15 steps 2–4, E4-25 stats | M–L | Fewer repeat mistakes, proven by override rate and test set | Weeks of trusted corrections | Not started |
 | **Blocked** | E4-16, E4-17, E4-13, E4-18 | — | — | ULINK (Q6, Q15, Q18, Q19, E4-16 list) | Blocked (ULINK input) |
@@ -668,7 +680,7 @@ Ticked when the item is done; the phase status above changes when all are done a
 - [x] E4a · E4-12 + E4-15 step 1: per-item correction (value or verdict), `ulink_ai_feedback`, re-check from the member check, trusted mark by a different super admin (Q16 / Q17 defaults)
 - [x] E4b · E4-22 Claim a case (*Being reviewed by …*, 30-min time-out, take over with comment, *My cases*) — the parked E2b (`ulink_case_claims`)
 - [x] E5a · E4-20 Review workspace: document viewer + findings side by side, page links, Correct in place, auto-claim, Next case
-- [ ] E5b · E4-20 *Right* / *Wrong* on each finding (*Right* recorded in `ulink_ai_feedback`, migration), Technical tab
+- [x] E5b · E4-20 *✓ Right* / *✗ Wrong* on each finding (*Right* → `ulink_ai_feedback` kind `confirm`, migration run on dev); technical details super admin only
 - [ ] E6 · E4-19 Daily API dashboard (Q20)
 
 **Phase F — Learning**

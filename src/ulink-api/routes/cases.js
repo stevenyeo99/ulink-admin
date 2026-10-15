@@ -1,7 +1,7 @@
 const express = require('express');
 const { requireRole } = require('../modules/auth/auth');
 const { getCaseStatuses, getOverview, getReviewQueue, getNextCase, getApprovals, listCases, getCase, getLlmCalls, getAttachment, getDocument, overrideCase, resetCase, releaseMissingDocuments, uploadCaseDocuments } = require('../controllers/cases/casesController');
-const { createCorrection, trustCorrection } = require('../controllers/cases/correctionsController');
+const { createCorrection, createConfirmation, trustCorrection } = require('../controllers/cases/correctionsController');
 const { claim, release } = require('../controllers/cases/claimController');
 const { requireNotHeldByOther } = require('../modules/case-claim/claim');
 
@@ -328,6 +328,35 @@ router.post('/:id/corrections', requireRole('super_admin'), requireNotHeldByOthe
  *       403: { description: The person who made the correction, or not a super admin }
  *       404: { description: Correction not found }
  */
+/**
+ * @openapi
+ * /api/cases/{id}/confirmations:
+ *   post:
+ *     tags: [Cases]
+ *     summary: "✓ Right" — the AI's value or verdict was checked and is right (SYSTEM_4 E4-20)
+ *     description: >
+ *       Learning data only (ulink_ai_feedback kind confirm: value, AI confidence, page, who); the case does not change.
+ *       Once per person per item and value. Super admin; refused (409) while someone else is reviewing the case.
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [kind, item]
+ *             properties:
+ *               kind: { type: string, enum: [value, verdict] }
+ *               item: { type: string }
+ *               reason: { type: string, description: 'Optional; default "Checked against the document"' }
+ *     responses:
+ *       200: { description: Confirmed (or already confirmed) }
+ *       400: { description: Not an item of this case, or nothing read to confirm }
+ *       404: { description: Case not found }
+ */
+router.post('/:id/confirmations', requireRole('super_admin'), requireNotHeldByOther, createConfirmation);
+
 // Not claim-guarded on purpose: the trusted mark comes from a second person, usually while the corrector holds the case.
 router.post('/:id/corrections/:feedbackId/trust', requireRole('super_admin'), trustCorrection);
 

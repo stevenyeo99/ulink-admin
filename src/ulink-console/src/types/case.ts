@@ -314,14 +314,15 @@ export interface CorrectionOption {
 
 export interface Correction {
   id: string;
-  kind: 'value' | 'verdict';
+  /** confirm: "✓ Right" in the review workspace (SYSTEM_4 E5b) — the AI was checked and is right; nothing changed. */
+  kind: 'value' | 'verdict' | 'confirm';
   item: string;
   label: string;
   aiValue: string | number | boolean | null;
   aiConfidence: number | null;
   correctedValue: string | number | boolean | null;
   reason: string;
-  wrongStep: WrongStep;
+  wrongStep: WrongStep | null; // null for a confirmation
   page: string | null;
   createdBy: string;
   trusted: boolean;

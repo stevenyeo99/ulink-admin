@@ -16,7 +16,15 @@ interface Finding {
   why: string | null;
   page: string | null;
   correct: string | null;
+  /** What "✓ Right" confirms: the item itself — for a voucher both its amount and its date (one evidence covers both). */
+  confirms: string[];
 }
+
+// A voucher's evidence ("voucher 2") covers its amount and its date: Right confirms both.
+const confirmItemsFor = (field: string) => {
+  const voucher = field.match(/^voucher (\d+)$/);
+  return voucher ? [`value:invoices.items.${Number(voucher[1]) - 1}.subtotal`, `value:invoices.items.${Number(voucher[1]) - 1}.date`] : [`value:${field}`];
+};
 
 // A voucher's evidence ("voucher 2") → its amount, the correction item a person most often needs.
 const correctionItemFor = (field: string) => {
@@ -37,6 +45,7 @@ function buildFindings(checklist: ChecklistItem[], options: CorrectionOption[]):
   const values: Finding[] = read.map((f) => ({
     key: `value-${f.field}`, label: f.label, value: f.value, passed: true, confidence: f.confidence,
     why: f.reportedBy ? `${f.reason ?? ''} (reported on its check)`.trim() : f.reason, page: f.page, correct: canCorrect(correctionItemFor(f.field)),
+    confirms: confirmItemsFor(f.field).filter((item) => canCorrect(item)),
   }));
   const mandatory = checklist.filter((c) => c.code === 'MISSING_MANDATORY_FIELD');
   const missing = mandatory.filter((c) => c.passed === false).map((c) => c.label);
@@ -45,11 +54,12 @@ function buildFindings(checklist: ChecklistItem[], options: CorrectionOption[]):
     .map((c) => ({
       key: `check-${c.code}`, label: c.label, passed: c.passed, confidence: c.confidence ?? null,
       why: c.note ?? c.reason ?? null, page: pageOf(c.usedFields), correct: canCorrect(`verdict:${c.code}`),
+      confirms: canCorrect(`verdict:${c.code}`) ? [`verdict:${c.code}`] : [],
     }));
   if (mandatory.length) {
     checks.push({
       key: 'check-mandatory', label: 'Mandatory fields', passed: missing.length === 0, confidence: null,
-      why: missing.length ? `Not found: ${missing.join('; ')}` : `All ${mandatory.length} found.`, page: null, correct: null,
+      why: missing.length ? `Not found: ${missing.join('; ')}` : `All ${mandatory.length} found.`, page: null, correct: null, confirms: [],
     });
   }
   return [...values, ...checks];
@@ -67,8 +77,17 @@ export function FindingsPanel({
   files,
   onOpenPage,
   onCorrect,
+  onConfirm,
+  confirming = false,
+  confirmed,
   documentsOverridden = false,
 }: {
+  /** "✓ Right": the reviewer checked it against the document (SYSTEM_4 E5b); null when they can't. */
+  onConfirm: ((items: string[]) => void) | null;
+  /** A confirmation is being saved — the buttons wait (no double count). */
+  confirming?: boolean;
+  /** Items ("value:…" / "verdict:…") this reviewer already confirmed, with the value they confirmed. */
+  confirmed: Map<string, unknown>;
   checklist: ChecklistItem[];
   /** A person overrode the document check: its failed / unsure findings are handled, not open. */
   documentsOverridden?: boolean;
@@ -79,6 +98,10 @@ export function FindingsPanel({
   onCorrect: ((item: string) => void) | null;
 }) {
   const threshold = useConfidenceThreshold();
+  // The value / verdict a "✓ Right" would confirm now (as the API's option.current); items read as nothing are skipped.
+  const currentOf = (item: string) => options.find((o) => `${o.kind}:${o.item}` === item)?.current ?? null;
+  const toConfirm = (f: Finding) => f.confirms.filter((item) => currentOf(item) != null);
+  const isConfirmed = (f: Finding) => toConfirm(f).length > 0 && toConfirm(f).every((item) => confirmed.has(item) && confirmed.get(item) === currentOf(item));
   const [showPassed, setShowPassed] = useState(false);
   const findings = buildFindings(checklist, options);
   const notChecked = findings.filter((f) => f.passed === null);
@@ -108,8 +131,15 @@ export function FindingsPanel({
           ) : (
             f.page && <span className="text-slate-400">{f.page} (file not on this case)</span>
           )}
+          {isConfirmed(f) ? (
+            <span className="text-ulink-teal-dark">✓ Confirmed by you</span>
+          ) : (
+            onConfirm && toConfirm(f).length > 0 && (
+              <button disabled={confirming} onClick={() => onConfirm(toConfirm(f))} className="text-ulink-teal-dark hover:underline disabled:opacity-50">✓ Right</button>
+            )
+          )}
           {onCorrect && f.correct && (
-            <button onClick={() => onCorrect(f.correct!)} className="text-ulink-orange-dark hover:underline">Correct</button>
+            <button onClick={() => onCorrect(f.correct!)} className="text-ulink-orange-dark hover:underline">✗ Wrong — correct it</button>
           )}
         </div>
       </li>
