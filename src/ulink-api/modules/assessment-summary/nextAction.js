@@ -9,6 +9,7 @@ const { lastReadSettings } = require('../settings/settings');
 // act — a person has to do something now.
 
 const TEAM = 'Claims team';
+const { CLAIM_EVENTS } = require('../case-claim/events');
 
 // The open review points, as "<decision> (<confidence>%)", at most three.
 function openPoints(summary) {
@@ -21,7 +22,8 @@ const missingList = (fields) => (fields.documentCheckResult?.issues || []).join(
 
 // The message of the event that put the case at its current status — the job's own words for why it stopped there.
 function lastMessage(fields, events = []) {
-  const event = [...events].reverse().find((e) => e.newStatus === fields.currentStatus && e.message);
+  // Claim events ("Being reviewed by …", SYSTEM_4 E4-22) say who works on the case, not what happened to it.
+  const event = [...events].reverse().find((e) => e.newStatus === fields.currentStatus && e.message && !CLAIM_EVENTS.includes(e.reasonCode));
   return event ? event.message.replace(/\s*\.?$/, '.') : null;
 }
 

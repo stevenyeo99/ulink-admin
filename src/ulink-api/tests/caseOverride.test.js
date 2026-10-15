@@ -3,6 +3,7 @@
 // Models are mocked.
 
 jest.mock('../db/models', () => ({
+  CaseClaim: { findByPk: jest.fn(async () => null), findAll: jest.fn(async () => []), destroy: jest.fn() },
   sequelize: { transaction: jest.fn(async (fn) => fn('tx')) },
   Case: { findByPk: jest.fn(), update: jest.fn(async () => [1]) },
   CaseEvent: { create: jest.fn() },

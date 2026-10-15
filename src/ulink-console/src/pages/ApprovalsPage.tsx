@@ -30,6 +30,7 @@ export function ApprovalsPage() {
         <>
           <span className="text-slate-800">{i.claimNo ?? '—'}</span>
           {i.tpaCaseNumber && <span className="block whitespace-nowrap text-xs text-slate-500">{i.tpaCaseNumber}</span>}
+          {i.claim && <span className="block text-xs text-ulink-teal-dark">Being reviewed by {i.claim.name}</span>}
         </>
       ),
     },

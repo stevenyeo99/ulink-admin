@@ -2,6 +2,8 @@ const express = require('express');
 const { requireRole } = require('../modules/auth/auth');
 const { getCaseStatuses, getOverview, getReviewQueue, getApprovals, listCases, getCase, getLlmCalls, getAttachment, getDocument, overrideCase, resetCase, releaseMissingDocuments, uploadCaseDocuments } = require('../controllers/cases/casesController');
 const { createCorrection, trustCorrection } = require('../controllers/cases/correctionsController');
+const { claim, release } = require('../controllers/cases/claimController');
+const { requireNotHeldByOther } = require('../modules/case-claim/claim');
 
 const router = express.Router();
 
@@ -255,7 +257,7 @@ router.get('/:caseId/documents/:documentId', getDocument);
  *       404:
  *         description: Case not found
  */
-router.post('/:id/override', requireRole('super_admin'), overrideCase);
+router.post('/:id/override', requireRole('super_admin'), requireNotHeldByOther, overrideCase);
 
 /**
  * @openapi
@@ -295,7 +297,7 @@ router.post('/:id/override', requireRole('super_admin'), overrideCase);
  *       404: { description: Case not found }
  *       409: { description: The case moved while the person was reviewing it }
  */
-router.post('/:id/corrections', requireRole('super_admin'), createCorrection);
+router.post('/:id/corrections', requireRole('super_admin'), requireNotHeldByOther, createCorrection);
 
 /**
  * @openapi
@@ -312,6 +314,7 @@ router.post('/:id/corrections', requireRole('super_admin'), createCorrection);
  *       403: { description: The person who made the correction, or not a super admin }
  *       404: { description: Correction not found }
  */
+// Not claim-guarded on purpose: the trusted mark comes from a second person, usually while the corrector holds the case.
 router.post('/:id/corrections/:feedbackId/trust', requireRole('super_admin'), trustCorrection);
 
 /**
@@ -354,7 +357,7 @@ router.post('/:id/corrections/:feedbackId/trust', requireRole('super_admin'), tr
  *       409:
  *         description: Case already has a real IAS claim number — refusing to reset
  */
-router.post('/:id/reset', requireRole('super_admin'), resetCase);
+router.post('/:id/reset', requireRole('super_admin'), requireNotHeldByOther, resetCase);
 
 /**
  * @openapi
@@ -383,7 +386,7 @@ router.post('/:id/reset', requireRole('super_admin'), resetCase);
  *       400: { description: Case is not held, or no comment }
  *       409: { description: The case changed meanwhile }
  */
-router.post('/:id/release-missing-documents', requireRole('super_admin'), releaseMissingDocuments);
+router.post('/:id/release-missing-documents', requireRole('super_admin'), requireNotHeldByOther, releaseMissingDocuments);
 
 /**
  * @openapi
@@ -424,6 +427,48 @@ router.post('/:id/release-missing-documents', requireRole('super_admin'), releas
  *       502: { description: Console upload failed (network / server) — nothing changed }
  *       503: { description: Console upload not set up on this server }
  */
-router.post('/:id/documents', uploadCaseDocuments);
+router.post('/:id/documents', requireNotHeldByOther, uploadCaseDocuments);
+
+/**
+ * @openapi
+ * /api/cases/{id}/claim:
+ *   post:
+ *     tags: [Cases]
+ *     summary: Claim a case — "Being reviewed by …" (SYSTEM_4 E4-22)
+ *     description: >
+ *       While one person holds a case, others can view it but their case actions (override, correct, reset, release
+ *       the missing-documents email, upload) answer 409. A claim lasts 30 minutes from the holder's last action;
+ *       claiming again renews it. Held by someone else → 409, unless takeOver with a comment (kept in the case history).
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               takeOver: { type: boolean }
+ *               comment: { type: string }
+ *     responses:
+ *       200: { description: Claimed (or renewed) }
+ *       400: { description: Take-over without a comment }
+ *       404: { description: Case not found }
+ *       409: { description: Being reviewed by someone else }
+ */
+router.post('/:id/claim', requireRole('super_admin'), claim);
+
+/**
+ * @openapi
+ * /api/cases/{id}/release:
+ *   post:
+ *     tags: [Cases]
+ *     summary: Give a claimed case back (SYSTEM_4 E4-22)
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Released (or nobody held it) }
+ *       409: { description: Someone else holds it }
+ */
+router.post('/:id/release', requireRole('super_admin'), release);
 
 module.exports = router;

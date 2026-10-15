@@ -32,6 +32,7 @@ export function reviewColumns(source: Source): Column<ReviewQueueItem>[] {
       render: (i) => (
         <>
           <span className="text-slate-800">{i.check}</span>
+          {i.claim && <span className="block text-xs text-ulink-teal-dark">Being reviewed by {i.claim.name}</span>}
           {i.pointCount > 1 && <span className="block text-xs text-slate-500">{i.pointCount - 1} more point(s) on the case page</span>}
         </>
       ),

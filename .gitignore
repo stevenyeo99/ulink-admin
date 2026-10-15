@@ -1,2 +1,5 @@
 /docs/samples/
 /release/
+
+# graphify knowledge graph (generated locally; rebuild with /graphify)
+graphify-out/

@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { ApprovalsResponse, Correction, WrongStep, CaseListQuery, CaseOverview, ReviewQueueResponse, CaseStatusCatalog, GetCaseResponse, ListCasesResponse, LlmCall, OverrideCaseResponse, ResetCaseResponse } from '../types/case';
+import type { ApprovalsResponse, CaseClaim, Correction, WrongStep, CaseListQuery, CaseOverview, ReviewQueueResponse, CaseStatusCatalog, GetCaseResponse, ListCasesResponse, LlmCall, OverrideCaseResponse, ResetCaseResponse } from '../types/case';
 import type { Source } from '../types/pipeline';
 
 export function listCases(query: CaseListQuery = {}): Promise<ListCasesResponse> {
@@ -57,6 +57,15 @@ export function createCorrection(
 // A second person agrees with a correction, so it may teach the AI later (super admin, not the one who made it).
 export function trustCorrection(id: string, feedbackId: string): Promise<{ correction: Correction }> {
   return request(`/api/cases/${id}/corrections/${feedbackId}/trust`, { method: 'POST' });
+}
+
+// "Being reviewed by me" (claimController.js, SYSTEM_4 E4-22). takeOver + comment: from someone else.
+export function claimCase(id: string, takeOver = false, comment = ''): Promise<{ claim: CaseClaim }> {
+  return request(`/api/cases/${id}/claim`, { method: 'POST', body: JSON.stringify({ takeOver, comment }) });
+}
+
+export function releaseCase(id: string): Promise<{ released: boolean }> {
+  return request(`/api/cases/${id}/release`, { method: 'POST' });
 }
 
 // Always rewinds to READY_FOR_DOCUMENT_READING (the only target the console exposes) — see

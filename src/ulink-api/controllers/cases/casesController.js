@@ -17,6 +17,8 @@ const logger = require('../../utils/logger');
 const { releaseMissingDocumentsEmail } = require('../../modules/document-checking/service');
 const { uploadDocuments, UploadRefused } = require('../../modules/case-upload/upload');
 const { correctionsInfo } = require('./correctionsController');
+const { claimView, activeClaims, endClaim } = require('../../modules/case-claim/claim');
+const { CaseClaim } = require('../../db/models');
 
 const BLOCK_NAME = 'case-review';
 
@@ -52,6 +54,12 @@ async function assessmentFieldsLoader(cases) {
   const stepsByCase = new Map();
   for (const step of steps) stepsByCase.set(step.caseId, [...(stepsByCase.get(step.caseId) || []), step]);
   return (c) => (c.source === 'API' ? apiCaseView(stepsByCase.get(c.id) || []) : c);
+}
+
+// Who is reviewing each queued case right now (claim: { username, name, … } or null — SYSTEM_4 E4-22).
+async function withClaims(items) {
+  const claims = await activeClaims(items.map((i) => i.id));
+  for (const item of items) item.claim = claims.get(item.id) ?? null;
 }
 
 const listRow = (c) => ({
@@ -93,6 +101,7 @@ async function getApprovals(req, res) {
     const points = reviewPoints.filter((p) => p.reason !== 'STP with open review points');
     return { ...listRow(c), reviewPoints: points.map((p) => `${p.decision}: ${p.check}`) };
   });
+  await withClaims(items);
   res.json({ items, total: items.length });
 }
 
@@ -136,6 +145,7 @@ async function getReviewQueue(req, res) {
     if (!entry) continue;
     items.push({ ...listRow(c), ...entry });
   }
+  await withClaims(items);
   const counts = Object.fromEntries(REASON_ORDER.map((r) => [r, items.filter((i) => i.reason === r).length]));
   res.json({ items, counts, total: items.length });
 }
@@ -320,8 +330,10 @@ async function getCase(req, res) {
     };
   };
   // corrections: per-item corrections allowed now, what can be corrected, and those made (SYSTEM_4 E4-12).
+  // claim: who is reviewing the case right now, or null (SYSTEM_4 E4-22).
+  const claim = claimView(await CaseClaim.findByPk(caseRecord.id));
   if (caseRecord.source !== 'API') {
-    return res.json({ case: caseRecord, events, documents, ...reviewInfo(caseRecord), corrections: await correctionsInfo(caseRecord, caseRecord) });
+    return res.json({ case: caseRecord, events, documents, ...reviewInfo(caseRecord), corrections: await correctionsInfo(caseRecord, caseRecord), claim });
   }
 
   // API cases: their job data lives in ulink_api_case_steps. Fill the same case fields the page
@@ -329,7 +341,7 @@ async function getCase(req, res) {
   // page's Job Steps section. Email cases take the branch above, unchanged.
   const apiSteps = await ApiCaseStep.findAll({ where: { caseId: caseRecord.id }, order: [['createdAt', 'ASC']] });
   const fields = { ...caseRecord.toJSON(), ...apiCaseView(apiSteps) };
-  res.json({ case: fields, events, documents, apiSteps, ...reviewInfo(fields), corrections: await correctionsInfo(caseRecord, fields) });
+  res.json({ case: fields, events, documents, apiSteps, ...reviewInfo(fields), corrections: await correctionsInfo(caseRecord, fields), claim });
 }
 
 /**
@@ -475,6 +487,7 @@ async function overrideCase(req, res) {
     return res.status(409).json({ error: { message: 'The case changed while you were reviewing it. Reload the page and check again.', status: 409 } });
   }
 
+  await endClaim(caseRecord.id, req.user.username); // the holder decided the case — their own claim ends (SYSTEM_4 E4-22)
   logger.info('Case manually overridden', { caseId: caseRecord.id, prevStatus, targetStatus, finding, username: req.user.username });
   res.json({ caseId: caseRecord.id, previousStatus: prevStatus, currentStatus: targetStatus });
 }

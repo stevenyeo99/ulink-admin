@@ -285,6 +285,15 @@ export interface GetCaseResponse {
   /** API cases only. Their CaseDetail fields (extractedFields, …) are filled from these by the API. */
   apiSteps?: ApiCaseStep[];
   corrections: CorrectionsInfo;
+  claim: CaseClaim | null;
+}
+
+// Who is reviewing a case right now (SYSTEM_4 E4-22, ulink-api modules/case-claim/claim.js); null = nobody.
+export interface CaseClaim {
+  username: string;
+  name: string;
+  claimedAt: string;
+  expiresAt: string;
 }
 
 // Per-item correction (SYSTEM_4 E4-12, ulink-api modules/ai-feedback/corrections.js).
@@ -366,6 +375,7 @@ export interface ReviewQueueItem {
   updatedAt: string;
   /** Most serious reason, e.g. "Data mismatch". */
   reason: string;
+  claim: CaseClaim | null;
   /** What to check first. */
   check: string;
   reasons: string[];
@@ -390,6 +400,7 @@ export interface ApprovalItem {
   updatedAt: string;
   /** "Decision: what to check" — the AI's review points for this claim. */
   reviewPoints: string[];
+  claim: CaseClaim | null;
 }
 
 export interface ApprovalsResponse {

@@ -3,6 +3,7 @@
 
 jest.mock('../db/models', () => {
   return {
+    CaseClaim: { findByPk: jest.fn(async () => null), findAll: jest.fn(async () => []), destroy: jest.fn() },
     Case: { findAndCountAll: jest.fn(async () => ({ rows: [], count: 0 })), findAll: jest.fn(), count: jest.fn() },
     ApiCaseStep: { findAll: jest.fn(async () => []) },
     CaseEvent: {}, CaseDocument: {}, EmailThread: {}, EmailMessage: {}, EmailAttachment: {},

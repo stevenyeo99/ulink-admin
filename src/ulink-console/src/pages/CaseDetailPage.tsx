@@ -13,6 +13,7 @@ import { CaseOverridePanel } from '../components/cases/CaseOverridePanel';
 import { LlmCallsSection } from '../components/cases/LlmCallsSection';
 import { CaseUploadPanel } from '../components/cases/CaseUploadPanel';
 import { CaseCorrectionPanel } from '../components/cases/CaseCorrectionPanel';
+import { CaseClaimBar } from '../components/cases/CaseClaimBar';
 import { isSuperAdmin } from '../lib/session';
 import { JsonViewer } from '../components/panel/JsonViewer';
 import { ChecklistTable } from '../components/panel/ChecklistTable';
@@ -91,7 +92,7 @@ export function CaseDetailPage() {
   if (isLoading) return <div className="p-6 text-sm text-slate-400">Loading…</div>;
   if (isError || !data) return <div className="p-6 text-sm text-red-600">Couldn't load this case. It may have been removed.</div>;
 
-  const { case: caseRecord, events, documents, apiSteps, assessmentSummary, override, nextAction, corrections } = data;
+  const { case: caseRecord, events, documents, apiSteps, assessmentSummary, override, nextAction, corrections, claim } = data;
   const fieldsRead = caseRecord.documentCheckResult?.checklist?.find((item) => item.code === 'FIELDS_READ')?.fields;
   const isApi = caseRecord.source === 'API';
   const statusLabel = (code: string | null) => (code ? info(code).label : '—');
@@ -120,6 +121,7 @@ export function CaseDetailPage() {
           {formatTimestamp(caseRecord.createdAt)}, last updated {formatTimestamp(caseRecord.updatedAt)}.
         </p>
         {nextAction ? <NextActionBox next={nextAction} /> : <p className="mt-1 text-sm text-slate-600">{info(caseRecord.currentStatus).description}</p>}
+        {isSuperAdmin() && <CaseClaimBar caseId={caseRecord.id} claim={claim ?? null} />}
       </header>
 
       <CaseUploadPanel caseRecord={caseRecord} />

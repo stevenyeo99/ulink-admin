@@ -6,6 +6,7 @@ import { SourceTabs } from '../components/common/SourceTabs';
 import { pickSource, useEnabledSources } from '../hooks/useSource';
 import { DataTable } from '../components/common/DataTable';
 import type { ReviewQueueItem } from '../types/case';
+import { getSession } from '../lib/session';
 
 const PAGE_SIZE = 25;
 const EMPTY: ReviewQueueItem[] = [];
@@ -34,7 +35,10 @@ export function ReviewQueuePage() {
   };
 
   const all = data?.items ?? EMPTY;
-  const items = reason ? all.filter((i) => i.reason === reason) : all;
+  // "My cases" (?reason=mine): the cases I am reviewing (SYSTEM_4 E4-22).
+  const me = getSession()?.user.username;
+  const mine = all.filter((i) => i.claim?.username === me);
+  const items = reason === 'mine' ? mine : reason ? all.filter((i) => i.reason === reason) : all;
   const reasons = Object.entries(data?.counts ?? {}).filter(([, n]) => n > 0);
 
   const columns = reviewColumns(source);
@@ -47,7 +51,7 @@ export function ReviewQueuePage() {
 
       {reasons.length > 0 && (
         <div className="mb-4 flex w-fit flex-wrap items-center gap-1 rounded-full bg-slate-100/80 p-1">
-          {[['', all.length] as const, ...reasons].map(([r, n]) => (
+          {[['', all.length] as const, ['mine', mine.length] as const, ...reasons].map(([r, n]) => (
             <button
               key={r || 'all'}
               onClick={() => update({ reason: r })}
@@ -57,7 +61,7 @@ export function ReviewQueuePage() {
                 reason === r ? 'bg-white text-slate-900 shadow-glass' : 'text-slate-500 hover:text-slate-800'
               )}
             >
-              {r || 'All'} <span className="tabular-nums text-slate-400">{n}</span>
+              {r === 'mine' ? 'My cases' : r || 'All'} <span className="tabular-nums text-slate-400">{n}</span>
             </button>
           ))}
         </div>

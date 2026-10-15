@@ -241,6 +241,7 @@ See 2.5–2.6. Normal wait 15–30 minutes; flagged after 2 hours; always keeps 
 
 | When | Where | What the person does |
 |---|---|---|
+| Working on a case | Case page → **Review this case** | "Being reviewed by …": others can view; their case actions wait (30 minutes from your last action; *Release*, or your override, ends it; *Take over* with a comment). Review queue: holder shown, **My cases** chip |
 | Looking for one case | **Search** in the top bar (any page): claim no., TPA case no., claimant name, NRC / passport or case ID — Email and API | One match opens the case; otherwise the Cases list |
 | Any case needing a person | **Review queue** (grouped by reason, oldest first) | Open the case: the header shows the claimant, benefit, amount and **Next** — what to do and who does it (amber when a person must act); then "why the case went this way" and the review points |
 | The AI got one item wrong (member or document finding holds the case) | Case page → **Correct one item** | Super admin. A value it read or one check's verdict, with a reason and what went wrong → the case is checked again with it (from the member check for name / NRC / DOB / policy no. / bank / treatment dates, else from the document check); missing documents found then wait for the person (no automatic customer email); AI value → corrected value, who and why are kept (history, summary, IAS remark); a second super admin marks it **trusted** |

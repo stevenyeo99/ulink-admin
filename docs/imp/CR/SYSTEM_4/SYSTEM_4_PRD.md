@@ -458,7 +458,13 @@ confirm with ULINK.
   the NRC, and API cases' claimant name and NRC (kept in their recognition step, so API cases were not found by name
   before). The name searched is the one the AI read from the claim form, not the IAS member name (as recommended — almost always the same; add it if wanted).
   Ordering and reason filters already existed (review queue and approvals oldest first; reason chips); the ageing
-  limit waits for Q20 (E6). **E2b** (claim / assign, *My cases*) **parked** (owner, 2026-10-15): little to protect yet — override already refuses a case that moved on, the team is small; build it with E4, when reviewers edit items one by one and Q21 may be answered.
+  limit waits for Q20 (E6). **Built 2026-10-15 as E4b (Q21 default: reviewers claim themselves; 30-minute time-out):**
+  case page *Review this case* → "Being reviewed by …" (table `ulink_case_claims`, migration
+  `20261015130000-create-case-claims`, run on dev); while held, others view but override / correct / reset / release
+  the email / upload answer 409; the claim lasts 30 minutes from the holder's last action (each action renews it);
+  *Release*, or the holder's override, ends it; *Take over* with a comment (case history); review queue and approvals
+  show who holds each case; review queue chip **My cases**. Pipeline jobs not affected; no roles yet (Q17 / Q21 may add
+  supervisor *Assign*). Earlier: **E2b** (claim / assign, *My cases*) **parked** (owner, 2026-10-15): little to protect yet — override already refuses a case that moved on, the team is small; build it with E4, when reviewers edit items one by one and Q21 may be answered.
 
 #### E4-23 One confidence look everywhere — P2, S
 - **Requirement:** one badge used on queue, case page and dashboard: green at or above the threshold, amber unsure,
@@ -605,7 +611,7 @@ sending email, changing data in a shared DB.
 | **E1. Upload → re-check** | E4-04 | M | Incomplete API case recovers without an inbox | Q1, Q2, Q5, Q12 | **Done — awaiting review** |
 | **E2. Work queue** | E4-22 claim / assign, ordering, search | M | No two people on one case; oldest first; find any case fast | Q21 (E2b) | **E2a done — awaiting review**; E2b parked (with E4) |
 | **E3. Confidence everywhere** | E4-08 confidence + reason + source page on every AI output (prompt changes, checked against D) | M | Every AI answer explained, with its page | D done | **E3a done — awaiting review**; **E3b-1 + E3b-2 built** — not verified against the AI yet |
-| **E4. Per-item correction** | E4-12 + E4-15 steps 0–1 (migration `ulink_ai_feedback`, trusted mark) | M | Reviewers fix single findings; corrections stored for learning | E3; Q16, Q17 | **E4a done — awaiting review**; E4b (claim a case) next |
+| **E4. Per-item correction** | E4-12 + E4-15 steps 0–1 (migration `ulink_ai_feedback`, trusted mark) | M | Reviewers fix single findings; corrections stored for learning | E3; Q16, Q17 | **E4a committed; E4b done — awaiting review** |
 | **E5. Review workspace** | E4-20 | M–L | Check and decide next to the document page, one screen, Next case | E3, E4 | Not started |
 | **E6. Daily dashboard** | E4-19 | M | One start page for the day's API work | Q20 | Not started |
 | **F. Learning** | E4-24 timeline, E4-14 feedback report, E4-15 steps 2–4, E4-25 stats | M–L | Fewer repeat mistakes, proven by override rate and test set | Weeks of trusted corrections | Not started |
@@ -645,12 +651,12 @@ Ticked when the item is done; the phase status above changes when all are done a
 **Phase E — Main features** (each sub-item approved on its own)
 - [x] E1 · E4-04 Upload missing documents → re-check: console watch (any uploader) + case-page upload via cl-upload (Q1, Q2, Q5, Q12 answered)
 - [x] E2a · E4-22 Search in the top bar (claim no., TPA case no., claimant, NRC, case ID; Email and API); ordering / reason filters already there
-- [ ] E2b · E4-22 Claim a case (*Being reviewed by …*, time-out, take over with comment), *My cases* (Q21) — **parked, build with E4**
+- [x] E2b · E4-22 Claim a case — built as E4b (2026-10-15)
 - [x] E3a · E4-08 Format checks on values read (*Values read look valid*: NRC, dates, amounts → unsure) + a reason on every document check, pass or fail — rules only
 - [x] E3b-1 · E4-08 Prompts + schema: doubt marks in page reading; field evidence (14 key fields: confidence, reason, page); voucher evidence, line total, vitamin items + score; translation reason — **built, not verified: AI runs on the 4 sample claims (before / after) waiting for the owner's go-ahead**
 - [x] E3b-2 · E4-08 Checks take their fields' confidence; voucher lines vs amount in *Values read look valid*; case page *What the AI read*; *Values read* summary line (rules + console; tested on mocked AI output)
 - [x] E4a · E4-12 + E4-15 step 1: per-item correction (value or verdict), `ulink_ai_feedback`, re-check from the member check, trusted mark by a different super admin (Q16 / Q17 defaults)
-- [ ] E4b · E4-22 Claim a case (*Being reviewed by …*, 30-min time-out, take over with comment) — the parked E2b
+- [x] E4b · E4-22 Claim a case (*Being reviewed by …*, 30-min time-out, take over with comment, *My cases*) — the parked E2b (`ulink_case_claims`)
 - [ ] E5 · E4-20 Review workspace
 - [ ] E6 · E4-19 Daily API dashboard (Q20)
 
