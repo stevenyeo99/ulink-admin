@@ -1,6 +1,7 @@
 const express = require('express');
 const { requireRole } = require('../modules/auth/auth');
 const { getCaseStatuses, getOverview, getReviewQueue, getApprovals, listCases, getCase, getLlmCalls, getAttachment, getDocument, overrideCase, resetCase, releaseMissingDocuments, uploadCaseDocuments } = require('../controllers/cases/casesController');
+const { createCorrection, trustCorrection } = require('../controllers/cases/correctionsController');
 
 const router = express.Router();
 
@@ -255,6 +256,63 @@ router.get('/:caseId/documents/:documentId', getDocument);
  *         description: Case not found
  */
 router.post('/:id/override', requireRole('super_admin'), overrideCase);
+
+/**
+ * @openapi
+ * /api/cases/{id}/corrections:
+ *   post:
+ *     tags: [Cases]
+ *     summary: Correct one value the AI read, or one check's verdict (SYSTEM_4 E4-12)
+ *     description: >
+ *       Allowed while a member or document finding holds the case (the override statuses). Stores the correction
+ *       (ulink_ai_feedback: AI value and confidence, corrected value, reason, which step was wrong, page, who),
+ *       writes it into the case's fields, and checks the case again with it — from the member check (RECOGNIZED /
+ *       API_RECOGNIZED) for a value the member check compares with IAS, else from the document check. Missing documents
+ *       found after a correction wait for the person (no automatic customer email). Super admin. Logs a CaseEvent
+ *       (MANUAL_CORRECTION). No IAS write.
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [kind, item, reason, wrongStep]
+ *             properties:
+ *               kind: { type: string, enum: [value, verdict] }
+ *               item: { type: string, description: 'A field path (e.g. claimant.claimant_nrc_passport, invoices.items.0.date) or a checklist code' }
+ *               value: { description: 'kind=value: the correct value (amount, YYYY-MM-DD date or text)' }
+ *               passed: { type: boolean, description: 'kind=verdict: the correct verdict' }
+ *               reason: { type: string }
+ *               wrongStep: { type: string, enum: [reading, mapping, check] }
+ *     responses:
+ *       200: { description: Corrected; the case is checked again }
+ *       400: { description: Not correctable now, or the value / verdict / reason is missing or invalid }
+ *       404: { description: Case not found }
+ *       409: { description: The case moved while the person was reviewing it }
+ */
+router.post('/:id/corrections', requireRole('super_admin'), createCorrection);
+
+/**
+ * @openapi
+ * /api/cases/{id}/corrections/{feedbackId}/trust:
+ *   post:
+ *     tags: [Cases]
+ *     summary: Mark a correction trusted, so it may teach the AI later (SYSTEM_4 E4-15)
+ *     description: Super admin; never the person who made the correction.
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+ *       - { name: feedbackId, in: path, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Trusted }
+ *       403: { description: The person who made the correction, or not a super admin }
+ *       404: { description: Correction not found }
+ */
+router.post('/:id/corrections/:feedbackId/trust', requireRole('super_admin'), trustCorrection);
 
 /**
  * @openapi

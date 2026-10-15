@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { ApprovalsResponse, CaseListQuery, CaseOverview, ReviewQueueResponse, CaseStatusCatalog, GetCaseResponse, ListCasesResponse, LlmCall, OverrideCaseResponse, ResetCaseResponse } from '../types/case';
+import type { ApprovalsResponse, Correction, WrongStep, CaseListQuery, CaseOverview, ReviewQueueResponse, CaseStatusCatalog, GetCaseResponse, ListCasesResponse, LlmCall, OverrideCaseResponse, ResetCaseResponse } from '../types/case';
 import type { Source } from '../types/pipeline';
 
 export function listCases(query: CaseListQuery = {}): Promise<ListCasesResponse> {
@@ -43,6 +43,20 @@ export function overrideCase(id: string, reason: string, finding: string): Promi
     method: 'POST',
     body: JSON.stringify({ reason, finding }),
   });
+}
+
+// Correct one value the AI read or one check's verdict (correctionsController.js, SYSTEM_4 E4-12); the case is checked
+// again from the member check. value: kind=value; passed: kind=verdict.
+export function createCorrection(
+  id: string,
+  correction: { kind: 'value' | 'verdict'; item: string; value?: string; passed?: boolean; reason: string; wrongStep: WrongStep }
+): Promise<{ caseId: string; currentStatus: string }> {
+  return request(`/api/cases/${id}/corrections`, { method: 'POST', body: JSON.stringify(correction) });
+}
+
+// A second person agrees with a correction, so it may teach the AI later (super admin, not the one who made it).
+export function trustCorrection(id: string, feedbackId: string): Promise<{ correction: Correction }> {
+  return request(`/api/cases/${id}/corrections/${feedbackId}/trust`, { method: 'POST' });
 }
 
 // Always rewinds to READY_FOR_DOCUMENT_READING (the only target the console exposes) — see

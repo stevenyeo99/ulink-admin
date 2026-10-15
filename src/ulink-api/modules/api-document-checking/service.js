@@ -3,6 +3,7 @@ const { runApiJob } = require('../api-pipeline/runApiJob');
 const { checkCase } = require('../document-checking/service');
 const { getSettings } = require('../settings/settings');
 const { unsureDocumentPoints, unsurePassedPoints } = require('../document-checking/holdForReview');
+const { correctionHold } = require('../ai-feedback/corrections');
 const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment-summary/summary');
 const { caseBasics } = require('../assessment-summary/journey');
 
@@ -41,8 +42,12 @@ async function processCase({ caseRecord, input }) {
   // Switch "hold the missing-documents email when the AI is unsure" (settings): the case waits for a
   // person (API_DOCUMENTS_REVIEW) instead of going on to a suspended revision; the customer email is kept
   // aside (heldEmail) and sent only if the person confirms (POST /api/cases/:id/release-missing-documents).
-  const unsure = result.passed ? [] : unsureDocumentPoints(result);
-  if (unsure.length && (await getSettings()).holdUnsureMissingDocsEmail) {
+  // After a person corrected items (SYSTEM_4 E4-12): held for them whatever the switch — they send the request.
+  const unsure = [
+    ...(result.passed || !(await getSettings()).holdUnsureMissingDocsEmail ? [] : unsureDocumentPoints(result)),
+    ...correctionHold(result, extractedFields),
+  ];
+  if (unsure.length) {
     const issuesKey = [...result.issues].sort().join('|');
     const assessment = assessmentSummaryText(buildAssessmentSummary({
       ...caseBasics(caseRecord), recognizedType, currentStatus: 'API_DOCUMENTS_REVIEW', documentCheckResult: result,
@@ -57,7 +62,7 @@ async function processCase({ caseRecord, input }) {
         email: { taskType: 'DOCUMENTS_INCOMPLETE', audience: 'internal', payload: { caseId: caseRecord.id, claimNo: caseRecord.claimNo, issues: result.issues, held: unsure, assessment }, dedupeKey: `held|${issuesKey}` },
       },
       nextStatus: 'API_DOCUMENTS_REVIEW',
-      message: `Documents incomplete: ${result.issues.join('; ')} — customer email held: the AI was unsure (${unsure.join('; ')})`,
+      message: `Documents incomplete: ${result.issues.join('; ')} — customer email held for a person: ${unsure.join('; ')}`,
     };
   }
 

@@ -16,6 +16,7 @@ const { resetOneCase } = require('../dev/casesController');
 const logger = require('../../utils/logger');
 const { releaseMissingDocumentsEmail } = require('../../modules/document-checking/service');
 const { uploadDocuments, UploadRefused } = require('../../modules/case-upload/upload');
+const { correctionsInfo } = require('./correctionsController');
 
 const BLOCK_NAME = 'case-review';
 
@@ -318,8 +319,9 @@ async function getCase(req, res) {
       override: { ...overrideCheck(fields.currentStatus, fields), findings: findingsFor(fields.currentStatus) },
     };
   };
+  // corrections: per-item corrections allowed now, what can be corrected, and those made (SYSTEM_4 E4-12).
   if (caseRecord.source !== 'API') {
-    return res.json({ case: caseRecord, events, documents, ...reviewInfo(caseRecord) });
+    return res.json({ case: caseRecord, events, documents, ...reviewInfo(caseRecord), corrections: await correctionsInfo(caseRecord, caseRecord) });
   }
 
   // API cases: their job data lives in ulink_api_case_steps. Fill the same case fields the page
@@ -327,7 +329,7 @@ async function getCase(req, res) {
   // page's Job Steps section. Email cases take the branch above, unchanged.
   const apiSteps = await ApiCaseStep.findAll({ where: { caseId: caseRecord.id }, order: [['createdAt', 'ASC']] });
   const fields = { ...caseRecord.toJSON(), ...apiCaseView(apiSteps) };
-  res.json({ case: fields, events, documents, apiSteps, ...reviewInfo(fields) });
+  res.json({ case: fields, events, documents, apiSteps, ...reviewInfo(fields), corrections: await correctionsInfo(caseRecord, fields) });
 }
 
 /**

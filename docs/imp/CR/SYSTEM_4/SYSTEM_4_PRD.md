@@ -306,6 +306,25 @@ Source: Vundick 8, demo 4.
   - The AI's original finding stays visible next to the correction.
 - **Acceptance:** correcting one wrong invoice date lets the case continue; the case page and the IAS remark show the
   AI value, the corrected value and who corrected it.
+- **Built 2026-10-15 (E4a; Q16 / Q17 defaults as recommended, owner to confirm with ULINK):** case page **Correct one
+  item** — a value the AI read (the 14 key values, each voucher's amount and date) or one checklist verdict (pass;
+  fail only where approved customer wording exists), with a reason and *what went wrong* (page misread / wrong field /
+  check's decision). Allowed where override is (a member or document finding holds the case). Saving stores the
+  correction in **`ulink_ai_feedback`** (AI value + confidence, corrected value, reason, step, page, who), writes it
+  into the case's fields (email: the case row; API: a new `api-claim-recognition` step — the AI's step is kept) with
+  `extractedFields.corrections`, and sends the case back to the **member check** (`RECOGNIZED` / `API_RECOGNIZED`), so
+  every check runs again with it; verdicts are applied by the document check. Case history `MANUAL_CORRECTION`;
+  summary line *Corrected by a person* (AI → corrected, who, why) → team emails and IAS remark. **Q16 default:** no IAS
+  claim-field update (the claim built later uses the corrected fields). **Q17 default:** any user corrects; a
+  **different** super admin marks it **trusted** (E4-15 step 1). Not in E4a: diagnosis / benefit picks, corrections
+  after revision or STP. Migration `20261015120000-create-ai-feedback` (run on dev).
+  **After code review (same day):** super admin only (like override — a corrected bank account or amount reaches the
+  claim); re-checked from the member check only for a value it compares with IAS (name, NRC, DOB, policy no., bank,
+  treatment dates) or a case still held there, else from the document check (a member override stays in force);
+  missing documents found after a correction are **held for the person** (they send the request; never an automatic
+  customer email); a voucher is sure only once both its amount and date are corrected; a refund voucher amount may be
+  negative; setting a check to pass removes only its own issue; a correction no longer in force (the case was read
+  again) shows *No longer applied*.
 
 #### E4-13 Editable missing-documents email before sending — P3, S–M
 Source: Vundick 7.
@@ -586,7 +605,7 @@ sending email, changing data in a shared DB.
 | **E1. Upload → re-check** | E4-04 | M | Incomplete API case recovers without an inbox | Q1, Q2, Q5, Q12 | **Done — awaiting review** |
 | **E2. Work queue** | E4-22 claim / assign, ordering, search | M | No two people on one case; oldest first; find any case fast | Q21 (E2b) | **E2a done — awaiting review**; E2b parked (with E4) |
 | **E3. Confidence everywhere** | E4-08 confidence + reason + source page on every AI output (prompt changes, checked against D) | M | Every AI answer explained, with its page | D done | **E3a done — awaiting review**; **E3b-1 + E3b-2 built** — not verified against the AI yet |
-| **E4. Per-item correction** | E4-12 + E4-15 steps 0–1 (migration `ulink_ai_feedback`, trusted mark) | M | Reviewers fix single findings; corrections stored for learning | E3; Q16, Q17 | Not started |
+| **E4. Per-item correction** | E4-12 + E4-15 steps 0–1 (migration `ulink_ai_feedback`, trusted mark) | M | Reviewers fix single findings; corrections stored for learning | E3; Q16, Q17 | **E4a done — awaiting review**; E4b (claim a case) next |
 | **E5. Review workspace** | E4-20 | M–L | Check and decide next to the document page, one screen, Next case | E3, E4 | Not started |
 | **E6. Daily dashboard** | E4-19 | M | One start page for the day's API work | Q20 | Not started |
 | **F. Learning** | E4-24 timeline, E4-14 feedback report, E4-15 steps 2–4, E4-25 stats | M–L | Fewer repeat mistakes, proven by override rate and test set | Weeks of trusted corrections | Not started |
@@ -630,7 +649,8 @@ Ticked when the item is done; the phase status above changes when all are done a
 - [x] E3a · E4-08 Format checks on values read (*Values read look valid*: NRC, dates, amounts → unsure) + a reason on every document check, pass or fail — rules only
 - [x] E3b-1 · E4-08 Prompts + schema: doubt marks in page reading; field evidence (14 key fields: confidence, reason, page); voucher evidence, line total, vitamin items + score; translation reason — **built, not verified: AI runs on the 4 sample claims (before / after) waiting for the owner's go-ahead**
 - [x] E3b-2 · E4-08 Checks take their fields' confidence; voucher lines vs amount in *Values read look valid*; case page *What the AI read*; *Values read* summary line (rules + console; tested on mocked AI output)
-- [ ] E4 · E4-12 Per-item correction + E4-15 steps 0–1 (`ulink_ai_feedback`, trusted mark) (Q16, Q17)
+- [x] E4a · E4-12 + E4-15 step 1: per-item correction (value or verdict), `ulink_ai_feedback`, re-check from the member check, trusted mark by a different super admin (Q16 / Q17 defaults)
+- [ ] E4b · E4-22 Claim a case (*Being reviewed by …*, 30-min time-out, take over with comment) — the parked E2b
 - [ ] E5 · E4-20 Review workspace
 - [ ] E6 · E4-19 Daily API dashboard (Q20)
 

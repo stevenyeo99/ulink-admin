@@ -18,6 +18,7 @@ const CLAUSE_TEXT = Object.fromEntries(require('../../scripts/seeds/ayaHealthExc
 // point. Separate from the 0.5 below which the judges (identityJudgment, diagnosisPicker, benefitPicker,
 // policy-exclusion judge) drop an answer as unusable: a 0.5–0.7 answer is kept, and counts as unsure.
 const { lastReadSettings } = require('../settings/settings');
+const { correctionText } = require('../ai-feedback/corrections');
 
 const isLowConfidence = (confidence) => confidence != null && confidence <= lastReadSettings().aiConfidenceThreshold;
 
@@ -26,6 +27,7 @@ const VERIFIED = {
   RULE: 'Rule',                    // plain comparison / calculation
   CROSS_CHECK: 'Cross-checked',    // AI reading agrees with an independent source (IAS, another page, a sum)
   AI: 'AI self-rated',             // only the model's own confidence — a hint, not proof
+  PERSON: 'Corrected by a person', // a reviewer set it (SYSTEM_4 E4-12)
 };
 
 // Why a person should look, who might be wrong, and what to check first.
@@ -232,8 +234,9 @@ function documentLines(documentCheckResult) {
       status: failed ? 'issue' : 'ok',
       why: failed ? reasonFor(item.code) || item.note : item.note,
       confidence: formatConfidence(item.confidence),
-      verified: CROSS_CHECKED_DOCUMENT_CODES.has(item.code) ? VERIFIED.CROSS_CHECK
-        : item.confidence != null ? VERIFIED.AI : VERIFIED.RULE,
+      verified: item.corrected ? VERIFIED.PERSON
+        : CROSS_CHECKED_DOCUMENT_CODES.has(item.code) ? VERIFIED.CROSS_CHECK
+          : item.confidence != null ? VERIFIED.AI : VERIFIED.RULE,
       review: failed ? (DOCUMENT_REVIEW[item.code] || REVIEW.DATA_MISMATCH) : lowConfidenceReview(item.confidence),
     }));
   }
@@ -280,6 +283,20 @@ function formatLine(item) {
     return line({ decision: 'Values read look valid', result: 'Check values', status: 'ok', why: item.note, verified: VERIFIED.RULE, review: REVIEW.AI_UNSURE });
   }
   return line({ decision: 'Values read look valid', result: 'OK', status: 'ok', why: item.reason, verified: VERIFIED.RULE });
+}
+
+// What reviewers corrected (SYSTEM_4 E4-12, modules/ai-feedback/corrections.js): the AI's value, the corrected one, who
+// and why — one line, so the case page, team emails and the IAS remark all show it. Never a review point.
+function correctionLines(extractedFields) {
+  const corrections = extractedFields?.corrections || [];
+  if (!corrections.length) return [];
+  return [line({
+    decision: 'Corrected by a person',
+    result: `${corrections.length} correction${corrections.length > 1 ? 's' : ''}`,
+    status: 'ok',
+    why: corrections.map(correctionText).join('; ') + '.',
+    verified: VERIFIED.PERSON,
+  })];
 }
 
 // How sure the AI was of the key values it read (SYSTEM_4 E3b, document-checking/checklist.js fieldsReadCheck). Values at
@@ -385,6 +402,7 @@ function buildAssessmentSummary(fields = {}, { overrides = [] } = {}) {
   const lines = [
     ...withArea('member', memberLines(fields.memberVerifyResult)),
     ...withArea('documents', documentLines(fields.documentCheckResult)),
+    ...withArea('corrections', correctionLines(fields.extractedFields)),
     ...withArea('claim', preparationLines(fields.claimPrepMeta, fields.isStp)),
   ];
   const reviewPoints = lines

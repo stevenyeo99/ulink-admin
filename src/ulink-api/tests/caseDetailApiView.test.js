@@ -6,6 +6,7 @@ jest.mock('../db/models', () => ({
   CaseEvent: { findAll: jest.fn(async () => [{ id: 'ev-1' }]) },
   CaseDocument: { findAll: jest.fn(async () => []) },
   ApiCaseStep: { findAll: jest.fn() },
+  AiFeedback: { findAll: jest.fn(async () => []) },
   EmailThread: {},
   EmailMessage: {},
   EmailAttachment: {},
@@ -61,7 +62,7 @@ describe('getCase', () => {
 
     const body = await call();
 
-    expect(Object.keys(body)).toEqual(['case', 'events', 'documents', 'assessmentSummary', 'nextAction', 'override']);
+    expect(Object.keys(body)).toEqual(['case', 'events', 'documents', 'assessmentSummary', 'nextAction', 'override', 'corrections']);
     expect(body.override).toMatchObject({ allowed: true, target: 'MEMBER_VERIFIED' });
     expect(body.nextAction).toMatchObject({ who: 'Customer', act: false }); // SYSTEM_4 E4-21: "Next" on the case page
     expect(body.case).toBe(emailCase); // the model instance itself, untouched

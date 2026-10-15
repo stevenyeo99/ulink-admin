@@ -958,4 +958,4 @@ function fieldsReadCheck(fields, checklist = []) {
   };
 }
 
-module.exports = { ISSUES, evaluateDocumentChecks, evaluateJudgmentDependentChecks, vitaminCheck, formatCheck, fieldsReadCheck };
+module.exports = { ISSUES, FIELD_LABELS, evaluateDocumentChecks, evaluateJudgmentDependentChecks, vitaminCheck, formatCheck, fieldsReadCheck, isRealDate, valueAt };

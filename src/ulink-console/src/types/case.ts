@@ -284,6 +284,44 @@ export interface GetCaseResponse {
   nextAction: NextAction;
   /** API cases only. Their CaseDetail fields (extractedFields, …) are filled from these by the API. */
   apiSteps?: ApiCaseStep[];
+  corrections: CorrectionsInfo;
+}
+
+// Per-item correction (SYSTEM_4 E4-12, ulink-api modules/ai-feedback/corrections.js).
+export type WrongStep = 'reading' | 'mapping' | 'check';
+
+export interface CorrectionOption {
+  kind: 'value' | 'verdict';
+  item: string;
+  label: string;
+  type: 'text' | 'date' | 'amount' | 'verdict';
+  current: string | number | boolean | null;
+  canFail?: boolean;
+}
+
+export interface Correction {
+  id: string;
+  kind: 'value' | 'verdict';
+  item: string;
+  label: string;
+  aiValue: string | number | boolean | null;
+  aiConfidence: number | null;
+  correctedValue: string | number | boolean | null;
+  reason: string;
+  wrongStep: WrongStep;
+  page: string | null;
+  createdBy: string;
+  trusted: boolean;
+  trustedBy: string | null;
+  trustedAt: string | null;
+  createdAt: string;
+  applied: boolean; // still in force — false once the case was read again (e.g. the customer sent new documents)
+}
+
+export interface CorrectionsInfo {
+  allowed: boolean; // a member or document finding holds the case
+  options: CorrectionOption[];
+  list: Correction[];
 }
 
 export interface OverrideCaseResponse {

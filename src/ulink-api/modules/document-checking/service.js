@@ -1,6 +1,7 @@
 const { sequelize, Case, CaseEvent } = require('../../db/models');
 const config = require('../../config');
 const { evaluateDocumentChecks, evaluateJudgmentDependentChecks, vitaminCheck, formatCheck, fieldsReadCheck } = require('./checklist');
+const { applyVerdicts, correctionHold } = require('../ai-feedback/corrections');
 const { entityMatch } = require('./identityJudgment');
 const { queueDedupedTask } = require('../shared/emailTaskQueue');
 const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment-summary/summary');
@@ -84,7 +85,8 @@ async function checkCase(caseRecord) {
   const stage1 = evaluateDocumentChecks(fields);
   const judgments = await runJudgments(fields);
   const stage2 = evaluateJudgmentDependentChecks(fields, judgments);
-  const result = {
+  // A check's verdict a person corrected (SYSTEM_4 E4-12) replaces the AI's; corrected values are already in fields.
+  const result = applyVerdicts({
     issues: [...stage1.issues, ...stage2.issues],
     details: [...stage1.details, ...stage2.details],
     flags: [...stage1.flags, ...stage2.flags],
@@ -92,7 +94,7 @@ async function checkCase(caseRecord) {
     // + the vitamins / supplements line (SYSTEM_4 E4-10), the format checks on values read and how sure the AI was of
     // them (E4-08) — information for STP and the reviewer, never an issue.
     checklist: [...stage1.checklist, ...stage2.checklist, ...[vitaminCheck(fields), formatCheck(fields), fieldsReadCheck(fields, stage1.checklist)].filter(Boolean)],
-  };
+  }, fields.corrections);
 
   const outcome = result.passed ? 'DOCUMENT_CHECKED' : 'INCOMPLETE';
   return { caseId: caseRecord.id, outcome, result };
@@ -155,8 +157,13 @@ const OUTCOME_TO_STATUS = {
 async function persistOutcome(caseRecord, outcome) {
   // Missing documents the AI wasn't sure about wait for a person before the customer is emailed —
   // only with the switch on (settings.holdUnsureMissingDocsEmail); off, exactly as before.
-  const unsure = outcome.result.passed ? [] : unsureDocumentPoints(outcome.result);
-  const held = unsure.length > 0 && (await getSettings()).holdUnsureMissingDocsEmail;
+  // After a person corrected items (SYSTEM_4 E4-12): held for them whatever the switch — they send the request.
+  const corrected = correctionHold(outcome.result, caseRecord.extractedFields);
+  const unsure = [
+    ...(outcome.result.passed || !(await getSettings()).holdUnsureMissingDocsEmail ? [] : unsureDocumentPoints(outcome.result)),
+    ...corrected,
+  ];
+  const held = unsure.length > 0;
   // Passed, but the AI was unsure about an item: a person confirms before claim preparation — only with the switch on
   // (settings.holdUnsureDocumentPass, SYSTEM_4 E4-09).
   const unsurePassed = outcome.result.passed ? unsurePassedPoints(outcome.result) : [];
@@ -175,7 +182,7 @@ async function persistOutcome(caseRecord, outcome) {
       reasonCode: outcome.result.passed ? null : 'DOCUMENT_ISSUES_FOUND',
       message: outcome.result.passed
         ? `All document checks passed${confirm ? ` — a person confirms first: the AI was unsure about ${unsurePassed.join('; ')}` : ''}`
-        : `${outcome.result.issues.join('; ')}${held ? ` — customer email held: the AI was unsure (${unsure.join('; ')})` : ''}`,
+        : `${outcome.result.issues.join('; ')}${held ? ` — customer email held for a person: ${unsure.join('; ')}` : ''}`,
     });
 
     // A pass sends nothing: the customer was already acknowledged at claim recognition
