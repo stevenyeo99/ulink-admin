@@ -29,7 +29,18 @@ const DEFAULTS = {
   // At or below this confidence (0–1) the AI counts as unsure: a review point on the case, and a held
   // missing-documents email (SYSTEM_4 E4-07). 0.7 decided by ULINK (14-Oct feedback); was a fixed 0.5 before.
   aiConfidenceThreshold: 0.7,
+  // A case waiting for a person longer than this many working days is flagged overdue in the review queue and approvals
+  // (SYSTEM_4 E4-19 / E6). 2 is a placeholder until ULINK sets its ageing limit (Q20).
+  overdueWorkingDays: 2,
+  // The Overview turns red when a pipeline has had no run for this many minutes (SYSTEM_4 E6) — 3× the UAT cron interval
+  // (docs/deployment/CRONTAB_SETUP.md: email every 10 min, API every 30). Raise them for a business-hours schedule.
+  pipelineStaleMinutesEmail: 30,
+  pipelineStaleMinutesApi: 90,
 };
+
+// Settings that are whole numbers in a range (the rest of the numbers are shares 0–1). Sent to the console with the
+// settings, so its form checks the same ranges.
+const WHOLE_NUMBERS = { overdueWorkingDays: [1, 30], pipelineStaleMinutesEmail: [5, 4320], pipelineStaleMinutesApi: [5, 4320] };
 
 // The source switch for a pipeline / case source ('EMAIL' / 'API').
 const SOURCE_SETTING = { EMAIL: 'emailCasesEnabled', API: 'apiCasesEnabled' };
@@ -48,10 +59,15 @@ async function getSettings() {
 
 const lastReadSettings = () => lastRead;
 
-// Why a value can't be saved, or null. Each setting takes the type of its default; the threshold is a share 0–1.
+// Why a value can't be saved, or null. Each setting takes the type of its default; the threshold is a share 0–1,
+// the working-day limit a whole number in its range.
 function settingError(key, value) {
   if (!(key in DEFAULTS)) return `Unknown switch ${key}.`;
   if (typeof DEFAULTS[key] === 'boolean') return typeof value === 'boolean' ? null : `${key} must be on or off.`;
+  if (WHOLE_NUMBERS[key]) {
+    const [min, max] = WHOLE_NUMBERS[key];
+    return Number.isInteger(value) && value >= min && value <= max ? null : `${key} must be a whole number from ${min} to ${max}.`;
+  }
   return typeof value === 'number' && value >= 0 && value <= 1 ? null : `${key} must be a percentage from 0 to 100.`;
 }
 
@@ -64,4 +80,4 @@ async function setSettings(changes, updatedBy, { transaction } = {}) {
   }
 }
 
-module.exports = { getSettings, lastReadSettings, setSettings, settingError, DEFAULTS, SOURCE_SETTING };
+module.exports = { getSettings, lastReadSettings, setSettings, settingError, DEFAULTS, SOURCE_SETTING, WHOLE_NUMBERS };

@@ -1,7 +1,7 @@
 import clsx from 'clsx';
 import { CaseStatusPill } from './CaseStatusPill';
 import type { Column } from '../common/DataTable';
-import { relativeTime } from '../../lib/relativeTime';
+import { WaitingCell } from '../common/WaitingCell';
 import type { ReviewQueueItem } from '../../types/case';
 import type { Source } from '../../types/pipeline';
 
@@ -48,6 +48,6 @@ export function reviewColumns(source: Source): Column<ReviewQueueItem>[] {
       ),
     },
     { key: 'status', header: 'Status', render: (i) => <CaseStatusPill status={i.currentStatus} /> },
-    { key: 'waiting', header: 'Last change', render: (i) => <span className="text-slate-500">{relativeTime(i.updatedAt)}</span> },
+    { key: 'waiting', header: 'Last change', render: (i) => <WaitingCell updatedAt={i.updatedAt} overdue={i.overdue} waitingWorkingDays={i.waitingWorkingDays} /> },
   ];
 }

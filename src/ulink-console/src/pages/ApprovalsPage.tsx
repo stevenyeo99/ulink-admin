@@ -3,7 +3,7 @@ import { useApprovals } from '../hooks/useCases';
 import { SourceTabs } from '../components/common/SourceTabs';
 import { pickSource, useEnabledSources } from '../hooks/useSource';
 import { DataTable, type Column } from '../components/common/DataTable';
-import { relativeTime } from '../lib/relativeTime';
+import { WaitingCell } from '../components/common/WaitingCell';
 import type { ApprovalItem } from '../types/case';
 
 const PAGE_SIZE = 25;
@@ -51,7 +51,7 @@ export function ApprovalsPage() {
           </ul>
         ),
     },
-    { key: 'waiting', header: 'Waiting since', render: (i) => <span className="whitespace-nowrap text-slate-500">{relativeTime(i.updatedAt)}</span> },
+    { key: 'waiting', header: 'Waiting since', render: (i) => <WaitingCell updatedAt={i.updatedAt} overdue={i.overdue} waitingWorkingDays={i.waitingWorkingDays} /> },
   ];
 
   return (

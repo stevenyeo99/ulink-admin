@@ -34,7 +34,15 @@ export interface Switches {
   apiSendMissingDocumentsEmail: boolean;
   // At or below this (0–1) the AI counts as unsure (SYSTEM_4 E4-07).
   aiConfidenceThreshold: number;
+  // A case waiting longer than this many working days is overdue (SYSTEM_4 E4-19 / E6; default 2 until ULINK sets it).
+  overdueWorkingDays: number;
+  // The Overview turns red after this many minutes with no pipeline run (SYSTEM_4 E6; 3× the cron interval).
+  pipelineStaleMinutesEmail: number;
+  pipelineStaleMinutesApi: number;
 }
+
+// The whole-number settings and their allowed [min, max] — from the API, so the form checks what the save will.
+export type NumberKey = 'overdueWorkingDays' | 'pipelineStaleMinutesEmail' | 'pipelineStaleMinutesApi';
 
 export type SwitchKey = { [K in keyof Switches]: Switches[K] extends boolean ? K : never }[keyof Switches];
 
@@ -42,6 +50,7 @@ export interface StpSettings {
   rules: StpRule[];
   blockedDiagnoses: StpBlockedDiagnosis[];
   switches: Switches;
+  numberRanges: Record<NumberKey, [number, number]>;
 }
 
 // What the one Save sends: the rules, the complete never-STP list, the switches (saved all or nothing).

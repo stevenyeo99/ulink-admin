@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as AlertDialog from '@radix-ui/react-alert-dialog';
 import { X } from 'lucide-react';
 import clsx from 'clsx';
-import { getStpSettings, saveStpSettings, type StpSettings, type SwitchKey, type Switches } from '../api/stpSettingsApi';
+import { getStpSettings, saveStpSettings, type NumberKey, type StpSettings, type SwitchKey, type Switches } from '../api/stpSettingsApi';
 import { SourceTabs } from '../components/common/SourceTabs';
 import { Button } from '../components/common/Button';
 import { isSuperAdmin } from '../lib/session';
@@ -77,7 +77,15 @@ interface Draft {
   diagnoses: { codePrefix: string; note: string | null }[];
   switches: Switches;
   threshold: string; // aiConfidenceThreshold as a percentage, as typed
+  numbers: Record<NumberKey, string>; // the whole-number settings, as typed
 }
+
+// The whole-number settings on this page: label before the box, unit after, what it does.
+const NUMBER_SETTINGS: { key: NumberKey; label: string; unit: string; help: string }[] = [
+  { key: 'overdueWorkingDays', label: 'A case waiting for a person is overdue after', unit: 'working days', help: "Monday–Friday, since the case entered its current status. Marked red in the review queue. 2 until ULINK sets its limit." },
+  { key: 'pipelineStaleMinutesEmail', label: 'The Overview turns red when the email pipeline has not run for', unit: 'minutes', help: 'About 3× the schedule (cron every 10 min → 30). Raise it if the schedule pauses outside working hours.' },
+  { key: 'pipelineStaleMinutesApi', label: 'The Overview turns red when the API pipeline has not run for', unit: 'minutes', help: 'About 3× the schedule (cron every 30 min → 90).' },
+];
 
 function draftFrom(data: StpSettings): Draft {
   return {
@@ -85,6 +93,7 @@ function draftFrom(data: StpSettings): Draft {
     diagnoses: data.blockedDiagnoses.map((d) => ({ codePrefix: d.codePrefix, note: d.note })),
     switches: { ...data.switches },
     threshold: String(Math.round(data.switches.aiConfidenceThreshold * 100)),
+    numbers: Object.fromEntries(NUMBER_SETTINGS.map((n) => [n.key, String(data.switches[n.key])])) as Record<NumberKey, string>,
   };
 }
 
@@ -95,6 +104,12 @@ const parsePercent = (text: string): number | null => {
 };
 
 const parseAmount = (text: string): number | null => (text.trim() === '' ? null : Number(text));
+
+// A whole-number box: the number when it is whole and in [min, max] (the API's range), else null.
+const parseWhole = (text: string, [min, max]: [number, number]): number | null => {
+  const n = Number(text);
+  return text.trim() !== '' && Number.isInteger(n) && n >= min && n <= max ? n : null;
+};
 
 /**
  * STP settings (enhancement status point 7): which claims may go straight through without a person — per
@@ -146,6 +161,10 @@ function StpForm({ data, canEdit }: { data: StpSettings; canEdit: boolean }) {
     if (percent !== null && percent / 100 !== data.switches.aiConfidenceThreshold) {
       list.push({ key: 'aiConfidenceThreshold', text: `AI unsure at or below: ${Math.round(data.switches.aiConfidenceThreshold * 100)}% → ${percent}%` });
     }
+    for (const n of NUMBER_SETTINGS) {
+      const value = parseWhole(draft.numbers[n.key], data.numberRanges[n.key]);
+      if (value !== null && value !== data.switches[n.key]) list.push({ key: n.key, text: `${n.label}: ${data.switches[n.key]} → ${value} ${n.unit}` });
+    }
     return list;
   }, [data, draft]);
 
@@ -161,7 +180,10 @@ function StpForm({ data, canEdit }: { data: StpSettings; canEdit: boolean }) {
     return errors;
   }, [data, draft]);
   const thresholdError = parsePercent(draft.threshold) === null ? 'Enter a percentage from 0 to 100.' : null;
-  const errorCount = Object.keys(ruleErrors).length + (thresholdError ? 1 : 0);
+  const numberErrors = Object.fromEntries(NUMBER_SETTINGS
+    .filter((n) => parseWhole(draft.numbers[n.key], data.numberRanges[n.key]) === null)
+    .map((n) => [n.key, `Enter a whole number from ${data.numberRanges[n.key][0]} to ${data.numberRanges[n.key][1]}.`]));
+  const errorCount = Object.keys(ruleErrors).length + (thresholdError ? 1 : 0) + Object.keys(numberErrors).length;
   const dirty = changes.length > 0;
 
   // Leaving with unsaved changes asks first.
@@ -176,7 +198,12 @@ function StpForm({ data, canEdit }: { data: StpSettings; canEdit: boolean }) {
     mutationFn: () => saveStpSettings({
       rules: data.rules.map((r) => ({ id: r.id, stpAllowed: draft.rules[r.id].stpAllowed, amountLimit: parseAmount(draft.rules[r.id].amount) })),
       blockedDiagnoses: draft.diagnoses,
-      switches: { ...draft.switches, aiConfidenceThreshold: (parsePercent(draft.threshold) ?? 0) / 100 },
+      switches: {
+        ...draft.switches,
+        aiConfidenceThreshold: (parsePercent(draft.threshold) ?? 0) / 100,
+        // Save is blocked while a box has an error, so each parses here.
+        ...Object.fromEntries(NUMBER_SETTINGS.map((n) => [n.key, parseWhole(draft.numbers[n.key], data.numberRanges[n.key])])),
+      },
     }),
     onSuccess: (saved) => {
       setConfirmOpen(false);
@@ -291,6 +318,33 @@ function StpForm({ data, canEdit }: { data: StpSettings; canEdit: boolean }) {
           {thresholdError && <p className="mt-1 text-xs text-red-600">{thresholdError}</p>}
         </div>
         <SwitchList switches={SWITCHES} draft={draft} stored={data.switches} canEdit={canEdit} onToggle={setSwitch} />
+      </section>
+
+      <section className={card}>
+        <h2 className="text-sm font-semibold text-slate-800">Overdue cases and pipeline alerts</h2>
+        {NUMBER_SETTINGS.map((n) => (
+          <div key={n.key} className={clsx('mt-3 rounded-lg p-2', changes.some((c) => c.key === n.key) && changedMark)}>
+            <label className="flex flex-wrap items-center gap-3">
+              <span className="text-sm font-medium text-slate-800">{n.label}</span>
+              <span className="inline-flex items-center gap-1">
+                <input
+                  type="number"
+                  min={data.numberRanges[n.key][0]}
+                  max={data.numberRanges[n.key][1]}
+                  step={1}
+                  value={draft.numbers[n.key]}
+                  disabled={!canEdit}
+                  onChange={(e) => setDraft((d) => ({ ...d, numbers: { ...d.numbers, [n.key]: e.target.value } }))}
+                  aria-label={`${n.label}, ${n.unit}`}
+                  className={`${input} w-24`}
+                />
+                <span className="text-sm text-slate-600">{n.unit}</span>
+              </span>
+            </label>
+            <p className="mt-1 text-sm text-slate-600">{n.help}</p>
+            {numberErrors[n.key] && <p className="mt-1 text-xs text-red-600">{numberErrors[n.key]}</p>}
+          </div>
+        ))}
       </section>
 
       <section className={card}>

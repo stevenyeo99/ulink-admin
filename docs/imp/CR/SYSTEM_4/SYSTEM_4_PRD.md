@@ -157,6 +157,18 @@ Source: owner, 2026-10-14 (main focus 3).
   - **Today:** received, completed, STP, sent to JD3, suspended, failed.
   - **Pipeline health:** last API pipeline run, its result, next scheduled run.
 - **Acceptance:** a CSR can start the day from this page and reach every case that needs them in one click.
+- **Built 2026-10-15 (E6 option B — the two parts that add something new; full page parked until Q20, owner):**
+  (1) **Overdue** — a case in the review queue or approvals waiting longer than `overdueWorkingDays` (STP settings,
+  default **2**, 1–30; Monday–Friday on Myanmar days since the case's last change, no public holidays yet) shows a red
+  *Overdue · N working days*. (2) **Pipeline health** — one line on the Overview: the last run of the shown source and
+  its result; red when it failed, ended with errors, or no run for 3× the cron interval (email 30 min, API 90 min).
+  Not built: the start page with needs-action / today counts (repeats Overview, Review queue, Approvals).
+  **After code review (same day):** overdue only in the **review queue** and only for cases a person must act on
+  (*needs review*) — not approvals (JD3 approves in IAS, which the system can't see, so every row would turn red) and not
+  cases waiting for the customer; waiting counts from **when the case entered its current status** (its case history;
+  a claim or a saved correction doesn't reset it); a run still *running* past the limit says it may be stuck; the
+  no-run limits are settings (`pipelineStaleMinutesEmail` 30, `pipelineStaleMinutesApi` 90 — raise them for a
+  business-hours schedule); the console checks the API's ranges; working days by formula (no one-year cap).
 
 ### Batch 2 — Confidence gate
 
@@ -635,7 +647,7 @@ sending email, changing data in a shared DB.
 | **E3. Confidence everywhere** | E4-08 confidence + reason + source page on every AI output (prompt changes, checked against D) | M | Every AI answer explained, with its page | D done | **E3a done — awaiting review**; **E3b-1 + E3b-2 built** — not verified against the AI yet |
 | **E4. Per-item correction** | E4-12 + E4-15 steps 0–1 (migration `ulink_ai_feedback`, trusted mark) | M | Reviewers fix single findings; corrections stored for learning | E3; Q16, Q17 | **E4a committed; E4b done — awaiting review** |
 | **E5. Review workspace** | E4-20 | M–L | Check and decide next to the document page, one screen, Next case | E3, E4 | **E5a committed; E5b done — awaiting review** |
-| **E6. Daily dashboard** | E4-19 | M | One start page for the day's API work | Q20 | Not started |
+| **E6. Daily dashboard** | E4-19 | M | One start page for the day's API work | Q20 | **Option B done — awaiting review** (overdue badge, pipeline health); full page parked (Q20) |
 | **F. Learning** | E4-24 timeline, E4-14 feedback report, E4-15 steps 2–4, E4-25 stats | M–L | Fewer repeat mistakes, proven by override rate and test set | Weeks of trusted corrections | Not started |
 | **Blocked** | E4-16, E4-17, E4-13, E4-18 | — | — | ULINK (Q6, Q15, Q18, Q19, E4-16 list) | Blocked (ULINK input) |
 
@@ -681,7 +693,7 @@ Ticked when the item is done; the phase status above changes when all are done a
 - [x] E4b · E4-22 Claim a case (*Being reviewed by …*, 30-min time-out, take over with comment, *My cases*) — the parked E2b (`ulink_case_claims`)
 - [x] E5a · E4-20 Review workspace: document viewer + findings side by side, page links, Correct in place, auto-claim, Next case
 - [x] E5b · E4-20 *✓ Right* / *✗ Wrong* on each finding (*Right* → `ulink_ai_feedback` kind `confirm`, migration run on dev); technical details super admin only
-- [ ] E6 · E4-19 Daily API dashboard (Q20)
+- [x] E6 (option B) · E4-19 Overdue badge (setting `overdueWorkingDays`, default 2) + pipeline health line on the Overview — full dashboard parked until Q20
 
 **Phase F — Learning**
 - [ ] F1 · E4-24 Single case timeline

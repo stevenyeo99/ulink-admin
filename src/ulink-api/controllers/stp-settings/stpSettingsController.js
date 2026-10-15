@@ -1,5 +1,5 @@
 const { sequelize, StpRule, StpBlockedDiagnosis } = require('../../db/models');
-const { getSettings, setSettings, settingError } = require('../../modules/settings/settings');
+const { getSettings, setSettings, settingError, WHOLE_NUMBERS } = require('../../modules/settings/settings');
 
 // STP settings edited from the console (one form, one Save) — read by ias-claim-preparation/stpEligibility.js
 // and modules/settings. A change applies to cases whose claim is prepared after it.
@@ -22,7 +22,8 @@ async function settingsView() {
     StpBlockedDiagnosis.findAll({ order: [['codePrefix', 'ASC']] }),
     getSettings(),
   ]);
-  return { rules: rules.map(ruleView), blockedDiagnoses: blockedDiagnoses.map(diagnosisView), switches };
+  // numberRanges: the allowed range of each whole-number setting, so the form checks what the save will (SYSTEM_4 E6).
+  return { rules: rules.map(ruleView), blockedDiagnoses: blockedDiagnoses.map(diagnosisView), switches, numberRanges: WHOLE_NUMBERS };
 }
 
 async function getStpSettings(req, res) {

@@ -4,6 +4,7 @@ import { useCaseOverview } from '../hooks/useCases';
 import { useCaseStatuses } from '../hooks/useCaseStatuses';
 import { SourceTabs } from '../components/common/SourceTabs';
 import { pickSource, useEnabledSources } from '../hooks/useSource';
+import { PipelineHealth } from '../components/common/PipelineHealth';
 
 // Order of the cards: what needs people first, then what is moving, then outcomes.
 const CARD_ORDER = ['needs_review', 'waiting_customer', 'in_progress', 'done', 'failed'];
@@ -32,6 +33,7 @@ export function OverviewPage() {
         <SourceTabs source={source} onChange={(next) => setParams(next === 'API' ? { source: 'api' } : {}, { replace: true })} />
       </div>
 
+      <PipelineHealth source={source} />
       {isError && <p className="mb-4 text-sm text-red-600">Couldn't load the numbers. Refresh to try again.</p>}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">

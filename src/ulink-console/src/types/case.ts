@@ -381,6 +381,9 @@ export interface ReviewQueueItem {
   /** Most serious reason, e.g. "Data mismatch". */
   reason: string;
   claim: CaseClaim | null;
+  /** Working days since its last change; overdue past the STP-settings limit (SYSTEM_4 E4-19 / E6). */
+  waitingWorkingDays?: number;
+  overdue?: boolean;
   /** What to check first. */
   check: string;
   reasons: string[];
@@ -406,6 +409,8 @@ export interface ApprovalItem {
   /** "Decision: what to check" — the AI's review points for this claim. */
   reviewPoints: string[];
   claim: CaseClaim | null;
+  waitingWorkingDays?: number;
+  overdue?: boolean;
 }
 
 export interface ApprovalsResponse {

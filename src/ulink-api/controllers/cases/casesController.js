@@ -18,6 +18,8 @@ const { releaseMissingDocumentsEmail } = require('../../modules/document-checkin
 const { uploadDocuments, UploadRefused } = require('../../modules/case-upload/upload');
 const { correctionsInfo } = require('./correctionsController');
 const { claimView, activeClaims, endClaim } = require('../../modules/case-claim/claim');
+const { workingDaysSince } = require('../../modules/shared/workingDays');
+const { lastReadSettings } = require('../../modules/settings/settings');
 const { CaseClaim } = require('../../db/models');
 
 const BLOCK_NAME = 'case-review';
@@ -60,6 +62,24 @@ async function assessmentFieldsLoader(cases) {
 async function withClaims(items) {
   const claims = await activeClaims(items.map((i) => i.id));
   for (const item of items) item.claim = claims.get(item.id) ?? null;
+}
+
+// How long each queued case has waited for a person (SYSTEM_4 E4-19 / E6): working days since it entered its current
+// status — the latest case-history entry that moved it there (a claim or a saved correction that doesn't move it
+// doesn't reset the clock); its last change when there is none. Overdue past the STP-settings limit (default 2) — only
+// for cases a person must act on (needs review), not those waiting for the customer or the pipeline.
+// statusEvents: the cases' case-history entries (caseId, prevStatus, newStatus, createdAt), any order.
+function withWaiting(items, statusEvents) {
+  const { overdueWorkingDays } = lastReadSettings();
+  const now = new Date();
+  for (const item of items) {
+    const entered = statusEvents
+      .filter((e) => e.caseId === item.id && e.newStatus === item.currentStatus && e.prevStatus !== e.newStatus)
+      .reduce((latest, e) => (!latest || new Date(e.createdAt) > new Date(latest) ? e.createdAt : latest), null);
+    item.waitingWorkingDays = workingDaysSince(entered || item.updatedAt, now);
+    item.overdue = CASE_STATUSES[item.currentStatus]?.group === 'needs_review'
+      && item.waitingWorkingDays != null && item.waitingWorkingDays > overdueWorkingDays;
+  }
 }
 
 const listRow = (c) => ({
@@ -158,13 +178,15 @@ async function reviewQueueItems(source) {
   });
 
   const fieldsOf = await assessmentFieldsLoader(cases);
-  // Checks a person already overrode, per case (from the override's case-history entry, email and API alike).
-  const overrideEvents = cases.length
+  // The cases' history, read once: the checks a person already overrode (email and API alike) and when each case
+  // entered its current status (how long it has waited).
+  const events = cases.length
     ? await CaseEvent.findAll({
-      where: { caseId: cases.map((c) => c.id), reasonCode: 'MANUAL_OVERRIDE' },
-      attributes: ['caseId', 'prevStatus', 'reasonCode', 'message', 'createdAt'],
+      where: { caseId: cases.map((c) => c.id) },
+      attributes: ['caseId', 'prevStatus', 'newStatus', 'reasonCode', 'message', 'createdAt'],
     })
     : [];
+  const overrideEvents = events.filter((e) => e.reasonCode === 'MANUAL_OVERRIDE');
   const overridesOf = (caseId) => overridesFromEvents(overrideEvents.filter((e) => e.caseId === caseId));
 
   const items = [];
@@ -174,6 +196,7 @@ async function reviewQueueItems(source) {
     items.push({ ...listRow(c), ...entry });
   }
   await withClaims(items);
+  withWaiting(items, events);
   return items;
 }
 
