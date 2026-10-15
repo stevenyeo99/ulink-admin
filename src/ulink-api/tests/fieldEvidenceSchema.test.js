@@ -6,7 +6,8 @@
 const Ajv = require('ajv');
 const previous = require('../db/migrations/20260916110000-add-presence-confidence-reason');
 const migration = require('../db/migrations/20261015100000-add-field-evidence');
-const { dedupeInvoiceItems, normalizeClaimantDob, dropOutOfRangeEvidence } = require('../modules/claim-recognition/service');
+const byField = require('../db/migrations/20261015150000-field-evidence-by-field');
+const { dedupeInvoiceItems, normalizeClaimantDob, dropOutOfRangeEvidence, fieldEvidenceList } = require('../modules/claim-recognition/service');
 
 async function currentSchema() {
   let stored;
@@ -120,4 +121,47 @@ it('an out-of-range score becomes "not recorded" instead of failing the claim', 
 
 it('stops the migration with a clear message when the route schema has no voucher object', async () => {
   await expect(migration.up(fakeDb({ type: 'object', properties: {} }))).rejects.toThrow('no invoices.items voucher object');
+});
+
+describe('field_evidence keyed by field (E3 check: the open list made the model loop)', () => {
+  const keyed = (over = {}) => Object.fromEntries(byField.KEY_FIELDS.map((f) => [f, null]).concat(Object.entries(over)));
+  const nrc = { confidence: 0.55, reason: 'handwritten', page: 'claim.pdf - page 1' };
+
+  it('the route schema asks for one fixed key per field (null when left null); down restores the list', async () => {
+    const db = fakeDb(await currentSchema());
+    await migration.up(db);
+    const asList = structuredClone(db.schema);
+    await byField.up(db);
+    const validate = new Ajv().compile(db.schema);
+    expect(validate(output({ field_evidence: keyed({ 'claimant.claimant_nrc_passport': nrc }) }))).toBe(true);
+    expect(validate(output({ field_evidence: { ...keyed(), 'claimant.phone_number': nrc } }))).toBe(false); // no other keys
+    expect(validate(output({ field_evidence: keyed({ 'claimant.claimant_name': undefined }) }))).toBe(false); // every key present
+    expect(validate(output())).toBe(false); // the old list form no longer passes
+    expect(db.schema.properties.invoices.properties.items.items.properties.vitamin_items.maxItems).toBe(30);
+
+    const keyedSchema = structuredClone(db.schema);
+    await byField.up(db); // twice: nothing changes
+    expect(db.schema).toEqual(keyedSchema);
+
+    await byField.down(db);
+    expect(db.schema).toEqual(asList);
+    await byField.down(db); // twice: still the list
+    expect(db.schema).toEqual(asList);
+  });
+
+  it('the answer is read back as the list everything else uses — nulls, and evidence for an empty field, dropped; a list answer kept as is', () => {
+    const parsed = fieldEvidenceList({
+      claimant: { claimant_nrc_passport: '12/X(N)123456' }, claim: { accident_date: null },
+      field_evidence: keyed({ 'claimant.claimant_nrc_passport': nrc, 'claim.accident_date': { confidence: 0.1, reason: 'not on the form', page: null } }),
+    });
+    expect(parsed.field_evidence).toEqual([{ field: 'claimant.claimant_nrc_passport', ...nrc }]);
+    const list = [{ field: 'claimant.claimant_name', confidence: 1, reason: 'typed', page: null }];
+    expect(fieldEvidenceList({ field_evidence: list }).field_evidence).toBe(list);
+  });
+
+  it('an out-of-range score in the keyed form becomes "not recorded" too', () => {
+    const fixed = dropOutOfRangeEvidence(output({ field_evidence: keyed({ 'claimant.claimant_nrc_passport': { ...nrc, confidence: 95 } }) }));
+    expect(fixed.field_evidence['claimant.claimant_nrc_passport'].confidence).toBeNull();
+    expect(fixed.field_evidence['claimant.claimant_name']).toBeNull();
+  });
 });

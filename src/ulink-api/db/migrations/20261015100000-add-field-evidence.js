@@ -92,6 +92,8 @@ async function updateSchema(queryInterface, change) {
 const without = (list, names) => list.filter((name) => !names.includes(name));
 
 module.exports = {
+  // The 14 key fields — also used by 20261015150000-field-evidence-by-field (one list, not copies).
+  KEY_FIELDS,
   async up(queryInterface) {
     await updateSchema(queryInterface, (schema, voucher) => {
       schema.properties.field_evidence = FIELD_EVIDENCE;

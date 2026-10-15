@@ -113,6 +113,12 @@ Rollback: `npm run db:migrate:undo` steps back one migration at a time; check ea
 A migration that changes a claim route's `extraction_schema` (e.g. `20261015100000-add-field-evidence`) changes what
 the AI is asked to return: run it together with the matching prompt change, and try a few claims before go-live.
 
+AI calls go through `node:http` (`claim-recognition/llmClient.js`), not `fetch` — Node's `fetch` stops waiting for
+the response headers after 5 minutes, which a long field-mapping call can exceed; `LLM_TIMEOUT_MS` is the one timeout.
+The field-mapping answer is capped at `LLM_OUTPUT_RESERVE_TOKENS` (6000), so a model stuck repeating itself stops within
+a minute; a cut-off answer sends the case to *Needs manual reading* (like documents that are too long), never a retry
+loop. The judgment calls (names, diagnosis, benefit, exclusions) are not capped — their reasoning counts toward it.
+
 ---
 
 ## 7. Logs

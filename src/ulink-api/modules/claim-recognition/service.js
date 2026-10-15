@@ -168,16 +168,34 @@ function normalizeClaimantDob(fields, transcriptChunks) {
   );
 }
 
+// The AI answers field_evidence as one fixed key per field (null when it left the field null — an object can't repeat a
+// key, so the answer can't loop: E3 check 2026-10-15); everything else reads it as [{ field, confidence, reason, page }].
+// Evidence for a field whose value is null is dropped (the model may describe a field it left empty — that is not an
+// unsure value). An answer already in list form (a route schema before migration 20261015150000) is kept as it is.
+function fieldEvidenceList(parsed) {
+  const evidence = parsed?.field_evidence;
+  if (!evidence || Array.isArray(evidence) || typeof evidence !== 'object') return parsed;
+  const valueAt = (path) => path.split('.').reduce((o, key) => (o == null ? o : o[key]), parsed);
+  return {
+    ...parsed,
+    field_evidence: Object.entries(evidence)
+      .filter(([field, e]) => e && typeof e === 'object' && valueAt(field) != null)
+      .map(([field, e]) => ({ field, ...e })),
+  };
+}
+
 // A confidence outside 0–1 (e.g. 95 meant as a percentage) becomes null — "not recorded" — so a bad score on the
-// evidence never fails the whole claim's schema check. Guessing 95 → 0.95 would be inventing a number.
+// evidence never fails the whole claim's schema check. Guessing 95 → 0.95 would be inventing a number. field_evidence
+// may be the keyed answer or the list (same fix for each value).
 function dropOutOfRangeEvidence(parsed) {
   const inRange = (v) => (typeof v === 'number' && v >= 0 && v <= 1 ? v : null);
   const fix = (e) => (e && typeof e === 'object' && 'confidence' in e ? { ...e, confidence: inRange(e.confidence) } : e);
+  const fixAll = (x) => (Array.isArray(x) ? x.map(fix) : Object.fromEntries(Object.entries(x).map(([k, e]) => [k, fix(e)])));
   if (!parsed || typeof parsed !== 'object') return parsed;
   const items = parsed.invoices?.items;
   return {
     ...parsed,
-    ...(Array.isArray(parsed.field_evidence) ? { field_evidence: parsed.field_evidence.map(fix) } : {}),
+    ...(parsed.field_evidence && typeof parsed.field_evidence === 'object' ? { field_evidence: fixAll(parsed.field_evidence) } : {}),
     ...(Array.isArray(items) ? {
       invoices: {
         ...parsed.invoices,
@@ -601,7 +619,12 @@ async function extractFields(transcriptChunks, matchedRoute) {
   const userText = ['Page transcripts:', transcriptChunks.join('\n\n')].join('\n');
 
   const parsed = dropOutOfRangeEvidence(
-    await synthesizeJson({ systemPrompt: EXTRACT_FIELDS_PROMPT, userText, jsonSchema: responseSchema, label: 'extract-fields' })
+    await synthesizeJson({
+      systemPrompt: EXTRACT_FIELDS_PROMPT, userText, jsonSchema: responseSchema, label: 'extract-fields',
+      // The answer gets the output reserve the token budget keeps for it: a model caught in a loop is cut off there
+      // (→ AnswerCutOffError → a person reads the documents) instead of running for minutes (E3 check 2026-10-15).
+      maxTokens: config.llm.outputReserveTokens,
+    })
   );
 
   const validate = ajv.compile(responseSchema);
@@ -609,7 +632,7 @@ async function extractFields(transcriptChunks, matchedRoute) {
     return { extractedFields: null, schemaValidationError: ajv.errorsText(validate.errors) };
   }
 
-  const normalizedFields = normalizeClaimantDob(normalizeDelegationLetter(dedupeInvoiceItems(parsed)), transcriptChunks);
+  const normalizedFields = normalizeClaimantDob(normalizeDelegationLetter(dedupeInvoiceItems(fieldEvidenceList(parsed))), transcriptChunks);
   const withFallback = await applyMedicalRecordFallback(normalizedFields, transcriptChunks);
   // The fallback may have re-read the medical record from another page: the first read's evidence for its date no longer applies.
   const extractedFields = withFallback.medical_record?.date !== normalizedFields.medical_record?.date
@@ -821,5 +844,6 @@ module.exports = {
   dedupeInvoiceItems,
   normalizeClaimantDob,
   dropOutOfRangeEvidence,
+  fieldEvidenceList,
   mentionsBillLikeDocument,
 };

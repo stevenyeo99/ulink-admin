@@ -1,9 +1,44 @@
 const crypto = require('crypto');
+const http = require('http');
+const https = require('https');
 const config = require('../../config');
 const logger = require('../../utils/logger');
 const { recordCall } = require('../llm-calls/log');
 
 const CHAT_ENDPOINT = '/v1/chat/completions';
+
+// The AI call goes through node:http, not fetch: Node's fetch (undici) stops waiting for the response headers after
+// 300 s whatever the AbortController allows, so a long call — field mapping on a big claim, with the E3b evidence —
+// failed with "fetch failed" at 5 minutes (2026-10-15 E3 check). node:http has no such limit; LLM_TIMEOUT_MS (the
+// abort below) stays the one timeout. Returns a fetch-like { ok, status, statusText, text(), json() }.
+// `transport.post` is what the call uses, so tests can stand in for the AI without a server.
+function httpPost(url, { headers = {}, body = '', signal } = {}) {
+  return new Promise((resolve, reject) => {
+    const target = new URL(url);
+    const request = (target.protocol === 'https:' ? https : http).request(target, {
+      method: 'POST', signal, headers: { ...headers, 'Content-Length': Buffer.byteLength(body) },
+    }, (response) => {
+      const chunks = [];
+      response.on('data', (chunk) => chunks.push(chunk));
+      // An abort (LLM_TIMEOUT_MS) while the answer is still arriving ends the stream with a plain "aborted" error —
+      // reported as the AbortError it is, so the call log says timeout, not error.
+      response.on('error', (error) => reject(signal?.aborted ? Object.assign(new Error('aborted'), { name: 'AbortError' }) : error));
+      response.on('end', () => {
+        const text = Buffer.concat(chunks).toString('utf8');
+        resolve({
+          ok: response.statusCode >= 200 && response.statusCode < 300,
+          status: response.statusCode,
+          statusText: response.statusMessage,
+          text: async () => text,
+          json: async () => JSON.parse(text),
+        });
+      });
+    });
+    request.on('error', reject);
+    request.end(body);
+  });
+}
+const transport = { post: httpPost };
 
 function buildImageDataUrl(buffer) {
   return `data:image/jpeg;base64,${buffer.toString('base64')}`;
@@ -54,7 +89,7 @@ async function postChatCompletion(body, call = {}) {
 
   let response;
   try {
-    response = await fetch(new URL(CHAT_ENDPOINT, config.llm.baseUrl).toString(), {
+    response = await transport.post(new URL(CHAT_ENDPOINT, config.llm.baseUrl).toString(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -164,11 +199,21 @@ async function transcribePage({ imageBuffer, instruction }) {
 // A text call too big for the model's context (SYSTEM_4 E4-27). Raised before anything is sent: claim recognition
 // turns it into "Needs manual reading" — never a call with part of the documents cut off.
 class DocumentsTooLongError extends Error {
-  constructor(estimatedTokens, limit) {
-    super(`Documents too long for the AI: about ${estimatedTokens.toLocaleString('en-US')} tokens, limit ${limit.toLocaleString('en-US')}. A person reads them.`);
+  constructor(estimatedTokens, limit, message = null) {
+    super(message || `Documents too long for the AI: about ${estimatedTokens.toLocaleString('en-US')} tokens, limit ${limit.toLocaleString('en-US')}. A person reads them.`);
     this.name = 'DocumentsTooLongError';
     this.estimatedTokens = estimatedTokens;
     this.limit = limit;
+  }
+}
+
+// The answer ran into its max_tokens and was cut off (E3 check 2026-10-15: a model can loop). The same outcome as
+// documents that are too long — a person reads them — and never retried: at temperature 0 the next run would cut off
+// the same way, re-reading every page each time.
+class AnswerCutOffError extends DocumentsTooLongError {
+  constructor(maxTokens) {
+    super(null, maxTokens, `The AI's answer ran past ${maxTokens.toLocaleString('en-US')} tokens and was cut off. A person reads the documents.`);
+    this.name = 'AnswerCutOffError';
   }
 }
 
@@ -187,7 +232,9 @@ function estimateTokens(text) {
 }
 
 // label: names the call in the size log (claim recognition's two whole-claim calls); unlabelled calls are small.
-async function synthesizeJson({ systemPrompt, userText, jsonSchema, reasoningEffort = config.llm.reasoningEffort, label = null }) {
+// maxTokens: a cap on the answer — only for a call whose answer must stay short (field mapping: E3 check, a model that
+// loops); judgment calls that reason leave it unset (reasoning tokens count toward it).
+async function synthesizeJson({ systemPrompt, userText, jsonSchema, reasoningEffort = config.llm.reasoningEffort, label = null, maxTokens = null }) {
   const estimatedTokens = estimateTokens(systemPrompt) + estimateTokens(userText) + estimateTokens(JSON.stringify(jsonSchema));
   const limit = config.llm.contextTokens - config.llm.outputReserveTokens;
   if (label) logger.info('LLM call size', { call: label, estimatedTokens, limit, userChars: userText.length });
@@ -204,12 +251,14 @@ async function synthesizeJson({ systemPrompt, userText, jsonSchema, reasoningEff
     ],
     temperature: 0,
     reasoning_effort: reasoningEffort,
+    ...(maxTokens ? { max_tokens: maxTokens } : {}),
     response_format: {
       type: 'json_schema',
       json_schema: { name: 'claim_recognition_result', schema: jsonSchema, strict: true },
     },
   }, { callType: 'text', prompt: systemPrompt, estimatedTokens });
 
+  if (maxTokens && data?.choices?.[0]?.finish_reason === 'length') throw new AnswerCutOffError(maxTokens);
   return extractJson(data?.choices?.[0]?.message?.content);
 }
 
@@ -282,4 +331,4 @@ function extractJson(content) {
   throw lastError || new Error('Unable to parse LLM JSON response');
 }
 
-module.exports = { transcribePage, synthesizeJson, estimateTokens, DocumentsTooLongError };
+module.exports = { transcribePage, synthesizeJson, estimateTokens, DocumentsTooLongError, AnswerCutOffError, transport };

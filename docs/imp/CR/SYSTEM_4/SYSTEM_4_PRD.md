@@ -260,6 +260,13 @@ they show the rule and its result as the reason, and are certain unless they use
   slips skipped); one unsure value = one review point (the check that used it, else *Values read*); a repeated field is
   kept once; `line_total` is the voucher's recount *net of printed discount / tax / service lines* (prompt + migration
   `20261015110000-line-total-net-of-adjustments`, run on dev).
+- **Checked against the AI 2026-10-15** (4 sample claims, before / after — `e3_ai_check_20261015.md`): works end to end
+  — all 60 evidence pages valid, values mostly unchanged, about +25 s per claim. Two bugs found and fixed: AI calls over
+  5 minutes always failed (Node `fetch`'s 300 s header limit → `node:http` transport), and the model looped on the open
+  `field_evidence` list (→ one fixed key per field, migration `20261015150000-field-evidence-by-field`; JSON answers
+  capped at the 6,000-token reserve). **Finding:** with this model the self-scored confidence does not separate right from
+  wrong (wrong values scored 0.8–0.95) — it explains, it does not catch; rules and reviewer data do (E4-15 step 3).
+  Three candidate rules from the samples listed in the report (owner to decide).
 - **Note:** the AI scores itself, so scores are not calibrated; E4-15 step 3 tunes thresholds from reviewer
   corrections.
 - **Acceptance:** no AI result on the case page is shown without a score and a reason.
@@ -644,7 +651,7 @@ sending email, changing data in a shared DB.
 | **D. Measurement baseline** | E4-26 AI call log + prompt versions (migration `ulink_llm_calls`) | ≈ 2–3 days | Every AI answer traceable to prompt and model; "before" numbers for E3 | — | **Done — awaiting review** (D1, D2, D3; run the baseline on UAT) |
 | **E1. Upload → re-check** | E4-04 | M | Incomplete API case recovers without an inbox | Q1, Q2, Q5, Q12 | **Done — awaiting review** |
 | **E2. Work queue** | E4-22 claim / assign, ordering, search | M | No two people on one case; oldest first; find any case fast | Q21 (E2b) | **E2a done — awaiting review**; E2b parked (with E4) |
-| **E3. Confidence everywhere** | E4-08 confidence + reason + source page on every AI output (prompt changes, checked against D) | M | Every AI answer explained, with its page | D done | **E3a done — awaiting review**; **E3b-1 + E3b-2 built** — not verified against the AI yet |
+| **E3. Confidence everywhere** | E4-08 confidence + reason + source page on every AI output (prompt changes, checked against D) | M | Every AI answer explained, with its page | D done | **E3a done — awaiting review**; **Committed; checked against the AI 2026-10-15** (2 fixes — awaiting review) |
 | **E4. Per-item correction** | E4-12 + E4-15 steps 0–1 (migration `ulink_ai_feedback`, trusted mark) | M | Reviewers fix single findings; corrections stored for learning | E3; Q16, Q17 | **E4a committed; E4b done — awaiting review** |
 | **E5. Review workspace** | E4-20 | M–L | Check and decide next to the document page, one screen, Next case | E3, E4 | **E5a committed; E5b done — awaiting review** |
 | **E6. Daily dashboard** | E4-19 | M | One start page for the day's API work | Q20 | **Option B done — awaiting review** (overdue badge, pipeline health); full page parked (Q20) |
