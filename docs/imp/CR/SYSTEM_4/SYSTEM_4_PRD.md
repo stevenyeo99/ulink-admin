@@ -232,7 +232,7 @@ they show the rule and its result as the reason, and are certain unless they use
   illness, treatment, bank name / holder / account no., medical record date) — a doubt-marked value scores ≤ 0.6;
   (3) each voucher: `evidence` (its amount and date), `line_total` (its lines added up), `vitamin_items`,
   `vitamin_confidence`; (4) translation `note` always says what the translation rests on. Existing fields unchanged,
-  so nothing downstream changes until E3b-2 reads the new ones. Migration **not run on dev yet**; it has a `down`.
+  so nothing downstream changes until E3b-2 reads the new ones. Migration **run on dev 2026-10-15** (UAT: owner's deploy step); it has a `down`.
 - **Note:** the AI scores itself, so scores are not calibrated; E4-15 step 3 tunes thresholds from reviewer
   corrections.
 - **Acceptance:** no AI result on the case page is shown without a score and a reason.

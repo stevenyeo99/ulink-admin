@@ -27,8 +27,11 @@ const KEY_FIELDS = [
   'medical_record.date',
 ];
 
+// null allowed: claim-recognition turns an out-of-range score into null ("not recorded") rather than failing the claim.
 const CONFIDENCE = {
-  type: 'number',
+  type: ['number', 'null'],
+  minimum: 0,
+  maximum: 1,
   description: '0.0-1.0: how sure you are the value matches what is on the document. High only for clearly printed/typed text; low for handwriting you had to guess at, a value marked [?] or "unsure" in the transcript, or one pieced together from more than one place.',
 };
 const REASON = { type: ['string', 'null'], description: 'One short phrase on what the value rests on — e.g. "typed on the claim form", "handwritten, last digit 1 or 7".' };
@@ -62,6 +65,8 @@ const VOUCHER_PROPERTIES = {
   },
   vitamin_confidence: {
     type: ['number', 'null'],
+    minimum: 0,
+    maximum: 1,
     description: '0.0-1.0: how sure you are of has_vitamin_or_supplement. Null when it is null.',
   },
 };
@@ -73,7 +78,11 @@ async function updateSchema(queryInterface, change) {
   );
   if (!rows.length) return; // route not seeded on this database — nothing to patch
   const schema = typeof rows[0].extraction_schema === 'string' ? JSON.parse(rows[0].extraction_schema) : rows[0].extraction_schema;
-  change(schema, schema.properties.invoices.properties.items.items);
+  const voucher = schema.properties?.invoices?.properties?.items?.items;
+  if (!voucher?.properties) throw new Error(`${ROUTE_KEY}: extraction schema has no invoices.items voucher object — check the route before migrating`);
+  schema.required = schema.required || [];
+  voucher.required = voucher.required || [];
+  change(schema, voucher);
   await queryInterface.sequelize.query(
     'UPDATE ulink_claim_routes SET extraction_schema = :schema, updated_at = now() WHERE route_key = :key',
     { replacements: { key: ROUTE_KEY, schema: JSON.stringify(schema) } }

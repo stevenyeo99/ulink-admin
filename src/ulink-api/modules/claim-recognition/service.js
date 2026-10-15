@@ -152,14 +152,51 @@ const CLAIMANT_DOB_LABEL_PATTERN = /Claimant Date of Birth:?\s*(\d{4}-\d{2}-\d{2
  * requires no interpretation at all — just prefer the transcript's own literal value over
  * whatever the synthesis call produced when they disagree.
  */
+// Doubt marks (SYSTEM_4 E3b, transcribe-page.md) are dropped before matching — the best reading of a year-first date
+// still beats a transposed one; the field evidence then says the date came from the form.
 function normalizeClaimantDob(fields, transcriptChunks) {
-  const match = transcriptChunks.join('\n').match(CLAIMANT_DOB_LABEL_PATTERN);
+  const match = transcriptChunks.join('\n').replace(/\[\?\]/g, '').match(CLAIMANT_DOB_LABEL_PATTERN);
   if (!match) return fields;
 
   const transcriptDob = match[1];
   if (fields.claimant?.claimant_dob === transcriptDob) return fields;
 
-  return { ...fields, claimant: { ...fields.claimant, claimant_dob: transcriptDob } };
+  return replaceEvidence(
+    { ...fields, claimant: { ...fields.claimant, claimant_dob: transcriptDob } },
+    'claimant.claimant_dob',
+    { confidence: 0.9, reason: "Taken from the claim form's year-first date of birth (corrected by rule)", page: null }
+  );
+}
+
+// A confidence outside 0–1 (e.g. 95 meant as a percentage) becomes null — "not recorded" — so a bad score on the
+// evidence never fails the whole claim's schema check. Guessing 95 → 0.95 would be inventing a number.
+function dropOutOfRangeEvidence(parsed) {
+  const inRange = (v) => (typeof v === 'number' && v >= 0 && v <= 1 ? v : null);
+  const fix = (e) => (e && typeof e === 'object' && 'confidence' in e ? { ...e, confidence: inRange(e.confidence) } : e);
+  if (!parsed || typeof parsed !== 'object') return parsed;
+  const items = parsed.invoices?.items;
+  return {
+    ...parsed,
+    ...(Array.isArray(parsed.field_evidence) ? { field_evidence: parsed.field_evidence.map(fix) } : {}),
+    ...(Array.isArray(items) ? {
+      invoices: {
+        ...parsed.invoices,
+        items: items.map((item) => ({
+          ...item,
+          ...('evidence' in item ? { evidence: fix(item.evidence) } : {}),
+          ...('vitamin_confidence' in item ? { vitamin_confidence: inRange(item.vitamin_confidence) } : {}),
+        })),
+      },
+    } : {}),
+  };
+}
+
+// field_evidence (SYSTEM_4 E3b) must describe the value actually kept: when code replaces a key field, its entry is
+// replaced too (evidence) or dropped (null — "not recorded" beats a wrong reason). Fields without the list: unchanged.
+function replaceEvidence(fields, field, evidence) {
+  if (!Array.isArray(fields.field_evidence)) return fields;
+  const others = fields.field_evidence.filter((e) => e.field !== field);
+  return { ...fields, field_evidence: evidence ? [...others, { field, ...evidence }] : others };
 }
 
 /**
@@ -199,12 +236,23 @@ function preferAffirmative(a, b) {
   return null;
 }
 
-// The first read's evidence / line_total (SYSTEM_4 E3b) are kept, as for subtotal; vitamin items from both reads.
+// The less sure of the two reads' evidence (SYSTEM_4 E3b) — it covers the amount and the date, and the merged date can
+// come from either read, so the lower confidence is the honest one.
+function lessSureEvidence(a, b) {
+  if (!a || !b) return a || b;
+  return (b.confidence ?? 1) < (a.confidence ?? 1) ? b : a;
+}
+
+// Every field listed on purpose — a new voucher field must decide here which read wins.
 function mergeInvoiceItemPair(a, b) {
+  const hasVitamin = preferAffirmative(a.has_vitamin_or_supplement, b.has_vitamin_or_supplement);
+  // The confidence of the read whose answer was kept (true wins: preferAffirmative).
+  const vitaminRead = a.has_vitamin_or_supplement === hasVitamin ? a : b;
   return {
-    ...b,
-    ...a,
+    ...(a.evidence || b.evidence ? { evidence: lessSureEvidence(a.evidence, b.evidence) } : {}),
+    ...('line_total' in a || 'line_total' in b ? { line_total: a.line_total ?? b.line_total ?? null } : {}),
     ...(a.vitamin_items || b.vitamin_items ? { vitamin_items: [...new Set([...(a.vitamin_items || []), ...(b.vitamin_items || [])])] } : {}),
+    ...('vitamin_confidence' in a || 'vitamin_confidence' in b ? { vitamin_confidence: vitaminRead.vitamin_confidence ?? null } : {}),
     subtotal: a.subtotal,
     voucher_type: a.voucher_type,
     // Previously dropped entirely (neither a.date nor b.date was ever read here) — silently
@@ -213,7 +261,7 @@ function mergeInvoiceItemPair(a, b) {
     date: a.date ?? b.date,
     legible: preferAffirmative(a.legible, b.legible),
     has_itemized_breakdown: preferAffirmative(a.has_itemized_breakdown, b.has_itemized_breakdown),
-    has_vitamin_or_supplement: preferAffirmative(a.has_vitamin_or_supplement, b.has_vitamin_or_supplement),
+    has_vitamin_or_supplement: hasVitamin,
     has_clinic_stamp_or_doctor_signature: preferAffirmative(a.has_clinic_stamp_or_doctor_signature, b.has_clinic_stamp_or_doctor_signature),
   };
 }
@@ -552,7 +600,9 @@ async function extractFields(transcriptChunks, matchedRoute) {
   const responseSchema = matchedRoute.extractionSchema;
   const userText = ['Page transcripts:', transcriptChunks.join('\n\n')].join('\n');
 
-  const parsed = await synthesizeJson({ systemPrompt: EXTRACT_FIELDS_PROMPT, userText, jsonSchema: responseSchema, label: 'extract-fields' });
+  const parsed = dropOutOfRangeEvidence(
+    await synthesizeJson({ systemPrompt: EXTRACT_FIELDS_PROMPT, userText, jsonSchema: responseSchema, label: 'extract-fields' })
+  );
 
   const validate = ajv.compile(responseSchema);
   if (!validate(parsed)) {
@@ -560,7 +610,11 @@ async function extractFields(transcriptChunks, matchedRoute) {
   }
 
   const normalizedFields = normalizeClaimantDob(normalizeDelegationLetter(dedupeInvoiceItems(parsed)), transcriptChunks);
-  const extractedFields = await applyMedicalRecordFallback(normalizedFields, transcriptChunks);
+  const withFallback = await applyMedicalRecordFallback(normalizedFields, transcriptChunks);
+  // The fallback may have re-read the medical record from another page: the first read's evidence for its date no longer applies.
+  const extractedFields = withFallback.medical_record?.date !== normalizedFields.medical_record?.date
+    ? replaceEvidence(withFallback, 'medical_record.date', null)
+    : withFallback;
   return { extractedFields, schemaValidationError: null };
 }
 
@@ -765,5 +819,7 @@ module.exports = {
   extractFields,
   transcribePages,
   dedupeInvoiceItems,
+  normalizeClaimantDob,
+  dropOutOfRangeEvidence,
   mentionsBillLikeDocument,
 };

@@ -6,7 +6,7 @@
 const Ajv = require('ajv');
 const previous = require('../db/migrations/20260916110000-add-presence-confidence-reason');
 const migration = require('../db/migrations/20261015100000-add-field-evidence');
-const { dedupeInvoiceItems } = require('../modules/claim-recognition/service');
+const { dedupeInvoiceItems, normalizeClaimantDob, dropOutOfRangeEvidence } = require('../modules/claim-recognition/service');
 
 async function currentSchema() {
   let stored;
@@ -74,18 +74,50 @@ it('leaves the existing fields as they were, and down removes exactly what up ad
   expect(db.schema).toEqual(before);
 });
 
-it('a duplicate voucher read keeps the first read\'s evidence and both reads\' vitamin items', () => {
+it('a duplicate voucher read: the less sure evidence, the line total either read has, both reads\' vitamin items', () => {
   const fields = {
     invoices: {
       present: true,
       items: [
-        voucher({ voucher_type: 'pharmacy', vitamin_items: ['Vitamin C'] }),
-        voucher({ voucher_type: 'pharmacy', evidence: { confidence: 0.4, reason: 'second read', page: 'claim.pdf - page 4' }, vitamin_items: ['Vitamin C', 'Zinc'] }),
+        voucher({ voucher_type: 'pharmacy', date: null, line_total: null, has_vitamin_or_supplement: false, vitamin_confidence: 0.9, vitamin_items: [] }),
+        voucher({ voucher_type: 'pharmacy', evidence: { confidence: 0.4, reason: 'second read', page: 'claim.pdf - page 4' },
+          has_vitamin_or_supplement: true, vitamin_confidence: 0.7, vitamin_items: ['Zinc'] }),
       ],
     },
   };
   const [merged] = dedupeInvoiceItems(fields).invoices.items;
-  expect(merged.evidence.page).toBe('claim.pdf - page 3');
+  expect(merged.date).toBe('2026-08-14'); // from the second read…
+  expect(merged.evidence.page).toBe('claim.pdf - page 4'); // …so its (less sure) evidence, not the first read's
   expect(merged.line_total).toBe(32500);
-  expect(merged.vitamin_items).toEqual(['Vitamin C', 'Zinc']);
+  expect(merged).toMatchObject({ has_vitamin_or_supplement: true, vitamin_confidence: 0.7, vitamin_items: ['Zinc'] });
+});
+
+it('a merged voucher without the new fields (read before E3b) gets none of them', () => {
+  const old = { subtotal: 23000, voucher_type: 'pharmacy', date: '2026-08-21', legible: true };
+  const [merged] = dedupeInvoiceItems({ invoices: { present: true, items: [old, { ...old }] } }).invoices.items;
+  expect(Object.keys(merged)).not.toEqual(expect.arrayContaining(['evidence', 'line_total', 'vitamin_items', 'vitamin_confidence']));
+});
+
+it('the DOB backstop still works on a doubt-marked date, and its evidence says the value came from the form', () => {
+  const fields = { claimant: { claimant_dob: '1999-07-12' }, field_evidence: [
+    { field: 'claimant.claimant_dob', confidence: 0.5, reason: 'handwritten', page: 'claim.pdf - page 1' },
+    { field: 'claimant.claimant_name', confidence: 0.95, reason: 'typed', page: 'claim.pdf - page 1' },
+  ] };
+  const result = normalizeClaimantDob(fields, ['[claim.pdf - page 1]\nClaimant Date of Birth: 1999-12-0[?]7']);
+  expect(result.claimant.claimant_dob).toBe('1999-12-07');
+  expect(result.field_evidence.find((e) => e.field === 'claimant.claimant_dob')).toMatchObject({ confidence: 0.9, reason: expect.stringContaining('corrected by rule') });
+  expect(result.field_evidence).toHaveLength(2);
+});
+
+it('an out-of-range score becomes "not recorded" instead of failing the claim', () => {
+  const parsed = dropOutOfRangeEvidence(output({
+    field_evidence: [{ field: 'claimant.claimant_name', confidence: 95, reason: 'typed', page: null }],
+    invoices: { present: true, items: [voucher({ evidence: { confidence: -1, reason: null, page: null }, vitamin_confidence: 2 })], presence_confidence: 1, presence_reason: null },
+  }));
+  expect(parsed.field_evidence[0].confidence).toBeNull();
+  expect(parsed.invoices.items[0]).toMatchObject({ evidence: { confidence: null }, vitamin_confidence: null });
+});
+
+it('stops the migration with a clear message when the route schema has no voucher object', async () => {
+  await expect(migration.up(fakeDb({ type: 'object', properties: {} }))).rejects.toThrow('no invoices.items voucher object');
 });
