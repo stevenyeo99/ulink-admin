@@ -1,12 +1,6 @@
 import clsx from 'clsx';
-import { useQuery } from '@tanstack/react-query';
-import { getStpSettings } from '../../api/stpSettingsApi';
+import { useConfidenceThreshold } from '../../hooks/useConfidenceThreshold';
 
-// The AI confidence threshold on the STP settings page (default 70%): at or below it the AI counts as unsure.
-function useConfidenceThreshold(): number {
-  const { data } = useQuery({ queryKey: ['stp-settings'], queryFn: getStpSettings, staleTime: 60_000 });
-  return data?.switches.aiConfidenceThreshold ?? 0.7;
-}
 
 /**
  * One look for an AI confidence everywhere it is shown (SYSTEM_4 E4-23): the number and a word, coloured — never

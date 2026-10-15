@@ -71,7 +71,7 @@ export function ReviewQueuePage() {
         columns={columns}
         rows={items.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)}
         rowKey={(i) => i.id}
-        onRowClick={(i) => navigate(`/cases/${i.id}`)}
+        onRowClick={(i) => navigate(`/cases/${i.id}/review`)} // the review workspace (SYSTEM_4 E4-20)
         page={page}
         pageSize={PAGE_SIZE}
         total={items.length}

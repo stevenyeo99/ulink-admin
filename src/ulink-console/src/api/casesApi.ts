@@ -59,6 +59,12 @@ export function trustCorrection(id: string, feedbackId: string): Promise<{ corre
   return request(`/api/cases/${id}/corrections/${feedbackId}/trust`, { method: 'POST' });
 }
 
+// The case to review next (review workspace, SYSTEM_4 E4-20): the next in queue order after `after`, not held by
+// someone else; both sources unless one is given.
+export function getNextCase(after: string, source?: Source): Promise<{ id: string | null }> {
+  return request(`/api/cases/next?${new URLSearchParams({ after, ...(source ? { source } : {}) })}`);
+}
+
 // "Being reviewed by me" (claimController.js, SYSTEM_4 E4-22). takeOver + comment: from someone else.
 export function claimCase(id: string, takeOver = false, comment = ''): Promise<{ claim: CaseClaim }> {
   return request(`/api/cases/${id}/claim`, { method: 'POST', body: JSON.stringify({ takeOver, comment }) });

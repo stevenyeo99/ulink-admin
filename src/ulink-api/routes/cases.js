@@ -1,6 +1,6 @@
 const express = require('express');
 const { requireRole } = require('../modules/auth/auth');
-const { getCaseStatuses, getOverview, getReviewQueue, getApprovals, listCases, getCase, getLlmCalls, getAttachment, getDocument, overrideCase, resetCase, releaseMissingDocuments, uploadCaseDocuments } = require('../controllers/cases/casesController');
+const { getCaseStatuses, getOverview, getReviewQueue, getNextCase, getApprovals, listCases, getCase, getLlmCalls, getAttachment, getDocument, overrideCase, resetCase, releaseMissingDocuments, uploadCaseDocuments } = require('../controllers/cases/casesController');
 const { createCorrection, trustCorrection } = require('../controllers/cases/correctionsController');
 const { claim, release } = require('../controllers/cases/claimController');
 const { requireNotHeldByOther } = require('../modules/case-claim/claim');
@@ -109,6 +109,20 @@ router.get('/overview', getOverview);
  *         description: "{ items: [{ id, source, currentStatus, claimNo, tpaCaseNumber, reason, check, reasons, pointCount, … }], counts: { reason: n }, total }"
  */
 router.get('/review-queue', getReviewQueue);
+
+/**
+ * @openapi
+ * /api/cases/next:
+ *   get:
+ *     tags: [Cases]
+ *     summary: The case to review next — oldest in the review queue, not held by someone else (SYSTEM_4 E4-20)
+ *     parameters:
+ *       - { name: after, in: query, schema: { type: string, format: uuid }, description: 'The case just reviewed (skipped)' }
+ *       - { name: source, in: query, schema: { type: string, enum: [EMAIL, API] } }
+ *     responses:
+ *       200: { description: '{ id } — null when the queue is empty' }
+ */
+router.get('/next', getNextCase);
 
 /**
  * @openapi

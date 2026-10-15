@@ -432,6 +432,16 @@ confirm with ULINK.
 ```
 - **Acceptance:** a reviewer can check and decide every unsure finding of a case without leaving the screen or
   scrolling to find the document.
+- **Built 2026-10-15 (E5a, decisions as recommended):** new view **`/cases/:id/review`** next to the case page (which
+  stays) — opened from the review queue and *Review documents* on the case page. **Left:** the case's files under the
+  names the AI's reading used (API console images `<barcode>/<file>`, replies `reply-N/<file>`, email attachments) —
+  images with zoom / rotate, PDFs in the browser's own viewer at the page (no pdf.js; no PDF thumbnails). **Right:**
+  findings from what the checks stored — every value read with its evidence (E3b), every checklist line (mandatory
+  fields as one), unsure first (≤ threshold), failed next, passed collapsed; member / claim decisions read-only; each
+  finding's page opens on the left (a check takes the page of the least sure value it used); **Correct** opens the E4a
+  correction with the item chosen. Opening it **claims the case** (E4b); **Next case** releases it and opens the oldest
+  unclaimed case in the queue (`GET /api/cases/next`). **Not in E5a (E5b):** Accept / Reject buttons with *Right*
+  recorded as learning data, the Technical tab.
 
 #### E4-21 Case header: why it is here, what to do — P1, S
 - **Requirement:** the top of every case shows TPA case number, claim number, member, benefit, amount, source,
@@ -612,7 +622,7 @@ sending email, changing data in a shared DB.
 | **E2. Work queue** | E4-22 claim / assign, ordering, search | M | No two people on one case; oldest first; find any case fast | Q21 (E2b) | **E2a done — awaiting review**; E2b parked (with E4) |
 | **E3. Confidence everywhere** | E4-08 confidence + reason + source page on every AI output (prompt changes, checked against D) | M | Every AI answer explained, with its page | D done | **E3a done — awaiting review**; **E3b-1 + E3b-2 built** — not verified against the AI yet |
 | **E4. Per-item correction** | E4-12 + E4-15 steps 0–1 (migration `ulink_ai_feedback`, trusted mark) | M | Reviewers fix single findings; corrections stored for learning | E3; Q16, Q17 | **E4a committed; E4b done — awaiting review** |
-| **E5. Review workspace** | E4-20 | M–L | Check and decide next to the document page, one screen, Next case | E3, E4 | Not started |
+| **E5. Review workspace** | E4-20 | M–L | Check and decide next to the document page, one screen, Next case | E3, E4 | **E5a done — awaiting review**; E5b (Right / Wrong, Technical tab) next |
 | **E6. Daily dashboard** | E4-19 | M | One start page for the day's API work | Q20 | Not started |
 | **F. Learning** | E4-24 timeline, E4-14 feedback report, E4-15 steps 2–4, E4-25 stats | M–L | Fewer repeat mistakes, proven by override rate and test set | Weeks of trusted corrections | Not started |
 | **Blocked** | E4-16, E4-17, E4-13, E4-18 | — | — | ULINK (Q6, Q15, Q18, Q19, E4-16 list) | Blocked (ULINK input) |
@@ -657,7 +667,8 @@ Ticked when the item is done; the phase status above changes when all are done a
 - [x] E3b-2 · E4-08 Checks take their fields' confidence; voucher lines vs amount in *Values read look valid*; case page *What the AI read*; *Values read* summary line (rules + console; tested on mocked AI output)
 - [x] E4a · E4-12 + E4-15 step 1: per-item correction (value or verdict), `ulink_ai_feedback`, re-check from the member check, trusted mark by a different super admin (Q16 / Q17 defaults)
 - [x] E4b · E4-22 Claim a case (*Being reviewed by …*, 30-min time-out, take over with comment, *My cases*) — the parked E2b (`ulink_case_claims`)
-- [ ] E5 · E4-20 Review workspace
+- [x] E5a · E4-20 Review workspace: document viewer + findings side by side, page links, Correct in place, auto-claim, Next case
+- [ ] E5b · E4-20 *Right* / *Wrong* on each finding (*Right* recorded in `ulink_ai_feedback`, migration), Technical tab
 - [ ] E6 · E4-19 Daily API dashboard (Q20)
 
 **Phase F — Learning**

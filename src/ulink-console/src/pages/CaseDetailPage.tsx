@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, ChevronDown, Clock } from 'lucide-react';
 import clsx from 'clsx';
@@ -114,6 +114,12 @@ export function CaseDetailPage() {
             <span className="rounded-full bg-ulink-teal/15 px-2.5 py-1 text-xs font-semibold text-ulink-teal-dark">Claim {caseRecord.claimNo}</span>
           )}
           {caseRecord.tpaCaseNumber && <span className="text-sm text-slate-700">{caseRecord.tpaCaseNumber}</span>}
+          <Link
+            to={`/cases/${caseRecord.id}/review`}
+            className="ml-auto rounded-full bg-ulink-teal px-3 py-1.5 text-sm font-medium text-white hover:bg-ulink-teal-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ulink-teal/60"
+          >
+            Review documents
+          </Link>
         </div>
         <p className="mt-2 text-sm text-slate-700">{caseFacts(caseRecord).join(' · ')}</p>
         <p className="mt-1 text-sm text-slate-500">

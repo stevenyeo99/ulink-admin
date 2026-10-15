@@ -23,9 +23,10 @@ const shown = (v: Correction['aiValue']) => (v === true ? 'passed' : v === false
  * summary, IAS remark). Below: the corrections so far, and "Trusted" — a second person agrees, so the correction may
  * teach the AI later (E4-15). Whole-check override stays in the panel above for "let it through as it is".
  */
-export function CaseCorrectionPanel({ caseId, corrections }: { caseId: string; corrections: CorrectionsInfo }) {
+// initialItem: "value:<field>" / "verdict:<code>" to start with that item chosen (the review workspace's Correct buttons).
+export function CaseCorrectionPanel({ caseId, corrections, initialItem = '' }: { caseId: string; corrections: CorrectionsInfo; initialItem?: string }) {
   const queryClient = useQueryClient();
-  const [item, setItem] = useState('');
+  const [item, setItem] = useState(initialItem);
   const [value, setValue] = useState('');
   const [passed, setPassed] = useState('');
   const [wrongStep, setWrongStep] = useState<WrongStep | ''>('');

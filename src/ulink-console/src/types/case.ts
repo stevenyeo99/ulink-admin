@@ -50,6 +50,7 @@ export interface ChecklistItem {
   note?: string | null;
   reason?: string | null; // why it passed or failed (SYSTEM_4 E4-08); checks before 2026-10-15 have none
   fields?: FieldRead[]; // FIELDS_READ only: every value the AI read with its evidence (SYSTEM_4 E3b)
+  usedFields?: string[]; // a rule check made unsure by the values it read: those values (SYSTEM_4 E3b)
 }
 
 // One value the AI read and how sure it was (SYSTEM_4 E3b); field is a path like "claimant.claimant_nrc_passport" or "voucher 1".
@@ -118,6 +119,7 @@ export interface EmailAttachment {
   contentType: string | null;
   sizeBytes: number | null;
   sourceUrl: string | null;
+  createdAt?: string;
 }
 
 export interface EmailMessage {
@@ -212,6 +214,8 @@ export interface AssessmentOverride {
 
 export interface AssessmentLine {
   decision: string;
+  /** Which check the line came from: member, documents, corrections, claim. */
+  area?: string;
   overridden?: AssessmentOverride;
   result: string;
   status: 'ok' | 'issue' | 'not_checked';

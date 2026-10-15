@@ -7,6 +7,7 @@ import { listCases } from '../../api/casesApi';
 import { NAV_SECTIONS } from './navigation';
 
 function titleFor(pathname: string): string {
+  if (/^\/cases\/[^/]+\/review$/.test(pathname)) return 'Review';
   if (/^\/cases\/[^/]+/.test(pathname)) return 'Case';
   const item = NAV_SECTIONS.flatMap((section) => section.items).find((i) => pathname.startsWith(i.to));
   return item?.label ?? 'ULINK Claims';

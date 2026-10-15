@@ -5,6 +5,7 @@ import { Sidebar } from './components/layout/Sidebar';
 import { TopBar } from './components/layout/TopBar';
 import { PipelinePage } from './pages/PipelinePage';
 import { CasesPage } from './pages/CasesPage';
+import { ReviewWorkspacePage } from './pages/ReviewWorkspacePage';
 import { CaseDetailPage } from './pages/CaseDetailPage';
 import { OverviewPage } from './pages/OverviewPage';
 import { ReviewQueuePage } from './pages/ReviewQueuePage';
@@ -61,6 +62,7 @@ function Shell() {
             <Route path="/approvals" element={<ApprovalsPage />} />
             <Route path="/cases" element={<CasesPage />} />
             <Route path="/cases/:id" element={<CaseDetailPage />} />
+            <Route path="/cases/:id/review" element={<ReviewWorkspacePage />} />
             <Route path="/stp-settings" element={<StpSettingsPage />} />
             <Route path="/ai-performance" element={<AiPerformancePage />} />
           </Routes>

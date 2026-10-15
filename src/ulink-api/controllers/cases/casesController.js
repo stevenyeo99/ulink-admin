@@ -123,6 +123,34 @@ async function getReviewQueue(req, res) {
   if (source && !CASE_SOURCES.includes(source)) {
     return res.status(400).json({ error: { message: `Unknown source filter: ${req.query.source}. Must be one of: ${CASE_SOURCES.join(', ')}`, status: 400 } });
   }
+  const items = await reviewQueueItems(source);
+  const counts = Object.fromEntries(REASON_ORDER.map((r) => [r, items.filter((i) => i.reason === r).length]));
+  res.json({ items, counts, total: items.length });
+}
+
+/**
+ * GET /api/cases/next?after=<caseId>&source= — the case to review next (the review workspace's "Next case", SYSTEM_4
+ * E4-20): the first case after `after` in queue order (oldest first, wrapping round to the start), skipping cases
+ * someone else is reviewing — so the reviewer walks down the queue instead of bouncing between the two oldest.
+ * `after` no longer in the queue (decided): from the oldest. { id } or { id: null } when nothing else is waiting.
+ */
+async function getNextCase(req, res) {
+  const source = req.query.source ? String(req.query.source).toUpperCase() : null;
+  if (source && !CASE_SOURCES.includes(source)) {
+    return res.status(400).json({ error: { message: `Unknown source filter: ${req.query.source}. Must be one of: ${CASE_SOURCES.join(', ')}`, status: 400 } });
+  }
+  const after = req.query.after ? String(req.query.after) : null;
+  // ponytail: rebuilds the whole queue (as GET /review-queue does) for one id; stop at the first match once the
+  // queue runs into hundreds of open cases.
+  const items = await reviewQueueItems(source);
+  const at = items.findIndex((i) => i.id === after);
+  const ordered = at >= 0 ? [...items.slice(at + 1), ...items.slice(0, at)] : items;
+  const next = ordered.find((i) => !i.claim || i.claim.username === req.user.username);
+  res.json({ id: next?.id ?? null });
+}
+
+// The review queue, oldest first, each with its reason and who is reviewing it (modules/review-queue/queue.js).
+async function reviewQueueItems(source) {
   const cases = await Case.findAll({
     where: { currentStatus: QUEUE_CANDIDATE_STATUSES, ...(source ? { source } : {}) },
     order: [['updatedAt', 'ASC']],
@@ -146,8 +174,7 @@ async function getReviewQueue(req, res) {
     items.push({ ...listRow(c), ...entry });
   }
   await withClaims(items);
-  const counts = Object.fromEntries(REASON_ORDER.map((r) => [r, items.filter((i) => i.reason === r).length]));
-  res.json({ items, counts, total: items.length });
+  return items;
 }
 
 /**
@@ -594,4 +621,4 @@ async function uploadCaseDocuments(req, res) {
   }
 }
 
-module.exports = { getCaseStatuses, getOverview, getReviewQueue, getApprovals, listCases, getCase, getLlmCalls, getAttachment, getDocument, overrideCase, resetCase, releaseMissingDocuments, uploadCaseDocuments, OVERRIDE_TARGETS, REVIEWABLE_STATUSES };
+module.exports = { getCaseStatuses, getOverview, getReviewQueue, getNextCase, getApprovals, listCases, getCase, getLlmCalls, getAttachment, getDocument, overrideCase, resetCase, releaseMissingDocuments, uploadCaseDocuments, OVERRIDE_TARGETS, REVIEWABLE_STATUSES };
