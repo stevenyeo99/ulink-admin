@@ -49,6 +49,18 @@ export interface ChecklistItem {
   confidence?: number | null;
   note?: string | null;
   reason?: string | null; // why it passed or failed (SYSTEM_4 E4-08); checks before 2026-10-15 have none
+  fields?: FieldRead[]; // FIELDS_READ only: every value the AI read with its evidence (SYSTEM_4 E3b)
+}
+
+// One value the AI read and how sure it was (SYSTEM_4 E3b); field is a path like "claimant.claimant_nrc_passport" or "voucher 1".
+export interface FieldRead {
+  field: string;
+  label: string;
+  value: string | number | null;
+  confidence: number | null;
+  reason: string | null;
+  page: string | null;
+  reportedBy?: string; // the check that already reports this unsure value (so the summary lists it once)
 }
 
 export interface DocumentCheckDetail {

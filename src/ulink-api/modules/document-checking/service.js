@@ -1,6 +1,6 @@
 const { sequelize, Case, CaseEvent } = require('../../db/models');
 const config = require('../../config');
-const { evaluateDocumentChecks, evaluateJudgmentDependentChecks, vitaminCheck, formatCheck } = require('./checklist');
+const { evaluateDocumentChecks, evaluateJudgmentDependentChecks, vitaminCheck, formatCheck, fieldsReadCheck } = require('./checklist');
 const { entityMatch } = require('./identityJudgment');
 const { queueDedupedTask } = require('../shared/emailTaskQueue');
 const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment-summary/summary');
@@ -79,6 +79,7 @@ async function checkCase(caseRecord) {
     throw new Error(`Case ${caseRecord.id} has no extractedFields (reached READY_FOR_DOCUMENT_CHECKING without extraction data)`);
   }
   const fields = caseRecord.extractedFields;
+  await getSettings(); // the AI confidence threshold decides which values read count as unsure (SYSTEM_4 E3b)
 
   const stage1 = evaluateDocumentChecks(fields);
   const judgments = await runJudgments(fields);
@@ -88,9 +89,9 @@ async function checkCase(caseRecord) {
     details: [...stage1.details, ...stage2.details],
     flags: [...stage1.flags, ...stage2.flags],
     passed: stage1.issues.length + stage2.issues.length === 0,
-    // + the vitamins / supplements line (SYSTEM_4 E4-10) and the format checks on values read (E4-08) — information for
-    // STP and the reviewer, never an issue.
-    checklist: [...stage1.checklist, ...stage2.checklist, ...[vitaminCheck(fields), formatCheck(fields)].filter(Boolean)],
+    // + the vitamins / supplements line (SYSTEM_4 E4-10), the format checks on values read and how sure the AI was of
+    // them (E4-08) — information for STP and the reviewer, never an issue.
+    checklist: [...stage1.checklist, ...stage2.checklist, ...[vitaminCheck(fields), formatCheck(fields), fieldsReadCheck(fields, stage1.checklist)].filter(Boolean)],
   };
 
   const outcome = result.passed ? 'DOCUMENT_CHECKED' : 'INCOMPLETE';

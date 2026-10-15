@@ -212,6 +212,10 @@ function documentLines(documentCheckResult) {
       lines.push(formatLine(item));
       continue;
     }
+    if (item.code === 'FIELDS_READ') {
+      lines.push(fieldsReadLine(item));
+      continue;
+    }
     const decision = DOCUMENT_DECISIONS[item.code] || item.label;
     if (item.passed === null || item.passed === undefined) {
       notChecked.push(decision);
@@ -276,6 +280,26 @@ function formatLine(item) {
     return line({ decision: 'Values read look valid', result: 'Check values', status: 'ok', why: item.note, verified: VERIFIED.RULE, review: REVIEW.AI_UNSURE });
   }
   return line({ decision: 'Values read look valid', result: 'OK', status: 'ok', why: item.reason, verified: VERIFIED.RULE });
+}
+
+// How sure the AI was of the key values it read (SYSTEM_4 E3b, document-checking/checklist.js fieldsReadCheck). Values at
+// or below the threshold: "AI unsure", with each value's reason and page so the reviewer knows where to look — except a
+// value a check already reports (reportedBy: that check's own line says it), so one doubt is one review point.
+function fieldsReadLine(item) {
+  const unsure = (item.fields || []).filter((f) => !f.reportedBy && isLowConfidence(f.confidence));
+  if (unsure.length) {
+    const list = unsure.map((f) => `${f.label} "${f.value ?? '—'}" ${Math.round(f.confidence * 100)}%${f.reason ? ` (${f.reason})` : ''}${f.page ? `, ${f.page}` : ''}`);
+    return line({
+      decision: 'Values read',
+      result: `${unsure.length} unsure`,
+      status: 'ok',
+      why: `The AI was unsure of: ${list.join('; ')}. Check them against the document.`,
+      confidence: formatConfidence(item.confidence),
+      verified: VERIFIED.AI,
+      review: REVIEW.AI_UNSURE,
+    });
+  }
+  return line({ decision: 'Values read', result: 'OK', status: 'ok', why: item.reason, confidence: formatConfidence(item.confidence), verified: VERIFIED.AI });
 }
 
 // STP rules (stpEligibility.js): reasons when blocked, else each benefit type's total against its limit.

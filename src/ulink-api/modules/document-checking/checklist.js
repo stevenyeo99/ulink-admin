@@ -1,4 +1,5 @@
 const { todayInIasTimezone } = require('../shared/iasDates');
+const { lastReadSettings } = require('../settings/settings');
 
 /**
  * Canonical customer-facing issue wording + the evaluator logic that decides which apply
@@ -735,6 +736,7 @@ function buildDateConsistencyChecklist(extractedFields) {
 }
 
 function evaluateDocumentChecks(extractedFields) {
+  const entries = evidenceEntries(extractedFields);
   const flags = [...evaluateMandatoryFieldFlags(extractedFields), ...(checkTreatmentDateConsistency(extractedFields) || [])];
   const issues = [...new Set([
     ...EVALUATORS.map(({ check }) => check(extractedFields)).filter(Boolean),
@@ -748,7 +750,7 @@ function evaluateDocumentChecks(extractedFields) {
     ...buildEvaluatorChecklist(extractedFields),
     ...buildMandatoryFieldChecklist(extractedFields),
     ...buildDateConsistencyChecklist(extractedFields),
-  ];
+  ].map((item) => withFieldConfidence(item, entries));
   return { issues, passed: issues.length === 0, details, flags, checklist };
 }
 
@@ -828,6 +830,15 @@ function formatCheck(fields, today = todayInIasTimezone()) {
   (fields.invoices?.items || []).forEach((item, i) => {
     if (item.subtotal != null && !isAmount(item.subtotal)) problems.push(`Voucher ${i + 1} amount "${item.subtotal}" is not a number`);
   });
+  // The voucher's printed lines, added up by the AI (line_total, SYSTEM_4 E3b), against the total it read.
+  const withLines = (fields.invoices?.items || []).map((item, i) => ({ item, n: i + 1 }))
+    .filter(({ item }) => isAmount(item.line_total) && isAmount(item.subtotal) && item.subtotal > 0);
+  if (withLines.length) checked.push('voucher lines');
+  for (const { item, n } of withLines) {
+    if (Math.abs(item.line_total - item.subtotal) >= 1) {
+      problems.push(`Voucher ${n} lines add up to ${item.line_total.toLocaleString('en-US')}, but its total reads ${item.subtotal.toLocaleString('en-US')}`);
+    }
+  }
 
   if (!checked.length) return null;
   return {
@@ -841,4 +852,110 @@ function formatCheck(fields, today = todayInIasTimezone()) {
   };
 }
 
-module.exports = { ISSUES, evaluateDocumentChecks, evaluateJudgmentDependentChecks, vitaminCheck, formatCheck };
+// How sure the AI was of what it read (SYSTEM_4 E3b, E4-08): the field_evidence it returned for the key fields and each
+// voucher's evidence (claim-recognition/prompts/extract-fields.md). Cases read before 2026-10-15 have none: no change.
+const FIELD_LABELS = {
+  'claimant.claimant_name': 'Claimant name',
+  'claimant.claimant_nrc_passport': 'NRC / passport',
+  'claimant.claimant_dob': 'Date of birth',
+  'policy.policy_no': 'Policy number',
+  'claim.appointment_date': 'Appointment date',
+  'claim.accident_date': 'Accident date',
+  'claim.total_claim_amount': 'Claimed amount',
+  'medical.hospital_or_clinic_name': 'Hospital / clinic',
+  'medical.detail_of_illness_injury': 'Illness / injury',
+  'medical.full_description_of_treatment': 'Treatment',
+  'bank.bank_name': 'Bank name',
+  'bank.bank_account_name': 'Account holder',
+  'bank.bank_account_number': 'Account number',
+  'medical_record.date': 'Medical record date',
+};
+
+const valueAt = (fields, path) => path.split('.').reduce((o, key) => (o == null ? o : o[key]), fields);
+const percent = (confidence) => `${Math.round(confidence * 100)}%`;
+// At or below the AI confidence threshold (STP settings) — the same test as assessment-summary's isLowConfidence.
+const isUnsure = (confidence) => typeof confidence === 'number' && confidence <= lastReadSettings().aiConfidenceThreshold;
+
+// Every value the AI gave evidence for: { field, label, value, confidence, reason, page, voucher? }. Vouchers as
+// "voucher N" (voucher: the item, so a check can pick the vouchers it compared). One entry per field: when the AI
+// repeats a field, the less sure entry is kept. Only confidence / reason / page are taken from the AI's evidence.
+function evidenceEntries(fields) {
+  const byField = new Map();
+  for (const e of Array.isArray(fields.field_evidence) ? fields.field_evidence : []) {
+    if (!FIELD_LABELS[e?.field]) continue;
+    const kept = byField.get(e.field);
+    if (!kept || (e.confidence ?? 1) < (kept.confidence ?? 1)) byField.set(e.field, e);
+  }
+  const keyFields = [...byField.values()].map((e) => ({
+    field: e.field, label: FIELD_LABELS[e.field], value: valueAt(fields, e.field) ?? null,
+    confidence: e.confidence ?? null, reason: e.reason ?? null, page: e.page ?? null,
+  }));
+  const vouchers = (fields.invoices?.items || []).map((item, i) => (item.evidence ? {
+    field: `voucher ${i + 1}`,
+    label: `Voucher ${i + 1} amount and date`,
+    value: [item.subtotal != null ? Number(item.subtotal).toLocaleString('en-US') : null, item.date].filter((v) => v != null).join(' · ') || null,
+    confidence: item.evidence.confidence ?? null,
+    reason: item.evidence.reason ?? null,
+    page: item.evidence.page ?? null,
+    voucher: item,
+  } : null)).filter(Boolean);
+  return [...keyFields, ...vouchers];
+}
+
+const leastSure = (entries) => entries.filter((e) => typeof e.confidence === 'number')
+  .reduce((least, e) => (least == null || e.confidence < least.confidence ? e : least), null);
+
+// The values each rule check reads. A check decided on a value the AI wasn't sure of is no surer than that value
+// (E4-08: "a checklist item decided by a rule on AI-extracted data takes the confidence of the data it used").
+// vouchers: which vouchers the check compared (the amount check skips refund slips; the date check, undated vouchers).
+// compared: whether the check compared anything — a check that had nothing to compare used no value.
+// Checks about how a document looks (legible, stamp, breakdown) and the presence checks have their own scores.
+const CHECK_FIELDS = {
+  INCOMPLETE_CLAIM_FORM: { paths: ['medical.detail_of_illness_injury', 'medical.full_description_of_treatment'] },
+  MISSING_BANK_INFO: { paths: ['bank.bank_name', 'bank.bank_account_name', 'bank.bank_account_number'] },
+  VOUCHER_AMOUNT_MISMATCH: { paths: ['claim.total_claim_amount'], vouchers: (v) => v.subtotal > 0, compared: (item) => item.confidence != null },
+  TREATMENT_DATE_INCONSISTENT: { paths: ['claim.appointment_date', 'claim.accident_date', 'medical_record.date'], compared: (item) => item.confidence != null },
+  INVOICE_DATE_INCONSISTENT: { paths: ['medical_record.date'], vouchers: (v) => v.date != null, compared: (item) => item.confidence != null },
+};
+
+// Only a PASSED check that compared something, and only when a value it used is unsure: then the check is unsure too,
+// with a note naming the value (usedFields: every unsure value it used, so "Key values read clearly" doesn't repeat
+// them). A failed check stays as the rule decided it — a plainly missing item still goes to the customer
+// (holdForReview.js). A check whose values were all read surely is left as it was (a rule result, not "AI self-rated").
+function withFieldConfidence(item, entries) {
+  const uses = CHECK_FIELDS[item.code];
+  if (!uses || item.passed !== true || (uses.compared && !uses.compared(item))) return item;
+  const unsure = entries.filter((e) => isUnsure(e.confidence)
+    && (uses.paths.includes(e.field) || (uses.vouchers && e.voucher && uses.vouchers(e.voucher))));
+  const least = leastSure(unsure);
+  if (!least || (item.confidence != null && item.confidence <= least.confidence)) return item;
+  const read = `Least sure value read: ${least.label} ${percent(least.confidence)}${least.reason ? ` (${least.reason})` : ''}.`;
+  return { ...item, confidence: least.confidence, note: [item.note ?? item.reason, read].filter(Boolean).join(' '), usedFields: unsure.map((e) => e.field) };
+}
+
+// One checklist line for everything the AI read with its evidence (E4-08): never an issue. `fields` is what the case
+// page's "What the AI read" shows — every value. Its confidence is the least sure value that no check already reports
+// (checklist: the other checklist items, for their usedFields), so one doubt gives one "AI unsure" point, not two;
+// that value's entry carries reportedBy for the rest.
+function fieldsReadCheck(fields, checklist = []) {
+  const entries = evidenceEntries(fields).map((entry) => {
+    const e = { ...entry };
+    delete e.voucher; // the voucher item itself is not stored with the line
+    const by = checklist.find((item) => item.usedFields?.includes(e.field));
+    return by ? { ...e, reportedBy: by.code } : e;
+  });
+  if (!entries.length) return null;
+  const least = leastSure(entries);
+  const leastUnreported = leastSure(entries.filter((e) => !e.reportedBy));
+  return {
+    code: 'FIELDS_READ',
+    label: 'Key values read clearly',
+    passed: true,
+    confidence: leastUnreported ? leastUnreported.confidence : null,
+    fields: entries,
+    note: null,
+    reason: least ? `${entries.length} values read; least sure: ${least.label} ${percent(least.confidence)}.` : `${entries.length} values read; no scores given.`,
+  };
+}
+
+module.exports = { ISSUES, evaluateDocumentChecks, evaluateJudgmentDependentChecks, vitaminCheck, formatCheck, fieldsReadCheck };

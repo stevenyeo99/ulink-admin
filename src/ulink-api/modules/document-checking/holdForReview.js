@@ -21,13 +21,20 @@ function unsureDocumentPoints(documentCheckResult) {
 }
 
 // Switch "documents the AI passed but wasn't sure about: a person confirms first" (settings.holdUnsureDocumentPass,
-// SYSTEM_4 E4-09): the passed checklist items the AI scored at or below the threshold. Items decided by a rule alone
-// carry no score and never count here — except the format checks (VALUE_FORMAT, E4-08): a value read that fails one
-// scores 0, since it is most likely misread.
+// SYSTEM_4 E4-09): the passed checklist items scored at or below the threshold — by the AI, or (E4-08) by a rule check
+// that relied on a value the AI read unsurely (bank, amounts, dates, claim form: checklist.js CHECK_FIELDS), a format
+// check a value failed (VALUE_FORMAT, scores 0) or an unsure value no other check reports (FIELDS_READ).
 function unsurePassedPoints(documentCheckResult) {
   return (documentCheckResult?.checklist || [])
     .filter((item) => item.passed === true && isLowConfidence(item.confidence))
-    .map((item) => (item.code === 'VALUE_FORMAT' ? `Values read: ${item.note}` : `${item.label || item.code} (AI confidence ${item.confidence})`));
+    .map((item) => {
+      if (item.code === 'VALUE_FORMAT') return `Values read: ${item.note}`;
+      if (item.code === 'FIELDS_READ') {
+        const unsure = item.fields.filter((f) => !f.reportedBy && isLowConfidence(f.confidence)).map((f) => `${f.label} (AI confidence ${f.confidence})`);
+        return `Values read with low confidence: ${unsure.join('; ')}`;
+      }
+      return `${item.label || item.code} (AI confidence ${item.confidence})`;
+    });
 }
 
 module.exports = { unsureDocumentPoints, unsurePassedPoints };

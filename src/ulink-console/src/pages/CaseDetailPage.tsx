@@ -15,6 +15,7 @@ import { CaseUploadPanel } from '../components/cases/CaseUploadPanel';
 import { isSuperAdmin } from '../lib/session';
 import { JsonViewer } from '../components/panel/JsonViewer';
 import { ChecklistTable } from '../components/panel/ChecklistTable';
+import { FieldsReadTable } from '../components/panel/FieldsReadTable';
 import { AssessmentSummaryPanel, CaseJourneyPanel } from '../components/panel/AssessmentSummaryPanel';
 import { useCaseStatuses } from '../hooks/useCaseStatuses';
 import type { CaseDetail, ChecklistItem, NextAction } from '../types/case';
@@ -90,6 +91,7 @@ export function CaseDetailPage() {
   if (isError || !data) return <div className="p-6 text-sm text-red-600">Couldn't load this case. It may have been removed.</div>;
 
   const { case: caseRecord, events, documents, apiSteps, assessmentSummary, override, nextAction } = data;
+  const fieldsRead = caseRecord.documentCheckResult?.checklist?.find((item) => item.code === 'FIELDS_READ')?.fields;
   const isApi = caseRecord.source === 'API';
   const statusLabel = (code: string | null) => (code ? info(code).label : '—');
 
@@ -122,6 +124,12 @@ export function CaseDetailPage() {
       <CaseUploadPanel caseRecord={caseRecord} />
       <CaseJourneyPanel summary={assessmentSummary} />
       <AssessmentSummaryPanel summary={assessmentSummary} />
+
+      {fieldsRead?.length ? (
+        <Section title="What the AI read">
+          <FieldsReadTable fields={fieldsRead} />
+        </Section>
+      ) : null}
 
       {isSuperAdmin() && <CaseOverridePanel caseRecord={caseRecord} override={override} summary={assessmentSummary} />}
 

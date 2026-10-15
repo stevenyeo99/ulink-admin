@@ -233,6 +233,21 @@ they show the rule and its result as the reason, and are certain unless they use
   (3) each voucher: `evidence` (its amount and date), `line_total` (its lines added up), `vitamin_items`,
   `vitamin_confidence`; (4) translation `note` always says what the translation rests on. Existing fields unchanged,
   so nothing downstream changes until E3b-2 reads the new ones. Migration **run on dev 2026-10-15** (UAT: owner's deploy step); it has a `down`.
+- **Built 2026-10-15 (E3b-2 — rules and console, no AI):** (1) rule checks take the confidence of the values they read
+  (`CHECK_FIELDS` in `checklist.js`: claim form ← illness / treatment; voucher amount ← claimed amount + voucher
+  evidence; bank ← bank fields; treatment date ← appointment / accident / medical record date; invoice dates ← medical
+  record date + voucher evidence) — the lower of the check's own score and the least sure value, with a note naming it;
+  (2) checklist line *Key values read clearly* (`FIELDS_READ`) lists every value read with its evidence, confidence = the
+  least sure → summary line *Values read* ("AI unsure" review point naming each unsure value, its reason and page;
+  switch #3 holds; team emails / IAS remark); (3) *Values read look valid* also checks each voucher's lines against its
+  total (`line_total`); (4) case page **What the AI read** (value, confidence badge, why, page). Not used: the identity
+  judges (name / hospital match) keep their own scores. Cases read before E3b: unchanged.
+  **After code review (same day):** only a *passed* check that compared something takes a value's confidence, and only
+  when that value is unsure (≤ threshold) — a failed check stays the rule's (a plainly missing item still goes to the
+  customer), a sure value leaves a rule check a rule result; vouchers counted only where the check used them (refund
+  slips skipped); one unsure value = one review point (the check that used it, else *Values read*); a repeated field is
+  kept once; `line_total` is the voucher's recount *net of printed discount / tax / service lines* (prompt + migration
+  `20261015110000-line-total-net-of-adjustments`, run on dev).
 - **Note:** the AI scores itself, so scores are not calibrated; E4-15 step 3 tunes thresholds from reviewer
   corrections.
 - **Acceptance:** no AI result on the case page is shown without a score and a reason.
@@ -570,7 +585,7 @@ sending email, changing data in a shared DB.
 | **D. Measurement baseline** | E4-26 AI call log + prompt versions (migration `ulink_llm_calls`) | ≈ 2–3 days | Every AI answer traceable to prompt and model; "before" numbers for E3 | — | **Done — awaiting review** (D1, D2, D3; run the baseline on UAT) |
 | **E1. Upload → re-check** | E4-04 | M | Incomplete API case recovers without an inbox | Q1, Q2, Q5, Q12 | **Done — awaiting review** |
 | **E2. Work queue** | E4-22 claim / assign, ordering, search | M | No two people on one case; oldest first; find any case fast | Q21 (E2b) | **E2a done — awaiting review**; E2b parked (with E4) |
-| **E3. Confidence everywhere** | E4-08 confidence + reason + source page on every AI output (prompt changes, checked against D) | M | Every AI answer explained, with its page | D done | **E3a done — awaiting review**; **E3b-1 built, not verified** (no AI runs yet); E3b-2 not started |
+| **E3. Confidence everywhere** | E4-08 confidence + reason + source page on every AI output (prompt changes, checked against D) | M | Every AI answer explained, with its page | D done | **E3a done — awaiting review**; **E3b-1 + E3b-2 built** — not verified against the AI yet |
 | **E4. Per-item correction** | E4-12 + E4-15 steps 0–1 (migration `ulink_ai_feedback`, trusted mark) | M | Reviewers fix single findings; corrections stored for learning | E3; Q16, Q17 | Not started |
 | **E5. Review workspace** | E4-20 | M–L | Check and decide next to the document page, one screen, Next case | E3, E4 | Not started |
 | **E6. Daily dashboard** | E4-19 | M | One start page for the day's API work | Q20 | Not started |
@@ -614,7 +629,7 @@ Ticked when the item is done; the phase status above changes when all are done a
 - [ ] E2b · E4-22 Claim a case (*Being reviewed by …*, time-out, take over with comment), *My cases* (Q21) — **parked, build with E4**
 - [x] E3a · E4-08 Format checks on values read (*Values read look valid*: NRC, dates, amounts → unsure) + a reason on every document check, pass or fail — rules only
 - [x] E3b-1 · E4-08 Prompts + schema: doubt marks in page reading; field evidence (14 key fields: confidence, reason, page); voucher evidence, line total, vitamin items + score; translation reason — **built, not verified: AI runs on the 4 sample claims (before / after) waiting for the owner's go-ahead**
-- [ ] E3b-2 · E4-08 Checks take their fields' confidence; voucher lines vs amount in *Values read look valid*; case page *What the AI read* panel; *Fields read* summary line
+- [x] E3b-2 · E4-08 Checks take their fields' confidence; voucher lines vs amount in *Values read look valid*; case page *What the AI read*; *Values read* summary line (rules + console; tested on mocked AI output)
 - [ ] E4 · E4-12 Per-item correction + E4-15 steps 0–1 (`ulink_ai_feedback`, trusted mark) (Q16, Q17)
 - [ ] E5 · E4-20 Review workspace
 - [ ] E6 · E4-19 Daily API dashboard (Q20)
