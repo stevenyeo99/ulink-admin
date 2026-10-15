@@ -241,15 +241,20 @@ async function listCases(req, res) {
   if (source) where.source = source;
 
   // ?q= — free-text search over the identifiers people have in hand: claim no., TPA case number,
-  // case id, and the claimant name the AI read (email cases keep it on the case row).
+  // case id, and the claimant name and NRC / passport the AI read — on the case row for email
+  // cases, in the recognition step for API cases (modules/api-pipeline/caseView.js).
   const q = req.query.q ? String(req.query.q).trim() : '';
   if (q) {
     const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    const claimant = (json) => [`${json}->'claimant'->>'claimant_name'`, `${json}->'claimant'->>'claimant_nrc_passport'`];
+    const quoted = sequelize.escape(like);
     where[Op.or] = [
       { claimNo: { [Op.iLike]: like } },
       { tpaCaseNumber: { [Op.iLike]: like } },
       sqlWhere(cast(col('Case.id'), 'text'), { [Op.iLike]: like }),
-      sqlWhere(literal(`"Case"."extracted_fields"->'claimant'->>'claimant_name'`), { [Op.iLike]: like }),
+      ...claimant(`"Case"."extracted_fields"`).map((path) => sqlWhere(literal(path), { [Op.iLike]: like })),
+      literal(`EXISTS (SELECT 1 FROM ulink_api_case_steps s WHERE s.case_id = "Case"."id" AND s.job = 'api-claim-recognition'`
+        + ` AND (${claimant(`s.output->'extractedFields'`).map((path) => `${path} ILIKE ${quoted}`).join(' OR ')}))`),
     ];
   }
 

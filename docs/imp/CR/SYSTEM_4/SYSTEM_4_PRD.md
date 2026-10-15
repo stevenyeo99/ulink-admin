@@ -397,6 +397,13 @@ confirm with ULINK.
     for upload); **My cases** view.
   - **Global search** in the top bar: TPA case number, claim number, member name, NRC.
 - **Open:** Q21.
+- **Built 2026-10-15 (E2a — search; ordering already there):** search box in the console top bar on every page —
+  claim no., TPA case no., claimant name, NRC / passport or case ID, Email and API cases alike; one match opens the
+  case, otherwise the Cases list on the tab of the first match. The cases search (`GET /api/cases?q=`) now also covers
+  the NRC, and API cases' claimant name and NRC (kept in their recognition step, so API cases were not found by name
+  before). The name searched is the one the AI read from the claim form, not the IAS member name (as recommended — almost always the same; add it if wanted).
+  Ordering and reason filters already existed (review queue and approvals oldest first; reason chips); the ageing
+  limit waits for Q20 (E6). **E2b** (claim / assign, *My cases*) not started.
 
 #### E4-23 One confidence look everywhere — P2, S
 - **Requirement:** one badge used on queue, case page and dashboard: green at or above the threshold, amber unsure,
@@ -540,7 +547,7 @@ sending email, changing data in a shared DB.
 | **C. Console basics** | E4-21 case header next action, E4-23 confidence badge, E4-11 comment on every action | ≈ 3–4 days | Users see why a case is here and what to do; every action explained | — | **Done — awaiting review** (C1, C2, C3) |
 | **D. Measurement baseline** | E4-26 AI call log + prompt versions (migration `ulink_llm_calls`) | ≈ 2–3 days | Every AI answer traceable to prompt and model; "before" numbers for E3 | — | **Done — awaiting review** (D1, D2, D3; run the baseline on UAT) |
 | **E1. Upload → re-check** | E4-04 | M | Incomplete API case recovers without an inbox | Q1, Q2, Q5, Q12 | **Done — awaiting review** |
-| **E2. Work queue** | E4-22 claim / assign, ordering, search | M | No two people on one case; oldest first; find any case fast | Q21 | Not started |
+| **E2. Work queue** | E4-22 claim / assign, ordering, search | M | No two people on one case; oldest first; find any case fast | Q21 (E2b) | **E2a done — awaiting review**; E2b not started |
 | **E3. Confidence everywhere** | E4-08 confidence + reason + source page on every AI output (prompt changes, checked against D) | M | Every AI answer explained, with its page | D done | Not started |
 | **E4. Per-item correction** | E4-12 + E4-15 steps 0–1 (migration `ulink_ai_feedback`, trusted mark) | M | Reviewers fix single findings; corrections stored for learning | E3; Q16, Q17 | Not started |
 | **E5. Review workspace** | E4-20 | M–L | Check and decide next to the document page, one screen, Next case | E3, E4 | Not started |
@@ -581,7 +588,8 @@ Ticked when the item is done; the phase status above changes when all are done a
 
 **Phase E — Main features** (each sub-item approved on its own)
 - [x] E1 · E4-04 Upload missing documents → re-check: console watch (any uploader) + case-page upload via cl-upload (Q1, Q2, Q5, Q12 answered)
-- [ ] E2 · E4-22 Work queue: claim / assign, ordering, search (Q21)
+- [x] E2a · E4-22 Search in the top bar (claim no., TPA case no., claimant, NRC, case ID; Email and API); ordering / reason filters already there
+- [ ] E2b · E4-22 Claim a case (*Being reviewed by …*, time-out, take over with comment), *My cases* (Q21)
 - [ ] E3 · E4-08 Confidence + reason + source page on every AI output; format checks
 - [ ] E4 · E4-12 Per-item correction + E4-15 steps 0–1 (`ulink_ai_feedback`, trusted mark) (Q16, Q17)
 - [ ] E5 · E4-20 Review workspace

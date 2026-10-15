@@ -91,7 +91,7 @@ export function CasesPage() {
             type="search"
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
-            placeholder="Search claim no., TPA case no., claimant or case ID"
+            placeholder="Search claim no., TPA case no., claimant, NRC or case ID"
             className="w-full rounded-full border border-slate-900/10 bg-white/80 py-2 pl-9 pr-4 text-sm text-slate-800 placeholder:text-slate-400 focus:border-ulink-teal focus:outline-none focus:ring-2 focus:ring-ulink-teal/30"
           />
         </label>

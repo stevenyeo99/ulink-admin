@@ -35,7 +35,7 @@ const router = express.Router();
  *       - name: q
  *         in: query
  *         schema: { type: string }
- *         description: Search claim no., TPA case number, case id or claimant name.
+ *         description: Search claim no., TPA case number, case id, claimant name or NRC / passport (Email and API cases).
  *       - name: sort
  *         in: query
  *         schema: { type: string, enum: [updatedAt, createdAt, claimNo, status], default: updatedAt }

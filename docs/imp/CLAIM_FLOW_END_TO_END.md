@@ -241,6 +241,7 @@ See 2.5–2.6. Normal wait 15–30 minutes; flagged after 2 hours; always keeps 
 
 | When | Where | What the person does |
 |---|---|---|
+| Looking for one case | **Search** in the top bar (any page): claim no., TPA case no., claimant name, NRC / passport or case ID — Email and API | One match opens the case; otherwise the Cases list |
 | Any case needing a person | **Review queue** (grouped by reason, oldest first) | Open the case: the header shows the claimant, benefit, amount and **Next** — what to do and who does it (amber when a person must act); then "why the case went this way" and the review points |
 | *Member check issue* | Case page | **Override and continue** (reason + finding) — or fix IAS; the case re-checks every run |
 | *Documents incomplete* | Case page | **Override and continue** if the documents are fine |

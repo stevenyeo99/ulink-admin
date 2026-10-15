@@ -6,6 +6,7 @@ jest.mock('../db/models', () => {
     Case: { findAndCountAll: jest.fn(async () => ({ rows: [], count: 0 })), findAll: jest.fn(), count: jest.fn() },
     ApiCaseStep: { findAll: jest.fn(async () => []) },
     CaseEvent: {}, CaseDocument: {}, EmailThread: {}, EmailMessage: {}, EmailAttachment: {},
+    sequelize: { escape: (v) => `'${v.replace(/'/g, "''")}'` },
   };
 });
 
@@ -27,11 +28,19 @@ it('turns group and module into the status codes they share', async () => {
   expect(lastQuery().where.currentStatus.sort()).toEqual(['API_MEMBER_REVIEW_REQUIRED', 'MEMBER_REVIEW_REQUIRED']);
 });
 
-it('searches claim no., TPA case number, case id and claimant name, escaping LIKE wildcards', async () => {
+it('searches claim no., TPA case number, case id, claimant name and NRC, escaping LIKE wildcards', async () => {
   await call(listCases, { q: ' 50%_x ' });
   const or = lastQuery().where[Op.or];
-  expect(or).toHaveLength(4);
+  expect(or).toHaveLength(6);
   expect(or[0]).toEqual({ claimNo: { [Op.iLike]: '%50\\%\\_x%' } });
+  expect(or[4].attribute.val).toContain('claimant_nrc_passport');
+});
+
+it('finds API cases by the claimant name and NRC in their recognition step, quoting the text', async () => {
+  await call(listCases, { q: "O'Neil" });
+  const exists = lastQuery().where[Op.or][5].val;
+  expect(exists).toContain("s.job = 'api-claim-recognition'");
+  expect(exists).toContain("s.output->'extractedFields'->'claimant'->>'claimant_nrc_passport' ILIKE '%O''Neil%'");
 });
 
 it('sorts by an allowed column only, newest first by default', async () => {
