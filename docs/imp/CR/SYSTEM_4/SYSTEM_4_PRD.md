@@ -212,6 +212,18 @@ they show the rule and its result as the reason, and are certain unless they use
   - **Format checks** on extracted values, as rules next to the AI's confidence: NRC format, policy / member number
     format, valid dates (not in the future, not before policy start), voucher lines adding up to the voucher total.
     A value that fails a format check is unsure whatever the AI's score.
+- **Built 2026-10-15 (E3a — rules only, no prompt change, decisions as recommended):** (1) a checklist line *Values
+  read look valid* (`VALUE_FORMAT`, `document-checking/checklist.js` `formatCheck`), both flows: NRC / passport shape
+  (Myanmar NRC in Latin or Burmese script, or a passport number), every date read is a real date and not in the future
+  (Myanmar time), date of birth not after the treatment date, claimed amount a number above zero, voucher amounts
+  numbers (zero / negative = refund slip, fine). A value that fails is **unsure, not an issue**: confidence 0 → an
+  *AI unsure* review point, switch #3 holds the passed check, counts for "open review points block STP"; the documents
+  stay complete and the customer is not asked. Missing values stay the mandatory-field check's. (2) Every document
+  checklist item carries a `reason`, pass or fail (a mandatory field: found / not found), shown on the case page
+  checklist and in the *Other document checks* line. Applies to cases checked from now on. **Not in E3a:** policy /
+  member number format (Q22 — one sample only); "not before policy start" (the member check already tests the
+  treatment date against the IAS policy dates); voucher lines adding up (the AI reads only each voucher's total — E3b);
+  confidence taken from the fields a check used (E3b — fields have no confidence yet).
 - **Note:** the AI scores itself, so scores are not calibrated; E4-15 step 3 tunes thresholds from reviewer
   corrections.
 - **Acceptance:** no AI result on the case page is shown without a score and a reason.
@@ -403,7 +415,7 @@ confirm with ULINK.
   the NRC, and API cases' claimant name and NRC (kept in their recognition step, so API cases were not found by name
   before). The name searched is the one the AI read from the claim form, not the IAS member name (as recommended — almost always the same; add it if wanted).
   Ordering and reason filters already existed (review queue and approvals oldest first; reason chips); the ageing
-  limit waits for Q20 (E6). **E2b** (claim / assign, *My cases*) not started.
+  limit waits for Q20 (E6). **E2b** (claim / assign, *My cases*) **parked** (owner, 2026-10-15): little to protect yet — override already refuses a case that moved on, the team is small; build it with E4, when reviewers edit items one by one and Q21 may be answered.
 
 #### E4-23 One confidence look everywhere — P2, S
 - **Requirement:** one badge used on queue, case page and dashboard: green at or above the threshold, amber unsure,
@@ -514,6 +526,7 @@ Go-live (production) values: Email off, API on, mailbox off, missing-documents e
 | Q19 | Combined dashboard (E4-18): needed at go-live, or when email cases go live? Any figures beyond status counts (STP rate, waiting time, override rate)? | ULINK |
 | Q20 | Daily API dashboard (E4-19): which figures and lists do CSR / Ops / JD3 need each day? Ageing limit (e.g. 2 working days)? | ULINK |
 | Q21 | Work queue (E4-22): does each reviewer claim cases themselves, or does a supervisor assign them? Claim time-out? | ULINK |
+| Q22 | Policy / member number formats AYA Sompo uses (E4-08 format check) — a few real examples; only `AYA/YGN/AYH/25000660` seen so far. | ULINK |
 
 ## 7. Inputs needed from ULINK
 
@@ -547,8 +560,8 @@ sending email, changing data in a shared DB.
 | **C. Console basics** | E4-21 case header next action, E4-23 confidence badge, E4-11 comment on every action | ≈ 3–4 days | Users see why a case is here and what to do; every action explained | — | **Done — awaiting review** (C1, C2, C3) |
 | **D. Measurement baseline** | E4-26 AI call log + prompt versions (migration `ulink_llm_calls`) | ≈ 2–3 days | Every AI answer traceable to prompt and model; "before" numbers for E3 | — | **Done — awaiting review** (D1, D2, D3; run the baseline on UAT) |
 | **E1. Upload → re-check** | E4-04 | M | Incomplete API case recovers without an inbox | Q1, Q2, Q5, Q12 | **Done — awaiting review** |
-| **E2. Work queue** | E4-22 claim / assign, ordering, search | M | No two people on one case; oldest first; find any case fast | Q21 (E2b) | **E2a done — awaiting review**; E2b not started |
-| **E3. Confidence everywhere** | E4-08 confidence + reason + source page on every AI output (prompt changes, checked against D) | M | Every AI answer explained, with its page | D done | Not started |
+| **E2. Work queue** | E4-22 claim / assign, ordering, search | M | No two people on one case; oldest first; find any case fast | Q21 (E2b) | **E2a done — awaiting review**; E2b parked (with E4) |
+| **E3. Confidence everywhere** | E4-08 confidence + reason + source page on every AI output (prompt changes, checked against D) | M | Every AI answer explained, with its page | D done | **E3a done — awaiting review**; E3b not started (AI runs: ask first) |
 | **E4. Per-item correction** | E4-12 + E4-15 steps 0–1 (migration `ulink_ai_feedback`, trusted mark) | M | Reviewers fix single findings; corrections stored for learning | E3; Q16, Q17 | Not started |
 | **E5. Review workspace** | E4-20 | M–L | Check and decide next to the document page, one screen, Next case | E3, E4 | Not started |
 | **E6. Daily dashboard** | E4-19 | M | One start page for the day's API work | Q20 | Not started |
@@ -589,8 +602,9 @@ Ticked when the item is done; the phase status above changes when all are done a
 **Phase E — Main features** (each sub-item approved on its own)
 - [x] E1 · E4-04 Upload missing documents → re-check: console watch (any uploader) + case-page upload via cl-upload (Q1, Q2, Q5, Q12 answered)
 - [x] E2a · E4-22 Search in the top bar (claim no., TPA case no., claimant, NRC, case ID; Email and API); ordering / reason filters already there
-- [ ] E2b · E4-22 Claim a case (*Being reviewed by …*, time-out, take over with comment), *My cases* (Q21)
-- [ ] E3 · E4-08 Confidence + reason + source page on every AI output; format checks
+- [ ] E2b · E4-22 Claim a case (*Being reviewed by …*, time-out, take over with comment), *My cases* (Q21) — **parked, build with E4**
+- [x] E3a · E4-08 Format checks on values read (*Values read look valid*: NRC, dates, amounts → unsure) + a reason on every document check, pass or fail — rules only
+- [ ] E3b · E4-08 Prompts: per-field confidence, reason and source page; doubtful-text marks in page reading; reason on translation; vitamins with a score; checks take their fields' confidence; voucher lines (AI runs — ask first)
 - [ ] E4 · E4-12 Per-item correction + E4-15 steps 0–1 (`ulink_ai_feedback`, trusted mark) (Q16, Q17)
 - [ ] E5 · E4-20 Review workspace
 - [ ] E6 · E4-19 Daily API dashboard (Q20)

@@ -16,7 +16,9 @@ function ChecklistRow({ item, reason }: { item: ChecklistItem; reason?: string |
   // whole point is "here's why the system believes this," not just a failure explanation —
   // and takes priority over the generic fallback `reason` (document-checking's own
   // reasonForIssue text) when both exist, since it's the more specific, model-stated reason.
-  const note = item.note ?? (item.passed === false ? reason : undefined);
+  // item.reason (SYSTEM_4 E4-08): why the check passed or failed, from the values it read — on every check
+  // since 2026-10-15; older checks fall back to the failure reason only.
+  const note = item.note ?? item.reason ?? (item.passed === false ? reason : undefined);
 
   return (
     <li className="flex items-start gap-2 py-1.5 text-sm">

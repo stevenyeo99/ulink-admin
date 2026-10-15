@@ -22,11 +22,12 @@ function unsureDocumentPoints(documentCheckResult) {
 
 // Switch "documents the AI passed but wasn't sure about: a person confirms first" (settings.holdUnsureDocumentPass,
 // SYSTEM_4 E4-09): the passed checklist items the AI scored at or below the threshold. Items decided by a rule alone
-// carry no score and never count here.
+// carry no score and never count here — except the format checks (VALUE_FORMAT, E4-08): a value read that fails one
+// scores 0, since it is most likely misread.
 function unsurePassedPoints(documentCheckResult) {
   return (documentCheckResult?.checklist || [])
     .filter((item) => item.passed === true && isLowConfidence(item.confidence))
-    .map((item) => `${item.label || item.code} (AI confidence ${item.confidence})`);
+    .map((item) => (item.code === 'VALUE_FORMAT' ? `Values read: ${item.note}` : `${item.label || item.code} (AI confidence ${item.confidence})`));
 }
 
 module.exports = { unsureDocumentPoints, unsurePassedPoints };

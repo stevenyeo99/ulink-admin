@@ -48,6 +48,7 @@ export interface ChecklistItem {
   passed: boolean | null;
   confidence?: number | null;
   note?: string | null;
+  reason?: string | null; // why it passed or failed (SYSTEM_4 E4-08); checks before 2026-10-15 have none
 }
 
 export interface DocumentCheckDetail {

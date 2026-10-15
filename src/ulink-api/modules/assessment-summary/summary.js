@@ -208,6 +208,10 @@ function documentLines(documentCheckResult) {
       lines.push(vitaminLine(item));
       continue;
     }
+    if (item.code === 'VALUE_FORMAT') {
+      lines.push(formatLine(item));
+      continue;
+    }
     const decision = DOCUMENT_DECISIONS[item.code] || item.label;
     if (item.passed === null || item.passed === undefined) {
       notChecked.push(decision);
@@ -215,7 +219,7 @@ function documentLines(documentCheckResult) {
     }
     const failed = item.passed === false;
     if (!failed && !item.note && item.confidence == null) {
-      quietlyPassed.push(decision);
+      quietlyPassed.push(item.reason ? `${decision} (${item.reason.replace(/\.$/, '')})` : decision);
       continue;
     }
     lines.push(line({
@@ -263,6 +267,15 @@ function vitaminLine(item) {
     return line({ decision: 'Vitamins / supplements', result: "Couldn't tell", status: 'ok', why: item.note, verified: VERIFIED.AI, review: REVIEW.AI_UNSURE });
   }
   return line({ decision: 'Vitamins / supplements', result: 'None', status: 'ok', why: 'No vitamins or supplements on the vouchers.', verified: VERIFIED.AI });
+}
+
+// Format checks on the values the AI read (SYSTEM_4 E4-08, document-checking/checklist.js formatCheck). A value that
+// fails is most likely misread: "AI unsure", so the switches for unsure points apply — never an issue.
+function formatLine(item) {
+  if (item.problems?.length) {
+    return line({ decision: 'Values read look valid', result: 'Check values', status: 'ok', why: item.note, verified: VERIFIED.RULE, review: REVIEW.AI_UNSURE });
+  }
+  return line({ decision: 'Values read look valid', result: 'OK', status: 'ok', why: item.reason, verified: VERIFIED.RULE });
 }
 
 // STP rules (stpEligibility.js): reasons when blocked, else each benefit type's total against its limit.

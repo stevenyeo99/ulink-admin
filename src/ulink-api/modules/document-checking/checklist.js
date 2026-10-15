@@ -1,3 +1,5 @@
+const { todayInIasTimezone } = require('../shared/iasDates');
+
 /**
  * Canonical customer-facing issue wording + the evaluator logic that decides which apply
  * to a case's extracted_fields. Most entries match the real missing-document email
@@ -606,19 +608,57 @@ const CHECKLIST_CONFIDENCE = {
   VOUCHER_AMOUNT_MISMATCH: voucherAmountAgreement,
 };
 
+// Why a check passed (SYSTEM_4 E4-08: a reason on every result, pass or fail), from the same values the check read.
+// A failed check's reason is reasonForIssue's. Voucher numbers as in reasonForIssue (#1, #2, …).
+function passReason(code, fields) {
+  const items = fields.invoices?.items || [];
+  const vouchers = items.length === 1 ? 'the voucher' : `all ${items.length} vouchers`;
+  const noVoucher = 'No voucher to check.';
+  switch (code) {
+    case 'INCOMPLETE_CLAIM_FORM':
+      return 'The claim form describes the illness/injury or the treatment (section B).';
+    case 'MISSING_VOUCHER':
+      return fields.invoices?.present === true ? `${items.length || 'A'} voucher(s) found.` : "The AI couldn't tell whether a voucher is attached.";
+    case 'NO_MEDICAL_REPORT':
+      return fields.medical_record?.present === true ? 'A medical record was found.' : "The AI couldn't tell whether a medical record is attached.";
+    case 'UNCLEAR_VOUCHER':
+      return fields.invoices?.present === true ? `No voucher marked unreadable (${vouchers}).` : noVoucher;
+    case 'INCORRECT_VOUCHER':
+      return fields.invoices?.present === true ? `A clinic/hospital stamp or the doctor's signature on ${vouchers}.` : noVoucher;
+    case 'MISSING_VOUCHER_BREAKDOWN':
+      if (fields.invoices?.present !== true) return noVoucher;
+      return items.some((item) => item.voucher_type === 'pharmacy') ? 'Every pharmacy voucher lists its items.' : 'No pharmacy voucher.';
+    case 'VOUCHER_AMOUNT_MISMATCH':
+      return 'Nothing to compare: no voucher amount or no claimed amount was read.'; // when compared, the note says it
+    case 'INCOMPLETE_MEDICAL_REPORT':
+      return fields.medical_record?.present === true ? 'The medical record is readable.' : 'No medical record to read.';
+    case 'MISSING_BANK_INFO': {
+      const bank = fields.bank || {};
+      const found = [['bank name', bank.bank_name], ['account holder', bank.bank_account_name], ['account number', bank.bank_account_number]]
+        .filter(([, value]) => value).map(([label]) => label);
+      return `Found: ${found.join(', ')}.`;
+    }
+    default:
+      return null;
+  }
+}
+
 function buildEvaluatorChecklist(extractedFields) {
   return EVALUATORS.map(({ code, check }) => {
     const extra = CHECKLIST_CONFIDENCE[code]?.(extractedFields) ?? null;
+    const issue = check(extractedFields);
     return {
       code,
       label: ISSUES[code],
-      passed: check(extractedFields) == null,
+      passed: issue == null,
       confidence: extra?.confidence ?? null,
       note: extra?.note ?? null,
+      reason: extra?.note ?? (issue ? reasonForIssue(issue, extractedFields).reason : passReason(code, extractedFields)),
     };
   });
 }
 
+// Found / not found is the whole reason here — no separate text.
 function buildMandatoryFieldChecklist(extractedFields) {
   return MANDATORY_FIELDS.map(({ section, field, get, isMissing = (value) => value == null }) => ({
     code: 'MISSING_MANDATORY_FIELD',
@@ -681,6 +721,7 @@ function buildDateConsistencyChecklist(extractedFields) {
       passed: !dateFlags.some((flag) => flag.code === 'TREATMENT_DATE_INCONSISTENT'),
       confidence: treatmentAgreement?.confidence ?? null,
       note: treatmentAgreement?.note ?? null,
+      reason: treatmentAgreement?.note ?? 'Nothing to compare: no claim date or no medical record date was read.',
     },
     {
       code: 'INVOICE_DATE_INCONSISTENT',
@@ -688,6 +729,7 @@ function buildDateConsistencyChecklist(extractedFields) {
       passed: !dateFlags.some((flag) => flag.code === 'INVOICE_DATE_INCONSISTENT'),
       confidence: worstInvoiceAgreement?.confidence ?? null,
       note: worstInvoiceAgreement?.note ?? null,
+      reason: worstInvoiceAgreement?.note ?? 'Nothing to compare: no voucher date or no medical record date was read.',
     },
   ];
 }
@@ -734,4 +776,69 @@ function vitaminCheck(fields) {
   };
 }
 
-module.exports = { ISSUES, evaluateDocumentChecks, evaluateJudgmentDependentChecks, vitaminCheck };
+// Format checks on the values the AI read (SYSTEM_4 E4-08): rules, no AI. A value that fails is most likely misread, so
+// the line is "unsure", not an issue — confidence 0, which makes it an "AI unsure" review point (assessment-summary),
+// holds a passed check for a person with switch #3 (holdForReview.js), and counts for "open review points block STP".
+// Never an issue: the documents stay complete and the customer is not asked. Missing values are the mandatory-field
+// check's business, not this one's. Policy / member number: no rule until ULINK confirms the formats.
+const NRC_LATIN = /^\d{1,2}\/[A-Z]{2,12}\((N|E|P|T|Y|S|NAING)\)\d{6}$/i; // 12/DAGAYA(N)081441
+const NRC_BURMESE = /^[\u1040-\u1049]{1,2}\/[\u1000-\u109F]+\([\u1000-\u109F]+\)[\u1040-\u1049]{6}$/; // ၁၂/ဒဂယ(နိုင်)၀၈၁၄၄၁
+const PASSPORT = /^(?=.*\d)[A-Z0-9]{6,9}$/i;
+
+function isRealDate(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+function formatCheck(fields, today = todayInIasTimezone()) {
+  const problems = [];
+  const checked = [];
+
+  const nrc = fields.claimant?.claimant_nrc_passport;
+  if (nrc != null) {
+    checked.push('NRC / passport');
+    const compact = String(nrc).replace(/\s+/g, '');
+    if (![NRC_LATIN, NRC_BURMESE, PASSPORT].some((re) => re.test(compact))) problems.push(`NRC / passport "${nrc}" doesn't look like an NRC or passport number`);
+  }
+
+  const dates = [
+    ['Date of birth', fields.claimant?.claimant_dob],
+    ['Accident date', fields.claim?.accident_date],
+    ['Appointment date', fields.claim?.appointment_date],
+    ['Medical record date', fields.medical_record?.date],
+    ...(fields.invoices?.items || []).map((item, i) => [`Voucher ${i + 1} date`, item.date]),
+  ].filter(([, value]) => value != null);
+  if (dates.length) checked.push('dates');
+  for (const [label, value] of dates) {
+    if (!isRealDate(value)) problems.push(`${label} "${value}" is not a real date`);
+    else if (value > today) problems.push(`${label} ${value} is in the future`);
+  }
+  const dob = fields.claimant?.claimant_dob;
+  const treatment = fields.claim?.accident_date || fields.claim?.appointment_date;
+  if (isRealDate(dob) && isRealDate(treatment) && dob > treatment) problems.push(`Date of birth ${dob} is after the treatment date ${treatment}`);
+
+  const isAmount = (value) => typeof value === 'number' && Number.isFinite(value);
+  const claimed = fields.claim?.total_claim_amount;
+  if (claimed != null) {
+    checked.push('amounts');
+    if (!isAmount(claimed) || claimed <= 0) problems.push(`Claimed amount "${claimed}" is not an amount above zero`);
+  }
+  // A zero / negative subtotal is a refund slip (checkVoucherAmountMismatch) — fine; only a non-number is wrong.
+  (fields.invoices?.items || []).forEach((item, i) => {
+    if (item.subtotal != null && !isAmount(item.subtotal)) problems.push(`Voucher ${i + 1} amount "${item.subtotal}" is not a number`);
+  });
+
+  if (!checked.length) return null;
+  return {
+    code: 'VALUE_FORMAT',
+    label: 'Values read look valid',
+    passed: true,
+    confidence: problems.length ? 0 : null,
+    problems,
+    note: problems.length ? `${problems.join('; ')} — probably misread; check against the document.` : null,
+    reason: problems.length ? `${problems.join('; ')}.` : `Checked: ${checked.join(', ')}.`,
+  };
+}
+
+module.exports = { ISSUES, evaluateDocumentChecks, evaluateJudgmentDependentChecks, vitaminCheck, formatCheck };
