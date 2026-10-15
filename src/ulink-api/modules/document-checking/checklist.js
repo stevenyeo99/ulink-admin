@@ -819,6 +819,22 @@ function formatCheck(fields, today = todayInIasTimezone()) {
   const dob = fields.claimant?.claimant_dob;
   const treatment = fields.claim?.accident_date || fields.claim?.appointment_date;
   if (isRealDate(dob) && isRealDate(treatment) && dob > treatment) problems.push(`Date of birth ${dob} is after the treatment date ${treatment}`);
+  // A voucher dated far from the visit is most likely misread — a 7 read as a 1 moves July to January (E3 check), on
+  // the voucher or on the visit date. Compared with the visit (appointment) date, the accident date when there is none;
+  // the limit (days, either way) is an STP setting, default 30. This only marks the values unsure: whether the customer
+  // is asked about a voucher / medical-record date mismatch stays with that check and switch #2, as before.
+  const visit = fields.claim?.appointment_date || fields.claim?.accident_date;
+  if (isRealDate(visit)) {
+    const limit = lastReadSettings().voucherDaysBeforeVisit;
+    const visitLabel = fields.claim?.appointment_date ? 'the visit (appointment) date' : 'the accident date';
+    (fields.invoices?.items || []).forEach((item, i) => {
+      if (!isRealDate(item.date) || item.date > today) return; // not a date, or in the future: already a problem above
+      const days = Math.round((Date.parse(visit) - Date.parse(item.date)) / MS_PER_DAY);
+      if (Math.abs(days) > limit) {
+        problems.push(`Voucher ${i + 1} date ${item.date} is ${Math.abs(days)} days ${days > 0 ? 'before' : 'after'} ${visitLabel} ${visit}`);
+      }
+    });
+  }
 
   const isAmount = (value) => typeof value === 'number' && Number.isFinite(value);
   const claimed = fields.claim?.total_claim_amount;

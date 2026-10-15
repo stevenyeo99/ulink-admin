@@ -266,7 +266,12 @@ they show the rule and its result as the reason, and are certain unless they use
   `field_evidence` list (→ one fixed key per field, migration `20261015150000-field-evidence-by-field`; JSON answers
   capped at the 6,000-token reserve). **Finding:** with this model the self-scored confidence does not separate right from
   wrong (wrong values scored 0.8–0.95) — it explains, it does not catch; rules and reviewer data do (E4-15 step 3).
-  Three candidate rules from the samples listed in the report (owner to decide).
+  Three candidate rules from the samples listed in the report (owner to decide). **Built 2026-10-15: rule 1** — a
+  voucher dated more than `voucherDaysBeforeVisit` days (STP settings, default 30, 1–365) before or after the visit date
+  (appointment; accident date when none) is a *Values read look valid* problem (→ *AI unsure*); catches the complete/1
+  misread, no false alarm on the other three samples. It does not change who is asked: when a medical record date was
+  read, the existing invoice-date check still fails and asks the customer unless switch #2 holds it. A claim covering a
+  long course of treatment needs a higher limit. Rules 2 and 3 not built.
 - **Note:** the AI scores itself, so scores are not calibrated; E4-15 step 3 tunes thresholds from reviewer
   corrections.
 - **Acceptance:** no AI result on the case page is shown without a score and a reason.

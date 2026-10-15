@@ -39,10 +39,12 @@ export interface Switches {
   // The Overview turns red after this many minutes with no pipeline run (SYSTEM_4 E6; 3× the cron interval).
   pipelineStaleMinutesEmail: number;
   pipelineStaleMinutesApi: number;
+  // A voucher dated more than this many days before the visit is marked unsure (SYSTEM_4 E3 check).
+  voucherDaysBeforeVisit: number;
 }
 
 // The whole-number settings and their allowed [min, max] — from the API, so the form checks what the save will.
-export type NumberKey = 'overdueWorkingDays' | 'pipelineStaleMinutesEmail' | 'pipelineStaleMinutesApi';
+export type NumberKey = 'overdueWorkingDays' | 'pipelineStaleMinutesEmail' | 'pipelineStaleMinutesApi' | 'voucherDaysBeforeVisit';
 
 export type SwitchKey = { [K in keyof Switches]: Switches[K] extends boolean ? K : never }[keyof Switches];
 

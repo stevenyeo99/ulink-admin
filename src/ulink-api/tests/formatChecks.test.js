@@ -87,3 +87,30 @@ it('the case page shows why the quietly passed checks passed', () => {
   const summary = buildAssessmentSummary({ documentCheckResult: { passed: true, issues: [], details: [], checklist } });
   expect(summary.lines.find((l) => l.decision === 'Other document checks').why).toContain('Bank information present (Found: bank name, account holder, account number)');
 });
+
+it('a voucher dated far from the visit is most likely misread (E3 check: a July visit, a voucher read as January)', async () => {
+  const items = (date) => [{ date, subtotal: 54690, legible: true, has_clinic_stamp_or_doctor_signature: true }];
+  // visit 2026-10-01 (fields() appointment_date)
+  expect(problemsOf(fields({ items: items('2026-04-01'), medical_record: { date: null } })))
+    .toEqual(['Voucher 1 date 2026-04-01 is 183 days before the visit (appointment) date 2026-10-01']);
+  expect(problemsOf(fields({ items: items('2026-09-10'), medical_record: { date: null } }))).toEqual([]); // 21 days: fine
+  // The visit date misread instead (July → January): the voucher is then far after it.
+  expect(problemsOf(fields({ claim: { appointment_date: '2026-01-05' }, items: items('2026-07-05'), medical_record: { date: null } })))
+    .toEqual(['Voucher 1 date 2026-07-05 is 181 days after the visit (appointment) date 2026-01-05']);
+  // No appointment date: from the accident date, and it says so.
+  expect(problemsOf(fields({ claim: { appointment_date: null, accident_date: '2026-10-01' }, items: items('2026-04-01'), medical_record: { date: null } })))
+    .toEqual(['Voucher 1 date 2026-04-01 is 183 days before the accident date 2026-10-01']);
+  // The limit is an STP setting.
+  Setting.findAll.mockResolvedValue([{ key: 'voucherDaysBeforeVisit', value: 10 }]);
+  await getSettings();
+  expect(problemsOf(fields({ items: items('2026-09-10'), medical_record: { date: null } })))
+    .toEqual(['Voucher 1 date 2026-09-10 is 21 days before the visit (appointment) date 2026-10-01']);
+  Setting.findAll.mockResolvedValue([]);
+  await getSettings();
+});
+
+it('with a medical record date, the invoice-date check still fails as before — the rule adds an unsure point, it does not change who is asked', () => {
+  const misread = fields({ items: [{ date: '2026-04-01', subtotal: 54690, legible: true, has_clinic_stamp_or_doctor_signature: true }] }); // record 2026-10-01
+  expect(evaluateDocumentChecks(misread).issues).toContain('The invoice date is not consistent with the medical record date. Please provide clarification or a corrected invoice.');
+  expect(formatCheck(misread, TODAY).confidence).toBe(0);
+});

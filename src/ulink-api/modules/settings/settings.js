@@ -36,11 +36,14 @@ const DEFAULTS = {
   // (docs/deployment/CRONTAB_SETUP.md: email every 10 min, API every 30). Raise them for a business-hours schedule.
   pipelineStaleMinutesEmail: 30,
   pipelineStaleMinutesApi: 90,
+  // A voucher dated more than this many days before or after the visit is most likely misread (E3 check 2026-10-15:
+  // a July visit with a voucher read as January) — "Values read look valid" marks it unsure (SYSTEM_4 E4-08).
+  voucherDaysBeforeVisit: 30,
 };
 
 // Settings that are whole numbers in a range (the rest of the numbers are shares 0–1). Sent to the console with the
 // settings, so its form checks the same ranges.
-const WHOLE_NUMBERS = { overdueWorkingDays: [1, 30], pipelineStaleMinutesEmail: [5, 4320], pipelineStaleMinutesApi: [5, 4320] };
+const WHOLE_NUMBERS = { overdueWorkingDays: [1, 30], pipelineStaleMinutesEmail: [5, 4320], pipelineStaleMinutesApi: [5, 4320], voucherDaysBeforeVisit: [1, 365] };
 
 // The source switch for a pipeline / case source ('EMAIL' / 'API').
 const SOURCE_SETTING = { EMAIL: 'emailCasesEnabled', API: 'apiCasesEnabled' };

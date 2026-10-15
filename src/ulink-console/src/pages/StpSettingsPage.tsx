@@ -85,6 +85,7 @@ const NUMBER_SETTINGS: { key: NumberKey; label: string; unit: string; help: stri
   { key: 'overdueWorkingDays', label: 'A case waiting for a person is overdue after', unit: 'working days', help: "Monday–Friday, since the case entered its current status. Marked red in the review queue. 2 until ULINK sets its limit." },
   { key: 'pipelineStaleMinutesEmail', label: 'The Overview turns red when the email pipeline has not run for', unit: 'minutes', help: 'About 3× the schedule (cron every 10 min → 30). Raise it if the schedule pauses outside working hours.' },
   { key: 'pipelineStaleMinutesApi', label: 'The Overview turns red when the API pipeline has not run for', unit: 'minutes', help: 'About 3× the schedule (cron every 30 min → 90).' },
+  { key: 'voucherDaysBeforeVisit', label: 'A voucher dated before or after the visit by more than', unit: 'days', help: 'Such a date is most likely misread (for example, July read as January). The AI is marked unsure, and a person checks the date. Raise it for claims that cover a long course of treatment.' },
 ];
 
 function draftFrom(data: StpSettings): Draft {
@@ -321,7 +322,7 @@ function StpForm({ data, canEdit }: { data: StpSettings; canEdit: boolean }) {
       </section>
 
       <section className={card}>
-        <h2 className="text-sm font-semibold text-slate-800">Overdue cases and pipeline alerts</h2>
+        <h2 className="text-sm font-semibold text-slate-800">Overdue cases, pipeline alerts and date checks</h2>
         {NUMBER_SETTINGS.map((n) => (
           <div key={n.key} className={clsx('mt-3 rounded-lg p-2', changes.some((c) => c.key === n.key) && changedMark)}>
             <label className="flex flex-wrap items-center gap-3">

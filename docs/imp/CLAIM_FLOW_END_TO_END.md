@@ -335,6 +335,7 @@ Team emails go to `INTERNAL_REVIEW_EMAIL` (+ the route's CC), start with "(ULINK
 | Switch #1 / #2 / #3 | Console → STP settings | Off | Human checks when the AI is unsure (4.5) |
 | Vitamins / supplements: a person approves | Console → STP settings | On | A voucher with them → no STP, JD3 approves (4.4) |
 | Overdue after (working days) | Console → STP settings | 2 | A review-queue case a person must act on, waiting longer (Mon–Fri since it entered its status), is marked red *Overdue* (ULINK to set — Q20) |
+| Voucher dated before or after the visit by more than (days) | Console → STP settings | 30 | *Values read look valid* marks that voucher date unsure (most likely misread) — an *AI unsure* point; the invoice-date check and switch #2 decide, as before, whether the customer is asked |
 | Pipeline alert after (minutes) — email / API | Console → STP settings | 30 / 90 | The Overview turns red when that pipeline has had no run (or a run hasn't finished) for longer — raise for a business-hours schedule |
 | AI confidence threshold | Console → STP settings | 70% | At or below: the AI counts as unsure (4.5) |
 | Work on email cases / API cases | Console → STP settings | On | Off: that pipeline doesn't run (cron or Run) and its tab is hidden on the work pages; its cases are kept |
