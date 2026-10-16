@@ -3,7 +3,7 @@
 // Models are mocked.
 
 jest.mock('../db/models', () => ({
-  CaseRequest: { findAll: jest.fn(async () => []), update: jest.fn() }, // reviewer's own lines (SYSTEM_4 E4-28): none
+  CaseRequest: { findAll: jest.fn(async () => []), update: jest.fn(async () => [0]) }, // reviewer's own lines (SYSTEM_4 E4-28): none
   CaseClaim: { findByPk: jest.fn(async () => null), findAll: jest.fn(async () => []), destroy: jest.fn() },
   sequelize: { transaction: jest.fn(async (fn) => fn('tx')) },
   Case: { findByPk: jest.fn(), update: jest.fn(async () => [1]) },
@@ -69,7 +69,7 @@ describe('POST /api/cases/:id/override', () => {
   it("a documents override marks the reviewer's own open lines done; a member override leaves them (SYSTEM_4 E4-28)", async () => {
     await call({ reason: 'Record is legible on page 3.', finding: 'AI_MISREAD' }, emailCase);
     expect(CaseRequest.update).toHaveBeenCalledWith(
-      { doneBy: 'Ulink (ulink)', doneAt: expect.any(Date) }, { where: { caseId: 'c1', doneAt: null }, transaction: 'tx' },
+      { doneBy: 'Ulink (ulink)', doneAt: expect.any(Date), closedAs: 'done' }, { where: { caseId: 'c1', doneAt: null }, transaction: 'tx' },
     );
     CaseRequest.update.mockClear();
     await call({ reason: 'Customer confirmed.', finding: 'CUSTOMER_CONFIRMED' }, { ...emailCase, currentStatus: 'MEMBER_REVIEW_REQUIRED', memberVerifyResult: {} });

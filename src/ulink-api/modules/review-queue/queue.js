@@ -13,7 +13,8 @@ const SYSTEM_ISSUE_STATUSES = new Set(['CLAIM_SUBMIT_FAILED', 'API_CLAIM_REVISIO
 const SYSTEM_ISSUE = 'System issue';
 
 // Most serious first — a case is filed under the first of its reasons found here.
-const REASON_ORDER = [SYSTEM_ISSUE, 'Data mismatch', 'Rule hold', 'Unreadable', 'AI unsure', 'Missing information'];
+// A reviewer's own lines open (SYSTEM_4 E4-29) come before AI unsure: a person asked for them, the AI can't check them.
+const REASON_ORDER = [SYSTEM_ISSUE, 'Data mismatch', 'Rule hold', 'Unreadable', 'Reviewer checklist open', 'AI unsure', 'Missing information'];
 
 // Points that don't by themselves need our team: the customer was already asked for missing
 // information, and "STP with open review points" only restates the points under it.

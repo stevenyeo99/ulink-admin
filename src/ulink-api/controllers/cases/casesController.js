@@ -21,8 +21,8 @@ const { correctionsInfo } = require('./correctionsController');
 const { claimView, activeClaims, endClaim } = require('../../modules/case-claim/claim');
 const { workingDaysSince } = require('../../modules/shared/workingDays');
 const { lastReadSettings } = require('../../modules/settings/settings');
-const { CaseClaim, CaseRequest } = require('../../db/models');
-const { requestsInfo } = require('../../modules/case-requests/requests');
+const { CaseClaim } = require('../../db/models');
+const { requestsInfo, closeRequests, refreshRequestLine } = require('../../modules/case-requests/requests');
 
 const BLOCK_NAME = 'case-review';
 
@@ -538,9 +538,9 @@ async function overrideCase(req, res) {
       { where: { id: caseRecord.id, currentStatus: prevStatus }, transaction }
     );
     if (count !== 1) return false;
-    // A person confirmed the documents: their own requested lines are done too (SYSTEM_4 E4-28).
-    if (OVERRIDE_AREAS[prevStatus] === 'documents') {
-      await CaseRequest.update({ doneBy: operator, doneAt: now }, { where: { caseId: caseRecord.id, doneAt: null }, transaction });
+    // A person confirmed the documents: the reviewer checklist's open lines are done too (SYSTEM_4 E4-28 / E4-29).
+    if (OVERRIDE_AREAS[prevStatus] === 'documents' && await closeRequests(caseRecord.id, { as: 'done', by: operator }, transaction)) {
+      await refreshRequestLine(caseRecord, transaction);
     }
     await CaseEvent.create({
       caseId: caseRecord.id,

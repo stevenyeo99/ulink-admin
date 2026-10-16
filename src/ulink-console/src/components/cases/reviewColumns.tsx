@@ -11,6 +11,7 @@ const REASON_STYLE: Record<string, string> = {
   'Rule hold': 'bg-violet-100 text-violet-700',
   Unreadable: 'bg-amber-100 text-amber-800',
   'AI unsure': 'bg-sky-100 text-sky-800',
+  'Reviewer checklist open': 'bg-ulink-teal/15 text-ulink-teal-dark',
 };
 
 /** The Review Queue's columns (Review queue page; reusable wherever queued cases are listed). */

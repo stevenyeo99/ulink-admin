@@ -39,8 +39,8 @@ const REVIEW = {
   MISSING: { reason: 'Missing information', mightBeWrong: ['Customer', 'AI vision'], check: 'Confirm it is really missing, then ask the customer.' },
   RULE_HOLD: { reason: 'Rule hold', mightBeWrong: [], check: 'Apply the policy rule.' },
   VITAMINS: { reason: 'Vitamins / supplements', mightBeWrong: ['AI vision'], check: 'Check the voucher items; a person approves the claim (no STP).' },
-  // A reviewer's own lines (SYSTEM_4 E4-28): the AI cannot check them.
-  REQUESTED: { reason: 'Requested by a person', mightBeWrong: ['Customer'], check: 'Check the documents against each requested line; confirm when all are there, or request again.' },
+  // A reviewer's own lines (SYSTEM_4 E4-28 / E4-29): the AI cannot check them.
+  REQUESTED: { reason: 'Reviewer checklist open', mightBeWrong: ['Customer'], check: 'Check the documents against each line of the reviewer checklist; mark the ones that arrived done, then confirm.' },
 };
 
 const MEMBER_REVIEW = {
@@ -184,6 +184,16 @@ function memberLines(memberVerifyResult) {
   return lines;
 }
 
+// The reviewer checklist (SYSTEM_4 E4-29): the open lines a person added, apart from the system checklist (area
+// "reviewer") — one line, a review point while any is open. Read from the check result's PERSON_REQUEST copy.
+function reviewerLines(documentCheckResult) {
+  const item = (documentCheckResult?.checklist || []).find((c) => c.code === 'PERSON_REQUEST');
+  if (!item) return [];
+  return [line({
+    decision: 'Reviewer checklist', result: `${item.requests.length} open`, status: 'issue', why: item.note, verified: VERIFIED.ASKED, review: REVIEW.REQUESTED,
+  })];
+}
+
 function documentLines(documentCheckResult) {
   if (!documentCheckResult) return [];
   const { checklist = [], details = [] } = documentCheckResult;
@@ -213,10 +223,7 @@ function documentLines(documentCheckResult) {
       lines.push(vitaminLine(item));
       continue;
     }
-    if (item.code === 'PERSON_REQUEST') {
-      lines.push(line({ decision: 'Requested by a person', result: 'Open', status: 'issue', why: item.note, verified: VERIFIED.ASKED, review: REVIEW.REQUESTED }));
-      continue;
-    }
+    if (item.code === 'PERSON_REQUEST') continue; // the reviewer checklist — its own area (reviewerLines)
     if (item.code === 'VALUE_FORMAT') {
       lines.push(formatLine(item));
       continue;
@@ -409,6 +416,7 @@ function buildAssessmentSummary(fields = {}, { overrides = [] } = {}) {
   const lines = [
     ...withArea('member', memberLines(fields.memberVerifyResult)),
     ...withArea('documents', documentLines(fields.documentCheckResult)),
+    ...withArea('reviewer', reviewerLines(fields.documentCheckResult)),
     ...withArea('corrections', correctionLines(fields.extractedFields)),
     ...withArea('claim', preparationLines(fields.claimPrepMeta, fields.isStp)),
   ];

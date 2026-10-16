@@ -645,6 +645,37 @@ the eye test record*." Scope (owner): **this case only** — not a new rule for 
   new status. Console: *Request more information* on the case page and the review workspace (open lines listed; the
   form starts from them).
 
+#### E4-29 Reviewer checklist apart from the system checklist, row editor, email draft — P1, M
+Source: owner, 2026-10-16 — "separate the system standard check and the user's own list; add or delete lines; the email
+draft should include both".
+- **Now (after E4-28):** the reviewer's lines are one text box; a new request closes all open lines and adds them again
+  (the original author is lost); on the case page they are one row among the AI's lines; the review queue says *AI
+  unsure*; no email that was not sent can be seen.
+- **Requirement:**
+  - **Two lists on the case page and the review workspace:** *System checklist* (the AI and the rules — the assessment
+    as today) and *Reviewer checklist* (each line with who added it and when). The reviewer's lines are no longer a row
+    of the system checklist (summary area `reviewer`).
+  - **Row editor:** one row per line, *+ Add line*, × on a new row; each open line has *Done* (the documents arrived)
+    and *Remove* (no longer needed). Save sends only the change: new lines added, removed ones closed as *removed*,
+    unchanged lines keep their author and date. Every action has a comment (E4-11).
+  - **Email draft:** the customer missing-documents email with the approved intro and footer, listing the open
+    system items (none once a person overrode the document check) and the open reviewer lines (the rows being
+    edited, before saving). Two labelled blocks on screen, one numbered list in the copied text. *Copy* only — never
+    sent by the system (API cases: the owner's rule; email cases: until Q23).
+  - **Review queue:** reason *Reviewer checklist open* for a case held for open lines.
+- **Data:** `ulink_case_requests.closed_as` (`done` / `removed` / `reset`) — migration. The open lines are still copied
+  onto the document check result (the carrier for team emails and the IAS remark), refreshed on every change.
+- **Built 2026-10-16 (H1–H4):** migration `20261016140000-case-requests-closed-as`; `POST …/request-information` takes
+  `{ add, remove, comment }` (at least one line stays open, at most 10); `POST …/requests/:requestId/done` (comment;
+  the case does not move); a documents override closes open lines as done and a reset as reset; every change refreshes
+  the copy on the check result (API: a document-check step marked `reviewerChecklist`, email null). Summary area
+  `reviewer` (one line *Reviewer checklist — n open*, review point *Reviewer checklist open*, ranked before *AI unsure*
+  in the review queue). `POST …/email-draft` (read-only, any user): the approved missing-documents template with the
+  open system items (none once passed or a documents override) and the reviewer lines. Console: the assessment panel is
+  the *System checklist*; *Reviewer checklist* row editor (super admin) with *Done* / *Remove* per open line, new rows
+  with ×, *+ Add line*; *Email draft to the customer* with the two lists and *Copy* — for every user on any case with
+  something to ask for.
+
 **Not proposed:** bulk approve (risky for claims), mobile layout, per-user custom dashboards.
 
 ## 5. New settings (summary)
@@ -729,6 +760,7 @@ sending email, changing data in a shared DB.
 | **E5. Review workspace** | E4-20 | M–L | Check and decide next to the document page, one screen, Next case | E3, E4 | **E5a committed; E5b done — awaiting review** |
 | **E6. Daily dashboard** | E4-19 | M | One start page for the day's API work | Q20 | **Option B done — awaiting review** (overdue badge, pipeline health); full page parked (Q20) |
 | **F. Learning** | E4-24 timeline, E4-14 feedback report, E4-15 steps 2–4, E4-25 stats | M–L | Fewer repeat mistakes, proven by override rate and test set | Weeks of trusted corrections | **F1, F2, F3a done — awaiting review**; F4 skipped (owner, 2026-10-16: counts only, F2 CSV covers it) |
+| **H. Reviewer checklist apart, row editor, email draft** | E4-29 | M | The user sees and edits their own list apart from the system's; a ready-to-copy customer email with both | E4-28 | **H1–H4 done — awaiting review** |
 | **G. Reviewer's own lines** | E4-28 request more information with free-text lines, this case only | M | Staff ask for what the predefined checklist misses; the AI never closes a line it cannot check | Q23 (customer email wording) | **G1–G4 done — awaiting review** (lines to the team only until Q23) |
 | **Blocked** | E4-16, E4-13, E4-18 (E4-17 built for vitamins 2026-10-16) | — | — | ULINK (Q6, Q15, Q18, Q19, E4-16 list) | Blocked (ULINK input) |
 
@@ -788,6 +820,12 @@ Ticked when the item is done; the phase status above changes when all are done a
 - [x] G2 · Re-check: a passed document check with open lines → `DOCUMENTS_UNSURE` / `API_DOCUMENTS_UNSURE` (no new status, built simpler than planned); the documents confirm there marks the lines done (no per-line endpoint)
 - [x] G3 · Assessment summary: one line *Requested by a person* (open / done) → case page, team emails, IAS remark; timeline entries
 - [x] G4 · Console: *Request more information* (case page + review workspace: tick AI items, own lines, comment); open lines with *Done* on the case; tests, docs, log, tracker
+
+**Phase H — Reviewer checklist apart, row editor, email draft** (E4-29, owner 2026-10-16)
+- [x] H1 · API: `closed_as` (migration); request = add / remove (unchanged lines kept); `POST /api/cases/:id/requests/:rid/done`; the copy on the check result refreshed on every change (and on a documents override)
+- [x] H2 · Summary area `reviewer`; review-queue reason *Reviewer checklist open*
+- [x] H3 · `POST /api/cases/:id/email-draft` (read-only: approved template, open system items + reviewer lines)
+- [x] H4 · Console: *Reviewer checklist* row editor and *Email draft* with *Copy* on the case page and the review workspace; tests, docs, log, tracker
 
 **Recommended go-live:** not before phase B, and with E1 (upload) — without the inbox an incomplete API case has
 no other way to recover (Q10).

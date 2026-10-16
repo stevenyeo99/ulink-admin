@@ -5,7 +5,7 @@
 // A reviewer's own lines (SYSTEM_4 E4-28): none open — no database here.
 jest.mock('../modules/case-requests/requests', () => ({ ...jest.requireActual('../modules/case-requests/requests'), openRequests: jest.fn(async () => []) }));
 jest.mock('../modules/member-verification/service', () => ({ checkCase: jest.fn() }));
-jest.mock('../modules/document-checking/service', () => ({ checkCase: jest.fn() }));
+jest.mock('../modules/document-checking/service', () => ({ ...jest.requireActual('../modules/document-checking/service'), checkCase: jest.fn() }));
 
 const memberEmail = require('../modules/member-verification/service');
 const documentEmail = require('../modules/document-checking/service');

@@ -3,7 +3,7 @@ const { requireRole } = require('../modules/auth/auth');
 const { getCaseStatuses, getOverview, getReviewQueue, getNextCase, getApprovals, listCases, getCase, getTimeline, getLlmCalls, getAttachment, getDocument, overrideCase, resetCase, releaseMissingDocuments, uploadCaseDocuments } = require('../controllers/cases/casesController');
 const { createCorrection, createConfirmation, trustCorrection } = require('../controllers/cases/correctionsController');
 const { claim, release } = require('../controllers/cases/claimController');
-const { requestInformation } = require('../controllers/cases/requestsController');
+const { requestInformation, markRequestDone, getEmailDraft } = require('../controllers/cases/requestsController');
 const { requireNotHeldByOther } = require('../modules/case-claim/claim');
 
 const router = express.Router();
@@ -456,12 +456,13 @@ router.post('/:id/release-missing-documents', requireRole('super_admin'), requir
  * /api/cases/{id}/request-information:
  *   post:
  *     tags: [cases]
- *     summary: A reviewer's own checklist lines on this case — ask for what the predefined checklist misses (SYSTEM_4 E4-28)
+ *     summary: Change the reviewer checklist of this case and ask for it (SYSTEM_4 E4-28, E4-29)
  *     description: >
  *       Super admin. From DOCUMENTS_REVIEW / DOCUMENTS_UNSURE (→ INCOMPLETE) and API_DOCUMENTS_REVIEW /
- *       API_DOCUMENTS_UNSURE (→ API_INCOMPLETE, IAS revision with suspense). The lines replace the open ones; the team is
- *       emailed to contact the customer about them (never in the customer's email). While a line is open, a passed
- *       document check stops for a person; confirming there marks the lines done.
+ *       API_DOCUMENTS_UNSURE (→ API_INCOMPLETE, IAS revision with suspense). Only the change is applied (lines added,
+ *       removed ones closed); at least one line stays open. The team is emailed to contact the customer about the open
+ *       lines (never in the customer's email). While a line is open, a passed document check stops for a person;
+ *       confirming there marks the lines done.
  *     parameters:
  *       - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
  *     requestBody:
@@ -470,16 +471,61 @@ router.post('/:id/release-missing-documents', requireRole('super_admin'), requir
  *         application/json:
  *           schema:
  *             type: object
- *             required: [lines, comment]
+ *             required: [comment]
  *             properties:
- *               lines: { type: array, minItems: 1, maxItems: 10, items: { type: string, maxLength: 300 } }
+ *               add: { type: array, maxItems: 10, items: { type: string, maxLength: 300 }, description: New lines }
+ *               remove: { type: array, items: { type: string, format: uuid }, description: Open lines no longer needed }
  *               comment: { type: string, minLength: 3, description: Why this is needed }
  *     responses:
  *       200: { description: Lines stored, case moved to its waiting-for-documents status }
- *       400: { description: No lines, too many / too long, no comment, or not at a documents review status }
- *       409: { description: The case changed meanwhile, or has no document check }
+ *       400: { description: Nothing changed, every line removed, too many / too long, no comment, or not at a documents review status }
+ *       409: { description: The case or its lines changed meanwhile, or it has no document check }
  */
 router.post('/:id/request-information', requireRole('super_admin'), requireNotHeldByOther, requestInformation);
+
+/**
+ * @openapi
+ * /api/cases/{id}/requests/{requestId}/done:
+ *   post:
+ *     tags: [cases]
+ *     summary: One reviewer checklist line is done — its documents arrived (SYSTEM_4 E4-29)
+ *     description: Super admin. The case does not move; at a documents review status a person still confirms to continue.
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+ *       - { name: requestId, in: path, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { type: object, required: [comment], properties: { comment: { type: string, minLength: 3 } } }
+ *     responses:
+ *       200: { description: The line is closed as done }
+ *       400: { description: No comment }
+ *       409: { description: The line is no longer open }
+ */
+router.post('/:id/requests/:requestId/done', requireRole('super_admin'), requireNotHeldByOther, markRequestDone);
+
+/**
+ * @openapi
+ * /api/cases/{id}/email-draft:
+ *   post:
+ *     tags: [cases]
+ *     summary: The customer missing-documents email as it would read now, to copy — system and reviewer checklists (SYSTEM_4 E4-29)
+ *     description: >
+ *       Read-only, never sends. The approved template with the open system items (none once passed or overridden) and
+ *       the reviewer lines — those in the body (being edited) or, left out, the open ones saved. Any logged-in user.
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema: { type: object, properties: { lines: { type: array, maxItems: 10, items: { type: string, maxLength: 300 } } } }
+ *     responses:
+ *       200: { description: "{ system: [item], reviewer: [line], text: string | null }" }
+ *       400: { description: Too many / too long lines }
+ */
+router.post('/:id/email-draft', getEmailDraft);
 
 /**
  * @openapi

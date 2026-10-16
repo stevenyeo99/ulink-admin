@@ -301,6 +301,16 @@ export interface RequestsInfo {
   open: { id: string; text: string; by: string; at: string }[];
 }
 
+// The customer missing-documents email as it would read now (SYSTEM_4 E4-29) — to copy, never sent by the system.
+export interface EmailDraft {
+  /** Open system checklist items (the AI and the rules). */
+  system: string[];
+  /** Reviewer checklist lines. */
+  reviewer: string[];
+  /** The email body, or null when there is nothing to ask for. */
+  text: string | null;
+}
+
 // One entry of a case's single timeline (SYSTEM_4 E4-24, ulink-api modules/case-timeline/timeline.js).
 export type TimelineKind = 'people' | 'ai' | 'email' | 'ias' | 'system';
 export interface TimelineEntry {

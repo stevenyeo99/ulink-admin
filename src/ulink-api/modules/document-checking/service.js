@@ -110,17 +110,20 @@ function issuesDedupeKey(issues) {
   return [...issues].sort().join('|');
 }
 
+// The customer email's list: each missing item with the check's reason (both flows, and the email draft — E4-29).
+function missingDocumentItems(result) {
+  return result.issues.map((issue) => {
+    const detail = result.details.find((candidate) => candidate.issue === issue && candidate.reason);
+    return detail?.reason ? `${issue}\n  Reason: ${detail.reason}` : issue;
+  });
+}
+
 async function queueMissingDocumentsEmail(transaction, caseId, result) {
   await queueDedupedTask(transaction, {
     caseId,
     taskType: 'MISSING_DOCUMENTS',
     dedupeKey: issuesDedupeKey(result.issues),
-    payload: {
-      issues: result.issues.map((issue) => {
-        const detail = result.details.find((candidate) => candidate.issue === issue && candidate.reason);
-        return detail?.reason ? `${issue}\n  Reason: ${detail.reason}` : issue;
-      }),
-    },
+    payload: { issues: missingDocumentItems(result) },
   });
 }
 
@@ -237,4 +240,4 @@ async function releaseMissingDocumentsEmail(caseRecord, operator, comment = null
   });
 }
 
-module.exports = { run, checkCase, persistOutcome, releaseMissingDocumentsEmail, issuesDedupeKey, queueMissingDocumentsEmail, queueDocumentsIncompleteEmail };
+module.exports = { run, checkCase, persistOutcome, releaseMissingDocumentsEmail, issuesDedupeKey, missingDocumentItems, queueMissingDocumentsEmail, queueDocumentsIncompleteEmail };

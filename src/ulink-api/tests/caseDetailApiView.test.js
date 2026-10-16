@@ -2,7 +2,7 @@
 // email cases get exactly the response they always had. Models are mocked.
 
 jest.mock('../db/models', () => ({
-  CaseRequest: { findAll: jest.fn(async () => []), update: jest.fn() }, // reviewer's own lines (SYSTEM_4 E4-28): none
+  CaseRequest: { findAll: jest.fn(async () => []), update: jest.fn(async () => [0]) }, // reviewer's own lines (SYSTEM_4 E4-28): none
   CaseClaim: { findByPk: jest.fn(async () => null), findAll: jest.fn(async () => []), destroy: jest.fn() },
   Case: { findByPk: jest.fn() },
   CaseEvent: { findAll: jest.fn(async () => [{ id: 'ev-1' }]) },

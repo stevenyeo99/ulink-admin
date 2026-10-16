@@ -62,7 +62,9 @@ export function CaseJourneyPanel({ summary }: { summary: AssessmentSummary | und
  */
 export function AssessmentSummaryPanel({ summary }: { summary: AssessmentSummary | undefined }) {
   if (!summary || summary.lines.length === 0) return null;
-  const { lines, reviewPoints, needsReview } = summary;
+  const { reviewPoints, needsReview } = summary;
+  // The reviewer checklist has its own panel (SYSTEM_4 E4-29); its open lines still count as a review point here.
+  const lines = summary.lines.filter((l) => l.area !== 'reviewer');
 
   return (
     <section
@@ -78,7 +80,7 @@ export function AssessmentSummaryPanel({ summary }: { summary: AssessmentSummary
           <CheckCircle2 size={16} className="text-ulink-teal-dark" />
         )}
         <h2 className={clsx('text-sm font-semibold', needsReview ? 'text-ulink-orange-dark' : 'text-ulink-teal-dark')}>
-          AI assessment: what was decided and why
+          System checklist — AI assessment: what was decided and why
         </h2>
       </div>
 

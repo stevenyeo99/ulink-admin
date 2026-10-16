@@ -49,7 +49,8 @@ function buildCaseJourney(fields = {}, lines = []) {
     steps.push(step('Policy check', warning.result, `${warning.brief || warning.why}${handled(warning)}`));
   }
 
-  const documents = lines.filter((l) => l.area === 'documents');
+  // The reviewer checklist's open lines keep the documents incomplete too (SYSTEM_4 E4-29).
+  const documents = lines.filter((l) => l.area === 'documents' || l.area === 'reviewer');
   if (documents.length) {
     const open = documents.filter((l) => l.status === 'issue' && !l.overridden);
     const overridden = documents.filter((l) => l.overridden);

@@ -279,7 +279,7 @@ stay visible, marked *✔ Overridden by … — why*, in the console, the emails
 | Documents incomplete | `INCOMPLETE` (email) / `API_CLAIM_SUSPENDED` (API) | Both | **Customer** |
 | Check before emailing customer | `DOCUMENTS_REVIEW` / `API_DOCUMENTS_REVIEW` | Both | **Person** |
 | Check the AI's documents finding | `DOCUMENTS_UNSURE` / `API_DOCUMENTS_UNSURE` | Both | **Person** |
-| Request more information (reviewer's own lines, SYSTEM_4 E4-28) | From `DOCUMENTS_REVIEW` / `DOCUMENTS_UNSURE` (+ `API_`) → `INCOMPLETE` / `API_INCOMPLETE` | Both | **Person** — the lines go to the team email (*contact the customer*), the case page and the IAS remark, never the customer email; the AI's own items go to the customer as usual. Open lines stop every passed re-check at *Check the AI's documents finding*; *Confirm and continue* marks them done |
+| Reviewer checklist (reviewer's own lines, SYSTEM_4 E4-28 / E4-29) — add / remove lines, *Done* per line; *Email draft* (both checklists, copy only, any user) | From `DOCUMENTS_REVIEW` / `DOCUMENTS_UNSURE` (+ `API_`) → `INCOMPLETE` / `API_INCOMPLETE` | Both | **Person** — the lines go to the team email (*contact the customer*), the case page and the IAS remark, never the customer email; the AI's own items go to the customer as usual. Open lines stop every passed re-check at *Check the AI's documents finding*; *Confirm and continue* marks them done |
 | Checks passed / Documents complete | `MEMBER_VERIFIED` / `API_DOCUMENTS_VERIFIED` | Both | System |
 | Documents missing | `API_INCOMPLETE` | API | System (→ suspense) |
 | Waiting for console barcode | `CONSOLE_BARCODE_PENDING` | Email | Console (15–30 min) |

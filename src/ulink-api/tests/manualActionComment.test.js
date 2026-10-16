@@ -9,7 +9,7 @@ jest.mock('../db/models', () => {
     Case: { findByPk: jest.fn(), update: jest.fn().mockResolvedValue([1]) },
     CaseEvent: { create: jest.fn(async (row) => events.push(row)) },
     ApiCaseStep: { findOne: jest.fn(), create: jest.fn() },
-    CaseRequest: { update: jest.fn() },
+    CaseRequest: { update: jest.fn(async () => [1]) },
   };
 });
 jest.mock('../modules/document-checking/service', () => ({ releaseMissingDocumentsEmail: jest.fn().mockResolvedValue(true) }));
@@ -54,7 +54,7 @@ describe('reset', () => {
   it("closes a reviewer's open lines when the document check is cleared (SYSTEM_4 E4-28)", async () => {
     Case.findByPk.mockResolvedValue({ id: 'case-1', currentStatus: 'DOCUMENTS_UNSURE', claimNo: null });
     await resetOneCase('case-1', 'READY_FOR_DOCUMENT_READING');
-    expect(CaseRequest.update).toHaveBeenCalledWith({ doneBy: 'reset (dev tool)', doneAt: expect.any(Date) }, { where: { caseId: 'case-1', doneAt: null } });
+    expect(CaseRequest.update).toHaveBeenCalledWith({ doneBy: 'reset (dev tool)', doneAt: expect.any(Date), closedAs: 'reset' }, { where: { caseId: 'case-1', doneAt: null }, transaction: undefined });
   });
 });
 

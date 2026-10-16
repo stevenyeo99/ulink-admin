@@ -7,7 +7,7 @@ import { getSession, isSuperAdmin } from '../lib/session';
 import { Button } from '../components/common/Button';
 import { CaseStatusPill } from '../components/cases/CaseStatusPill';
 import { CaseClaimBar } from '../components/cases/CaseClaimBar';
-import { RequestInformationPanel } from '../components/cases/RequestInformationPanel';
+import { ReviewerChecklistPanel } from '../components/cases/ReviewerChecklistPanel';
 import { CaseCorrectionPanel } from '../components/cases/CaseCorrectionPanel';
 import { useConfidenceThreshold } from '../hooks/useConfidenceThreshold';
 import { DocumentViewer } from '../components/review/DocumentViewer';
@@ -164,7 +164,7 @@ export function ReviewWorkspacePage() {
           <div ref={correctionRef}>
             <CaseCorrectionPanel key={`${id}-${correcting ?? ''}-${correctCount}`} caseId={id} corrections={corrections} initialItem={correcting ?? ''} />
           </div>
-          {isSuperAdmin() && <RequestInformationPanel key={`${id}-${requests.open.map((r) => r.id).join()}`} caseId={id} requests={requests} />}
+          <ReviewerChecklistPanel key={id} caseId={id} requests={requests} />
         </section>
       </div>
     </div>

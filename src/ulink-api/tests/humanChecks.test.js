@@ -4,7 +4,7 @@
 //    waits for a person (send it, or override the check).
 
 jest.mock('../db/models', () => ({
-  CaseRequest: { findAll: jest.fn(async () => []), update: jest.fn() }, // reviewer's own lines (SYSTEM_4 E4-28): none
+  CaseRequest: { findAll: jest.fn(async () => []), update: jest.fn(async () => [0]) }, // reviewer's own lines (SYSTEM_4 E4-28): none
   sequelize: { transaction: (fn) => fn('tx') },
   Case: { update: jest.fn().mockResolvedValue([1]), findAll: jest.fn() },
   CaseEvent: { create: jest.fn(), findAll: jest.fn().mockResolvedValue([]) },

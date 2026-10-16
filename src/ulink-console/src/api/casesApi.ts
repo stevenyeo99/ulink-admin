@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { ApprovalsResponse, CaseClaim, Correction, TimelineEntry, WrongStep, CaseListQuery, CaseOverview, ReviewQueueResponse, CaseStatusCatalog, GetCaseResponse, ListCasesResponse, LlmCall, OverrideCaseResponse, ResetCaseResponse } from '../types/case';
+import type { ApprovalsResponse, CaseClaim, Correction, EmailDraft, TimelineEntry, WrongStep, CaseListQuery, CaseOverview, ReviewQueueResponse, CaseStatusCatalog, GetCaseResponse, ListCasesResponse, LlmCall, OverrideCaseResponse, ResetCaseResponse } from '../types/case';
 import type { Source } from '../types/pipeline';
 
 export function listCases(query: CaseListQuery = {}): Promise<ListCasesResponse> {
@@ -102,9 +102,21 @@ export function releaseMissingDocuments(id: string, comment: string): Promise<{ 
   return request(`/api/cases/${id}/release-missing-documents`, { method: 'POST', body: JSON.stringify({ comment }) });
 }
 
-// A reviewer's own lines for this case (SYSTEM_4 E4-28): they replace the open ones; the team contacts the customer.
-export function requestInformation(id: string, lines: string[], comment: string): Promise<{ caseId: string; currentStatus: string }> {
-  return request(`/api/cases/${id}/request-information`, { method: 'POST', body: JSON.stringify({ lines, comment }) });
+// The reviewer checklist of a case (SYSTEM_4 E4-28, E4-29): add new lines, remove open ones (ids); the case waits for
+// documents and the team contacts the customer.
+export function requestInformation(id: string, add: string[], remove: string[], comment: string): Promise<{ caseId: string; currentStatus: string }> {
+  return request(`/api/cases/${id}/request-information`, { method: 'POST', body: JSON.stringify({ add, remove, comment }) });
+}
+
+// One reviewer checklist line is done — its documents arrived (SYSTEM_4 E4-29).
+export function markRequestDone(id: string, requestId: string, comment: string): Promise<{ requestId: string }> {
+  return request(`/api/cases/${id}/requests/${requestId}/done`, { method: 'POST', body: JSON.stringify({ comment }) });
+}
+
+// The customer email as it would read now, to copy (SYSTEM_4 E4-29). lines: the reviewer lines being edited.
+// lines null: the open ones saved.
+export function getEmailDraft(id: string, lines: string[] | null): Promise<EmailDraft> {
+  return request(`/api/cases/${id}/email-draft`, { method: 'POST', body: JSON.stringify(lines ? { lines } : {}) });
 }
 
 // casesController.js::resetCase. Fails with 409 if the case already has a real IAS claimNo.

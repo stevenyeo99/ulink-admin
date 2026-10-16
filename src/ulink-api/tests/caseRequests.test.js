@@ -6,7 +6,7 @@ jest.mock('../db/models', () => ({
   sequelize: { transaction: (fn) => fn('tx') },
   Case: { findByPk: jest.fn(), update: jest.fn(async () => [1]) },
   CaseEvent: { create: jest.fn(), findAll: jest.fn(async () => []) },
-  CaseRequest: { findAll: jest.fn(async () => []), update: jest.fn(), bulkCreate: jest.fn() },
+  CaseRequest: { findAll: jest.fn(async () => []), update: jest.fn(async () => [1]), bulkCreate: jest.fn() },
   ApiCaseStep: { findAll: jest.fn(async () => []), create: jest.fn() },
   CaseClaim: { destroy: jest.fn() },
   Setting: { findAll: jest.fn(async () => []) },
@@ -21,7 +21,8 @@ const { job: apiDocumentJob, emailFor } = require('../modules/api-document-check
 const { validateLines, withRequests } = require('../modules/case-requests/requests');
 const { buildAssessmentSummary } = require('../modules/assessment-summary/summary');
 const { render } = require('../modules/email-sender/templates');
-const { requestInformation } = require('../controllers/cases/requestsController');
+const { requestInformation, markRequestDone, getEmailDraft } = require('../controllers/cases/requestsController');
+const { queueEntry } = require('../modules/review-queue/queue');
 
 const LINE = 'Need to fill treatment date in the eye test record';
 const open = [{ id: 'r1', text: LINE, createdBy: 'Ulink (ulink)', createdAt: '2026-10-16T02:00:00Z' }];
@@ -57,10 +58,11 @@ it('API case: an open line holds a passed check before the IAS revision', async 
   expect(out.message).toContain(LINE);
 });
 
-it('shown as a review point "Requested by a person"; never in the customer email', () => {
+it('shown apart from the system checklist (area "reviewer"), as the review point "Reviewer checklist open"; never in the customer email', () => {
   const result = withRequests(failed, open);
   const summary = buildAssessmentSummary({ documentCheckResult: result });
-  expect(summary.reviewPoints).toEqual(expect.arrayContaining([expect.objectContaining({ decision: 'Requested by a person' })]));
+  expect(summary.reviewPoints).toEqual(expect.arrayContaining([expect.objectContaining({ decision: 'Reviewer checklist', area: 'reviewer', reason: 'Reviewer checklist open' })]));
+  expect(summary.lines.filter((l) => l.area === 'documents').map((l) => l.decision)).not.toContain('Reviewer checklist');
   expect(JSON.stringify(emailFor(result))).not.toContain(LINE);
   expect(render('MISSING_DOCUMENTS', emailFor(result).payload).bodyText).not.toContain(LINE);
 });
@@ -79,9 +81,9 @@ describe('POST /api/cases/:id/request-information', () => {
   it('API case at "check the AI finding": suspended revision, no customer email, the team told to contact the customer', async () => {
     Case.findByPk.mockResolvedValue({ id: 'c1', source: 'API', claimNo: 'CL1', currentStatus: 'API_DOCUMENTS_UNSURE', toJSON: () => ({ id: 'c1', source: 'API', claimNo: 'CL1' }) });
     ApiCaseStep.findAll.mockResolvedValue([{ job: 'api-document-checking', status: 'DONE', createdAt: '2026-10-16T01:00:00Z', output: { outcome: 'DOCUMENT_CHECKED', documentCheckResult: passed, checkedAt: 'T' } }]);
-    CaseRequest.findAll.mockResolvedValue(open);
+    CaseRequest.findAll.mockResolvedValueOnce([]).mockResolvedValue(open); // none open before, the new line after
     const r = res();
-    await requestInformation(req({ lines: [LINE], comment: 'eye test record has no date' }), r);
+    await requestInformation(req({ add: [LINE], comment: 'eye test record has no date' }), r);
 
     expect(r.json).toHaveBeenCalledWith({ caseId: 'c1', previousStatus: 'API_DOCUMENTS_UNSURE', currentStatus: 'API_INCOMPLETE' });
     expect(CaseRequest.bulkCreate).toHaveBeenCalledWith([{ caseId: 'c1', text: LINE, createdBy: 'Ulink (ulink)' }], { transaction: 'tx' });
@@ -92,8 +94,8 @@ describe('POST /api/cases/:id/request-information', () => {
 
   it('email case at "check before emailing": the AI items to the customer, the lines to the team only', async () => {
     Case.findByPk.mockResolvedValue({ id: 'c1', source: 'EMAIL', currentStatus: 'DOCUMENTS_REVIEW', documentCheckResult: failed });
-    CaseRequest.findAll.mockResolvedValue(open);
-    await requestInformation(req({ lines: [LINE], comment: 'eye test record has no date' }), res());
+    CaseRequest.findAll.mockResolvedValueOnce([]).mockResolvedValue(open);
+    await requestInformation(req({ add: [LINE], comment: 'eye test record has no date' }), res());
     const tasks = queueDedupedTask.mock.calls.map((c) => c[1]);
     expect(tasks.find((t) => t.taskType === 'MISSING_DOCUMENTS').payload.issues.join()).not.toContain(LINE);
     expect(tasks.find((t) => t.taskType === 'DOCUMENTS_INCOMPLETE').payload.requested).toEqual([LINE]);
@@ -102,9 +104,9 @@ describe('POST /api/cases/:id/request-information', () => {
   it('refused away from the documents review statuses, without lines, or without a comment', async () => {
     Case.findByPk.mockResolvedValue({ id: 'c1', source: 'API', currentStatus: 'API_CLAIM_REVISED' });
     const r = res();
-    await requestInformation(req({ lines: [LINE], comment: 'why not' }), r);
+    await requestInformation(req({ add: [LINE], comment: 'why not' }), r);
     expect(r.status).toHaveBeenCalledWith(400);
-    for (const body of [{ lines: [], comment: 'why not' }, { lines: [LINE] }]) {
+    for (const body of [{ add: [], comment: 'why not' }, { add: [LINE] }]) {
       const r2 = res();
       await requestInformation(req(body), r2);
       expect(r2.status).toHaveBeenCalledWith(400);
@@ -115,4 +117,82 @@ describe('POST /api/cases/:id/request-information', () => {
 it('a requested line is not offered as a check to correct', () => {
   const { correctionOptions } = require('../modules/ai-feedback/corrections');
   expect(correctionOptions({}, withRequests(passed, open)).some((o) => o.item === 'PERSON_REQUEST')).toBe(false);
+});
+
+describe('reviewer checklist rows (SYSTEM_4 E4-29)', () => {
+  const res = () => { const r = { status: jest.fn(() => r), json: jest.fn() }; return r; };
+  const req = (body, params = {}) => ({ params: { id: 'c1', ...params }, user: { username: 'ulink', name: 'Ulink' }, body });
+  const emailCase = { id: 'c1', source: 'EMAIL', currentStatus: 'DOCUMENTS_UNSURE', documentCheckResult: withRequests(passed, open) };
+
+  it('the closed_as list matches the table constraint', () => {
+    const migration = require('fs').readFileSync(require('path').join(__dirname, '../db/migrations/20261016140000-case-requests-closed-as.js'), 'utf8');
+    const inSql = migration.match(/closed_as IN \(([^)]*)\)/)[1].replace(/'/g, '').split(', ');
+    const { CLOSED_AS } = require('fs').readFileSync(require('path').join(__dirname, '../db/models/caseRequest.js'), 'utf8')
+      .match(/const CLOSED_AS = \[([^\]]*)\]/).slice(1).reduce((_, list) => ({ CLOSED_AS: list.replace(/'/g, '').split(', ') }), {});
+    expect(CLOSED_AS).toEqual(inSql);
+  });
+
+  it('a request applies only the change: removed lines closed as removed, the others kept', async () => {
+    Case.findByPk.mockResolvedValue(emailCase);
+    CaseRequest.findAll.mockResolvedValue([...open, { id: 'r2', text: 'Old line', createdBy: 'X', createdAt: 'T' }]);
+    const r = res();
+    await requestInformation(req({ add: ['New line'], remove: ['r2'], comment: 'r2 no longer needed' }), r);
+    expect(r.json).toHaveBeenCalledWith(expect.objectContaining({ currentStatus: 'INCOMPLETE' }));
+    expect(CaseRequest.update).toHaveBeenCalledWith(expect.objectContaining({ closedAs: 'removed' }), expect.objectContaining({ where: expect.objectContaining({ caseId: 'c1' }) }));
+    expect(CaseRequest.update).toHaveBeenCalledTimes(1);
+    expect(CaseRequest.bulkCreate).toHaveBeenCalledWith([{ caseId: 'c1', text: 'New line', createdBy: 'Ulink (ulink)' }], { transaction: 'tx' });
+  });
+
+  it('does not add a line that is already open', async () => {
+    Case.findByPk.mockResolvedValue(emailCase);
+    CaseRequest.findAll.mockResolvedValue(open);
+    const r = res();
+    await requestInformation(req({ add: [LINE], comment: 'same line again' }), r);
+    expect(r.status).toHaveBeenCalledWith(400);
+  });
+
+  it('refuses a change that removes every line, or a line that is no longer open', async () => {
+    Case.findByPk.mockResolvedValue(emailCase);
+    CaseRequest.findAll.mockResolvedValue(open);
+    const r = res();
+    await requestInformation(req({ remove: ['r1'], comment: 'all fine' }), r);
+    expect(r.status).toHaveBeenCalledWith(400);
+    const r2 = res();
+    await requestInformation(req({ remove: ['gone'], comment: 'all fine' }), r2);
+    expect(r2.status).toHaveBeenCalledWith(409);
+  });
+
+  it('Done closes one line as done, refreshes the copy on the check result, and does not move the case', async () => {
+    Case.findByPk.mockResolvedValueOnce(emailCase).mockResolvedValueOnce({ id: 'c1', documentCheckResult: emailCase.documentCheckResult });
+    CaseRequest.findAll.mockResolvedValueOnce(open).mockResolvedValueOnce([]);
+    CaseRequest.update.mockResolvedValue([1]);
+    const r = res();
+    await markRequestDone(req({ comment: 'eye test record dated, page 2' }, { requestId: 'r1' }), r);
+    expect(r.json).toHaveBeenCalledWith({ caseId: 'c1', requestId: 'r1', closedAs: 'done' });
+    expect(CaseRequest.update.mock.calls[0][0]).toMatchObject({ closedAs: 'done', doneBy: 'Ulink (ulink)' });
+    const refreshed = Case.update.mock.calls.find((c) => c[0].documentCheckResult)[0].documentCheckResult;
+    expect(refreshed.checklist.find((c) => c.code === 'PERSON_REQUEST')).toBeUndefined();
+    expect(Case.update.mock.calls.some((c) => c[0].currentStatus)).toBe(false);
+  });
+
+  it('the email draft: the approved template with the open system items and the reviewer lines; none once overridden', async () => {
+    Case.findByPk.mockResolvedValue({ id: 'c1', source: 'EMAIL', documentCheckResult: failed });
+    const r = res();
+    await getEmailDraft(req({ lines: [LINE] }), r);
+    const draft = r.json.mock.calls[0][0];
+    expect(draft).toMatchObject({ system: ['No Medical Report(s)'], reviewer: [LINE] });
+    expect(draft.text).toContain('Dear Valued Customer');
+    expect(draft.text).toContain('No Medical Report(s)');
+    expect(draft.text).toContain(LINE);
+
+    CaseEvent.findAll.mockResolvedValueOnce([{ reasonCode: 'MANUAL_OVERRIDE', prevStatus: 'DOCUMENTS_REVIEW', createdAt: 'T', message: 'Overridden by X — y: z' }]);
+    const r2 = res();
+    await getEmailDraft(req({ lines: [] }), r2);
+    expect(r2.json.mock.calls[0][0]).toEqual({ system: [], reviewer: [], text: null });
+  });
+
+  it('the review queue files a held case under "Reviewer checklist open", before "AI unsure"', () => {
+    const entry = queueEntry('DOCUMENTS_UNSURE', { documentCheckResult: withRequests(passed, open) });
+    expect(entry.reason).toBe('Reviewer checklist open');
+  });
 });

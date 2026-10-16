@@ -1,6 +1,6 @@
 const config = require('../../config');
 const { runApiJob } = require('../api-pipeline/runApiJob');
-const { checkCase } = require('../document-checking/service');
+const { checkCase, missingDocumentItems } = require('../document-checking/service');
 const { getSettings } = require('../settings/settings');
 const { unsureDocumentPoints, unsurePassedPoints } = require('../document-checking/holdForReview');
 const { correctionHold } = require('../ai-feedback/corrections');
@@ -23,11 +23,7 @@ const { openRequests, withRequests, requestHold } = require('../case-requests/re
 function emailFor(result) {
   // Complete documents send nothing: the customer was acknowledged at api-claim-recognition.
   if (result.passed) return null;
-  const issues = result.issues.map((issue) => {
-    const detail = result.details.find((candidate) => candidate.issue === issue && candidate.reason);
-    return detail?.reason ? `${issue}\n  Reason: ${detail.reason}` : issue;
-  });
-  return { taskType: 'MISSING_DOCUMENTS', audience: 'customer', payload: { issues }, dedupeKey: [...result.issues].sort().join('|') };
+  return { taskType: 'MISSING_DOCUMENTS', audience: 'customer', payload: { issues: missingDocumentItems(result) }, dedupeKey: [...result.issues].sort().join('|') };
 }
 
 const OUTCOME_TO_STATUS = {

@@ -10,7 +10,7 @@ import { JobStepsSection } from '../components/cases/JobStepsSection';
 import { EmailThreadSection } from '../components/cases/EmailThreadSection';
 import { CaseAdminActions } from '../components/cases/CaseAdminActions';
 import { CaseOverridePanel } from '../components/cases/CaseOverridePanel';
-import { RequestInformationPanel } from '../components/cases/RequestInformationPanel';
+import { ReviewerChecklistPanel } from '../components/cases/ReviewerChecklistPanel';
 import { LlmCallsSection } from '../components/cases/LlmCallsSection';
 import { CaseUploadPanel } from '../components/cases/CaseUploadPanel';
 import { CaseCorrectionPanel } from '../components/cases/CaseCorrectionPanel';
@@ -140,7 +140,7 @@ export function CaseDetailPage() {
       ) : null}
 
       {isSuperAdmin() && <CaseOverridePanel caseRecord={caseRecord} override={override} summary={assessmentSummary} />}
-      {isSuperAdmin() && <RequestInformationPanel key={requests.open.map((r) => r.id).join()} caseId={caseRecord.id} requests={requests} />}
+      <ReviewerChecklistPanel key={caseRecord.id} caseId={caseRecord.id} requests={requests} />
       {corrections && <CaseCorrectionPanel caseId={caseRecord.id} corrections={corrections} />}
 
       {isApi && (
