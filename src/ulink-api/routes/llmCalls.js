@@ -1,5 +1,5 @@
 const express = require('express');
-const { getPromptSummary } = require('../controllers/llm-calls/llmCallsController');
+const { getPromptSummary, getFeedbackReport } = require('../controllers/llm-calls/llmCallsController');
 
 const router = express.Router();
 
@@ -19,5 +19,23 @@ const router = express.Router();
  *       400: { description: Bad days }
  */
 router.get('/summary', getPromptSummary);
+
+/**
+ * @openapi
+ * /api/llm-calls/feedback-report:
+ *   get:
+ *     tags: [llm-calls]
+ *     summary: Every correction, confirmation and override of the AI — one row each (SYSTEM_4 E4-14, F2)
+ *     description: >
+ *       From ulink_ai_feedback and the MANUAL_OVERRIDE case-history entries, newest first. The console filters by item
+ *       and type and downloads CSV. Super admin.
+ *     parameters:
+ *       - { name: from, in: query, required: false, schema: { type: string, format: date-time }, description: From this time (included) }
+ *       - { name: to, in: query, required: false, schema: { type: string, format: date-time }, description: Up to this time (excluded) }
+ *     responses:
+ *       200: { description: "{ truncated, rows: [{ at, caseId, claimNo, tpaCaseNumber, source, type, item, aiFinding, aiConfidence, decision, comment, by, trusted }] }" }
+ *       400: { description: Bad date }
+ */
+router.get('/feedback-report', getFeedbackReport);
 
 module.exports = router;

@@ -361,6 +361,12 @@ Source: Vundick 7.
 Source: demo 2.
 - **Requirement:** a list / CSV export of all corrections and overrides: case, checklist item, AI finding and
   confidence, human decision, comment, user, date. Filter by date and item.
+- **Built 2026-10-16 (F2):** *AI performance* page → *Feedback report* (super admin): one row per correction, *✓ Right*
+  confirmation and override — date, case (link), type, item, what the AI found and how sure, decision (with *trusted*),
+  comment, by. Filter by days (default last 30), type and item; *Download CSV* exports the rows shown (Excel-ready,
+  UTF-8). `GET /api/llm-calls/feedback-report?from&to`, from `ulink_ai_feedback` and the `MANUAL_OVERRIDE` case-history
+  entries (an override's AI finding = the review points it waived; no confidence). Newest 5000 per source. No
+  migration, no AI. Counts per item are F4 (E4-25).
 
 #### E4-15 AI learns from human review — P1 (steps 0–1) / P2 (steps 2–4) / P3 (step 5)
 Source: Vundick 6 — "when a human is in the review loop, the AI learns for future cases".
@@ -665,7 +671,7 @@ sending email, changing data in a shared DB.
 | **E4. Per-item correction** | E4-12 + E4-15 steps 0–1 (migration `ulink_ai_feedback`, trusted mark) | M | Reviewers fix single findings; corrections stored for learning | E3; Q16, Q17 | **E4a committed; E4b done — awaiting review** |
 | **E5. Review workspace** | E4-20 | M–L | Check and decide next to the document page, one screen, Next case | E3, E4 | **E5a committed; E5b done — awaiting review** |
 | **E6. Daily dashboard** | E4-19 | M | One start page for the day's API work | Q20 | **Option B done — awaiting review** (overdue badge, pipeline health); full page parked (Q20) |
-| **F. Learning** | E4-24 timeline, E4-14 feedback report, E4-15 steps 2–4, E4-25 stats | M–L | Fewer repeat mistakes, proven by override rate and test set | Weeks of trusted corrections | **F1 done — awaiting review**; F2–F4 not started |
+| **F. Learning** | E4-24 timeline, E4-14 feedback report, E4-15 steps 2–4, E4-25 stats | M–L | Fewer repeat mistakes, proven by override rate and test set | Weeks of trusted corrections | **F1, F2 done — awaiting review**; F3, F4 not started |
 | **Blocked** | E4-16, E4-17, E4-13, E4-18 | — | — | ULINK (Q6, Q15, Q18, Q19, E4-16 list) | Blocked (ULINK input) |
 
 ### Items per phase
@@ -714,7 +720,7 @@ Ticked when the item is done; the phase status above changes when all are done a
 
 **Phase F — Learning**
 - [x] F1 · E4-24 Single case timeline (`GET /api/cases/:id/timeline`; replaces *Case history* on the case page, filter by kind)
-- [ ] F2 · E4-14 Feedback report
+- [x] F2 · E4-14 Feedback report (*AI performance* page: list + filters + CSV; `GET /api/llm-calls/feedback-report`)
 - [ ] F3 · E4-15 steps 2–4: test set, lookups / provider hints, correction memory (pgvector)
 - [ ] F4 · E4-25 Reviewer and AI-quality stats
 
