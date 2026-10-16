@@ -60,7 +60,17 @@ function buildPayload({ extractedFields, iasMemberInfoResponse, route, diagnosis
   // exists anywhere upstream for the true case, so that direction is an accepted gap.
   const treatmentCountry = claim.treatment_outside_myanmar === false ? 'MYANMAR' : null;
 
-  const items = lines.map(({ subtotal, benefit }) => ({
+  // Vitamins / supplements the AI read on a voucher (SYSTEM_4 E4-10, owner 2026-10-16): one manual-rejection set on its
+  // item — the lines' amounts added up and one remark naming them; sets 2–3 unused. PresentedAmt stays the voucher
+  // amount: IAS takes the rejected amount off. No amount read → no set: JD3 enters it (with the switch
+  // *Vitamins / supplements: a person approves* on, the default, a vitamin claim never goes STP).
+  const manualRejection = (vitamin) => (vitamin?.vitamin_exclude_amount == null ? {} : {
+    scma_oid_man_rej_code_1: 'MAN_REJ_CODE_T180',
+    man_rej_amt_1: vitamin.vitamin_exclude_amount,
+    man_rej_remark_1: vitamin.vitamin_remark,
+  });
+
+  const items = lines.map(({ subtotal, benefit, vitamin }) => ({
     PlanId: planId,
     ClaimType: route?.claimType ?? null,
     // The case's own creation timestamp (when its originating email was ingested), not
@@ -91,6 +101,7 @@ function buildPayload({ extractedFields, iasMemberInfoResponse, route, diagnosis
     PayeeEmail: claimant.email_address ?? null,
     ContactNumber: claimant.phone_number ?? null,
     ReviseClaimReasonCode: '',
+    ...manualRejection(vitamin),
   }));
 
   return {

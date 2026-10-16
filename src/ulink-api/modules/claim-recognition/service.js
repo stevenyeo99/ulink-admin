@@ -270,7 +270,14 @@ function mergeInvoiceItemPair(a, b) {
   return {
     ...(a.evidence || b.evidence ? { evidence: lessSureEvidence(a.evidence, b.evidence) } : {}),
     ...('line_total' in a || 'line_total' in b ? { line_total: a.line_total ?? b.line_total ?? null } : {}),
-    ...(a.vitamin_items || b.vitamin_items ? { vitamin_items: [...new Set([...(a.vitamin_items || []), ...(b.vitamin_items || [])])] } : {}),
+    // One entry per name (both reads may list the same line); a plain name is an older case's reading.
+    ...(a.vitamin_items || b.vitamin_items ? {
+      vitamin_items: [...[...(a.vitamin_items || []), ...(b.vitamin_items || [])].reduce((byName, v) => {
+        const name = typeof v === 'string' ? v : v?.name;
+        if (name && (!byName.has(name) || byName.get(name)?.amount == null)) byName.set(name, v); // keep a read amount
+        return byName;
+      }, new Map()).values()],
+    } : {}),
     ...('vitamin_confidence' in a || 'vitamin_confidence' in b ? { vitamin_confidence: vitaminRead.vitamin_confidence ?? null } : {}),
     subtotal: a.subtotal,
     voucher_type: a.voucher_type,

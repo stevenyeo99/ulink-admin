@@ -214,7 +214,10 @@ A claim goes STP only if **all** hold (console **STP settings**):
 5. switch #1 on → **no open review point** (AI unsure, possible exclusion, …);
 6. *Vitamins / supplements: a person approves* on (default **on**) → **no voucher with vitamins / supplements** (the
    AI reads each voucher; the document check shows a *Vitamins / supplements* line — never a missing-document issue).
-   The AI couldn't tell → only an *AI unsure* point (#1 decides).
+   The AI couldn't tell (or said none but was unsure) → only an *AI unsure* point (#1 decides). Found → per voucher a
+   remark ("Vit C - 10,000 MMK is not covered due to supplement.") and the amount, and that voucher's IAS item gets
+   `scma_oid_man_rej_code_1` = `MAN_REJ_CODE_T180`, `man_rej_amt_1`, `man_rej_remark_1` (no amount read → no set;
+   JD3 enters it). The claimed amount is not changed.
 
 Every block is written as the reason (e.g. "IP is not allowed for STP. (email case rules)"). A rule change applies to
 claims prepared after it. STP → `isValidation=Y, isCSR=Y` in IAS and the settlement report; not STP → JD3.

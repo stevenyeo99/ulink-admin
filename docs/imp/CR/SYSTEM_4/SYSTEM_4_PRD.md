@@ -303,6 +303,14 @@ Source: demo 5.
   couldn't tell) — never an issue, so the documents still pass. Found → review point "Vitamins / supplements" and STP
   reason "Vitamins / supplements on voucher n — a person approves" → JD3. Couldn't tell → "AI unsure" point only
   (switch #1 decides). Whole claim to JD3; rejecting only the vitamin amount waits for E4-17.
+- **Built 2026-10-16 (owner — the reviewer checks the itemised bill; the claimed amount stays the same):** the AI
+  gives each vitamin / supplement line with its own amount (`vitamin_items: [{ name, amount }]`, migration
+  `20261016100000-vitamin-item-amounts`). Per voucher: `vitamin_exclude_amount` (the amounts read, added up) and
+  `vitamin_remark` ("Vit C - 10,000 MMK, Calcium D - 2,500 MMK is not covered due to supplement."), shown on the case,
+  in team emails and in `AiSummaryRemark`. That voucher's IAS item (submit and revise) gets one manual-rejection set:
+  `scma_oid_man_rej_code_1` = `MAN_REJ_CODE_T180`, `man_rej_amt_1`, `man_rej_remark_1` (sets 2–3 unused; field names
+  lowercase, confirmed by the owner). No amount read → no set (JD3 enters it). A "none" the AI was unsure of (at or
+  below the threshold) → *couldn't tell*, so a person checks the bill. Still whole claim to JD3 (switch on).
 - **Depends on:** ULINK vitamin/supplement sample case.
 
 ### Batch 3 — Human-in-the-loop

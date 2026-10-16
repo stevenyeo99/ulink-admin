@@ -3,6 +3,7 @@ const config = require('../../config');
 const { pickDiagnosis } = require('./diagnosisPicker');
 const { pickBenefit } = require('./benefitPicker');
 const { buildPayload } = require('./payloadBuilder');
+const { vitaminRejection } = require('../document-checking/checklist');
 const { stpDecision } = require('./stpEligibility');
 const { toEnglishMedicalText } = require('./medicalTranslation');
 const { aiSummaryRemark } = require('./aiSummaryRemark');
@@ -66,7 +67,8 @@ async function checkCase(caseRecord) {
   if (invoiceItems.length > 0) {
     for (const item of invoiceItems) {
       const benefitPick = await pickBenefit({ ...benefitContext, voucherType: item.voucher_type }, memberPlansRaw);
-      lines.push({ subtotal: item.subtotal, benefit: benefitPick.pick });
+      // Vitamins / supplements on this voucher → man_rej set 1 on its IAS item (SYSTEM_4 E4-10, owner 2026-10-16).
+      lines.push({ subtotal: item.subtotal, benefit: benefitPick.pick, vitamin: vitaminRejection(item) });
       lineMeta.push({ voucherType: item.voucher_type ?? null, subtotal: item.subtotal ?? null, ...benefitPick });
     }
   } else {
