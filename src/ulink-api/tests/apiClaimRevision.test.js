@@ -95,3 +95,14 @@ it('lets a technical failure throw, so the runner retries it next run', async ()
   reviseClaim.mockRejectedValue(new Error('IAS claim revision request timed out after 30000ms'));
   await expect(job.process({ caseRecord, input: inputWith({ isSuspense: 'N', isStp: false }) })).rejects.toThrow(/timed out/);
 });
+
+it("a reviewer's open lines (SYSTEM_4 E4-28): the suspended team email names them, keyed like the request's own email", async () => {
+  reviseClaim.mockResolvedValue({ success: true });
+  const documentCheckResult = { passed: true, issues: [], checklist: [{ code: 'PERSON_REQUEST', passed: false, requests: [{ text: 'Treatment date on the eye test record' }] }] };
+  const result = await job.process({ caseRecord, input: { ...inputWith({ isSuspense: 'Y', isStp: false }), 'api-document-checking': { documentCheckResult } } });
+  expect(result.output.email).toMatchObject({
+    taskType: 'DOCUMENTS_INCOMPLETE',
+    payload: { issues: [], requested: ['Treatment date on the eye test record'] },
+    dedupeKey: 'requested|Treatment date on the eye test record|',
+  });
+});

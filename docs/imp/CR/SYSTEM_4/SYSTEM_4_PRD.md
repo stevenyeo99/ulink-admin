@@ -433,6 +433,10 @@ Source: demo 6.
 - **Now:** nothing.
 - **Open:** Q6. Blocked on ULINK's sample of how they enter a manual rejection, and on whether the IAS API accepts
   these fields.
+- **Built 2026-10-16 for vitamins / supplements (owner gave the fields):** per voucher, the IAS item (submit and
+  revise) gets `scma_oid_man_rej_code_1` = `MAN_REJ_CODE_T180`, `man_rej_amt_1` = `vitamin_exclude_amount`,
+  `man_rej_remark_1` = `vitamin_remark` — see E4-10. Other rejection reasons: not built. Not yet tried against IAS
+  (a validation call on UAT needs the owner's go-ahead).
 
 #### E4-18 Combined Email + API dashboard — P3, S–M
 Source: demo 7.
@@ -605,6 +609,42 @@ Source: owner, 2026-10-14 (context-limit concern: documents differ in format and
   whole-claim call logs `LLM call size`. API 60-page rule kept. LM Studio overflow → *Stop at limit*: documented in
   `OPERATIONS.md`, server change for the owner. Splitting long claims only if the logged sizes show it's needed.
 
+#### E4-28 Reviewer's own checklist lines on a case — P1, M
+Source: owner, 2026-10-16 — "our checklist is predefined; users work free style, e.g. *Need to fill treatment date in
+the eye test record*." Scope (owner): **this case only** — not a new rule for every case.
+- **Now:** a reviewer can only act on the AI's own checklist lines (override, correct, confirm). *Send request* emails
+  only the AI's issues; the reviewer's comment goes to the case history, not to the customer. A reviewer cannot stop a
+  case the AI passed to ask for something new.
+- **Requirement:** an action **Request more information** on the case page and the review workspace:
+  - The reviewer ticks any of the AI's missing items and writes their own lines in free text (one per line,
+    required comment as for every manual action, E4-11).
+  - The lines are stored per case — who asked, when — and shown on the case as *Requested by <person>*, in the
+    timeline, in team emails and in the IAS remark (`AiSummaryRemark`).
+  - The case goes to the waiting-for-documents path of its flow, as if the check had found the items: email
+    `INCOMPLETE` → the customer's missing-documents email lists the AI's items and the reviewer's lines between the
+    approved intro and footer; API `API_INCOMPLETE` → the IAS revision with suspense, and the customer email when
+    `apiSendMissingDocumentsEmail` is on (off: the team email says "contact the customer" with the lines).
+  - **The AI cannot check a free line.** When new documents come (reply, upload, console), the case is checked again
+    as usual; while any reviewer line is open, a passed check stops at the review status *Check the documents
+    against the requested lines* — a person marks each line done (or still missing → request again). No line is
+    ever closed by the AI.
+- **Available at:** the documents review statuses (`DOCUMENTS_REVIEW`, `DOCUMENTS_UNSURE`, `API_DOCUMENTS_REVIEW`,
+  `API_DOCUMENTS_UNSURE`). A case the AI passes surely does not stop for a person; use switch #3 if every claim should.
+- **Not in this item:** making a line a rule for every case (owner chose this case only); counting the lines as "the
+  AI missed something" in the feedback report (later, with a new feedback kind).
+- **Open:** Q23 — free text written by staff inside the approved customer email.
+- **Built 2026-10-16 (G1–G4; owner: API cases never email the lines to the customer):** `ulink_case_requests`
+  (migration `20261016120000-create-case-requests`); `POST /api/cases/:id/request-information` (super admin, lines +
+  comment) from the 4 documents review statuses → `INCOMPLETE` / `API_INCOMPLETE`; the new lines replace the open ones.
+  The lines are a checklist line `PERSON_REQUEST` on the document check result → review point *Requested by a person*
+  on the case page, team emails and the IAS remark. The customer email lists only the AI's own items — for **both**
+  flows until Q23; the team email (*Contact the customer — information requested*) lists the lines. API: a
+  document-check step with outcome `INCOMPLETE`, so the revision is suspended; claim preparation also treats any open
+  line as documents not complete. A passed re-check with open lines stops at `DOCUMENTS_UNSURE` /
+  `API_DOCUMENTS_UNSURE` whatever switch #3 says; *Confirm and continue* (a documents override) marks them done. No
+  new status. Console: *Request more information* on the case page and the review workspace (open lines listed; the
+  form starts from them).
+
 **Not proposed:** bulk approve (risky for claims), mobile layout, per-user custom dashboards.
 
 ## 5. New settings (summary)
@@ -645,6 +685,7 @@ Go-live (production) values: Email off, API on, mailbox off, missing-documents e
 | Q16 | A corrected value (E4-12, e.g. invoice date, amount): update the IAS claim fields, or only the AI remark and our decision? | ULINK |
 | Q17 | Roles: who may correct items, who marks a correction trusted (JD3?), who changes settings? | ULINK |
 | Q18 | Editable email (E4-13): still needed while ULINK emails customers by hand, or only when email cases go live? | ULINK |
+| Q23 | Reviewer's own lines (E4-28): may staff-written lines appear in the customer's missing-documents email, between the approved intro and footer? If not, only the team sees them and staff contact the customer. | ULINK |
 | Q19 | Combined dashboard (E4-18): needed at go-live, or when email cases go live? Any figures beyond status counts (STP rate, waiting time, override rate)? | ULINK |
 | Q20 | Daily API dashboard (E4-19): which figures and lists do CSR / Ops / JD3 need each day? Ageing limit (e.g. 2 working days)? | ULINK |
 | Q21 | Work queue (E4-22): does each reviewer claim cases themselves, or does a supervisor assign them? Claim time-out? | ULINK |
@@ -688,7 +729,8 @@ sending email, changing data in a shared DB.
 | **E5. Review workspace** | E4-20 | M–L | Check and decide next to the document page, one screen, Next case | E3, E4 | **E5a committed; E5b done — awaiting review** |
 | **E6. Daily dashboard** | E4-19 | M | One start page for the day's API work | Q20 | **Option B done — awaiting review** (overdue badge, pipeline health); full page parked (Q20) |
 | **F. Learning** | E4-24 timeline, E4-14 feedback report, E4-15 steps 2–4, E4-25 stats | M–L | Fewer repeat mistakes, proven by override rate and test set | Weeks of trusted corrections | **F1, F2, F3a done — awaiting review**; F4 skipped (owner, 2026-10-16: counts only, F2 CSV covers it) |
-| **Blocked** | E4-16, E4-17, E4-13, E4-18 | — | — | ULINK (Q6, Q15, Q18, Q19, E4-16 list) | Blocked (ULINK input) |
+| **G. Reviewer's own lines** | E4-28 request more information with free-text lines, this case only | M | Staff ask for what the predefined checklist misses; the AI never closes a line it cannot check | Q23 (customer email wording) | **G1–G4 done — awaiting review** (lines to the team only until Q23) |
+| **Blocked** | E4-16, E4-13, E4-18 (E4-17 built for vitamins 2026-10-16) | — | — | ULINK (Q6, Q15, Q18, Q19, E4-16 list) | Blocked (ULINK input) |
 
 ### Items per phase
 
@@ -740,6 +782,12 @@ Ticked when the item is done; the phase status above changes when all are done a
 - [x] F3a · E4-15 step 4 minimal: correction memory — trusted reviewer notes per hospital, no values, no personal fields (`modules/ai-feedback/memory.js`)
 - [ ] F3b · E4-15 steps 2–3 and verdicts: test set, lookups, judgment notes — only if the F2 report shows a need
 - [ ] F4 · E4-25 Reviewer and AI-quality stats — **skipped** (owner, 2026-10-16: does not make the AI learn; the F2 CSV gives the counts)
+
+**Phase G — Reviewer's own checklist lines** (E4-28, owner 2026-10-16: this case only)
+- [x] G1 · API: `ulink_case_requests` (case, text, asked by / at, done by / at) — migration; `POST /api/cases/:id/request-information` (AI items picked + own lines + comment) from the 4 documents review statuses → email `INCOMPLETE` / API `API_INCOMPLETE`, case event; the lines added to the missing-documents email (customer and team) — wording per Q23
+- [x] G2 · Re-check: a passed document check with open lines → `DOCUMENTS_UNSURE` / `API_DOCUMENTS_UNSURE` (no new status, built simpler than planned); the documents confirm there marks the lines done (no per-line endpoint)
+- [x] G3 · Assessment summary: one line *Requested by a person* (open / done) → case page, team emails, IAS remark; timeline entries
+- [x] G4 · Console: *Request more information* (case page + review workspace: tick AI items, own lines, comment); open lines with *Done* on the case; tests, docs, log, tracker
 
 **Recommended go-live:** not before phase B, and with E1 (upload) — without the inbox an incomplete API case has
 no other way to recover (Q10).

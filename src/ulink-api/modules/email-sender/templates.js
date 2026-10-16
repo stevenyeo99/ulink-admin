@@ -209,8 +209,26 @@ ${SIGN_OFF}`,
 // asked; nothing to do unless they don't reply. claimNo only on API cases (email cases have none yet).
 // held (switch "hold the missing-documents email when the AI is unsure"): the AI's unsure points — the
 // customer has NOT been emailed; a person decides: send the request, or override the check.
+// requested (SYSTEM_4 E4-28): a reviewer's own lines — never in the customer's email, so the team contacts the customer.
 function renderDocumentsIncomplete(payload) {
-  const { caseId, claimNo, issues = [], held, contactCustomer } = payload;
+  const { caseId, claimNo, issues = [], held, contactCustomer, requested = [] } = payload;
+  if (requested.length) {
+    const asked = requested.map((line, i) => `${i + 1}. ${line}`).join('\n');
+    const missing = issues.length
+      ? `\n\nThe AI also found these missing (${contactCustomer ? 'the customer has NOT been emailed about them either' : 'the customer has been emailed about these'}):\n${issues.map((issue, i) => `${i + 1}. ${issue}`).join('\n')}`
+      : '';
+    return {
+      subject: `${INTERNAL_SUBJECT_PREFIX}Contact the customer — information requested — ${claimNo ? `Claim ${claimNo}` : `Case ${caseId}`} — ${requested.length} line${requested.length > 1 ? 's' : ''}`,
+      bodyText: `Hi team,
+
+ACTION NEEDED — a reviewer asked for the information below. It is NOT in any email to the customer: please contact the customer about it. When the documents come in, the case stops for a person to check them against these lines.
+
+Requested:
+${asked}${missing}${internalExtras(payload)}
+
+${SIGN_OFF}`,
+    };
+  }
   const ref = claimNo ? `Claim ${claimNo}` : `Case ${caseId}`;
   const list = issues.map((issue, i) => `${i + 1}. ${issue}`).join('\n');
   const intro = held?.length

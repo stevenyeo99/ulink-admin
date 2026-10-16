@@ -289,7 +289,16 @@ export interface GetCaseResponse {
   /** API cases only. Their CaseDetail fields (extractedFields, …) are filled from these by the API. */
   apiSteps?: ApiCaseStep[];
   corrections: CorrectionsInfo;
+  requests: RequestsInfo;
   claim: CaseClaim | null;
+}
+
+// A reviewer's own checklist lines on this case (SYSTEM_4 E4-28, ulink-api modules/case-requests/requests.js).
+export interface RequestsInfo {
+  /** The case is at a documents review status: a request can be made now. */
+  allowed: boolean;
+  /** Lines still open — the AI can't check them; a person confirms them. */
+  open: { id: string; text: string; by: string; at: string }[];
 }
 
 // One entry of a case's single timeline (SYSTEM_4 E4-24, ulink-api modules/case-timeline/timeline.js).

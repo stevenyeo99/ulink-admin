@@ -1,4 +1,4 @@
-const { Case, CaseEvent } = require('../../db/models');
+const { Case, CaseEvent, CaseRequest } = require('../../db/models');
 const logger = require('../../utils/logger');
 
 const BLOCK_NAME = 'dev-reset';
@@ -59,6 +59,10 @@ async function resetOneCase(caseId, to, { source = 'dev tool', comment = null } 
   for (const field of clearedFields) updates[field] = null;
 
   await Case.update(updates, { where: { id: caseId } });
+  // Reprocessed as if fresh: a reviewer's own lines from before (SYSTEM_4 E4-28) no longer hold the document check.
+  if (clearedFields.includes('documentCheckResult')) {
+    await CaseRequest.update({ doneBy: `reset (${source})`, doneAt: new Date() }, { where: { caseId, doneAt: null } });
+  }
   await CaseEvent.create({
     caseId,
     blockName: BLOCK_NAME,

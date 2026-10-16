@@ -2,6 +2,8 @@
 // own (unchanged) checkCase and map its outcome to API statuses. The email checks are mocked —
 // what matters is the input they get and how their answers are mapped.
 
+// A reviewer's own lines (SYSTEM_4 E4-28): none open — no database here.
+jest.mock('../modules/case-requests/requests', () => ({ ...jest.requireActual('../modules/case-requests/requests'), openRequests: jest.fn(async () => []) }));
 jest.mock('../modules/member-verification/service', () => ({ checkCase: jest.fn() }));
 jest.mock('../modules/document-checking/service', () => ({ checkCase: jest.fn() }));
 

@@ -9,11 +9,12 @@ jest.mock('../db/models', () => {
     Case: { findByPk: jest.fn(), update: jest.fn().mockResolvedValue([1]) },
     CaseEvent: { create: jest.fn(async (row) => events.push(row)) },
     ApiCaseStep: { findOne: jest.fn(), create: jest.fn() },
+    CaseRequest: { update: jest.fn() },
   };
 });
 jest.mock('../modules/document-checking/service', () => ({ releaseMissingDocumentsEmail: jest.fn().mockResolvedValue(true) }));
 
-const { events, Case, ApiCaseStep } = require('../db/models');
+const { events, Case, ApiCaseStep, CaseRequest } = require('../db/models');
 const { releaseMissingDocumentsEmail } = require('../modules/document-checking/service');
 const { resetCase, releaseMissingDocuments } = require('../controllers/cases/casesController');
 const { resetOneCase } = require('../controllers/dev/casesController');
@@ -48,6 +49,12 @@ describe('reset', () => {
     Case.findByPk.mockResolvedValue({ id: 'case-1', currentStatus: 'MANUAL_REVIEW', claimNo: null });
     await resetOneCase('case-1', 'READY_FOR_DOCUMENT_READING');
     expect(events[0].message).toMatch(/^Reset via dev tool, cleared: /);
+  });
+
+  it("closes a reviewer's open lines when the document check is cleared (SYSTEM_4 E4-28)", async () => {
+    Case.findByPk.mockResolvedValue({ id: 'case-1', currentStatus: 'DOCUMENTS_UNSURE', claimNo: null });
+    await resetOneCase('case-1', 'READY_FOR_DOCUMENT_READING');
+    expect(CaseRequest.update).toHaveBeenCalledWith({ doneBy: 'reset (dev tool)', doneAt: expect.any(Date) }, { where: { caseId: 'case-1', doneAt: null } });
   });
 });
 

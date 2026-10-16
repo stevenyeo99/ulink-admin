@@ -6,6 +6,7 @@ const { unsureDocumentPoints, unsurePassedPoints } = require('../document-checki
 const { correctionHold } = require('../ai-feedback/corrections');
 const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment-summary/summary');
 const { caseBasics } = require('../assessment-summary/journey');
+const { openRequests, withRequests, requestHold } = require('../case-requests/requests');
 
 // api-document-checking: API case workflow job 5 (docs/imp/day1/api-case-workflow.md section 6.5).
 //
@@ -36,7 +37,11 @@ const OUTCOME_TO_STATUS = {
 
 async function processCase({ caseRecord, input }) {
   const { extractedFields, recognizedType } = input['api-claim-recognition'];
-  const { outcome, result } = await checkCase({ id: caseRecord.id, extractedFields, recognizedType });
+  const checked = await checkCase({ id: caseRecord.id, extractedFields, recognizedType });
+  const { outcome } = checked;
+  // A reviewer's own lines (SYSTEM_4 E4-28) go on the result; open ones hold a pass for a person whatever the switch.
+  const result = withRequests(checked.result, await openRequests(caseRecord.id));
+  const requested = requestHold(result);
   if (!OUTCOME_TO_STATUS[outcome]) throw new Error(`Unexpected document check outcome: ${outcome}`);
 
   // Switch "hold the missing-documents email when the AI is unsure" (settings): the case waits for a
@@ -69,11 +74,13 @@ async function processCase({ caseRecord, input }) {
   // Passed, but the AI was unsure about an item (settings.holdUnsureDocumentPass, SYSTEM_4 E4-09): a person confirms
   // (API_DOCUMENTS_UNSURE) before the IAS revision; confirmed, it continues as documents complete.
   const unsurePassed = result.passed ? unsurePassedPoints(result) : [];
-  if (unsurePassed.length && (await getSettings()).holdUnsureDocumentPass) {
+  if (requested.length || (unsurePassed.length && (await getSettings()).holdUnsureDocumentPass)) {
     return {
       output: { outcome, documentCheckResult: result, checkedAt: new Date().toISOString(), email: null },
       nextStatus: 'API_DOCUMENTS_UNSURE',
-      message: `Documents complete — a person confirms first: the AI was unsure about ${unsurePassed.join('; ')}`,
+      message: requested.length
+        ? `Documents complete — a person checks the requested lines first: ${requested.join('; ')}`
+        : `Documents complete — a person confirms first: the AI was unsure about ${unsurePassed.join('; ')}`,
     };
   }
 
@@ -100,4 +107,4 @@ const job = {
   process: processCase,
 };
 
-module.exports = { run: () => runApiJob(job), job };
+module.exports = { run: () => runApiJob(job), job, emailFor };

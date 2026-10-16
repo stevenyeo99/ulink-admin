@@ -9,6 +9,7 @@ const { overridesFromEvents } = require('../case-override/override');
 const { getSettings } = require('../settings/settings');
 const { unsureDocumentPoints, unsurePassedPoints } = require('./holdForReview');
 const { forCase } = require('../llm-calls/log');
+const { openRequests, withRequests, requestHold, requestedDedupeKey } = require('../case-requests/requests');
 
 const BLOCK_NAME = 'document-checking';
 
@@ -126,18 +127,20 @@ async function queueMissingDocumentsEmail(transaction, caseId, result) {
 // Internal copy (17/09 meeting notes, item 4): the team sees which documents the customer was asked
 // for and why the case went this way, without opening the console. Same dedupe key as the customer
 // email, so the team hears about the same missing list once.
-// held: the AI's unsure points when the customer email is held for review (else null).
-async function queueDocumentsIncompleteEmail(transaction, caseRecord, result, { status = 'INCOMPLETE', held = null } = {}) {
+// held: the AI's unsure points when the customer email is held for review (else null). requested: a reviewer's own
+// lines (SYSTEM_4 E4-28) — the team contacts the customer about them; part of the dedupe key, so a new list is sent.
+async function queueDocumentsIncompleteEmail(transaction, caseRecord, result, { status = 'INCOMPLETE', held = null, requested = null } = {}) {
   const events = await CaseEvent.findAll({ where: { caseId: caseRecord.id, reasonCode: 'MANUAL_OVERRIDE' }, transaction });
   const fields = { ...(caseRecord.toJSON ? caseRecord.toJSON() : caseRecord), currentStatus: status, documentCheckResult: result };
   await queueDedupedTask(transaction, {
     caseId: caseRecord.id,
     taskType: 'DOCUMENTS_INCOMPLETE',
-    dedupeKey: issuesDedupeKey(result.issues),
+    dedupeKey: requested ? requestedDedupeKey(requested, result.issues) : issuesDedupeKey(result.issues),
     payload: {
       caseId: caseRecord.id,
       issues: result.issues,
       held,
+      ...(requested ? { requested } : {}),
       assessment: assessmentSummaryText(buildAssessmentSummary(fields, { overrides: overridesFromEvents(events) })),
     },
   });
@@ -154,7 +157,10 @@ const OUTCOME_TO_STATUS = {
   INCOMPLETE: 'INCOMPLETE',
 };
 
-async function persistOutcome(caseRecord, outcome) {
+async function persistOutcome(caseRecord, rawOutcome) {
+  // A reviewer's own lines (SYSTEM_4 E4-28) go on the result; open ones hold a pass for a person whatever the switch.
+  const outcome = { ...rawOutcome, result: withRequests(rawOutcome.result, await openRequests(caseRecord.id)) };
+  const requested = requestHold(outcome.result);
   // Missing documents the AI wasn't sure about wait for a person before the customer is emailed —
   // only with the switch on (settings.holdUnsureMissingDocsEmail); off, exactly as before.
   // After a person corrected items (SYSTEM_4 E4-12): held for them whatever the switch — they send the request.
@@ -167,7 +173,7 @@ async function persistOutcome(caseRecord, outcome) {
   // Passed, but the AI was unsure about an item: a person confirms before claim preparation — only with the switch on
   // (settings.holdUnsureDocumentPass, SYSTEM_4 E4-09).
   const unsurePassed = outcome.result.passed ? unsurePassedPoints(outcome.result) : [];
-  const confirm = unsurePassed.length > 0 && (await getSettings()).holdUnsureDocumentPass;
+  const confirm = requested.length > 0 || (unsurePassed.length > 0 && (await getSettings()).holdUnsureDocumentPass);
   return sequelize.transaction(async (transaction) => {
     const prevStatus = caseRecord.currentStatus;
     const newStatus = held ? 'DOCUMENTS_REVIEW' : confirm ? 'DOCUMENTS_UNSURE' : OUTCOME_TO_STATUS[outcome.outcome];
@@ -181,7 +187,8 @@ async function persistOutcome(caseRecord, outcome) {
       newStatus,
       reasonCode: outcome.result.passed ? null : 'DOCUMENT_ISSUES_FOUND',
       message: outcome.result.passed
-        ? `All document checks passed${confirm ? ` — a person confirms first: the AI was unsure about ${unsurePassed.join('; ')}` : ''}`
+        ? `All document checks passed${requested.length ? ` — a person checks the requested lines first: ${requested.join('; ')}`
+          : confirm ? ` — a person confirms first: the AI was unsure about ${unsurePassed.join('; ')}` : ''}`
         : `${outcome.result.issues.join('; ')}${held ? ` — customer email held for a person: ${unsure.join('; ')}` : ''}`,
     });
 
@@ -230,4 +237,4 @@ async function releaseMissingDocumentsEmail(caseRecord, operator, comment = null
   });
 }
 
-module.exports = { run, checkCase, persistOutcome, releaseMissingDocumentsEmail, issuesDedupeKey };
+module.exports = { run, checkCase, persistOutcome, releaseMissingDocumentsEmail, issuesDedupeKey, queueMissingDocumentsEmail, queueDocumentsIncompleteEmail };

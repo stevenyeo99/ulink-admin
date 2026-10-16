@@ -2,6 +2,8 @@
 // waits at API_DOCUMENTS_REVIEW (no customer email, no suspended revision yet); overridden, it is revised
 // as complete (2026-09-29).
 
+// A reviewer's own lines (SYSTEM_4 E4-28): none open — no database here.
+jest.mock('../modules/case-requests/requests', () => ({ ...jest.requireActual('../modules/case-requests/requests'), openRequests: jest.fn(async () => []) }));
 jest.mock('../modules/document-checking/service', () => ({ checkCase: jest.fn() }));
 jest.mock('../modules/settings/settings', () => ({ getSettings: jest.fn(), lastReadSettings: () => ({ aiConfidenceThreshold: 0.7 }) }));
 jest.mock('../modules/ias-claim-preparation/service', () => ({ checkCase: jest.fn() }));

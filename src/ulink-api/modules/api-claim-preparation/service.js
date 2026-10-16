@@ -2,6 +2,7 @@ const config = require('../../config');
 const { runApiJob } = require('../api-pipeline/runApiJob');
 const { checkCase } = require('../ias-claim-preparation/service');
 const { barcodeFields } = require('../shared/barcodeFields');
+const { openRequests } = require('../case-requests/requests');
 
 // api-claim-preparation: API case workflow job (docs/imp/day1/api-case-workflow.md section 6.6).
 //
@@ -35,7 +36,9 @@ async function processCase({ caseRecord, input }) {
   const { extractedFields, recognizedType } = input['api-claim-recognition'];
   const documentCheck = input['api-document-checking'];
   // A person overrode a held document check (API_DOCUMENTS_REVIEW → API_DOCUMENTS_VERIFIED): the documents are fine.
-  const documentsComplete = documentCheck.outcome === 'DOCUMENT_CHECKED' || input['case-override']?.from === 'API_DOCUMENTS_REVIEW';
+  // A reviewer's own line still open (SYSTEM_4 E4-28): not complete, whatever an earlier override said.
+  const documentsComplete = (documentCheck.outcome === 'DOCUMENT_CHECKED' || input['case-override']?.from === 'API_DOCUMENTS_REVIEW')
+    && (await openRequests(caseRecord.id)).length === 0;
   const { barcode, ...suppBarcodes } = barcodeFields(input['api-material-download'].documents);
 
   const prepared = await checkCase({

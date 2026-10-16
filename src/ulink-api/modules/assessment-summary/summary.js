@@ -28,6 +28,7 @@ const VERIFIED = {
   CROSS_CHECK: 'Cross-checked',    // AI reading agrees with an independent source (IAS, another page, a sum)
   AI: 'AI self-rated',             // only the model's own confidence — a hint, not proof
   PERSON: 'Corrected by a person', // a reviewer set it (SYSTEM_4 E4-12)
+  ASKED: 'Asked by a person',       // a reviewer's own line; the AI cannot check it (SYSTEM_4 E4-28)
 };
 
 // Why a person should look, who might be wrong, and what to check first.
@@ -38,6 +39,8 @@ const REVIEW = {
   MISSING: { reason: 'Missing information', mightBeWrong: ['Customer', 'AI vision'], check: 'Confirm it is really missing, then ask the customer.' },
   RULE_HOLD: { reason: 'Rule hold', mightBeWrong: [], check: 'Apply the policy rule.' },
   VITAMINS: { reason: 'Vitamins / supplements', mightBeWrong: ['AI vision'], check: 'Check the voucher items; a person approves the claim (no STP).' },
+  // A reviewer's own lines (SYSTEM_4 E4-28): the AI cannot check them.
+  REQUESTED: { reason: 'Requested by a person', mightBeWrong: ['Customer'], check: 'Check the documents against each requested line; confirm when all are there, or request again.' },
 };
 
 const MEMBER_REVIEW = {
@@ -208,6 +211,10 @@ function documentLines(documentCheckResult) {
     if (item.code === 'MISSING_MANDATORY_FIELD') continue;
     if (item.code === 'VITAMIN_OR_SUPPLEMENT') {
       lines.push(vitaminLine(item));
+      continue;
+    }
+    if (item.code === 'PERSON_REQUEST') {
+      lines.push(line({ decision: 'Requested by a person', result: 'Open', status: 'issue', why: item.note, verified: VERIFIED.ASKED, review: REVIEW.REQUESTED }));
       continue;
     }
     if (item.code === 'VALUE_FORMAT') {

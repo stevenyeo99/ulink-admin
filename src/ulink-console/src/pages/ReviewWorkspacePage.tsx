@@ -7,6 +7,7 @@ import { getSession, isSuperAdmin } from '../lib/session';
 import { Button } from '../components/common/Button';
 import { CaseStatusPill } from '../components/cases/CaseStatusPill';
 import { CaseClaimBar } from '../components/cases/CaseClaimBar';
+import { RequestInformationPanel } from '../components/cases/RequestInformationPanel';
 import { CaseCorrectionPanel } from '../components/cases/CaseCorrectionPanel';
 import { useConfidenceThreshold } from '../hooks/useConfidenceThreshold';
 import { DocumentViewer } from '../components/review/DocumentViewer';
@@ -68,7 +69,7 @@ export function ReviewWorkspacePage() {
   if (isLoading) return <div className="p-6 text-sm text-slate-400">Loading…</div>;
   if (isError || !data || !id) return <div className="p-6 text-sm text-red-600">Couldn't load this case.</div>;
 
-  const { case: caseRecord, assessmentSummary, corrections, claim } = data;
+  const { case: caseRecord, assessmentSummary, corrections, requests, claim } = data;
   const checklist = caseRecord.documentCheckResult?.checklist ?? [];
   const fields = (caseRecord.extractedFields ?? {}) as { claimant?: { claimant_name?: string | null }; claim?: { total_claim_amount?: number | null } };
   const unsureCount = assessmentSummary.reviewPoints.filter((p) => !p.overridden).length;
@@ -163,6 +164,7 @@ export function ReviewWorkspacePage() {
           <div ref={correctionRef}>
             <CaseCorrectionPanel key={`${id}-${correcting ?? ''}-${correctCount}`} caseId={id} corrections={corrections} initialItem={correcting ?? ''} />
           </div>
+          {isSuperAdmin() && <RequestInformationPanel key={`${id}-${requests.open.map((r) => r.id).join()}`} caseId={id} requests={requests} />}
         </section>
       </div>
     </div>

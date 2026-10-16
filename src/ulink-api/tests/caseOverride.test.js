@@ -3,6 +3,7 @@
 // Models are mocked.
 
 jest.mock('../db/models', () => ({
+  CaseRequest: { findAll: jest.fn(async () => []), update: jest.fn() }, // reviewer's own lines (SYSTEM_4 E4-28): none
   CaseClaim: { findByPk: jest.fn(async () => null), findAll: jest.fn(async () => []), destroy: jest.fn() },
   sequelize: { transaction: jest.fn(async (fn) => fn('tx')) },
   Case: { findByPk: jest.fn(), update: jest.fn(async () => [1]) },
@@ -11,7 +12,7 @@ jest.mock('../db/models', () => ({
   CaseDocument: {}, EmailThread: {}, EmailMessage: {}, EmailAttachment: {},
 }));
 
-const { Case, CaseEvent, ApiCaseStep } = require('../db/models');
+const { Case, CaseEvent, ApiCaseStep, CaseRequest } = require('../db/models');
 const { overrideCheck, overridesFromEvents } = require('../modules/case-override/override');
 const { overrideCase } = require('../controllers/cases/casesController');
 
@@ -63,6 +64,16 @@ describe('POST /api/cases/:id/override', () => {
     expect(message).toContain('Overridden by Ulink (ulink) — The AI misread the documents: Record is legible on page 3.');
     expect(message).toContain('waived: Medical record readable: Unreadable');
     expect(ApiCaseStep.create).not.toHaveBeenCalled();
+  });
+
+  it("a documents override marks the reviewer's own open lines done; a member override leaves them (SYSTEM_4 E4-28)", async () => {
+    await call({ reason: 'Record is legible on page 3.', finding: 'AI_MISREAD' }, emailCase);
+    expect(CaseRequest.update).toHaveBeenCalledWith(
+      { doneBy: 'Ulink (ulink)', doneAt: expect.any(Date) }, { where: { caseId: 'c1', doneAt: null }, transaction: 'tx' },
+    );
+    CaseRequest.update.mockClear();
+    await call({ reason: 'Customer confirmed.', finding: 'CUSTOMER_CONFIRMED' }, { ...emailCase, currentStatus: 'MEMBER_REVIEW_REQUIRED', memberVerifyResult: {} });
+    expect(CaseRequest.update).not.toHaveBeenCalled();
   });
 
   it('moves an API member-check case on and adds the override to its job history', async () => {

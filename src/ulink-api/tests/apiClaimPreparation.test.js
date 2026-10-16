@@ -2,6 +2,8 @@
 // preparation, then turns its payload into the IAS claim revision body: claimNo, IAS's
 // TpaCaseNumber, barcode + suppBarcode1-5, and the API flags (isValidation / isCSR / isSuspense).
 
+// A reviewer's own lines (SYSTEM_4 E4-28): none open — no database here.
+jest.mock('../modules/case-requests/requests', () => ({ ...jest.requireActual('../modules/case-requests/requests'), openRequests: jest.fn(async () => []) }));
 jest.mock('../modules/ias-claim-preparation/service', () => ({ checkCase: jest.fn() }));
 
 const { checkCase } = require('../modules/ias-claim-preparation/service');
@@ -140,4 +142,12 @@ it('matches the IAS claim revision body, plus only the API fields', () => {
   expect(Object.keys(sample).filter((k) => !(k in payload))).toEqual([]);
   expect(extras).toEqual(['isSuspense', 'suppBarcode1', 'suppBarcode2', 'suppBarcode3', 'suppBarcode4', 'suppBarcode5']);
   expect(Object.keys(payload.Items[0]).sort()).toEqual(Object.keys(sample.Items[0]).sort());
+});
+
+it("a reviewer's own line still open: the revision is suspended, even after an earlier override (SYSTEM_4 E4-28)", async () => {
+  const { openRequests } = require('../modules/case-requests/requests');
+  openRequests.mockResolvedValueOnce([{ id: 'r1', text: 'Need to fill treatment date in the eye test record' }]);
+  checkCase.mockResolvedValue(prepared(false));
+  const result = await job.process({ caseRecord, input: { ...inputWith(passed), 'case-override': { from: 'API_DOCUMENTS_REVIEW' } } });
+  expect(result.output.payload.isSuspense).toBe('Y');
 });

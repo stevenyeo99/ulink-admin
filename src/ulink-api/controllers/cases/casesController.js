@@ -1,7 +1,7 @@
 const { Op, fn, col, cast, where: sqlWhere, literal } = require('sequelize');
 const { sequelize, Case, CaseEvent, CaseDocument, ApiCaseStep, EmailThread, EmailMessage, EmailAttachment, LlmCall, AiFeedback } = require('../../db/models');
 const { buildTimeline } = require('../../modules/case-timeline/timeline');
-const { OVERRIDE_TARGETS, OVERRIDE_FINDINGS, findingsFor, overrideCheck, overridesFromEvents } = require('../../modules/case-override/override');
+const { OVERRIDE_TARGETS, OVERRIDE_AREAS, OVERRIDE_FINDINGS, findingsFor, overrideCheck, overridesFromEvents } = require('../../modules/case-override/override');
 const { todayInIasTimezone } = require('../../modules/shared/iasDates');
 const { apiCaseView } = require('../../modules/api-pipeline/caseView');
 const { buildAssessmentSummary } = require('../../modules/assessment-summary/summary');
@@ -21,7 +21,8 @@ const { correctionsInfo } = require('./correctionsController');
 const { claimView, activeClaims, endClaim } = require('../../modules/case-claim/claim');
 const { workingDaysSince } = require('../../modules/shared/workingDays');
 const { lastReadSettings } = require('../../modules/settings/settings');
-const { CaseClaim } = require('../../db/models');
+const { CaseClaim, CaseRequest } = require('../../db/models');
+const { requestsInfo } = require('../../modules/case-requests/requests');
 
 const BLOCK_NAME = 'case-review';
 
@@ -384,7 +385,7 @@ async function getCase(req, res) {
   // claim: who is reviewing the case right now, or null (SYSTEM_4 E4-22).
   const claim = claimView(await CaseClaim.findByPk(caseRecord.id));
   if (caseRecord.source !== 'API') {
-    return res.json({ case: caseRecord, events, documents, ...reviewInfo(caseRecord), corrections: await correctionsInfo(caseRecord, caseRecord), claim });
+    return res.json({ case: caseRecord, events, documents, ...reviewInfo(caseRecord), corrections: await correctionsInfo(caseRecord, caseRecord), requests: await requestsInfo(caseRecord), claim });
   }
 
   // API cases: their job data lives in ulink_api_case_steps. Fill the same case fields the page
@@ -392,7 +393,7 @@ async function getCase(req, res) {
   // page's Job Steps section. Email cases take the branch above, unchanged.
   const apiSteps = await ApiCaseStep.findAll({ where: { caseId: caseRecord.id }, order: [['createdAt', 'ASC']] });
   const fields = { ...caseRecord.toJSON(), ...apiCaseView(apiSteps) };
-  res.json({ case: fields, events, documents, apiSteps, ...reviewInfo(fields), corrections: await correctionsInfo(caseRecord, fields), claim });
+  res.json({ case: fields, events, documents, apiSteps, ...reviewInfo(fields), corrections: await correctionsInfo(caseRecord, fields), requests: await requestsInfo(caseRecord), claim });
 }
 
 /**
@@ -537,6 +538,10 @@ async function overrideCase(req, res) {
       { where: { id: caseRecord.id, currentStatus: prevStatus }, transaction }
     );
     if (count !== 1) return false;
+    // A person confirmed the documents: their own requested lines are done too (SYSTEM_4 E4-28).
+    if (OVERRIDE_AREAS[prevStatus] === 'documents') {
+      await CaseRequest.update({ doneBy: operator, doneAt: now }, { where: { caseId: caseRecord.id, doneAt: null }, transaction });
+    }
     await CaseEvent.create({
       caseId: caseRecord.id,
       blockName: BLOCK_NAME,
@@ -671,4 +676,4 @@ async function uploadCaseDocuments(req, res) {
   }
 }
 
-module.exports = { getCaseStatuses, getOverview, getReviewQueue, getNextCase, getApprovals, listCases, getCase, getTimeline, getLlmCalls, getAttachment, getDocument, overrideCase, resetCase, releaseMissingDocuments, uploadCaseDocuments, OVERRIDE_TARGETS, REVIEWABLE_STATUSES };
+module.exports = { requiredComment, getCaseStatuses, getOverview, getReviewQueue, getNextCase, getApprovals, listCases, getCase, getTimeline, getLlmCalls, getAttachment, getDocument, overrideCase, resetCase, releaseMissingDocuments, uploadCaseDocuments, OVERRIDE_TARGETS, REVIEWABLE_STATUSES };

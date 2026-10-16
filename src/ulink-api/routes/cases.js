@@ -3,6 +3,7 @@ const { requireRole } = require('../modules/auth/auth');
 const { getCaseStatuses, getOverview, getReviewQueue, getNextCase, getApprovals, listCases, getCase, getTimeline, getLlmCalls, getAttachment, getDocument, overrideCase, resetCase, releaseMissingDocuments, uploadCaseDocuments } = require('../controllers/cases/casesController');
 const { createCorrection, createConfirmation, trustCorrection } = require('../controllers/cases/correctionsController');
 const { claim, release } = require('../controllers/cases/claimController');
+const { requestInformation } = require('../controllers/cases/requestsController');
 const { requireNotHeldByOther } = require('../modules/case-claim/claim');
 
 const router = express.Router();
@@ -352,7 +353,7 @@ router.post('/:id/corrections', requireRole('super_admin'), requireNotHeldByOthe
  * /api/cases/{id}/confirmations:
  *   post:
  *     tags: [cases]
- *     summary: "✓ Right" — the AI's value or verdict was checked and is right (SYSTEM_4 E4-20)
+ *     summary: "✓ Right: the AI's value or verdict was checked and is right (SYSTEM_4 E4-20)"
  *     description: >
  *       Learning data only (ulink_ai_feedback kind confirm: value, AI confidence, page, who); the case does not change.
  *       Once per person per item and value. Super admin; refused (409) while someone else is reviewing the case.
@@ -449,6 +450,36 @@ router.post('/:id/reset', requireRole('super_admin'), requireNotHeldByOther, res
  *       409: { description: The case changed meanwhile }
  */
 router.post('/:id/release-missing-documents', requireRole('super_admin'), requireNotHeldByOther, releaseMissingDocuments);
+
+/**
+ * @openapi
+ * /api/cases/{id}/request-information:
+ *   post:
+ *     tags: [cases]
+ *     summary: A reviewer's own checklist lines on this case — ask for what the predefined checklist misses (SYSTEM_4 E4-28)
+ *     description: >
+ *       Super admin. From DOCUMENTS_REVIEW / DOCUMENTS_UNSURE (→ INCOMPLETE) and API_DOCUMENTS_REVIEW /
+ *       API_DOCUMENTS_UNSURE (→ API_INCOMPLETE, IAS revision with suspense). The lines replace the open ones; the team is
+ *       emailed to contact the customer about them (never in the customer's email). While a line is open, a passed
+ *       document check stops for a person; confirming there marks the lines done.
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [lines, comment]
+ *             properties:
+ *               lines: { type: array, minItems: 1, maxItems: 10, items: { type: string, maxLength: 300 } }
+ *               comment: { type: string, minLength: 3, description: Why this is needed }
+ *     responses:
+ *       200: { description: Lines stored, case moved to its waiting-for-documents status }
+ *       400: { description: No lines, too many / too long, no comment, or not at a documents review status }
+ *       409: { description: The case changed meanwhile, or has no document check }
+ */
+router.post('/:id/request-information', requireRole('super_admin'), requireNotHeldByOther, requestInformation);
 
 /**
  * @openapi

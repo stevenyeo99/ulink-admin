@@ -3,6 +3,7 @@
 // (DOCUMENTS_UNSURE / API_DOCUMENTS_UNSURE) until a person confirms; off, it continues exactly as before.
 
 jest.mock('../db/models', () => ({
+  CaseRequest: { findAll: jest.fn(async () => []), update: jest.fn() }, // reviewer's own lines (SYSTEM_4 E4-28): none
   sequelize: { transaction: (fn) => fn('tx') },
   Case: { update: jest.fn().mockResolvedValue([1]) },
   CaseEvent: { create: jest.fn(), findAll: jest.fn().mockResolvedValue([]) },

@@ -23,6 +23,7 @@ Size: S ≤ ½ day · M ≈ 1–2 days · L > 2 days.
 
 | ID | Item | Why | Size |
 |---|---|---|---|
+| E1b | **Bug:** API claim preparation counts documents complete when the *latest* override came from `API_DOCUMENTS_REVIEW`, even if a later re-check failed — the revision then goes with `isSuspense=N` for incomplete documents (`api-claim-preparation/service.js`, `input['case-override']`). Fix: only an override newer than the last document check counts. Found in the E4-28 code review, 2026-10-16 | Wrong IAS suspense on a rare path (override, then new documents that fail) | S |
 | E1 | Override for **API** documents incomplete (not held): revision with `isSuspense=N` + reason | AI wrongly suspends an API claim; today only a reply or IAS fixes it | M |
 | E2 | "Re-check this case" — re-run claim preparation after an STP rule change, without a full reset | Rule changes only reach new cases today | S |
 | E3 | Barcode lookup: follow `hasMore` pages | A case with many uploads could miss a barcode | S |

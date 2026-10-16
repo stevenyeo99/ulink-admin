@@ -2,6 +2,7 @@
 // email cases get exactly the response they always had. Models are mocked.
 
 jest.mock('../db/models', () => ({
+  CaseRequest: { findAll: jest.fn(async () => []), update: jest.fn() }, // reviewer's own lines (SYSTEM_4 E4-28): none
   CaseClaim: { findByPk: jest.fn(async () => null), findAll: jest.fn(async () => []), destroy: jest.fn() },
   Case: { findByPk: jest.fn() },
   CaseEvent: { findAll: jest.fn(async () => [{ id: 'ev-1' }]) },
@@ -63,7 +64,7 @@ describe('getCase', () => {
 
     const body = await call();
 
-    expect(Object.keys(body)).toEqual(['case', 'events', 'documents', 'assessmentSummary', 'nextAction', 'override', 'corrections', 'claim']);
+    expect(Object.keys(body)).toEqual(['case', 'events', 'documents', 'assessmentSummary', 'nextAction', 'override', 'corrections', 'requests', 'claim']);
     expect(body.override).toMatchObject({ allowed: true, target: 'MEMBER_VERIFIED' });
     expect(body.nextAction).toMatchObject({ who: 'Customer', act: false }); // SYSTEM_4 E4-21: "Next" on the case page
     expect(body.case).toBe(emailCase); // the model instance itself, untouched

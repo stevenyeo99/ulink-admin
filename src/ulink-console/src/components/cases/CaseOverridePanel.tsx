@@ -61,7 +61,7 @@ export function CaseOverridePanel({
       <h2 className="text-sm font-semibold text-slate-800">{action}</h2>
       <p className="mb-4 mt-1 text-sm text-slate-600">
         {isUnsurePass
-          ? "The documents passed, but the AI wasn't sure about the review points on this page. Check them against the documents; if they're right, confirm and the case continues."
+          ? "The documents passed, but the AI wasn't sure about the review points on this page, or a person asked for something the AI can't check. Check them against the documents; if they're right, confirm and the case continues. Confirming also marks the requested lines done."
           : `If the AI flagged the ${checkName} wrongly, you can let the case continue as if it had passed.`}{' '}
         Your name, your choice below and your reason are kept in the case history.
       </p>

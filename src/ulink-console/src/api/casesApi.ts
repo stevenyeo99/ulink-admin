@@ -102,6 +102,11 @@ export function releaseMissingDocuments(id: string, comment: string): Promise<{ 
   return request(`/api/cases/${id}/release-missing-documents`, { method: 'POST', body: JSON.stringify({ comment }) });
 }
 
+// A reviewer's own lines for this case (SYSTEM_4 E4-28): they replace the open ones; the team contacts the customer.
+export function requestInformation(id: string, lines: string[], comment: string): Promise<{ caseId: string; currentStatus: string }> {
+  return request(`/api/cases/${id}/request-information`, { method: 'POST', body: JSON.stringify({ lines, comment }) });
+}
+
 // casesController.js::resetCase. Fails with 409 if the case already has a real IAS claimNo.
 // comment: why — required, kept in the case history (SYSTEM_4 E4-11).
 export function resetCase(id: string, comment: string): Promise<ResetCaseResponse> {

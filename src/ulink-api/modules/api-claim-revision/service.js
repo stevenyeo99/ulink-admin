@@ -2,6 +2,7 @@ const config = require('../../config');
 const { runApiJob } = require('../api-pipeline/runApiJob');
 const { reviseClaim } = require('./iasClient');
 const { assessmentFor } = require('../api-pipeline/assessment');
+const { requestedLines, requestedDedupeKey } = require('../case-requests/requests');
 
 // api-claim-revision: API case workflow job (docs/imp/day1/api-case-workflow.md section 6.7).
 //
@@ -52,7 +53,11 @@ async function processCase({ caseRecord, input }) {
   const assessment = assessmentFor(input, caseRecord, { currentStatus: nextStatus, iasClaimResult: response });
   // Missing documents: the customer was already asked (api-document-checking); the team is told too,
   // with why the case went this way (17/09 meeting notes, item 4) — same email as the email flow's.
-  const missing = input['api-document-checking']?.documentCheckResult?.issues || [];
+  const documentCheckResult = input['api-document-checking']?.documentCheckResult;
+  const missing = documentCheckResult?.issues || [];
+  // A reviewer's open lines (SYSTEM_4 E4-28): the team email names them; same key as the request's own team email,
+  // so right after a request this one is not sent again.
+  const requested = requestedLines(documentCheckResult);
   return {
     output: {
       response,
@@ -63,7 +68,9 @@ async function processCase({ caseRecord, input }) {
       // Same as the email flow: a non-STP claim that's through is handed to JD3 for approval, with the
       // AI assessment (17/09 meeting, action 10) — kept in this output as the case's audit snapshot.
       email: suspended
-        ? { taskType: 'DOCUMENTS_INCOMPLETE', audience: 'internal', payload: { caseId: caseRecord.id, claimNo, issues: missing, assessment }, dedupeKey: [...missing].sort().join('|') }
+        ? requested.length
+          ? { taskType: 'DOCUMENTS_INCOMPLETE', audience: 'internal', payload: { caseId: caseRecord.id, claimNo, issues: missing, requested, assessment }, dedupeKey: requestedDedupeKey(requested, missing) }
+          : { taskType: 'DOCUMENTS_INCOMPLETE', audience: 'internal', payload: { caseId: caseRecord.id, claimNo, issues: missing, assessment }, dedupeKey: [...missing].sort().join('|') }
         : !prepared.isStp
           ? { taskType: 'CLAIM_APPROVAL_REVIEW', audience: 'internal', payload: { caseId: caseRecord.id, claimNo, assessment }, dedupeKey: null }
           : null,
