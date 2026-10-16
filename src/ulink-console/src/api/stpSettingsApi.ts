@@ -25,6 +25,8 @@ export interface Switches {
   holdUnsureDocumentPass: boolean;
   // A voucher with vitamins / supplements: a person approves, never STP (SYSTEM_4 E4-10). On by default.
   vitaminsBlockStp: boolean;
+  // Reviewer notes from past claims of the same hospital given to the AI — lessons, never values (SYSTEM_4 F3). On by default.
+  usePastCorrections: boolean;
   // Which cases the system works on (SYSTEM_4 E4-01); a source switched off has no pipeline runs and no tab.
   emailCasesEnabled: boolean;
   apiCasesEnabled: boolean;

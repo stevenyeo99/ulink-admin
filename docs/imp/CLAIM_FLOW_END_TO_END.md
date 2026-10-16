@@ -67,7 +67,7 @@ ias-claim-preparation → ias-claim-creation → *email: JD3 / IAS rejection* �
 | | |
 |---|---|
 | **Reads** | `READY_FOR_DOCUMENT_READING` |
-| **Does** | The AI reads every page (vision), decides which claim type it is (today one route: AYAS member claim, `ayas_member_claim`) and extracts every field (claimant, policy, claim, medical, invoices, bank). |
+| **Does** | The AI reads every page (vision), decides which claim type it is (today one route: AYAS member claim, `ayas_member_claim`) and extracts every field (claimant, policy, claim, medical, invoices, bank). Before extracting, it is given up to 5 trusted reviewer notes from past claims of the same hospital (what was misread and why — no past values, no personal fields; switch *The AI learns from trusted corrections*); the case keeps which ones (`extractedFields.learnedFrom`). |
 | **Decided by** | **AI** (with a confidence threshold) |
 | **Status** | `RECOGNIZED` *Read by AI* · `MANUAL_REVIEW` *Needs manual reading* (type matched but AI not confident, the result didn't fit the form, or the documents are too long for the AI) · `NOT_RECOGNIZED` *Not a claim we handle* |
 | **Too long** | The whole claim's text goes to the AI in one call (claim type, then fields). Before each, its size is estimated against the model's context (`LLM_CONTEXT_TOKENS` minus `LLM_OUTPUT_RESERVE_TOKENS`); too big → *Needs manual reading*, "Documents too long for the AI: about N tokens, limit M" (`DOCUMENTS_TOO_LONG`) — never a call with pages cut off. Same for API cases (`API_MANUAL_REVIEW`). |
@@ -335,6 +335,7 @@ Team emails go to `INTERNAL_REVIEW_EMAIL` (+ the route's CC), start with "(ULINK
 | Switch #1 / #2 / #3 | Console → STP settings | Off | Human checks when the AI is unsure (4.5) |
 | Vitamins / supplements: a person approves | Console → STP settings | On | A voucher with them → no STP, JD3 approves (4.4) |
 | Overdue after (working days) | Console → STP settings | 2 | A review-queue case a person must act on, waiting longer (Mon–Fri since it entered its status), is marked red *Overdue* (ULINK to set — Q20) |
+| The AI learns from trusted corrections | Console → STP settings | On | Recognition gets up to 5 trusted reviewer notes from past claims of the same hospital — lessons only, never past values (2.2) |
 | Voucher dated before or after the visit by more than (days) | Console → STP settings | 30 | *Values read look valid* marks that voucher date unsure (most likely misread) — an *AI unsure* point; the invoice-date check and switch #2 decide, as before, whether the customer is asked |
 | Pipeline alert after (minutes) — email / API | Console → STP settings | 30 / 90 | The Overview turns red when that pipeline has had no run (or a run hasn't finished) for longer — raise for a business-hours schedule |
 | AI confidence threshold | Console → STP settings | 70% | At or below: the AI counts as unsure (4.5) |

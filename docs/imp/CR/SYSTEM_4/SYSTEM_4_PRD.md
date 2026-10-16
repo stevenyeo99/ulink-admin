@@ -403,6 +403,14 @@ correction would otherwise teach the mistake.
 | 5a. Multimodal retrieval | Similar past page images (handwriting, layouts) retrieved as examples | Only if the test set shows text retrieval does not fix reading errors | Image embedding model in LM Studio + pgvector; applies to the reading step only; reading is one page per call because several images in one call caused multi-minute hangs, so example images bring that risk back |
 | 5b. Fine-tuning | Retrain the local model on trusted corrections | Only if the test set shows steps 3–4 no longer help, and there are hundreds of trusted examples | LoRA / QLoRA (Unsloth, Hugging Face PEFT/TRL or Axolotl) on a GPU machine → GGUF → loaded in LM Studio as a new model version, re-tested on the test set |
 
+- **Built 2026-10-16 (F3a, step 4 minimal — owner: "learn from past mistakes, never reuse a past value"):** before field
+  mapping (`extract-fields`, email and API), up to 5 trusted value corrections (misread / wrong field) from past claims of
+  the same hospital — a name that case's hospital had, as read or as corrected, appears in this claim's pages — are added
+  as reviewer notes: field, kind of mistake, reason with every number / date replaced by "…". No past value and no
+  personal field (name, NRC, birth date, policy, bank) reaches the prompt. The case keeps `extractedFields.learnedFrom`
+  (shown under *What the AI read*). Switch *The AI learns from trusted corrections* (`usePastCorrections`, on). No
+  embeddings, no migration. Not built: verdict judgments, lookups (step 3), test set (step 2) — add when the F2 report
+  shows a need. Effect needs trusted corrections; an AI run to compare on/off waits for the owner's go-ahead.
 - **This release:** steps 0–2. **Phase 2:** steps 3–4. **Phase 3 (if needed, test set decides):** step 5a / 5b.
 - **Success measure (agree with ULINK):** the override rate per checklist item falls over time, while low-confidence
   findings still go to a person.
@@ -671,7 +679,7 @@ sending email, changing data in a shared DB.
 | **E4. Per-item correction** | E4-12 + E4-15 steps 0–1 (migration `ulink_ai_feedback`, trusted mark) | M | Reviewers fix single findings; corrections stored for learning | E3; Q16, Q17 | **E4a committed; E4b done — awaiting review** |
 | **E5. Review workspace** | E4-20 | M–L | Check and decide next to the document page, one screen, Next case | E3, E4 | **E5a committed; E5b done — awaiting review** |
 | **E6. Daily dashboard** | E4-19 | M | One start page for the day's API work | Q20 | **Option B done — awaiting review** (overdue badge, pipeline health); full page parked (Q20) |
-| **F. Learning** | E4-24 timeline, E4-14 feedback report, E4-15 steps 2–4, E4-25 stats | M–L | Fewer repeat mistakes, proven by override rate and test set | Weeks of trusted corrections | **F1, F2 done — awaiting review**; F3, F4 not started |
+| **F. Learning** | E4-24 timeline, E4-14 feedback report, E4-15 steps 2–4, E4-25 stats | M–L | Fewer repeat mistakes, proven by override rate and test set | Weeks of trusted corrections | **F1, F2, F3a done — awaiting review**; F4 skipped (owner, 2026-10-16: counts only, F2 CSV covers it) |
 | **Blocked** | E4-16, E4-17, E4-13, E4-18 | — | — | ULINK (Q6, Q15, Q18, Q19, E4-16 list) | Blocked (ULINK input) |
 
 ### Items per phase
@@ -721,8 +729,9 @@ Ticked when the item is done; the phase status above changes when all are done a
 **Phase F — Learning**
 - [x] F1 · E4-24 Single case timeline (`GET /api/cases/:id/timeline`; replaces *Case history* on the case page, filter by kind)
 - [x] F2 · E4-14 Feedback report (*AI performance* page: list + filters + CSV; `GET /api/llm-calls/feedback-report`)
-- [ ] F3 · E4-15 steps 2–4: test set, lookups / provider hints, correction memory (pgvector)
-- [ ] F4 · E4-25 Reviewer and AI-quality stats
+- [x] F3a · E4-15 step 4 minimal: correction memory — trusted reviewer notes per hospital, no values, no personal fields (`modules/ai-feedback/memory.js`)
+- [ ] F3b · E4-15 steps 2–3 and verdicts: test set, lookups, judgment notes — only if the F2 report shows a need
+- [ ] F4 · E4-25 Reviewer and AI-quality stats — **skipped** (owner, 2026-10-16: does not make the AI learn; the F2 CSV gives the counts)
 
 **Recommended go-live:** not before phase B, and with E1 (upload) — without the inbox an incomplete API case has
 no other way to recover (Q10).

@@ -11,6 +11,8 @@ const logger = require('../../utils/logger');
 // the email jobs that call the AI); the AI client reads it, so the code calling the AI doesn't pass it along.
 const context = new AsyncLocalStorage();
 const forCase = (caseId, job, fn) => context.run({ caseId, job }, fn);
+// The case the running job works on, or null (outside a job).
+const currentCaseId = () => context.getStore()?.caseId ?? null;
 
 // Prompt name and version from the prompt text itself: every prompt is a modules/*/prompts/*.md file, sent as written.
 // Version = the start of the text's SHA-256, so an edited prompt is a new version with nothing to remember.
@@ -71,4 +73,4 @@ function recordCall({ callType, prompt, model = null, status, durationMs = null,
 // The prompts on this server now: [{ promptName, promptVersion }] — so a prompt with no calls yet still shows.
 const currentPrompts = () => [...PROMPTS].map(([promptVersion, promptName]) => ({ promptName, promptVersion }));
 
-module.exports = { forCase, recordCall, promptOf, currentPrompts };
+module.exports = { forCase, currentCaseId, recordCall, promptOf, currentPrompts };

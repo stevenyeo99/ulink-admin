@@ -11,6 +11,7 @@ const { extractLinkedDocumentUrls, fetchLinkedDocument } = require('./linkedDocu
 const { queueDedupedTask } = require('../shared/emailTaskQueue');
 const { gatherAttachments } = require('../shared/gatherAttachments');
 const { forCase } = require('../llm-calls/log');
+const { pastCorrectionNotes } = require('../ai-feedback/memory');
 
 const BLOCK_NAME = 'claim-recognition';
 const ajv = new Ajv({ allErrors: true });
@@ -616,7 +617,9 @@ async function decideRoute(transcriptChunks, emailContext, routes) {
  */
 async function extractFields(transcriptChunks, matchedRoute) {
   const responseSchema = matchedRoute.extractionSchema;
-  const userText = ['Page transcripts:', transcriptChunks.join('\n\n')].join('\n');
+  // Reviewer notes from past claims of the same hospital — lessons only, no values (SYSTEM_4 F3, ai-feedback/memory.js).
+  const { block: notes, learnedFrom } = await pastCorrectionNotes(transcriptChunks);
+  const userText = ['Page transcripts:', transcriptChunks.join('\n\n'), ...(notes ? ['', notes] : [])].join('\n');
 
   const parsed = dropOutOfRangeEvidence(
     await synthesizeJson({
@@ -638,7 +641,7 @@ async function extractFields(transcriptChunks, matchedRoute) {
   const extractedFields = withFallback.medical_record?.date !== normalizedFields.medical_record?.date
     ? replaceEvidence(withFallback, 'medical_record.date', null)
     : withFallback;
-  return { extractedFields, schemaValidationError: null };
+  return { extractedFields: learnedFrom.length ? { ...extractedFields, learnedFrom } : extractedFields, schemaValidationError: null };
 }
 
 /**

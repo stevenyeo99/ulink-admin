@@ -134,6 +134,7 @@ export function CaseDetailPage() {
       {fieldsRead?.length ? (
         <Section title="What the AI read">
           <FieldsReadTable fields={fieldsRead} />
+          <LearnedFrom fields={caseRecord.extractedFields} />
         </Section>
       ) : null}
 
@@ -253,5 +254,16 @@ export function CaseDetailPage() {
         </div>
       )}
     </div>
+  );
+}
+
+// Which trusted reviewer notes from past claims the AI was given when it read this case (SYSTEM_4 F3).
+function LearnedFrom({ fields }: { fields: unknown }) {
+  const notes = (fields as { learnedFrom?: { id: string; label: string }[] } | null)?.learnedFrom;
+  if (!notes?.length) return null;
+  return (
+    <p className="mt-2 text-xs text-slate-500">
+      The AI used {notes.length} trusted reviewer note{notes.length > 1 ? 's' : ''} from past claims of this hospital: {[...new Set(notes.map((n) => n.label))].join(', ')}.
+    </p>
   );
 }

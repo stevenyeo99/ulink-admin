@@ -93,7 +93,7 @@ switch is the quick way to stop one environment reading a mailbox it shares with
 
 - **Console → STP settings** (super admin): STP rules per case source and benefit type, never-STP diagnoses, the
   two human-check switches, the AI confidence threshold (default 70%), which cases the system works on (email / API),
-  whether the mailbox is read, and whether API customers get the missing-documents email. Go-live (API only): email
+  whether the mailbox is read, whether API customers get the missing-documents email, and whether the AI gets trusted reviewer notes from past claims of the same hospital (*The AI learns from trusted corrections*, on; a correction stops being used when its trusted mark is removed). Go-live (API only): email
   cases off, mailbox off, missing-documents email off. One form, one Save: edits are marked until **Review & save**, which lists every change
   and saves all of it or nothing (**Discard** drops them). Changes apply to cases processed after the save.
 - **`.env`**: `CONSOLE_UPLOAD_METHOD` (`folder` / `cl-upload`), wait times, batch limits, URLs. Restart after a change.

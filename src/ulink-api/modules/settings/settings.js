@@ -39,6 +39,10 @@ const DEFAULTS = {
   // A voucher dated more than this many days before or after the visit is most likely misread (E3 check 2026-10-15:
   // a July visit with a voucher read as January) — "Values read look valid" marks it unsure (SYSTEM_4 E4-08).
   voucherDaysBeforeVisit: 30,
+  // Before the AI maps a claim's pages, it gets trusted reviewer notes from past claims of the same hospital — lessons
+  // only, never past values (SYSTEM_4 F3, E4-15 step 4). Off: the AI reads every claim without them. On from the start —
+  // the owner approved it so (2026-10-16); it does nothing until a correction is marked trusted.
+  usePastCorrections: true,
 };
 
 // Settings that are whole numbers in a range (the rest of the numbers are shares 0–1). Sent to the console with the

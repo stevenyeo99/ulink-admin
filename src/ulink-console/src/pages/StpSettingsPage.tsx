@@ -32,6 +32,11 @@ const SWITCHES: { key: SwitchKey; title: string; text: string }[] = [
     text: 'When the AI reads a vitamin or supplement on a voucher, the claim goes to JD3 for approval instead of STP, and the case shows which voucher.',
   },
   {
+    key: 'usePastCorrections',
+    title: 'The AI learns from trusted corrections',
+    text: "Before the AI reads a claim, it gets up to 5 trusted reviewer notes from past claims of the same hospital or clinic (what was misread, and why). It never gets a past amount, date or name — every value comes from this claim's own pages. The case page shows which notes it used.",
+  },
+  {
     key: 'holdUnsureMissingDocsEmail',
     title: "Don't email the customer when the AI is unsure a document is missing",
     text: "When the AI couldn't read a document, or wasn't sure it is missing, the customer's missing-documents email waits. The team checks, then sends the request or overrides the check.",
