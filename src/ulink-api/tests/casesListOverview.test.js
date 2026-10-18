@@ -58,19 +58,41 @@ it('rejects an unknown group or module', async () => {
 });
 
 it('counts cases per group, and new today', async () => {
-  Case.findAll.mockResolvedValue([
+  Case.findAll.mockResolvedValueOnce([
     { currentStatus: 'INCOMPLETE', count: '3' },
     { currentStatus: 'API_CLAIM_SUSPENDED', count: '2' },
     { currentStatus: 'CSR_SENT', count: '4' },
     { currentStatus: 'SOMETHING_NEW', count: '1' },
   ]);
   Case.count.mockResolvedValue(5);
+  Case.findAll.mockResolvedValueOnce([]);
 
   const { body } = await call(getOverview, {});
 
   expect(body).toMatchObject({ total: 10, newToday: 5 });
   expect(body.groups).toMatchObject({ waiting_customer: 5, done: 4, needs_review: 0 });
   expect(body).not.toHaveProperty('modules');
+});
+
+it('counts the last 14 days of claims by outcome, per Myanmar day', async () => {
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Yangon' }).format(new Date());
+  const at = `${today}T09:00:00+06:30`;
+  Case.findAll.mockResolvedValueOnce([]).mockResolvedValueOnce([
+    { createdAt: at, currentStatus: 'CSR_SENT', isStp: true },
+    { createdAt: at, currentStatus: 'CLAIM_CREATED', isStp: true },
+    { createdAt: at, currentStatus: 'CLAIM_CREATED', isStp: false },
+    { createdAt: at, currentStatus: 'API_CLAIM_REVISED', isStp: null },
+    { createdAt: at, currentStatus: 'API_CLAIM_SUSPENDED', isStp: null },
+    { createdAt: at, currentStatus: 'API_DOCUMENTS_REVIEW', isStp: null },
+  ]);
+  Case.count.mockResolvedValue(6);
+
+  const { body } = await call(getOverview, { source: 'API' });
+
+  expect(body.days).toHaveLength(14);
+  expect(body.days.at(-1)).toEqual({ day: today, stp: 2, approval: 2, incomplete: 1, processing: 1 });
+  expect(body.days[0]).toMatchObject({ stp: 0, approval: 0, incomplete: 0, processing: 0 });
+  expect(Case.findAll.mock.calls[1][0].where.source).toBe('API');
 });
 
 it('lists non-STP claims waiting for JD3, with the review points JD3 should look at', async () => {

@@ -80,14 +80,14 @@ router.get('/statuses', getCaseStatuses);
  * /api/cases/overview:
  *   get:
  *     tags: [cases]
- *     summary: Dashboard numbers — cases per group (who acts next) and new today
+ *     summary: Dashboard numbers — cases per group (who acts next), new today, and the last 14 days' claims by outcome
  *     parameters:
  *       - name: source
  *         in: query
  *         schema: { type: string, enum: [EMAIL, API] }
  *     responses:
  *       200:
- *         description: "{ total, newToday, groups: { groupId: n } }"
+ *         description: "{ total, newToday, groups: { groupId: n }, days: [{ day, stp, approval, incomplete, processing }] }"
  */
 router.get('/overview', getOverview);
 

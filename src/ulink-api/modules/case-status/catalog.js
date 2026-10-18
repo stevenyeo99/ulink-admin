@@ -86,4 +86,19 @@ function codesInGroup(group) {
   return Object.keys(CASE_STATUSES).filter((code) => CASE_STATUSES[code].group === group);
 }
 
-module.exports = { CASE_STATUSES, MODULES, GROUPS, codesInGroup };
+// The Overview chart's outcome of a case (2026-10-18), for business users: paid straight through, waiting for JD3's
+// approval, waiting for the customer's documents, or still being processed (being read, waiting for a person, failed).
+// Same rules as the Approvals page: an email claim created in IAS is STP or JD3 by its isStp; an API claim revised in
+// IAS is always JD3 (API STP goes on to API_AWAITING_CSR).
+const STP_STATUSES = new Set(['CSR_SENT', 'API_AWAITING_CSR', 'API_CSR_SENT']);
+const INCOMPLETE_STATUSES = new Set(['INCOMPLETE', 'API_NO_DOCUMENTS', 'API_INCOMPLETE', 'API_CLAIM_SUSPENDED']);
+const OUTCOMES = ['stp', 'approval', 'incomplete', 'processing'];
+
+function outcomeOf(status, isStp) {
+  if (STP_STATUSES.has(status) || (status === 'CLAIM_CREATED' && isStp === true)) return 'stp';
+  if (status === 'CLAIM_CREATED' || status === 'API_CLAIM_REVISED') return 'approval';
+  if (INCOMPLETE_STATUSES.has(status)) return 'incomplete';
+  return 'processing';
+}
+
+module.exports = { CASE_STATUSES, MODULES, GROUPS, codesInGroup, OUTCOMES, outcomeOf };

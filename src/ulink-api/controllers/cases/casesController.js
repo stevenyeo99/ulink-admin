@@ -7,7 +7,7 @@ const { apiCaseView } = require('../../modules/api-pipeline/caseView');
 const { buildAssessmentSummary } = require('../../modules/assessment-summary/summary');
 const { nextAction } = require('../../modules/assessment-summary/nextAction');
 const { queueEntry, REASON_ORDER } = require('../../modules/review-queue/queue');
-const { CASE_STATUSES, MODULES, GROUPS, codesInGroup } = require('../../modules/case-status/catalog');
+const { CASE_STATUSES, MODULES, GROUPS, codesInGroup, OUTCOMES, outcomeOf } = require('../../modules/case-status/catalog');
 
 
 // Every status code the jobs set — rejects a typo'd ?status= filter with a helpful error.
@@ -231,7 +231,31 @@ async function getOverview(req, res) {
     if (!info) continue; // an unknown status still counts toward the total
     groups[info.group] += count;
   }
-  res.json({ total, newToday, groups });
+  res.json({ total, newToday, groups, days: await outcomesByDay(where) });
+}
+
+const TREND_DAYS = 14;
+// Myanmar date (YYYY-MM-DD) of a time — the day the claim was received, as IAS and the claim intake count days.
+const myanmarDay = (date) => todayInIasTimezone(new Date(date));
+
+/**
+ * The Overview chart: claims received on each of the last 14 days (Myanmar time), by where they are now (outcomeOf).
+ * A day's bar keeps its total; its parts move as claims finish.
+ * ponytail: reads one row per case of the 14 days and counts here; a GROUP BY in SQL if daily volume gets large.
+ */
+async function outcomesByDay(where) {
+  const days = Array.from({ length: TREND_DAYS }, (_, i) => myanmarDay(Date.now() - (TREND_DAYS - 1 - i) * 86400000));
+  const counts = Object.fromEntries(days.map((day) => [day, Object.fromEntries(OUTCOMES.map((o) => [o, 0]))]));
+  const rows = await Case.findAll({
+    where: { ...where, createdAt: { [Op.gte]: new Date(`${days[0]}T00:00:00+06:30`) } },
+    attributes: ['createdAt', 'currentStatus', 'isStp'],
+    raw: true,
+  });
+  for (const row of rows) {
+    const day = counts[myanmarDay(row.createdAt)];
+    if (day) day[outcomeOf(row.currentStatus, row.isStp)] += 1;
+  }
+  return days.map((day) => ({ day, ...counts[day] }));
 }
 
 /**

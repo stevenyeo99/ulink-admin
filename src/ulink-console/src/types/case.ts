@@ -33,6 +33,16 @@ export interface CaseOverview {
   total: number;
   newToday: number;
   groups: Record<string, number>;
+  // The last 14 days' claims (Myanmar day received), by where they are now — the Overview chart.
+  days: OutcomeDay[];
+}
+
+export interface OutcomeDay {
+  day: string; // YYYY-MM-DD
+  stp: number;
+  approval: number;
+  incomplete: number;
+  processing: number;
 }
 
 export interface ListCasesResponse {
