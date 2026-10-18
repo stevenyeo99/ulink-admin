@@ -14,9 +14,9 @@ Line
 4	BENEFIT_TYPE_IP	MISC	1686250
 
 Staging
-Poho no = 
-Pocy No = 
-Mbr no = 
+Poho no = 000743-000
+Pocy No = 000743-000-00001
+Mbr no = 098565200
 ----------------------------------------------------
 tpa case number = AYA-CL-26040946
 tpa CLAIM number = CL/YGN/AYH/26032593
@@ -28,9 +28,9 @@ Line
 1	BENEFIT_TYPE_OP	OV	174500
 
 Staging
-Poho no = 
-Pocy No = 
-Mbr no = 
+Poho no = 000732-000
+Pocy No = 000732-000-00001
+Mbr no = 098565300
 ----------------------------------------------------
 tpa case number = AYA-CL-26041363
 tpa CLAIM number = CL/YGN/AYH/26031977
@@ -43,9 +43,9 @@ Line
 2	BENEFIT_TYPE_OP	OV	92200
 
 Staging
-Poho no = 
-Pocy No = 
-Mbr no = 
+Poho no = 000732-000
+Pocy No = 000732-000-00001
+Mbr no = 098565400
 ----------------------------------------------------
 (PROD NO)
 tpa case number = AYA-CL-26042304
@@ -58,9 +58,9 @@ Line
 
 
 Staging
-Poho no = 
-Pocy No = 
-Mbr no = 
+Poho no = 000736-000
+Pocy No = 000736-000-00001
+Mbr no = 098565500
 ----------------------------------------------------
 (PROD NO)
 tpa case number = AYA-CL-26043392
@@ -73,9 +73,9 @@ Line
 
 
 Staging
-Poho no = 
-Pocy No = 
-Mbr no = 
+Poho no = 000744-000
+Pocy No = 000744-000-00001
+Mbr no = 098565600
 ----------------------------------------------------
 (PROD NO)
 tpa case number = AYA-CL-26043766
@@ -88,9 +88,9 @@ Line
 
 
 Staging
-Poho no = 
-Pocy No = 
-Mbr no = 
+Poho no = 000745-000
+Pocy No = 000745-000-00001
+Mbr no = 098565700
 ----------------------------------------------------
 tpa case number = AYA-CL-26043772
 tpa CLAIM number = CL/YGN/AYH/26033730
@@ -103,9 +103,9 @@ Line
 
 
 Staging
-Poho no = 
-Pocy No = 
-Mbr no = 
+Poho no = 000531-000
+Pocy No = 000531-000-00002
+Mbr no = 098565800
 ----------------------------------------------------
 (PROD NO)
 tpa case number = AYA-CL-26043792
@@ -118,9 +118,9 @@ Line
 
 
 Staging
-Poho no = 
-Pocy No = 
-Mbr no = 
+Poho no = 000734-000
+Pocy No = 000734-000-00001
+Mbr no = 098566000
 ----------------------------------------------------
 (PROD NO)
 tpa case number = AYA-CL-26043951
@@ -133,9 +133,9 @@ Line
 
 
 Staging
-Poho no = 
-Pocy No = 
-Mbr no = 
+Poho no = 000732-000
+Pocy No = 000732-000-00001
+Mbr no = 098566100
 ----------------------------------------------------
 (PROD NO)
 tpa case number = AYA-CL-26044486
@@ -148,7 +148,7 @@ Line
 
 
 Staging
-Poho no = 
-Pocy No = 
-Mbr no = 
+Poho no = 000734-000
+Pocy No = 000734-000-00001
+Mbr no = 098566200
 ----------------------------------------------------
