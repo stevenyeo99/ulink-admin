@@ -10,7 +10,8 @@ import type { PageRef, ViewFile } from '../../lib/caseFiles';
  */
 export function DocumentViewer({ files, open, onOpen }: { files: ViewFile[]; open: PageRef | null; onOpen: (ref: PageRef) => void }) {
   const file = files.find((f) => f.key === open?.fileKey) ?? files[0];
-  const page = open?.fileKey === file?.key ? open.page : 1;
+  // open is null until a page is chosen; with no files, file is undefined too — compare only a real choice.
+  const page = open && open.fileKey === file?.key ? open.page : 1;
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const [zoom, setZoom] = useState(1);
