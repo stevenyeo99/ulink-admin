@@ -26,7 +26,7 @@ Why the system is built the way it is, and what changes when it scales. How each
 - **Postgres** (Supabase) with **pgvector** for the ICD-10 and policy-exclusion searches. Every table `ulink_…`.
 - **Local LLM** (LM Studio, OpenAI-compatible): page reading (vision), recognition/extraction, judgments, diagnosis
   and benefit picks, Burmese translation, embeddings. No cloud AI: claim documents stay on the network.
-- **ulink-console** — the working dashboard (overview, review queue, approvals, cases, STP settings, pipeline).
+- **ulink-console** — the working dashboard (overview, review queue, approvals, cases, STP settings, System settings, pipeline).
 
 ---
 

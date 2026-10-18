@@ -28,7 +28,7 @@ export function AiPerformancePage() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-2xl text-sm text-slate-600">
           Every call to the AI, by prompt and version. A changed prompt file is a new version, so its numbers can be compared
-          with the version before. <b>Unsure</b> = the AI's confidence at or below {data ? `${Math.round(data.threshold * 100)}%` : 'the threshold'} (STP settings).
+          with the version before. <b>Unsure</b> = the AI's confidence at or below {data ? `${Math.round(data.threshold * 100)}%` : 'the threshold'} (System settings).
         </p>
         <div role="tablist" aria-label="Period" className="flex items-center gap-1 rounded-full bg-slate-100/80 p-1">
           {PERIODS.map((p) => (

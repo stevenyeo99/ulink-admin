@@ -91,7 +91,7 @@ describe('POST .../run with steps', () => {
     const res = await call(pipelineController, undefined);
     expect(res.body).toEqual({ block: 'pipeline', started: true, runId: 'run-1' });
   });
-  // SYSTEM_4 E4-01: a source switched off on the STP settings page never starts a run (cron or console).
+  // SYSTEM_4 E4-01: a source switched off on the System settings page never starts a run (cron or console).
   it('starts no run for a source that is switched off, and the other source still runs', async () => {
     const { Setting, PipelineRun } = require('../db/models');
     Setting.findAll.mockResolvedValueOnce([{ key: 'emailCasesEnabled', value: false }]);

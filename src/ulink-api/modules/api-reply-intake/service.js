@@ -101,7 +101,7 @@ const job = {
   process: processCase,
 };
 
-// Replies only come from the mailbox: with it switched off (STP settings) or not set up, there is nothing to take, so
+// Replies only come from the mailbox: with it switched off (System settings) or not set up, there is nothing to take, so
 // the pipeline skips this step too — SYSTEM_4 API go-live without an inbox (same reason as email-intake).
 const { notConfiguredReason } = require('../email-intake/service');
 

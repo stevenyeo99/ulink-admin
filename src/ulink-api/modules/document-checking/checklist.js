@@ -919,7 +919,7 @@ const FIELD_LABELS = {
 
 const valueAt = (fields, path) => path.split('.').reduce((o, key) => (o == null ? o : o[key]), fields);
 const percent = (confidence) => `${Math.round(confidence * 100)}%`;
-// At or below the AI confidence threshold (STP settings) — the same test as assessment-summary's isLowConfidence.
+// At or below the AI confidence threshold (System settings) — the same test as assessment-summary's isLowConfidence.
 const isUnsure = (confidence) => typeof confidence === 'number' && confidence <= lastReadSettings().aiConfidenceThreshold;
 
 // Every value the AI gave evidence for: { field, label, value, confidence, reason, page, voucher? }. Vouchers as

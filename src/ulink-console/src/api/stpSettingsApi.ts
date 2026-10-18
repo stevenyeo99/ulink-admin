@@ -16,7 +16,7 @@ export interface StpBlockedDiagnosis {
   note: string | null;
 }
 
-// Settings changed on this page (ulink-api modules/settings/settings.js DEFAULTS).
+// Settings changed on the STP and System settings pages (ulink-api modules/settings/settings.js DEFAULTS).
 export interface Switches {
   // Human-in-the-loop switches — both off until Ulink decides.
   stpBlockOnReviewPoints: boolean;
@@ -58,10 +58,11 @@ export interface StpSettings {
 }
 
 // What the one Save sends: the rules, the complete never-STP list, the switches (saved all or nothing).
+// One page's part (STP settings or System settings). blockedDiagnoses left out: the never-STP list is unchanged.
 export interface StpSettingsForm {
-  rules: { id: string; stpAllowed: boolean; amountLimit: number | null }[];
-  blockedDiagnoses: { codePrefix: string; note: string | null }[];
-  switches: Switches;
+  rules?: { id: string; stpAllowed: boolean; amountLimit: number | null }[];
+  blockedDiagnoses?: { codePrefix: string; note: string | null }[];
+  switches: Partial<Switches>;
 }
 
 export function getStpSettings(): Promise<StpSettings> {

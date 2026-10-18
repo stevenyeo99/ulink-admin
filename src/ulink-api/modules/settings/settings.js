@@ -1,6 +1,6 @@
 const { Setting } = require('../../db/models');
 
-// Switches changed on the console's STP settings page (super admin). Each default keeps the behaviour the system had
+// Switches changed on the console's STP settings and System settings pages (super admin). Each default keeps the behaviour the system had
 // before the switch existed, unless the owner decided otherwise (noted per setting).
 const DEFAULTS = {
   // The human-in-the-loop switches (2026-09-29). Both off until Ulink decides.
@@ -78,7 +78,7 @@ function settingError(key, value) {
   return typeof value === 'number' && value >= 0 && value <= 1 ? null : `${key} must be a percentage from 0 to 100.`;
 }
 
-// Only known keys, each of its own type. transaction: to save with other changes (the STP settings form).
+// Only known keys, each of its own type. transaction: to save with other changes (the STP / System settings form).
 async function setSettings(changes, updatedBy, { transaction } = {}) {
   for (const [key, value] of Object.entries(changes)) {
     const error = settingError(key, value);

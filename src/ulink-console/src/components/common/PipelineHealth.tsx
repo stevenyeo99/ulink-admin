@@ -10,7 +10,7 @@ import type { Source } from '../../types/pipeline';
 /**
  * One line on the Overview (SYSTEM_4 E4-19 / E6): the last pipeline run of this source and how it went — red when it
  * failed, ended with errors, is still running past the limit (stuck), or no run came within the limit (cron stopped).
- * The limits are STP settings (default 3× the cron interval: email 30 min, API 90 min).
+ * The limits are System settings (default 3× the cron interval: email 30 min, API 90 min).
  */
 export function PipelineHealth({ source }: { source: Source }) {
   const { data: run, isLoading, isError } = useQuery({ queryKey: ['pipeline-latest', source], queryFn: () => getLatestRun(source), refetchInterval: 60_000 });

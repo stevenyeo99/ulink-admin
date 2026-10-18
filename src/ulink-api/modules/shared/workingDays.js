@@ -1,6 +1,6 @@
 // Working days a case has waited (SYSTEM_4 E4-19 / E6: the overdue badge). Monday–Friday, counted on Myanmar calendar
 // days (the day boundary IAS uses): each weekday after the day it started waiting, up to today.
-// ponytail: no public holidays — add a holiday list (STP settings) if ULINK's ageing limit needs them (Q20).
+// ponytail: no public holidays — add a holiday list (System settings) if ULINK's ageing limit needs them (Q20).
 
 const dayIn = (date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Yangon' }).format(date); // YYYY-MM-DD
 const DAY_MS = 24 * 60 * 60 * 1000;

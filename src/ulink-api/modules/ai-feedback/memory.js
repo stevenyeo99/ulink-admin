@@ -7,7 +7,7 @@
 //   - no past value reaches the prompt: only the field, the kind of mistake and the reviewer's reason with every
 //     number / date replaced by "…", so the AI cannot copy another claim's amount or date;
 //   - same provider = a name the past case's hospital had (as read or as corrected) appears in this claim's pages.
-// Switch: usePastCorrections (STP settings). The case keeps which notes the AI saw (extractedFields.learnedFrom).
+// Switch: usePastCorrections (System settings). The case keeps which notes the AI saw (extractedFields.learnedFrom).
 
 const { Op } = require('sequelize');
 const { Case, ApiCaseStep, AiFeedback, sequelize } = require('../../db/models');

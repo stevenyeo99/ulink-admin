@@ -1,4 +1,4 @@
-// SYSTEM_4 E4-07: one AI confidence threshold (STP settings, default 70%) decides when the AI is unsure — a review
+// SYSTEM_4 E4-07: one AI confidence threshold (System settings, default 70%) decides when the AI is unsure — a review
 // point on the case, and an unsure missing-documents finding. At or below it is unsure.
 
 jest.mock('../db/models', () => ({ Setting: { findAll: jest.fn(async () => []) } }));

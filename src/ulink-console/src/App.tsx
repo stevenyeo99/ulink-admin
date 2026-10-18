@@ -64,6 +64,7 @@ function Shell() {
             <Route path="/cases/:id" element={<CaseDetailPage />} />
             <Route path="/cases/:id/review" element={<ReviewWorkspacePage />} />
             <Route path="/stp-settings" element={<StpSettingsPage />} />
+            <Route path="/system-settings" element={<StpSettingsPage view="system" />} />
             <Route path="/ai-performance" element={<AiPerformancePage />} />
           </Routes>
         </div>

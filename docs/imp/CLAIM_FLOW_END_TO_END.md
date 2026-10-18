@@ -155,7 +155,7 @@ Only what differs from the email case is described; the checks themselves are th
 
 **No inbox (from 2026-10-18):** the API pipeline does not read the mailbox. When documents are missing, ULINK sends
 the customer the *Email draft to the customer* from the case page (switch *API cases: email the customer about missing
-documents* off). ULINK uploads the documents that come back on the case page. Console watch then restarts the case.
+documents* off on System settings). ULINK uploads the documents that come back on the case page. Console watch then restarts the case.
 
 | # | Step | What happens | Status (label) |
 |---|---|---|---|
@@ -220,11 +220,11 @@ Every block is written as the reason (e.g. "IP is not allowed for STP. (email ca
 claims prepared after it. STP → `isValidation=Y, isCSR=Y` in IAS and the settlement report; not STP → JD3.
 
 ### 4.5 Human checks when the AI is unsure (switches, all off by default)
-**Unsure** = an AI result at or below the *AI confidence threshold* (STP settings, default **70%**): it becomes a review
+**Unsure** = an AI result at or below the *AI confidence threshold* (System settings, default **70%**): it becomes a review
 point on the case. The judges' own cut-off for dropping an answer as unusable stays at 0.5, so a 0.5–0.7 answer is
 kept and counts as unsure.
 
-| Switch (STP settings page) | On |
+| Switch (#1: STP settings page · #2, #3: System settings page) | On |
 |---|---|
 | **#1 Don't pay automatically when the AI was unsure** | Any open review point stops STP → JD3 approves. |
 | **#2 Don't email the customer when the AI is unsure a document is missing** | Customer email held; *Check before emailing customer*; the team sends the request or overrides. |
@@ -254,7 +254,8 @@ See 2.5–2.6. Normal wait 15–30 minutes; flagged after 2 hours; always keeps 
 | *Upload not in the console* | Case page / IAS console | Check the console (or upload again); the case continues once the documents appear |
 | *Needs manual reading*, *Case number unclear*, *Console upload refused*, *Console barcode not received* | Case page / internal email | Check and fix; *Reset* reprocesses a case from reading (not allowed once it has an IAS claim number) |
 | Non-STP claim in IAS | **Approvals** page + JD3 email | JD3 approves in IAS |
-| STP rules and switches | **STP settings** (super admin) | Limits, never-STP diagnoses, the switches |
+| STP rules and switches | **STP settings** (super admin) | Limits, never-STP diagnoses, switch #1, vitamins |
+| Pipelines, AI checks and alerts | **System settings** (super admin) | Which cases the system works on, mailbox, API customer email, threshold, switches #2 and #3, AI learning, overdue and pipeline alerts |
 
 Every manual action needs a comment, kept in the case history with the person: override / confirm (finding +
 reason), *Send the request to the customer* ("What did you check?"), *Reset* ("Why?"). Every override is recorded in
@@ -333,16 +334,16 @@ Team emails go to `INTERNAL_REVIEW_EMAIL` (+ the route's CC), start with "(ULINK
 |---|---|---|---|
 | STP rules | Console → STP settings | Demo values | Allowed + max amount per case type (Email/API) and IAS benefit type |
 | Never-STP diagnoses | Console → STP settings | `R69` | ICD-10 codes or prefixes that never go STP |
-| Switch #1 / #2 / #3 | Console → STP settings | Off | Human checks when the AI is unsure (4.5) |
+| Switch #1 · #2 / #3 | Console → STP settings · System settings | Off | Human checks when the AI is unsure (4.5) |
 | Vitamins / supplements: a person approves | Console → STP settings | On | A voucher with them → no STP, JD3 approves (4.4) |
-| Overdue after (working days) | Console → STP settings | 2 | A review-queue case a person must act on, waiting longer (Mon–Fri since it entered its status), is marked red *Overdue* (ULINK to set — Q20) |
-| The AI learns from trusted corrections | Console → STP settings | On | Recognition gets up to 5 trusted reviewer notes from past claims of the same hospital — lessons only, never past values (2.2) |
-| Voucher dated before or after the visit by more than (days) | Console → STP settings | 30 | *Values read look valid* marks that voucher date unsure (most likely misread) — an *AI unsure* point; the invoice-date check and switch #2 decide, as before, whether the customer is asked |
-| Pipeline alert after (minutes) — email / API | Console → STP settings | 30 / 90 | The Overview turns red when that pipeline has had no run (or a run hasn't finished) for longer — raise for a business-hours schedule |
-| AI confidence threshold | Console → STP settings | 70% | At or below: the AI counts as unsure (4.5) |
-| Work on email cases / API cases | Console → STP settings | On | Off: that pipeline doesn't run (cron or Run) and its tab is hidden on the work pages; its cases are kept |
-| API cases: email the customer about missing documents | Console → STP settings | On | Off: ULINK contacts the customer; team still emailed (section 3) |
-| Read the mailbox (IMAP) | Console → STP settings | On | Off: email-intake (email pipeline) is skipped (no `.env` change, no restart) |
+| Overdue after (working days) | Console → System settings | 2 | A review-queue case a person must act on, waiting longer (Mon–Fri since it entered its status), is marked red *Overdue* (ULINK to set — Q20) |
+| The AI learns from trusted corrections | Console → System settings | On | Recognition gets up to 5 trusted reviewer notes from past claims of the same hospital — lessons only, never past values (2.2) |
+| Voucher dated before or after the visit by more than (days) | Console → System settings | 30 | *Values read look valid* marks that voucher date unsure (most likely misread) — an *AI unsure* point; the invoice-date check and switch #2 decide, as before, whether the customer is asked |
+| Pipeline alert after (minutes) — email / API | Console → System settings | 30 / 90 | The Overview turns red when that pipeline has had no run (or a run hasn't finished) for longer — raise for a business-hours schedule |
+| AI confidence threshold | Console → System settings | 70% | At or below: the AI counts as unsure (4.5) |
+| Work on email cases / API cases | Console → System settings | On | Off: that pipeline doesn't run (cron or Run) and its tab is hidden on the work pages; its cases are kept |
+| API cases: email the customer about missing documents | Console → System settings | On | Off: ULINK contacts the customer; team still emailed (section 3) |
+| Read the mailbox (IMAP) | Console → System settings | On | Off: email-intake (email pipeline) is skipped (no `.env` change, no restart) |
 | `IMAP_HOST` | `.env` | — | Empty: no inbox — email-intake is skipped |
 | `CONSOLE_UPLOAD_METHOD` | `.env` | `folder` | `folder` or `cl-upload` |
 | `CL_UPLOAD_URL`, `CL_UPLOAD_API_KEY` | `.env` | — | cl-upload API |

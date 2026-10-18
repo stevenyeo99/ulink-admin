@@ -70,7 +70,7 @@ A new decision stores its result **with a reason** (and confidence when the AI d
 
 - Deploy value → `config/index.js` + `.env.example` (never a real secret in docs or git).
 - Business switch the owner changes from the console → `modules/settings/settings.js` `DEFAULTS` (off unless decided)
-  + the STP settings page.
+  + the STP settings page (STP rules) or the System settings page (everything else) — `PAGE` in `StpSettingsPage.tsx`.
 
 **Done when** the default keeps today's behaviour and the setting is documented where it is set.
 

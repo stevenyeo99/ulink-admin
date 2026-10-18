@@ -1,8 +1,9 @@
 const { sequelize, StpRule, StpBlockedDiagnosis } = require('../../db/models');
 const { getSettings, setSettings, settingError, WHOLE_NUMBERS } = require('../../modules/settings/settings');
 
-// STP settings edited from the console (one form, one Save) — read by ias-claim-preparation/stpEligibility.js
-// and modules/settings. A change applies to cases whose claim is prepared after it.
+// STP settings and System settings edited from the console (one form per page, one Save) — read by
+// ias-claim-preparation/stpEligibility.js and modules/settings. A change applies to cases whose claim is prepared after it.
+// Both pages use this one endpoint; each sends only its own part (System settings: switches only).
 
 const bad = (res, message, errors) => res.status(400).json({ error: { message, status: 400, ...(errors ? { errors } : {}) } });
 
@@ -51,7 +52,10 @@ function validateStpForm(body, existingRules) {
     else rules.push({ id: rule.id, stpAllowed, amountLimit });
   }
 
-  const blockedDiagnoses = [];
+  // Left out or null (the System settings page) → null: the never-STP list is not touched. A list, even empty,
+  // replaces it; anything else is refused rather than read as an empty list (that would clear it).
+  const blockedDiagnoses = body?.blockedDiagnoses == null ? null : [];
+  if (blockedDiagnoses && !Array.isArray(body.blockedDiagnoses)) errors.push('The never-STP diagnoses must be a list.');
   const seen = new Set();
   for (const input of Array.isArray(body?.blockedDiagnoses) ? body.blockedDiagnoses : []) {
     const codePrefix = typeof input?.codePrefix === 'string' ? input.codePrefix.trim().toUpperCase() : '';
@@ -72,10 +76,11 @@ function validateStpForm(body, existingRules) {
 }
 
 /**
- * PUT /api/stp-settings — the whole form: { rules: [{ id, stpAllowed, amountLimit }], blockedDiagnoses:
- * [{ codePrefix, note }] (the complete list), switches: { … } }. All or nothing: any error → nothing saved.
+ * PUT /api/stp-settings — a page's form: { rules?: [{ id, stpAllowed, amountLimit }], blockedDiagnoses?:
+ * [{ codePrefix, note }] (the complete list; left out = unchanged), switches?: { … } }. All or nothing: any error → nothing saved.
  */
 async function saveStpSettings(req, res) {
+  if (['rules', 'blockedDiagnoses', 'switches'].every((part) => req.body?.[part] == null)) return bad(res, 'Nothing to save.');
   const { errors, form } = validateStpForm(req.body, await StpRule.findAll());
   if (errors.length) return bad(res, errors.join(' '), errors);
 
@@ -83,15 +88,17 @@ async function saveStpSettings(req, res) {
     for (const { id, stpAllowed, amountLimit } of form.rules) {
       await StpRule.update({ stpAllowed, amountLimit }, { where: { id }, transaction });
     }
-    const keep = form.blockedDiagnoses.map((d) => d.codePrefix);
-    const existing = await StpBlockedDiagnosis.findAll({ transaction });
-    for (const d of existing) {
-      if (!keep.includes(d.codePrefix)) await d.destroy({ transaction });
-    }
-    for (const d of form.blockedDiagnoses) {
-      const current = existing.find((e) => e.codePrefix === d.codePrefix);
-      if (!current) await StpBlockedDiagnosis.create(d, { transaction });
-      else if ((current.note ?? null) !== d.note) await current.update({ note: d.note }, { transaction });
+    if (form.blockedDiagnoses) {
+      const keep = form.blockedDiagnoses.map((d) => d.codePrefix);
+      const existing = await StpBlockedDiagnosis.findAll({ transaction });
+      for (const d of existing) {
+        if (!keep.includes(d.codePrefix)) await d.destroy({ transaction });
+      }
+      for (const d of form.blockedDiagnoses) {
+        const current = existing.find((e) => e.codePrefix === d.codePrefix);
+        if (!current) await StpBlockedDiagnosis.create(d, { transaction });
+        else if ((current.note ?? null) !== d.note) await current.update({ note: d.note }, { transaction });
+      }
     }
     await setSettings(form.switches, req.user.username, { transaction });
   });

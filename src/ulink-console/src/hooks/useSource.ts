@@ -6,7 +6,7 @@ import type { Source } from '../types/pipeline';
 const ALL_SOURCES: Source[] = ['EMAIL', 'API'];
 
 /**
- * The sources switched on (STP settings page, SYSTEM_4 E4-01). Both while loading, or when both are off — hiding a
+ * The sources switched on (System settings page, SYSTEM_4 E4-01). Both while loading, or when both are off — hiding a
  * tab is a convenience; the API itself refuses to run a switched-off pipeline.
  */
 export function useEnabledSources(): Source[] {

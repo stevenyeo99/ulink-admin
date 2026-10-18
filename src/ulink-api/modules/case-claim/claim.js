@@ -11,7 +11,7 @@ const { sequelize, CaseClaim, CaseEvent } = require('../../db/models');
 const { CASE_STATUSES } = require('../case-status/catalog');
 const { CLAIM_EVENTS } = require('./events');
 
-// ponytail: fixed until ULINK answers Q21 (time-out); move to the STP settings page if they want to change it.
+// ponytail: fixed until ULINK answers Q21 (time-out); move to the System settings page if they want to change it.
 const CLAIM_MINUTES = 30;
 // "Done" for the pipeline, but waiting for JD3's approval in IAS (the Approvals page) — still claimable.
 const APPROVAL_STATUSES = ['CLAIM_CREATED', 'API_CLAIM_REVISED'];

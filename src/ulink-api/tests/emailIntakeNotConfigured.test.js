@@ -1,5 +1,5 @@
 // SYSTEM_4 E4-02: no mailbox to read — the IMAP driver with no IMAP_HOST, or *Read the mailbox* switched off on the
-// STP settings page. The pipelines skip email-intake on notConfiguredReason(), and a direct run says why instead of a
+// System settings page. The pipelines skip email-intake on notConfiguredReason(), and a direct run says why instead of a
 // connection error.
 
 jest.mock('../db/models', () => ({ Setting: { findAll: jest.fn(async () => []) } }));
@@ -26,11 +26,11 @@ it('is configured once IMAP_HOST is set', async () => {
   await expect(emailIntake.run()).resolves.toEqual({ processed: 0, errors: [] });
 });
 
-it('reads nothing when the mailbox is switched off on the STP settings page', async () => {
+it('reads nothing when the mailbox is switched off on the System settings page', async () => {
   config.channel.driver = 'imap_smtp';
   config.imap.host = 'imap.example.com';
   Setting.findAll.mockResolvedValue([{ key: 'mailboxEnabled', value: false }]);
-  expect(await emailIntake.notConfiguredReason()).toBe('mailbox switched off (STP settings)');
+  expect(await emailIntake.notConfiguredReason()).toBe('mailbox switched off (System settings)');
   await expect(emailIntake.run()).rejects.toThrow('mailbox switched off');
   Setting.findAll.mockResolvedValue([]);
 });

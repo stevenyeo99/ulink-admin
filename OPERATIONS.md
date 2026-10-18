@@ -45,10 +45,10 @@ Schedule both orchestrators with cron (API pipeline: every 30 minutes; email pip
 picked up). Job endpoints are open to cron; everything else needs a console login.
 
 Every call returns at once and works in the background. A trigger that overlaps a running one is **skipped**, not
-queued. A pipeline whose cases are switched off (STP settings → *Work on email / API cases*) is skipped too
+queued. A pipeline whose cases are switched off (System settings → *Work on email / API cases*) is skipped too
 (`reason: source_disabled`) — no run is created.
 
-**No inbox** (API-only go-live): switch off *Read the mailbox (IMAP)* on the STP settings page, or leave `IMAP_HOST`
+**No inbox** (API-only go-live): switch off *Read the mailbox (IMAP)* on the System settings page, or leave `IMAP_HOST`
 empty. The email-intake step is then skipped in both pipelines, and api-reply-intake in the API pipeline, with the
 reason; SMTP sending is not affected. The
 switch is the quick way to stop one environment reading a mailbox it shares with another (UAT and a dev machine). If the process died mid-run, the lock stays: clear it with `POST /api/jobs/<job or pipeline>/release`.
@@ -91,11 +91,15 @@ switch is the quick way to stop one environment reading a mailbox it shares with
 
 ## 5. Settings that change behaviour
 
-- **Console → STP settings** (super admin): STP rules per case source and benefit type, never-STP diagnoses, the
-  two human-check switches, the AI confidence threshold (default 70%), which cases the system works on (email / API),
-  whether the mailbox is read, whether API customers get the missing-documents email, and whether the AI gets trusted reviewer notes from past claims of the same hospital (*The AI learns from trusted corrections*, on; a correction stops being used when its trusted mark is removed). Go-live (API only): email
-  cases off, mailbox off, missing-documents email off. One form, one Save: edits are marked until **Review & save**, which lists every change
-  and saves all of it or nothing (**Discard** drops them). Changes apply to cases processed after the save.
+- **Console → STP settings** (super admin): STP rules per case source and benefit type, never-STP diagnoses,
+  switch #1 (*Don't pay automatically when the AI was unsure*) and the vitamins rule.
+- **Console → System settings** (super admin): which cases the system works on (email / API), whether the mailbox is
+  read, whether API customers get the missing-documents email, the AI confidence threshold (default 70%), switches #2
+  and #3, whether the AI gets trusted reviewer notes from past claims of the same hospital (*The AI learns from trusted
+  corrections*, on; a correction stops being used when its trusted mark is removed), the voucher date limit, and the
+  overdue and pipeline alert limits. Go-live (API only): email cases off, mailbox off, missing-documents email off.
+- Both pages: one form, one Save. Edits are marked until **Review & save**, which lists every change and saves all of
+  it or nothing (**Discard** drops them). A page saves only its own settings. Changes apply to cases processed after the save.
 - **`.env`**: `CONSOLE_UPLOAD_METHOD` (`folder` / `cl-upload`), wait times, batch limits, URLs. Restart after a change.
 
 ---

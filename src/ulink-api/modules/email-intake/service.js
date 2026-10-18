@@ -250,11 +250,11 @@ async function queueNoAttachmentReminder(transaction, caseId, triggeringMessageI
 }
 
 // Why there is no mailbox to read here, or null (SYSTEM_4 E4-02 — API-only go-live has no inbox): the IMAP driver
-// with no IMAP_HOST, or *Read the mailbox* switched off on the STP settings page. The pipelines skip this step on
+// with no IMAP_HOST, or *Read the mailbox* switched off on the System settings page. The pipelines skip this step on
 // it (modules/pipeline/service.js); a direct /run says so instead of failing on a connection error.
 async function notConfiguredReason() {
   if (config.channel.driver === 'imap_smtp' && !config.imap.host) return 'inbox not configured (IMAP_HOST is empty)';
-  if (!(await getSettings()).mailboxEnabled) return 'mailbox switched off (STP settings)';
+  if (!(await getSettings()).mailboxEnabled) return 'mailbox switched off (System settings)';
   return null;
 }
 

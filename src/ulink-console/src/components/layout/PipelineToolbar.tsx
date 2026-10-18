@@ -38,7 +38,7 @@ export function PipelineToolbar({ run, isRunning, skipReason, isRateLimited, onR
       )}
       {skipReason && (
         <span className="text-xs font-medium text-ulink-orange-dark">
-          {skipReason === 'source_disabled' ? 'These cases are switched off (STP settings)' : 'A run is already in progress'}
+          {skipReason === 'source_disabled' ? 'These cases are switched off (System settings)' : 'A run is already in progress'}
         </span>
       )}
       {isRateLimited && (

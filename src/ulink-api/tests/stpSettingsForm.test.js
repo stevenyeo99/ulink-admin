@@ -92,4 +92,29 @@ describe('saveStpSettings', () => {
     expect(StpBlockedDiagnosis.create).toHaveBeenCalledWith({ codePrefix: 'C50', note: 'Breast cancer' }, { transaction: 'tx' });
     expect(Setting.upsert).toHaveBeenCalledWith({ key: 'stpBlockOnReviewPoints', value: true, updatedBy: 'admin' }, { transaction: 'tx' });
   });
+
+  // The System settings page sends its switches only: the never-STP list is left as it is (an empty list would clear it).
+  it('leaves the never-STP list alone when the form has none', async () => {
+    StpRule.findAll.mockResolvedValue(rules);
+    const stored = { codePrefix: 'R69', note: null, destroy: jest.fn() };
+    StpBlockedDiagnosis.findAll.mockResolvedValue([stored]);
+    await saveStpSettings(req({ switches: { apiSendMissingDocumentsEmail: false } }), res());
+    expect(stored.destroy).not.toHaveBeenCalled();
+    expect(Setting.upsert).toHaveBeenCalledWith({ key: 'apiSendMissingDocumentsEmail', value: false, updatedBy: 'admin' }, { transaction: 'tx' });
+
+    // null means left out too; a value that is not a list is refused, never read as an empty list.
+    await saveStpSettings(req({ blockedDiagnoses: null, switches: { apiSendMissingDocumentsEmail: false } }), res());
+    expect(stored.destroy).not.toHaveBeenCalled();
+    const r = res();
+    await saveStpSettings(req({ blockedDiagnoses: 'C50', switches: {} }), r);
+    expect(r.status).toHaveBeenCalledWith(400);
+    expect(stored.destroy).not.toHaveBeenCalled();
+  });
+
+  it('refuses a save with nothing in it', async () => {
+    const r = res();
+    await saveStpSettings(req({}), r);
+    expect(r.status).toHaveBeenCalledWith(400);
+    expect(Setting.upsert).not.toHaveBeenCalled();
+  });
 });

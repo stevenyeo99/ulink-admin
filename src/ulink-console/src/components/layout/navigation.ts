@@ -1,4 +1,4 @@
-import { Activity, ClipboardCheck, FolderOpen, LayoutDashboard, SlidersHorizontal, Stamp, Workflow, type LucideIcon } from 'lucide-react';
+import { Activity, ClipboardCheck, FolderOpen, LayoutDashboard, Settings, SlidersHorizontal, Stamp, Workflow, type LucideIcon } from 'lucide-react';
 
 export interface NavItem {
   to: string;
@@ -28,6 +28,7 @@ export const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     items: [
       { to: '/pipeline', label: 'Pipeline', icon: Workflow },
       { to: '/stp-settings', label: 'STP settings', icon: SlidersHorizontal },
+      { to: '/system-settings', label: 'System settings', icon: Settings },
       { to: '/ai-performance', label: 'AI performance', icon: Activity, superAdminOnly: true },
     ],
   },

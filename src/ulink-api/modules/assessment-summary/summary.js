@@ -14,7 +14,7 @@ const { buildCaseJourney, caseJourneyText } = require('./journey');
 // (2026-09-29). Static, hand-transcribed policy text (the same list the clause table is seeded from).
 const CLAUSE_TEXT = Object.fromEntries(require('../../scripts/seeds/ayaHealthExclusionClauses').clauses.map((c) => [c.clauseRef, c.clauseText]));
 
-// At or below the AI confidence threshold (STP settings page, default 70% — SYSTEM_4 E4-07) an AI result is a review
+// At or below the AI confidence threshold (System settings page, default 70% — SYSTEM_4 E4-07) an AI result is a review
 // point. Separate from the 0.5 below which the judges (identityJudgment, diagnosisPicker, benefitPicker,
 // policy-exclusion judge) drop an answer as unusable: a 0.5–0.7 answer is kept, and counts as unsure.
 const { lastReadSettings } = require('../settings/settings');

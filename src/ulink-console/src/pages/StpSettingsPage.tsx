@@ -13,23 +13,29 @@ import type { Source } from '../types/pipeline';
 const BENEFIT_LABELS: Record<string, string> = { IP: 'Inpatient', OP: 'Outpatient', DT: 'Dental', VS: 'Vision' };
 const SOURCE_LABEL: Record<Source, string> = { EMAIL: 'Email', API: 'API' };
 
-// When the AI itself says it is unsure, a person decides — before anything is paid, and before the
-// customer is asked for documents. All off until Ulink decides; off, the system works as before.
-const SWITCHES: { key: SwitchKey; title: string; text: string }[] = [
+type View = 'stp' | 'system';
+
+// STP settings page: what stops a claim from being paid straight through.
+const STP_SWITCHES: { key: SwitchKey; title: string; text: string }[] = [
   {
     key: 'stpBlockOnReviewPoints',
     title: "Don't pay automatically when the AI was unsure",
-    text: 'A claim with an open review point (the AI unsure, a possible policy exclusion, …) never goes STP — it goes to JD3 for approval, and the STP reason says why.',
-  },
-  {
-    key: 'holdUnsureDocumentPass',
-    title: "Documents the AI passed but wasn't sure about: a person confirms first",
-    text: 'When every document check passed but the AI was unsure about one (at or below the threshold above), the case waits for a person to confirm before anything goes to IAS.',
+    text: 'A claim with an open review point (the AI unsure — at or below the threshold on System settings — a possible policy exclusion, …) never goes STP — it goes to JD3 for approval, and the STP reason says why.',
   },
   {
     key: 'vitaminsBlockStp',
     title: 'Vitamins / supplements: a person approves (no STP)',
     text: 'When the AI reads a vitamin or supplement on a voucher, the claim goes to JD3 for approval instead of STP, and the case shows which voucher.',
+  },
+];
+
+// System settings page: when the AI itself says it is unsure, a person decides before the customer is asked for
+// documents or anything goes to IAS. Off until Ulink decides; off, the system works as before.
+const AI_SWITCHES: { key: SwitchKey; title: string; text: string }[] = [
+  {
+    key: 'holdUnsureDocumentPass',
+    title: "Documents the AI passed but wasn't sure about: a person confirms first",
+    text: 'When every document check passed but the AI was unsure about one (at or below the threshold above), the case waits for a person to confirm before anything goes to IAS.',
   },
   {
     key: 'usePastCorrections',
@@ -66,7 +72,6 @@ const CASE_SWITCHES: { key: SwitchKey; title: string; text: string }[] = [
     text: 'Off: the customer is not emailed — the team gets the list and contacts the customer. The claim is still suspended in IAS as usual.',
   },
 ];
-const onOffSwitches = [...CASE_SWITCHES, ...SWITCHES];
 
 const card = 'mb-6 rounded-xl2 border border-slate-900/10 bg-white/80 p-5 shadow-glass backdrop-blur-xl';
 const input =
@@ -85,13 +90,24 @@ interface Draft {
   numbers: Record<NumberKey, string>; // the whole-number settings, as typed
 }
 
-// The whole-number settings on this page: label before the box, unit after, what it does.
-const NUMBER_SETTINGS: { key: NumberKey; label: string; unit: string; help: string }[] = [
+// The whole-number settings (all on System settings): label before the box, unit after, what it does.
+type NumberSetting = { key: NumberKey; label: string; unit: string; help: string };
+const AI_NUMBERS: NumberSetting[] = [
+  { key: 'voucherDaysBeforeVisit', label: 'A voucher dated before or after the visit by more than', unit: 'days', help: 'Such a date is most likely misread (for example, July read as January). The AI is marked unsure, and a person checks the date. Raise it for claims that cover a long course of treatment.' },
+];
+const ALERT_NUMBERS: NumberSetting[] = [
   { key: 'overdueWorkingDays', label: 'A case waiting for a person is overdue after', unit: 'working days', help: "Monday–Friday, since the case entered its current status. Marked red in the review queue. 2 until ULINK sets its limit." },
   { key: 'pipelineStaleMinutesEmail', label: 'The Overview turns red when the email pipeline has not run for', unit: 'minutes', help: 'About 3× the schedule (cron every 10 min → 30). Raise it if the schedule pauses outside working hours.' },
   { key: 'pipelineStaleMinutesApi', label: 'The Overview turns red when the API pipeline has not run for', unit: 'minutes', help: 'About 3× the schedule (cron every 30 min → 90).' },
-  { key: 'voucherDaysBeforeVisit', label: 'A voucher dated before or after the visit by more than', unit: 'days', help: 'Such a date is most likely misread (for example, July read as January). The AI is marked unsure, and a person checks the date. Raise it for claims that cover a long course of treatment.' },
 ];
+const NUMBER_SETTINGS = [...AI_NUMBERS, ...ALERT_NUMBERS];
+
+// What each page shows, checks and saves. The STP page alone has the rules and the never-STP list; the
+// System page alone has the threshold and the whole numbers.
+const PAGE: Record<View, { switches: { key: SwitchKey; title: string; text: string }[]; numbers: NumberSetting[] }> = {
+  stp: { switches: STP_SWITCHES, numbers: [] },
+  system: { switches: [...CASE_SWITCHES, ...AI_SWITCHES], numbers: NUMBER_SETTINGS },
+};
 
 function draftFrom(data: StpSettings): Draft {
   return {
@@ -118,30 +134,35 @@ const parseWhole = (text: string, [min, max]: [number, number]): number | null =
 };
 
 /**
- * STP settings (enhancement status point 7): which claims may go straight through without a person — per
- * case type (email / API) and IAS benefit type, diagnoses that never go STP, and the human-check switches.
- * One form, one Save: nothing takes effect until "Review & save", which lists every change first and saves
- * all of it or nothing. Read when a claim is prepared, so a change applies to claims prepared after it.
+ * Two pages on one form (2026-10-18). STP settings (enhancement status point 7): which claims may go straight
+ * through without a person — per case type (email / API) and IAS benefit type, diagnoses that never go STP, and the
+ * STP switches. System settings: which cases the system works on, the AI checks, overdue and pipeline alerts.
+ * Both read and save /api/stp-settings; each page shows, lists and saves only its own part.
+ * One Save per page: nothing takes effect until "Review & save", which lists every change first and saves
+ * all of it or nothing.
  */
-export function StpSettingsPage() {
+export function StpSettingsPage({ view = 'stp' }: { view?: View }) {
   const { data, isLoading, isError, dataUpdatedAt } = useQuery({ queryKey: ['stp-settings'], queryFn: getStpSettings });
 
   return (
     <div className="mx-auto h-full w-full max-w-4xl overflow-y-auto px-4 pb-28 pt-6 sm:px-6">
       <p className="mb-4 max-w-2xl text-sm text-slate-600">
-        A claim goes straight through (STP) only when every benefit type on it is allowed and within its limit, and its diagnosis is
-        not on the never-STP list. Nothing changes until you save; changes apply to claims prepared after that.
+        {view === 'stp'
+          ? 'A claim goes straight through (STP) only when every benefit type on it is allowed and within its limit, and its diagnosis is not on the never-STP list. Nothing changes until you save; changes apply to claims prepared after that.'
+          : 'Which cases the system works on, when the AI counts as unsure and a person checks, and when cases and pipelines are flagged. Nothing changes until you save.'}
         {!isSuperAdmin() && ' Only a super admin can change these.'}
       </p>
       {isLoading && <p className="text-sm text-slate-500">Loading…</p>}
-      {isError && <p className="text-sm text-red-600">Could not load the STP settings.</p>}
+      {isError && <p className="text-sm text-red-600">Could not load the settings.</p>}
       {/* Keyed on the loaded version: after a save (or a reload) the form starts again from what is stored. */}
-      {data && <StpForm key={dataUpdatedAt} data={data} canEdit={isSuperAdmin()} />}
+      {data && <StpForm key={`${view}-${dataUpdatedAt}`} view={view} data={data} canEdit={isSuperAdmin()} />}
     </div>
   );
 }
 
-function StpForm({ data, canEdit }: { data: StpSettings; canEdit: boolean }) {
+function StpForm({ view, data, canEdit }: { view: View; data: StpSettings; canEdit: boolean }) {
+  const isStp = view === 'stp';
+  const page = PAGE[view];
   const queryClient = useQueryClient();
   const [source, setSource] = useState<Source>('EMAIL');
   const [draft, setDraft] = useState<Draft>(() => draftFrom(data));
@@ -150,43 +171,45 @@ function StpForm({ data, canEdit }: { data: StpSettings; canEdit: boolean }) {
   // Every difference from what is stored, in words — the Review & save list, and the change count.
   const changes = useMemo(() => {
     const list: { key: string; text: string; source?: Source }[] = [];
-    for (const rule of data.rules) {
+    for (const rule of isStp ? data.rules : []) {
       const d = draft.rules[rule.id];
       const name = `${SOURCE_LABEL[rule.caseSource]} · ${rule.benefitType}`;
       if (d.stpAllowed !== rule.stpAllowed) list.push({ key: `${rule.id}-a`, source: rule.caseSource, text: `${name}: STP allowed ${rule.stpAllowed ? 'Yes' : 'No'} → ${d.stpAllowed ? 'Yes' : 'No'}` });
       if (parseAmount(d.amount) !== rule.amountLimit) list.push({ key: `${rule.id}-m`, source: rule.caseSource, text: `${name}: max amount ${money(rule.amountLimit)} → ${money(parseAmount(d.amount))} ${rule.currency}` });
     }
-    const stored = data.blockedDiagnoses.map((d) => d.codePrefix);
-    const drafted = draft.diagnoses.map((d) => d.codePrefix);
-    for (const d of draft.diagnoses) if (!stored.includes(d.codePrefix)) list.push({ key: `+${d.codePrefix}`, text: `Never-STP diagnoses: add ${d.codePrefix}${d.note ? ` (${d.note})` : ''}` });
-    for (const code of stored) if (!drafted.includes(code)) list.push({ key: `-${code}`, text: `Never-STP diagnoses: remove ${code}` });
-    for (const s of onOffSwitches) {
+    if (isStp) {
+      const stored = data.blockedDiagnoses.map((d) => d.codePrefix);
+      const drafted = draft.diagnoses.map((d) => d.codePrefix);
+      for (const d of draft.diagnoses) if (!stored.includes(d.codePrefix)) list.push({ key: `+${d.codePrefix}`, text: `Never-STP diagnoses: add ${d.codePrefix}${d.note ? ` (${d.note})` : ''}` });
+      for (const code of stored) if (!drafted.includes(code)) list.push({ key: `-${code}`, text: `Never-STP diagnoses: remove ${code}` });
+    }
+    for (const s of page.switches) {
       if (draft.switches[s.key] !== data.switches[s.key]) list.push({ key: s.key, text: `"${s.title}": ${onOff(data.switches[s.key])} → ${onOff(draft.switches[s.key])}` });
     }
     const percent = parsePercent(draft.threshold);
-    if (percent !== null && percent / 100 !== data.switches.aiConfidenceThreshold) {
+    if (!isStp && percent !== null && percent / 100 !== data.switches.aiConfidenceThreshold) {
       list.push({ key: 'aiConfidenceThreshold', text: `AI unsure at or below: ${Math.round(data.switches.aiConfidenceThreshold * 100)}% → ${percent}%` });
     }
-    for (const n of NUMBER_SETTINGS) {
+    for (const n of page.numbers) {
       const value = parseWhole(draft.numbers[n.key], data.numberRanges[n.key]);
       if (value !== null && value !== data.switches[n.key]) list.push({ key: n.key, text: `${n.label}: ${data.switches[n.key]} → ${value} ${n.unit}` });
     }
     return list;
-  }, [data, draft]);
+  }, [data, draft, isStp, page]);
 
   // Problems the save would be refused for — shown on the row, and they block the save.
   const ruleErrors = useMemo(() => {
     const errors: Record<string, string> = {};
-    for (const rule of data.rules) {
+    for (const rule of isStp ? data.rules : []) {
       const d = draft.rules[rule.id];
       const amount = parseAmount(d.amount);
       if (amount != null && (!Number.isFinite(amount) || amount < 0)) errors[rule.id] = 'Enter a number of 0 or more.';
       else if (d.stpAllowed && amount == null) errors[rule.id] = 'Set a max amount to allow STP.';
     }
     return errors;
-  }, [data, draft]);
-  const thresholdError = parsePercent(draft.threshold) === null ? 'Enter a percentage from 0 to 100.' : null;
-  const numberErrors = Object.fromEntries(NUMBER_SETTINGS
+  }, [data, draft, isStp]);
+  const thresholdError = !isStp && parsePercent(draft.threshold) === null ? 'Enter a percentage from 0 to 100.' : null;
+  const numberErrors = Object.fromEntries(page.numbers
     .filter((n) => parseWhole(draft.numbers[n.key], data.numberRanges[n.key]) === null)
     .map((n) => [n.key, `Enter a whole number from ${data.numberRanges[n.key][0]} to ${data.numberRanges[n.key][1]}.`]));
   const errorCount = Object.keys(ruleErrors).length + (thresholdError ? 1 : 0) + Object.keys(numberErrors).length;
@@ -201,16 +224,23 @@ function StpForm({ data, canEdit }: { data: StpSettings; canEdit: boolean }) {
   }, [dirty]);
 
   const save = useMutation({
-    mutationFn: () => saveStpSettings({
-      rules: data.rules.map((r) => ({ id: r.id, stpAllowed: draft.rules[r.id].stpAllowed, amountLimit: parseAmount(draft.rules[r.id].amount) })),
-      blockedDiagnoses: draft.diagnoses,
-      switches: {
-        ...draft.switches,
-        aiConfidenceThreshold: (parsePercent(draft.threshold) ?? 0) / 100,
-        // Save is blocked while a box has an error, so each parses here.
-        ...Object.fromEntries(NUMBER_SETTINGS.map((n) => [n.key, parseWhole(draft.numbers[n.key], data.numberRanges[n.key])])),
-      },
-    }),
+    // Only what changed (the Review & save list): a setting this page didn't change — on either page — is never
+    // sent, so an old tab can't undo a newer save. No blockedDiagnoses unless the list changed — the API then leaves
+    // the never-STP list as it is. Save is blocked while a box has an error, so each changed box parses here.
+    mutationFn: () => {
+      const changed = new Set(changes.map((c) => c.key));
+      return saveStpSettings({
+        rules: data.rules
+          .filter((r) => changed.has(`${r.id}-a`) || changed.has(`${r.id}-m`))
+          .map((r) => ({ id: r.id, stpAllowed: draft.rules[r.id].stpAllowed, amountLimit: parseAmount(draft.rules[r.id].amount) })),
+        ...(changes.some((c) => /^[+-]/.test(c.key)) && { blockedDiagnoses: draft.diagnoses }),
+        switches: {
+          ...Object.fromEntries(page.switches.filter((s) => changed.has(s.key)).map((s) => [s.key, draft.switches[s.key]])),
+          ...(changed.has('aiConfidenceThreshold') && { aiConfidenceThreshold: (parsePercent(draft.threshold) ?? 0) / 100 }),
+          ...Object.fromEntries(page.numbers.filter((n) => changed.has(n.key)).map((n) => [n.key, parseWhole(draft.numbers[n.key], data.numberRanges[n.key])])),
+        },
+      });
+    },
     onSuccess: (saved) => {
       setConfirmOpen(false);
       queryClient.setQueryData(['stp-settings'], saved);
@@ -223,141 +253,157 @@ function StpForm({ data, canEdit }: { data: StpSettings; canEdit: boolean }) {
     setDraft((d) => ({ ...d, rules: { ...d.rules, [id]: { ...d.rules[id], ...patch } } }));
   const countFor = (s: Source) => changes.filter((c) => c.source === s).length;
 
+  // One whole-number box: label, box with its unit, what it does, and its error.
+  const numberRow = (n: NumberSetting) => (
+    <div key={n.key} className={clsx('mt-3 rounded-lg p-2', changes.some((c) => c.key === n.key) && changedMark)}>
+      <label className="flex flex-wrap items-center gap-3">
+        <span className="text-sm font-medium text-slate-800">{n.label}</span>
+        <span className="inline-flex items-center gap-1">
+          <input
+            type="number"
+            min={data.numberRanges[n.key][0]}
+            max={data.numberRanges[n.key][1]}
+            step={1}
+            value={draft.numbers[n.key]}
+            disabled={!canEdit}
+            onChange={(e) => setDraft((d) => ({ ...d, numbers: { ...d.numbers, [n.key]: e.target.value } }))}
+            aria-label={`${n.label}, ${n.unit}`}
+            className={`${input} w-24`}
+          />
+          <span className="text-sm text-slate-600">{n.unit}</span>
+        </span>
+      </label>
+      <p className="mt-1 text-sm text-slate-600">{n.help}</p>
+      {numberErrors[n.key] && <p className="mt-1 text-xs text-red-600">{numberErrors[n.key]}</p>}
+    </div>
+  );
+
   return (
     <>
-      <section className={card}>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold text-slate-800">Rules by benefit type</h2>
-          <div className="flex items-center gap-3">
-            {(['EMAIL', 'API'] as Source[]).filter((s) => s !== source && countFor(s) > 0).map((s) => (
-              <span key={s} className="text-xs text-ulink-orange-dark">
-                {SOURCE_LABEL[s]}: {countFor(s)} unsaved
-              </span>
-            ))}
-            <SourceTabs source={source} onChange={setSource} showAll />
-          </div>
-        </div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
-              <th className="pb-2 pl-3 pr-4 font-medium">Benefit type</th>
-              <th className="pb-2 pr-4 font-medium">STP allowed</th>
-              <th className="pb-2 pr-3 font-medium">Max amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.rules.filter((r) => r.caseSource === source).map((rule) => {
-              const d = draft.rules[rule.id];
-              const changed = d.stpAllowed !== rule.stpAllowed || parseAmount(d.amount) !== rule.amountLimit;
-              return (
-                <tr key={rule.id} className={clsx('border-t border-slate-900/5 align-top', changed && changedMark)}>
-                  <td className="py-3 pl-3 pr-4">
-                    <span className="font-medium text-slate-800">{rule.benefitType}</span>
-                    <span className="ml-2 text-slate-500">{BENEFIT_LABELS[rule.benefitType] ?? ''}</span>
-                  </td>
-                  <td className="py-3 pr-4">
-                    <label className="inline-flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={d.stpAllowed}
-                        disabled={!canEdit}
-                        onChange={(e) => setRule(rule.id, { stpAllowed: e.target.checked })}
-                        className="h-4 w-4 accent-ulink-orange"
-                      />
-                      <span className="text-slate-700">{d.stpAllowed ? 'Yes' : 'No'}</span>
-                    </label>
-                  </td>
-                  <td className="py-3 pr-3">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        min={0}
-                        step={1000}
-                        value={d.amount}
-                        disabled={!canEdit}
-                        onChange={(e) => setRule(rule.id, { amount: e.target.value })}
-                        aria-label={`Max amount for ${rule.benefitType}`}
-                        aria-invalid={Boolean(ruleErrors[rule.id])}
-                        className={clsx(input, 'w-36', ruleErrors[rule.id] && 'border-red-400')}
-                      />
-                      <span className="text-slate-500">{rule.currency}</span>
-                    </div>
-                    {ruleErrors[rule.id] && <p className="mt-1 text-xs text-red-600">{ruleErrors[rule.id]}</p>}
-                  </td>
+      {isStp ? (
+        <>
+          <section className={card}>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-sm font-semibold text-slate-800">Rules by benefit type</h2>
+              <div className="flex items-center gap-3">
+                {(['EMAIL', 'API'] as Source[]).filter((s) => s !== source && countFor(s) > 0).map((s) => (
+                  <span key={s} className="text-xs text-ulink-orange-dark">
+                    {SOURCE_LABEL[s]}: {countFor(s)} unsaved
+                  </span>
+                ))}
+                <SourceTabs source={source} onChange={setSource} showAll />
+              </div>
+            </div>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
+                  <th className="pb-2 pl-3 pr-4 font-medium">Benefit type</th>
+                  <th className="pb-2 pr-4 font-medium">STP allowed</th>
+                  <th className="pb-2 pr-3 font-medium">Max amount</th>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        <p className="mt-3 text-xs text-slate-500">A benefit type not listed here (e.g. PA) never goes STP.</p>
-      </section>
+              </thead>
+              <tbody>
+                {data.rules.filter((r) => r.caseSource === source).map((rule) => {
+                  const d = draft.rules[rule.id];
+                  const changed = d.stpAllowed !== rule.stpAllowed || parseAmount(d.amount) !== rule.amountLimit;
+                  return (
+                    <tr key={rule.id} className={clsx('border-t border-slate-900/5 align-top', changed && changedMark)}>
+                      <td className="py-3 pl-3 pr-4">
+                        <span className="font-medium text-slate-800">{rule.benefitType}</span>
+                        <span className="ml-2 text-slate-500">{BENEFIT_LABELS[rule.benefitType] ?? ''}</span>
+                      </td>
+                      <td className="py-3 pr-4">
+                        <label className="inline-flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={d.stpAllowed}
+                            disabled={!canEdit}
+                            onChange={(e) => setRule(rule.id, { stpAllowed: e.target.checked })}
+                            className="h-4 w-4 accent-ulink-orange"
+                          />
+                          <span className="text-slate-700">{d.stpAllowed ? 'Yes' : 'No'}</span>
+                        </label>
+                      </td>
+                      <td className="py-3 pr-3">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min={0}
+                            step={1000}
+                            value={d.amount}
+                            disabled={!canEdit}
+                            onChange={(e) => setRule(rule.id, { amount: e.target.value })}
+                            aria-label={`Max amount for ${rule.benefitType}`}
+                            aria-invalid={Boolean(ruleErrors[rule.id])}
+                            className={clsx(input, 'w-36', ruleErrors[rule.id] && 'border-red-400')}
+                          />
+                          <span className="text-slate-500">{rule.currency}</span>
+                        </div>
+                        {ruleErrors[rule.id] && <p className="mt-1 text-xs text-red-600">{ruleErrors[rule.id]}</p>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <p className="mt-3 text-xs text-slate-500">A benefit type not listed here (e.g. PA) never goes STP.</p>
+          </section>
 
-      <NeverStpDiagnoses
-        diagnoses={draft.diagnoses}
-        stored={data.blockedDiagnoses.map((d) => ({ codePrefix: d.codePrefix, note: d.note }))}
-        canEdit={canEdit}
-        onChange={(diagnoses) => setDraft((d) => ({ ...d, diagnoses }))}
-      />
+          <NeverStpDiagnoses
+            diagnoses={draft.diagnoses}
+            stored={data.blockedDiagnoses.map((d) => ({ codePrefix: d.codePrefix, note: d.note }))}
+            canEdit={canEdit}
+            onChange={(diagnoses) => setDraft((d) => ({ ...d, diagnoses }))}
+          />
 
-      <section className={card}>
-        <h2 className="text-sm font-semibold text-slate-800">Human checks when the AI is unsure</h2>
-        <p className="mb-4 mt-1 text-sm text-slate-600">Applies to email and API cases.</p>
-        <div className={clsx('mb-3 rounded-lg p-2', changes.some((c) => c.key === 'aiConfidenceThreshold') && changedMark)}>
-          <label className="flex flex-wrap items-center gap-3">
-            <span className="text-sm font-medium text-slate-800">The AI is unsure at or below</span>
-            <span className="inline-flex items-center gap-1">
-              <input
-                type="number"
-                min={0}
-                max={100}
-                inputMode="decimal"
-                value={draft.threshold}
-                disabled={!canEdit}
-                onChange={(e) => setDraft((d) => ({ ...d, threshold: e.target.value }))}
-                aria-label="AI confidence threshold, percent"
-                className={`${input} w-20`}
-              />
-              <span className="text-sm text-slate-600">% confidence</span>
-            </span>
-          </label>
-          <p className="mt-1 text-sm text-slate-600">An AI answer at or below this becomes a review point on the case; with the switches below on, a person decides.</p>
-          {thresholdError && <p className="mt-1 text-xs text-red-600">{thresholdError}</p>}
-        </div>
-        <SwitchList switches={SWITCHES} draft={draft} stored={data.switches} canEdit={canEdit} onToggle={setSwitch} />
-      </section>
+          <section className={card}>
+            <h2 className="text-sm font-semibold text-slate-800">When a claim never goes STP</h2>
+            <p className="mb-4 mt-1 text-sm text-slate-600">Applies to email and API cases.</p>
+            <SwitchList switches={STP_SWITCHES} draft={draft} stored={data.switches} canEdit={canEdit} onToggle={setSwitch} />
+          </section>
+        </>
+      ) : (
+        <>
+          <section className={card}>
+            <h2 className="text-sm font-semibold text-slate-800">Which cases the system works on</h2>
+            <p className="mb-4 mt-1 text-sm text-slate-600">For going live with one kind of case first. The STP rules (STP settings page) can be set for both either way.</p>
+            <SwitchList switches={CASE_SWITCHES} draft={draft} stored={data.switches} canEdit={canEdit} onToggle={setSwitch} />
+          </section>
 
-      <section className={card}>
-        <h2 className="text-sm font-semibold text-slate-800">Overdue cases, pipeline alerts and date checks</h2>
-        {NUMBER_SETTINGS.map((n) => (
-          <div key={n.key} className={clsx('mt-3 rounded-lg p-2', changes.some((c) => c.key === n.key) && changedMark)}>
-            <label className="flex flex-wrap items-center gap-3">
-              <span className="text-sm font-medium text-slate-800">{n.label}</span>
-              <span className="inline-flex items-center gap-1">
-                <input
-                  type="number"
-                  min={data.numberRanges[n.key][0]}
-                  max={data.numberRanges[n.key][1]}
-                  step={1}
-                  value={draft.numbers[n.key]}
-                  disabled={!canEdit}
-                  onChange={(e) => setDraft((d) => ({ ...d, numbers: { ...d.numbers, [n.key]: e.target.value } }))}
-                  aria-label={`${n.label}, ${n.unit}`}
-                  className={`${input} w-24`}
-                />
-                <span className="text-sm text-slate-600">{n.unit}</span>
-              </span>
-            </label>
-            <p className="mt-1 text-sm text-slate-600">{n.help}</p>
-            {numberErrors[n.key] && <p className="mt-1 text-xs text-red-600">{numberErrors[n.key]}</p>}
-          </div>
-        ))}
-      </section>
+          <section className={card}>
+            <h2 className="text-sm font-semibold text-slate-800">AI checks — when the AI is unsure, a person checks</h2>
+            <p className="mb-4 mt-1 text-sm text-slate-600">Applies to email and API cases.</p>
+            <div className={clsx('mb-3 rounded-lg p-2', changes.some((c) => c.key === 'aiConfidenceThreshold') && changedMark)}>
+              <label className="flex flex-wrap items-center gap-3">
+                <span className="text-sm font-medium text-slate-800">The AI is unsure at or below</span>
+                <span className="inline-flex items-center gap-1">
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    inputMode="decimal"
+                    value={draft.threshold}
+                    disabled={!canEdit}
+                    onChange={(e) => setDraft((d) => ({ ...d, threshold: e.target.value }))}
+                    aria-label="AI confidence threshold, percent"
+                    className={`${input} w-20`}
+                  />
+                  <span className="text-sm text-slate-600">% confidence</span>
+                </span>
+              </label>
+              <p className="mt-1 text-sm text-slate-600">An AI answer at or below this becomes a review point on the case; with the switches below on, a person decides.</p>
+              {thresholdError && <p className="mt-1 text-xs text-red-600">{thresholdError}</p>}
+            </div>
+            <SwitchList switches={AI_SWITCHES} draft={draft} stored={data.switches} canEdit={canEdit} onToggle={setSwitch} />
+            {AI_NUMBERS.map(numberRow)}
+          </section>
 
-      <section className={card}>
-        <h2 className="text-sm font-semibold text-slate-800">Which cases the system works on</h2>
-        <p className="mb-4 mt-1 text-sm text-slate-600">For going live with one kind of case first. The STP rules above can be set for both either way.</p>
-        <SwitchList switches={CASE_SWITCHES} draft={draft} stored={data.switches} canEdit={canEdit} onToggle={setSwitch} />
-      </section>
+          <section className={card}>
+            <h2 className="text-sm font-semibold text-slate-800">Overdue cases and pipeline alerts</h2>
+            {ALERT_NUMBERS.map(numberRow)}
+          </section>
+        </>
+      )}
 
       {canEdit && dirty && (
         <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-900/10 bg-white/95 px-4 py-3 shadow-glass backdrop-blur-xl sm:px-6">
@@ -382,7 +428,7 @@ function StpForm({ data, canEdit }: { data: StpSettings; canEdit: boolean }) {
         <AlertDialog.Portal>
           <AlertDialog.Overlay className="fixed inset-0 z-40 bg-slate-900/30 backdrop-blur-sm" />
           <AlertDialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-xl2 bg-white p-5 shadow-glass">
-            <AlertDialog.Title className="text-sm font-semibold text-slate-900">Save these STP changes?</AlertDialog.Title>
+            <AlertDialog.Title className="text-sm font-semibold text-slate-900">{isStp ? 'Save these STP changes?' : 'Save these system changes?'}</AlertDialog.Title>
             <AlertDialog.Description asChild>
               <div className="mt-3 text-sm text-slate-700">
                 <ul className="max-h-72 space-y-1 overflow-y-auto">
@@ -390,7 +436,7 @@ function StpForm({ data, canEdit }: { data: StpSettings; canEdit: boolean }) {
                     <li key={c.key}>• {c.text}</li>
                   ))}
                 </ul>
-                <p className="mt-3 text-slate-500">They apply to claims prepared after saving. Claims already prepared keep their decision.</p>
+                <p className="mt-3 text-slate-500">{isStp ? 'They apply to claims prepared after saving. Claims already prepared keep their decision.' : 'They apply from the next pipeline run. Cases already checked keep their results.'}</p>
               </div>
             </AlertDialog.Description>
             {save.isError && <p className="mt-3 text-sm text-red-600">{save.error.message}</p>}

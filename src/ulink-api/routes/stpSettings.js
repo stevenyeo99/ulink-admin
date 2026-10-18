@@ -9,13 +9,13 @@ const router = express.Router();
  * /api/stp-settings:
  *   get:
  *     tags: [stp-settings]
- *     summary: STP settings — rules per case type (EMAIL / API) and IAS benefit type, never-STP diagnoses, human-check switches
+ *     summary: STP settings and System settings — rules per case type (EMAIL / API) and IAS benefit type, never-STP diagnoses, every switch and number
  *     responses:
  *       200:
  *         description: "{ rules: [{ id, caseSource, benefitType, currency, stpAllowed, amountLimit }], blockedDiagnoses: [{ id, codePrefix, note }], switches: { stpBlockOnReviewPoints, holdUnsureMissingDocsEmail } }"
  *   put:
  *     tags: [stp-settings]
- *     summary: Save the whole STP settings form (super admin) — all or nothing
+ *     summary: Save one settings page's form (super admin) — all or nothing; blockedDiagnoses left out = unchanged
  *     description: >
  *       The console's one Save. rules — the rules to change; blockedDiagnoses — the complete never-STP list
  *       (codes left out are removed); switches — the switches to set. Any error → nothing is saved and every

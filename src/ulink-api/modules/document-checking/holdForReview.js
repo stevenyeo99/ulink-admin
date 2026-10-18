@@ -5,7 +5,7 @@ const { isLowConfidence } = require('../assessment-summary/summary');
 // the customer isn't emailed until a person has looked (send the request, or override the check).
 //
 // Unsure = a failed check that is about reading a document (a medical record or voucher it couldn't read
-// clearly), a date mismatch, or one the AI judged at or below the AI confidence threshold (STP settings). A plainly missing
+// clearly), a date mismatch, or one the AI judged at or below the AI confidence threshold (System settings). A plainly missing
 // item, found with confidence or by a plain rule (e.g. no bank details at all), is not unsure: it goes to
 // the customer as before.
 //
