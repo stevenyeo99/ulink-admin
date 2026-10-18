@@ -1,0 +1,37 @@
+{
+    "Items": [
+        {
+            "PlanId": "2147",
+            "BankName": "CB Bank",
+            "ClaimType": "M",
+            "InvoiceID": "NIL",
+            "BankAcctNo": "2005600500132705",
+            "PayeeEmail": "hninhninwin.bb@gmail.com",
+            "BenefitHead": "",
+            "BenefitType": "",
+            "IncurDateTo": "09102026",
+            "SymptomDate": "09072026",
+            "BankAcctName": "Hnin Hnin Win",
+            "ExchangeRate": 1,
+            "PresentedAmt": 2771750,
+            "ProviderCode": null,
+            "ProviderName": "Golden Light (Rohto) Eye Hospital, Mandalay",
+            "ReceivedDate": "09212026",
+            "ContactNumber": "09798533558",
+            "DiagnosisCode": "",
+            "IncurDateFrom": "09072026",
+            "PaymentMethod": null,
+            "PaymentCurrency": "MMK",
+            "TreatmentCountry": "MYANMAR",
+            "DiagnosisCodeDesc": "",
+            "PresentedCurrency": "MMK",
+            "PaymentExchangeRate": 1,
+            "DiagnosisDescription": "",
+            "ReviseClaimReasonCode": ""
+        }
+    ],
+    "MemberRefNo": "9/KHAAHZA(N)029678",
+    "TpaCaseNumber": "AYA-CL-26040093",
+    "TpaClaimNumber": "CL/YGN/AYH/26032531",
+    "ProvPortalCaseNumber": ""
+}
