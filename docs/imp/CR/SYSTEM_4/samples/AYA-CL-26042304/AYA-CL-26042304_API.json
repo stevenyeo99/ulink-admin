@@ -1,0 +1,37 @@
+{
+    "Items": [
+        {
+            "PlanId": "2147",
+            "BankName": "AYA Bank",
+            "ClaimType": "M",
+            "InvoiceID": "NIL",
+            "BankAcctNo": "20027820520",
+            "PayeeEmail": "SaiAung.Main@rescue.org",
+            "BenefitHead": "",
+            "BenefitType": "",
+            "IncurDateTo": "10022026",
+            "SymptomDate": "09292026",
+            "BankAcctName": "Sai Aung Maine",
+            "ExchangeRate": 1,
+            "PresentedAmt": 3507000,
+            "ProviderCode": null,
+            "ProviderName": "ThuKha Myaing Hospital",
+            "ReceivedDate": "10032026",
+            "ContactNumber": "09423156331",
+            "DiagnosisCode": "",
+            "IncurDateFrom": "09292026",
+            "PaymentMethod": null,
+            "PaymentCurrency": "MMK",
+            "TreatmentCountry": "MYANMAR",
+            "DiagnosisCodeDesc": "",
+            "PresentedCurrency": "MMK",
+            "PaymentExchangeRate": 1,
+            "DiagnosisDescription": "",
+            "ReviseClaimReasonCode": ""
+        }
+    ],
+    "MemberRefNo": "13/LARANA(N)156475",
+    "TpaCaseNumber": "AYA-CL-26042304",
+    "TpaClaimNumber": "CL/YGN/AYH/26032667",
+    "ProvPortalCaseNumber": ""
+}

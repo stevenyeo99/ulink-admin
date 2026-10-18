@@ -1,0 +1,37 @@
+{
+    "Items": [
+        {
+            "PlanId": "2147",
+            "BankName": "AYA Bank",
+            "ClaimType": "M",
+            "InvoiceID": "NIL",
+            "BankAcctNo": "3571050036770244",
+            "PayeeEmail": "phyohan048@gmail.com",
+            "BenefitHead": "",
+            "BenefitType": "",
+            "IncurDateTo": "10082026",
+            "SymptomDate": "10082026",
+            "BankAcctName": "Phyo Phyo Han",
+            "ExchangeRate": 1,
+            "PresentedAmt": 200000,
+            "ProviderCode": null,
+            "ProviderName": "Rainbow optical",
+            "ReceivedDate": "10082026",
+            "ContactNumber": "09456431623",
+            "DiagnosisCode": "",
+            "IncurDateFrom": "10082026",
+            "PaymentMethod": null,
+            "PaymentCurrency": "MMK",
+            "TreatmentCountry": "MYANMAR",
+            "DiagnosisCodeDesc": "",
+            "PresentedCurrency": "MMK",
+            "PaymentExchangeRate": 1,
+            "DiagnosisDescription": "",
+            "ReviseClaimReasonCode": ""
+        }
+    ],
+    "MemberRefNo": "12/MABANA(N)207084",
+    "TpaCaseNumber": "AYA-CL-26043392",
+    "TpaClaimNumber": "CL/YGN/AYH/26033474",
+    "ProvPortalCaseNumber": ""
+}

@@ -1,0 +1,37 @@
+{
+    "Items": [
+        {
+            "PlanId": "2147",
+            "BankName": "CB Bank",
+            "ClaimType": "M",
+            "InvoiceID": "NIL",
+            "BankAcctNo": "0095600500020718",
+            "PayeeEmail": "thandar.lwin@green-towers.com",
+            "BenefitHead": "",
+            "BenefitType": "",
+            "IncurDateTo": "10122026",
+            "SymptomDate": "10122026",
+            "BankAcctName": "Thandar Lwin",
+            "ExchangeRate": 1,
+            "PresentedAmt": 92116,
+            "ProviderCode": null,
+            "ProviderName": "Grand Handtha Hospital",
+            "ReceivedDate": "10122026",
+            "ContactNumber": "09796396225",
+            "DiagnosisCode": "",
+            "IncurDateFrom": "10122026",
+            "PaymentMethod": null,
+            "PaymentCurrency": "MMK",
+            "TreatmentCountry": "MYANMAR",
+            "DiagnosisCodeDesc": "",
+            "PresentedCurrency": "MMK",
+            "PaymentExchangeRate": 1,
+            "DiagnosisDescription": "",
+            "ReviseClaimReasonCode": ""
+        }
+    ],
+    "MemberRefNo": "12/ALANA(N)048931",
+    "TpaCaseNumber": "AYA-CL-26043951",
+    "TpaClaimNumber": "CL/YGN/AYH/26033891",
+    "ProvPortalCaseNumber": ""
+}

@@ -1,0 +1,37 @@
+{
+    "Items": [
+        {
+            "PlanId": "2147",
+            "BankName": "CB Bank",
+            "ClaimType": "M",
+            "InvoiceID": "NIL",
+            "BankAcctNo": "0204600500007072",
+            "PayeeEmail": "aungmyint.myat@green-towers.com",
+            "BenefitHead": "",
+            "BenefitType": "",
+            "IncurDateTo": "09232026",
+            "SymptomDate": "09232026",
+            "BankAcctName": "Aung Myint Myat",
+            "ExchangeRate": 1,
+            "PresentedAmt": 174500,
+            "ProviderCode": null,
+            "ProviderName": "Parami General Hospital - Yangon",
+            "ReceivedDate": "09252026",
+            "ContactNumber": "09250529681",
+            "DiagnosisCode": "",
+            "IncurDateFrom": "09232026",
+            "PaymentMethod": null,
+            "PaymentCurrency": "MMK",
+            "TreatmentCountry": "MYANMAR",
+            "DiagnosisCodeDesc": "",
+            "PresentedCurrency": "MMK",
+            "PaymentExchangeRate": 1,
+            "DiagnosisDescription": "",
+            "ReviseClaimReasonCode": ""
+        }
+    ],
+    "MemberRefNo": "12/UKAMA(N)191924",
+    "TpaCaseNumber": "AYA-CL-26040946",
+    "TpaClaimNumber": "CL/YGN/AYH/26032593",
+    "ProvPortalCaseNumber": ""
+}

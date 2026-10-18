@@ -1,0 +1,37 @@
+{
+    "Items": [
+        {
+            "PlanId": "2147",
+            "BankName": "KBZ Bank",
+            "ClaimType": "M",
+            "InvoiceID": "NIL",
+            "BankAcctNo": "13130199909232001",
+            "PayeeEmail": "pyae.wa@aml.mobi",
+            "BenefitHead": "",
+            "BenefitType": "",
+            "IncurDateTo": "10102026",
+            "SymptomDate": "10102026",
+            "BankAcctName": "Pyae wa",
+            "ExchangeRate": 1,
+            "PresentedAmt": 190000,
+            "ProviderCode": null,
+            "ProviderName": "Zee kwat",
+            "ReceivedDate": "10112026",
+            "ContactNumber": "09791000616",
+            "DiagnosisCode": "",
+            "IncurDateFrom": "10102026",
+            "PaymentMethod": null,
+            "PaymentCurrency": "MMK",
+            "TreatmentCountry": "MYANMAR",
+            "DiagnosisCodeDesc": "",
+            "PresentedCurrency": "MMK",
+            "PaymentExchangeRate": 1,
+            "DiagnosisDescription": "",
+            "ReviseClaimReasonCode": ""
+        }
+    ],
+    "MemberRefNo": "9/TAKANA(N)171684",
+    "TpaCaseNumber": "AYA-CL-26043792",
+    "TpaClaimNumber": "CL/YGN/AYH/26033750",
+    "ProvPortalCaseNumber": ""
+}

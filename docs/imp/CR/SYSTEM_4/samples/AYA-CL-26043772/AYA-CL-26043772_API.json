@@ -1,0 +1,37 @@
+{
+    "Items": [
+        {
+            "PlanId": "2147",
+            "BankName": "CB Bank",
+            "ClaimType": "M",
+            "InvoiceID": "NIL",
+            "BankAcctNo": "0224100900012343",
+            "PayeeEmail": "zinmin.naing@ri.org",
+            "BenefitHead": "",
+            "BenefitType": "",
+            "IncurDateTo": "10102026",
+            "SymptomDate": "10102026",
+            "BankAcctName": "Zin Min Naing",
+            "ExchangeRate": 1,
+            "PresentedAmt": 80000,
+            "ProviderCode": null,
+            "ProviderName": "121 Dental Clinic",
+            "ReceivedDate": "10112026",
+            "ContactNumber": "09409403642",
+            "DiagnosisCode": "",
+            "IncurDateFrom": "10102026",
+            "PaymentMethod": null,
+            "PaymentCurrency": "MMK",
+            "TreatmentCountry": "MYANMAR",
+            "DiagnosisCodeDesc": "",
+            "PresentedCurrency": "MMK",
+            "PaymentExchangeRate": 1,
+            "DiagnosisDescription": "",
+            "ReviseClaimReasonCode": ""
+        }
+    ],
+    "MemberRefNo": "5/KANANA(N)090943",
+    "TpaCaseNumber": "AYA-CL-26043772",
+    "TpaClaimNumber": "CL/YGN/AYH/26033730",
+    "ProvPortalCaseNumber": ""
+}
