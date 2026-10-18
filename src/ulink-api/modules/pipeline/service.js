@@ -20,7 +20,6 @@ const apiClaimRecognitionService = require('../api-claim-recognition/service');
 const apiMemberVerificationService = require('../api-member-verification/service');
 const apiDocumentCheckingService = require('../api-document-checking/service');
 const apiEmailSenderService = require('../api-email-sender/service');
-const apiReplyIntakeService = require('../api-reply-intake/service');
 const apiClaimPreparationService = require('../api-claim-preparation/service');
 const apiClaimRevisionService = require('../api-claim-revision/service');
 const apiClaimStpService = require('../api-claim-stp/service');
@@ -82,11 +81,8 @@ const API_STEPS = [
   // next, and the case is checked again (SYSTEM_4 E4-04).
   ['api-console-watch', apiConsoleWatchService],
   ['api-material-download', apiMaterialDownloadService],
-  // The one inbox reader, shared with the email pipeline (same job, same lock — never both at
-  // once). A reply to an API email lands on the API case's thread; api-reply-intake takes it
-  // from there. email-intake itself only ever reprocesses email statuses.
-  ['email-intake', emailIntakeService],
-  ['api-reply-intake', apiReplyIntakeService],
+  // No inbox steps: ULINK emails the customer (draft on the case page) and uploads what comes back on the case
+  // page; console watch picks it up. The api-reply-intake job stays callable on its own (old cases' history).
   ['api-claim-recognition', apiClaimRecognitionService],
   ['api-member-verification', apiMemberVerificationService],
   ['api-document-checking', apiDocumentCheckingService],

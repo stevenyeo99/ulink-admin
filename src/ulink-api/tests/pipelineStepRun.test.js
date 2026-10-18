@@ -45,18 +45,15 @@ it('runs only the chosen steps, in pipeline order', async () => {
 
 it('skips a step that is not set up here (no inbox) and still runs the rest', async () => {
   const emailIntake = require('../modules/email-intake/service');
-  const apiReplyIntake = require('../modules/api-reply-intake/service');
   const { PipelineRunStep } = require('../db/models');
   emailIntake.notConfiguredReason = () => 'inbox not configured';
-  apiReplyIntake.notConfiguredReason = () => 'inbox not configured';
   try {
-    await pipelineService.executeSteps(runOf('API'));
+    await pipelineService.executeSteps(runOf('EMAIL'));
   } finally {
     emailIntake.notConfiguredReason = () => null;
-    apiReplyIntake.notConfiguredReason = () => null;
   }
-  // No mailbox: both mail steps of the API pipeline are skipped (SYSTEM_4 go-live), every other step runs.
-  expect(ran).toEqual(stepNames('API').filter((n) => n !== 'email-intake' && n !== 'api-reply-intake'));
+  // No mailbox: the inbox step is skipped, every other step runs.
+  expect(ran).toEqual(stepNames('EMAIL').filter((n) => n !== 'email-intake'));
   const skipped = await PipelineRunStep.create.mock.results.find((r, i) => PipelineRunStep.create.mock.calls[i][0].blockName === 'email-intake').value;
   expect(skipped.status).toBe('SKIPPED');
   expect(skipped.skipReason).toBe('inbox not configured');

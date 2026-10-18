@@ -15,9 +15,9 @@ const { requestedLines, requestedDedupeKey } = require('../case-requests/request
 // handled the same way as the email flow's ias-claim-creation:
 // - success, documents complete, STP → API_AWAITING_CSR (api-claim-stp fetches the settlement report)
 // - success, documents complete, non-STP → API_CLAIM_REVISED (internal CLAIM_APPROVAL_REVIEW email; JD3)
-// - success, documents incomplete    → API_CLAIM_SUSPENDED — suspense set in IAS, the customer was
-//                                      asked for documents; their reply restarts the case, and the next
-//                                      revision (isSuspense=N) lifts the suspense
+// - success, documents incomplete    → API_CLAIM_SUSPENDED — suspense set in IAS, ULINK asks the
+//                                      customer for documents and uploads them on the case page; console
+//                                      watch restarts the case, and the next revision (isSuspense=N) lifts it
 // - success: false                   → API_CLAIM_REVISION_FAILED, not retried (internal CLAIM_SUBMIT_ISSUE email)
 // - network error / timeout / non-2xx → thrown: FAILED step, retried next run
 // Revising the same claimNo again is safe (confirmed 2026-09-24).

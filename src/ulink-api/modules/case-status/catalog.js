@@ -74,7 +74,7 @@ const CASE_STATUSES = {
   API_DOCUMENTS_UNSURE: status('documents', 'needs_review', "Check the AI's documents finding", "All documents passed, but the AI wasn't sure about some of them, or a person asked for something the AI can't check (see the review points). Check them against the documents, then confirm to continue — or request more information; IAS is unchanged."),
   API_DOCUMENTS_VERIFIED: status('documents', 'in_progress', 'Documents complete', 'Member and documents are checked; the IAS revision is being prepared.'),
   API_CLAIM_PAYLOAD_PREPARED: status('claim', 'in_progress', 'Revision prepared', 'The IAS claim revision is built and about to be sent.'),
-  API_CLAIM_SUSPENDED: status('claim', 'waiting_customer', 'Documents incomplete', "Revised in IAS with suspense; the customer was asked for the missing documents and the case waits for their reply."),
+  API_CLAIM_SUSPENDED: status('claim', 'waiting_customer', 'Documents incomplete', "Revised in IAS with suspense; the missing documents are asked for, and the case continues once they are in the IAS console (uploaded on the case page or by the customer)."),
   API_CLAIM_REVISED: status('claim', 'done', 'Revised in IAS', 'Documents are complete; handed to JD3 for approval in IAS.'),
   API_CLAIM_REVISION_FAILED: status('claim', 'failed', 'IAS rejected the revision', 'IAS rejected the revision; the reason was emailed to the internal team.'),
   API_AWAITING_CSR: status('stp', 'in_progress', 'Waiting for settlement report', 'STP claim: waiting for IAS to produce the settlement report.'),

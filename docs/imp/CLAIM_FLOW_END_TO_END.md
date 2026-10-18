@@ -148,28 +148,25 @@ A **non-STP** claim ends at *Created in IAS*: JD3 approves it in IAS. ULINK can'
 
 ## 3. API case, step by step
 
-Pipeline order (API): api-claim-intake → api-console-watch → api-material-download → email-intake → api-reply-intake →
-api-claim-recognition → api-member-verification → api-document-checking → api-claim-preparation → api-claim-revision →
+Pipeline order (API): api-claim-intake → api-console-watch → api-material-download → api-claim-recognition → api-member-verification → api-document-checking → api-claim-preparation → api-claim-revision →
 api-claim-stp → api-email-sender.
 
 Only what differs from the email case is described; the checks themselves are the same code.
 
-**No inbox:** when IMAP is not configured (`IMAP_HOST` empty), or *Read the mailbox (IMAP)* is switched off on the
-STP settings page, the email-intake and api-reply-intake steps show *Skipped* with the reason and the run completes
-normally; customer replies then never reach the case — new documents come through the console instead (console watch,
-case-page upload). Sending email is not affected.
+**No inbox (from 2026-10-18):** the API pipeline does not read the mailbox. When documents are missing, ULINK sends
+the customer the *Email draft to the customer* from the case page (switch *API cases: email the customer about missing
+documents* off). ULINK uploads the documents that come back on the case page. Console watch then restarts the case.
 
 | # | Step | What happens | Status (label) |
 |---|---|---|---|
 | 1 | **API claim intake** | Lists the claims created in IAS today (Myanmar time); one case per IAS claim number. A second IAS claim with the same TPA case number is refused (reported, not merged). | `API_RECEIVED` *Received from IAS* |
 | 1b | **Console watch** | For a case **waiting on documents** (*No documents*, *Documents incomplete*, *Check before emailing customer*, *Check the AI's documents finding*, *Uploaded — waiting for the console*, *Upload not in the console*): a console submission the case doesn't have yet — uploaded on the case page or put in the console by anyone — sends it on to be downloaded and checked again; complete, the next revision lifts the suspense. Our upload not in the console after 2 hours → *Upload not in the console* (still watched). | `API_NEW_DOCUMENTS` *New documents in the console* · `API_UPLOAD_NOT_IN_CONSOLE` *Upload not in the console* |
 | 2 | **Console material download** | Downloads the images the customer uploaded to the console (only the ones not stored yet). None after **2 hours** → the customer is asked for documents. Also runs on *New documents in the console*. | `API_MATERIALS_DOWNLOADED` *Images downloaded* · `API_NO_DOCUMENTS` *No documents* |
-| 3 | **Reply intake** | A customer reply to our email with new attachments → the case is read again (console images + new attachments). | `API_REPLY_RECEIVED` *Customer replied* |
 | 4 | **Recognition** | Same as 2.2. | `API_RECOGNIZED` · `API_MANUAL_REVIEW` |
 | 5 | **Member check** | Same as 2.3 (internal email on an issue). | `API_READY_FOR_DOCUMENT_CHECKING` · `API_MEMBER_REVIEW_REQUIRED` |
 | 6 | **Document check** | Same checklist. Missing documents: customer emailed (unless switched off — 4.5), and — unlike email — the case **continues** so the IAS claim can be suspended. Switch #2 on and the AI unsure: waits at *Check before emailing customer* instead. Switch #3 on and all passed but the AI unsure — or a reviewer's own line still open — waits at *Check the AI's documents finding* before the IAS revision. | `API_DOCUMENTS_VERIFIED` *Documents complete* · `API_INCOMPLETE` *Documents missing* · `API_DOCUMENTS_REVIEW` *Check before emailing customer* · `API_DOCUMENTS_UNSURE` *Check the AI's documents finding* |
 | 7 | **Claim preparation** | Same builder as 2.7, plus the API flags: documents missing → `isSuspense=Y`; STP → `isValidation=Y, isCSR=Y`; otherwise `N`. All the customer's console barcodes → `barcode` + `suppBarcode1–5`. | `API_CLAIM_PAYLOAD_PREPARED` *Revision prepared* |
-| 8 | **Claim revision** | The claim already exists in IAS, so it is **revised** (never created). Complete + STP → settlement report next. Complete, not STP → JD3 email. Documents missing → **suspense** in IAS + internal "Documents incomplete" email; the customer's reply restarts the case and the next revision lifts the suspense. | `API_AWAITING_CSR` *Waiting for settlement report* · `API_CLAIM_REVISED` *Revised in IAS* · `API_CLAIM_SUSPENDED` *Documents incomplete* · `API_CLAIM_REVISION_FAILED` *IAS rejected the revision* |
+| 8 | **Claim revision** | The claim already exists in IAS, so it is **revised** (never created). Complete + STP → settlement report next. Complete, not STP → JD3 email. Documents missing → **suspense** in IAS + internal "Documents incomplete" email; the documents uploaded on the case page (or by the customer in the console) restart the case, and the next revision lifts the suspense. | `API_AWAITING_CSR` *Waiting for settlement report* · `API_CLAIM_REVISED` *Revised in IAS* · `API_CLAIM_SUSPENDED` *Documents incomplete* · `API_CLAIM_REVISION_FAILED` *IAS rejected the revision* |
 | 9 | **Settlement report** | Same as 2.9. | `API_CSR_SENT` *Settlement report sent* |
 | — | **API email sender** | Sends every email the API jobs asked for. API emails start their own thread (subject "AYA Sompo claim … (Ref: …)"); customer and internal emails are kept in separate threads. With *API cases: email the customer about missing documents* off, the customer's missing-documents email is not sent (case history: "Customer not emailed …"); the team's emails say to contact the customer, and a case with no console images gets a team email instead. | — |
 
@@ -178,7 +175,7 @@ case-page upload). Sending email is not affected.
 | | Email case | API case |
 |---|---|---|
 | Starts from | Customer's email | Claim created in IAS |
-| Documents come from | Email attachments | Console (customer's upload) + email replies |
+| Documents come from | Email attachments | Console (customer's upload, or ULINK's upload on the case page) |
 | Console / barcode | We upload (`cl-upload`) and wait for the barcode — or folder copy | Already in the console; barcodes read from it |
 | IAS action | **Create** the claim | **Revise** the claim |
 | Documents missing | No IAS claim yet; wait for the customer | Claim **suspended** in IAS; wait for the customer |
@@ -345,7 +342,7 @@ Team emails go to `INTERNAL_REVIEW_EMAIL` (+ the route's CC), start with "(ULINK
 | AI confidence threshold | Console → STP settings | 70% | At or below: the AI counts as unsure (4.5) |
 | Work on email cases / API cases | Console → STP settings | On | Off: that pipeline doesn't run (cron or Run) and its tab is hidden on the work pages; its cases are kept |
 | API cases: email the customer about missing documents | Console → STP settings | On | Off: ULINK contacts the customer; team still emailed (section 3) |
-| Read the mailbox (IMAP) | Console → STP settings | On | Off: email-intake (both pipelines) and api-reply-intake are skipped (no `.env` change, no restart) |
+| Read the mailbox (IMAP) | Console → STP settings | On | Off: email-intake (email pipeline) is skipped (no `.env` change, no restart) |
 | `IMAP_HOST` | `.env` | — | Empty: no inbox — email-intake is skipped |
 | `CONSOLE_UPLOAD_METHOD` | `.env` | `folder` | `folder` or `cl-upload` |
 | `CL_UPLOAD_URL`, `CL_UPLOAD_API_KEY` | `.env` | — | cl-upload API |
