@@ -1,7 +1,7 @@
 /**
- * yyyy/MM/dd partition key for a given date (UTC) — shared by email-intake's attachment
- * storage key and console-upload's destination folder, so both date-sharded layouts stay
- * byte-for-byte consistent without duplicating the logic.
+ * yyyy/MM/dd partition key for a given date (UTC) — the first folder of every stored file
+ * (email attachments, linked documents, API console images, case-page uploads), console-upload's
+ * destination folder and the CSR folder, so one day's files are found in one place.
  */
 function datePathSegments(date) {
   const d = date instanceof Date ? date : new Date(date);

@@ -4,6 +4,7 @@ const { CaseDocument } = require('../../db/models');
 const config = require('../../config');
 const { getStorageAdapter } = require('../../storage');
 const { runApiJob } = require('../api-pipeline/runApiJob');
+const { datePathSegments } = require('../shared/datePathSegments');
 const { listMaterials, downloadZip } = require('./middlewareClient');
 
 // api-material-download: API case workflow job 2 (docs/imp/day1/api-case-workflow.md section 6.3).
@@ -138,7 +139,8 @@ async function processCase({ caseRecord, input }) {
   for (const batch of zipBatches(incomplete)) {
     for (const file of await readZip(await downloadZip(scanId, batch), scanId, barcodeIds)) {
       if (have.has(docKey(file.barcodeId, file.filename))) continue;
-      const { storageRef } = await storage.put(`api/${scanId}/${file.barcodeId}/${file.filename}`, file.bytes);
+      // Under the day it is stored (yyyy/MM/dd, UTC, like every stored file).
+      const { storageRef } = await storage.put(`${datePathSegments(new Date())}/api/${scanId}/${file.barcodeId}/${file.filename}`, file.bytes);
       stored.push(await CaseDocument.create({
         caseId: caseRecord.id,
         origin: 'CONSOLE',

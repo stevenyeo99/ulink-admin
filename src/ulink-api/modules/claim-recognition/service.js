@@ -10,6 +10,7 @@ const { transcribePage, synthesizeJson, DocumentsTooLongError } = require('./llm
 const { extractLinkedDocumentUrls, fetchLinkedDocument } = require('./linkedDocuments');
 const { queueDedupedTask } = require('../shared/emailTaskQueue');
 const { gatherAttachments } = require('../shared/gatherAttachments');
+const { datePathSegments } = require('../shared/datePathSegments');
 const { forCase } = require('../llm-calls/log');
 const { pastCorrectionNotes } = require('../ai-feedback/memory');
 
@@ -104,7 +105,8 @@ async function transcribeLinkedDocuments(attachment, pdfBuffer, storage) {
         continue;
       }
 
-      const key = `linked/${attachment.id}/${Buffer.from(url).toString('base64url')}${fetched.ext}`;
+      // Under the day it is stored (yyyy/MM/dd, UTC, like every stored file).
+      const key = `${datePathSegments(new Date())}/linked/${attachment.id}/${Buffer.from(url).toString('base64url')}${fetched.ext}`;
       const { storageRef } = await storage.put(key, fetched.buffer);
       linkedAttachment = await EmailAttachment.create({
         messageId: attachment.messageId,

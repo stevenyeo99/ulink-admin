@@ -122,7 +122,9 @@ describe('job.process', () => {
 
     expect(listMaterials.mock.calls).toEqual([['API-T2', 0], ['API-T2', 1]]);
     expect(downloadZip.mock.calls[0][1].map((i) => i.barcodeId)).toEqual(['B1', 'B2']);
-    expect([...storage.files.keys()]).toEqual(['api/API-T2/B1/m1.jpg', 'api/API-T2/B2/m2.jpg']);
+    // Under the day stored (UTC), like every stored file.
+    const day = new Date().toISOString().slice(0, 10).replace(/-/g, '/');
+    expect([...storage.files.keys()]).toEqual([`${day}/api/API-T2/B1/m1.jpg`, `${day}/api/API-T2/B2/m2.jpg`]);
     expect(models.docs[0]).toMatchObject({ origin: 'CONSOLE', barcodeId: 'B1', scanId: 'API-T2-01', originalFilename: 'm1.jpg', contentType: 'image/jpeg' });
     expect(result).toEqual({
       nextStatus: 'API_MATERIALS_DOWNLOADED',

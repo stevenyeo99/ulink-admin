@@ -41,7 +41,7 @@ it('merges the files into one PDF stored on the case, and the case is read again
   const res = await call({ comment: 'Customer sent the medical report by Viber', files: [file('report.pdf'), file('voucher.jpg')] });
   expect(res.body).toEqual({ caseId: 'case-1', currentStatus: 'API_UPLOAD_RECEIVED', files: ['report.pdf', 'voucher.jpg'] });
   expect(mergeToPdf).toHaveBeenCalledTimes(1);
-  expect(put).toHaveBeenCalledWith(expect.stringMatching(/^api\/AYA-CL-26100012\/upload\/[0-9a-f-]{36}\.pdf$/), Buffer.from('%PDF'));
+  expect(put).toHaveBeenCalledWith(expect.stringMatching(/^\d{4}\/\d\d\/\d\d\/api\/API-AYA-CL-26100012\/upload\/[0-9a-f-]{36}\.pdf$/), Buffer.from('%PDF'));
   expect(rows.documents).toEqual([expect.objectContaining({
     caseId: 'case-1', origin: 'UPLOAD', barcodeId: null, contentType: 'application/pdf',
     originalFilename: expect.stringMatching(/^UPLOAD-AYA-CL-26100012-\d{4}-\d\d-\d\dT\d{6}\.pdf$/),

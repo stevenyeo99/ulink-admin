@@ -3,6 +3,7 @@ const { sequelize, Case, CaseEvent, CaseDocument, ApiCaseStep } = require('../..
 const config = require('../../config');
 const { getStorageAdapter } = require('../../storage');
 const { mergeToPdf } = require('../console-upload/mergePdf');
+const { datePathSegments } = require('../shared/datePathSegments');
 
 // Upload missing documents from the case page (SYSTEM_4 E4-04): a person — any logged-in user (owner, Q2) — adds the
 // documents the customer gave them. The files of one upload are merged into one PDF and stored on the case (origin
@@ -47,8 +48,10 @@ async function uploadDocuments(caseRecord, files, { operator, username, comment 
   const uploadedAt = new Date();
   // [A-Za-z0-9._-] only, like every stored document name (getDocument sends it as the download name).
   const filename = `UPLOAD-${caseRecord.tpaCaseNumber}-${uploadedAt.toISOString().slice(0, 19).replace(/:/g, '')}.pdf`;
-  // A random key: two uploads in the same second never overwrite each other.
-  const { storageRef } = await getStorageAdapter().put(`api/${caseRecord.tpaCaseNumber}/upload/${crypto.randomUUID()}.pdf`, pdf);
+  // Under the day it is stored (yyyy/MM/dd, UTC, like every stored file) next to the case's console images; a random
+  // name, so two uploads in the same second never overwrite each other.
+  const key = `${datePathSegments(uploadedAt)}/api/API-${caseRecord.tpaCaseNumber}/upload/${crypto.randomUUID()}.pdf`;
+  const { storageRef } = await getStorageAdapter().put(key, pdf);
 
   const names = files.map((f) => f.filename);
   const prevStatus = caseRecord.currentStatus;
