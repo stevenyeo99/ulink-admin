@@ -6,7 +6,11 @@ const JSZip = require('jszip');
 // CaseDocument are in-memory. Zips are real (jszip). The runner itself is covered by
 // tests/runApiJob.test.js.
 
-jest.mock('../config', () => ({ apiMaterialDownload: { graceMinutes: 120, batchLimit: 10, middlewareUrl: 'http://middleware.test' } }));
+jest.mock('../config', () => ({ apiMaterialDownload: { graceMinutes: 120, batchLimit: 10, middlewareUrl: 'http://middleware.test' }, claimRecognition: { rasterDpi: 100 } }));
+// The PDF merge is replaced: its "PDF" names the images in the order they were given (real merge: mergePdf tests).
+jest.mock('../modules/console-upload/mergePdf', () => ({
+  mergeToPdf: jest.fn(async (files) => ({ pdf: Buffer.from(`PDF:${files.map((f) => f.filename).join(',')}`), pageCount: files.length, skipped: [] })),
+}));
 jest.mock('../modules/api-material-download/middlewareClient', () => ({ listMaterials: jest.fn(), downloadZip: jest.fn() }));
 jest.mock('../storage', () => {
   const files = new Map();
@@ -24,6 +28,7 @@ jest.mock('../db/models', () => {
 });
 
 const { listMaterials, downloadZip } = require('../modules/api-material-download/middlewareClient');
+const { mergeToPdf } = require('../modules/console-upload/mergePdf');
 const storage = require('../storage');
 const models = require('../db/models');
 const { job, scanIdFor, belongsToScan, zipBatches, readZip, withinGrace } = require('../modules/api-material-download/service');
@@ -105,38 +110,65 @@ describe('job.process', () => {
     expect(job).toMatchObject({ inputStatus: ['API_RECEIVED', 'API_NEW_DOCUMENTS'], inputs: ['api-claim-intake'], optionalInputs: ['api-console-upload'] });
   });
 
-  it("stores every image of the scan's own submissions as case documents", async () => {
+  it("stores each of the scan's own submissions as one PDF, its images as pages in file order", async () => {
     listMaterials
-      .mockResolvedValueOnce({ items: [{ barcodeId: 'B1', scanId: 'API-T2-01', materials: [material('m1')] }], hasMore: true })
+      .mockResolvedValueOnce({ items: [{ barcodeId: 'B1', scanId: 'API-T2-01', materials: [material('m1'), material('m10'), material('m2')] }], hasMore: true })
       .mockResolvedValueOnce({
         items: [
-          { barcodeId: 'B2', scanId: 'API-T2-02', materials: [material('m2')] },
-          { barcodeId: 'ZZ', scanId: 'API-T22-01', materials: [material('m3')] }, // another claim
+          { barcodeId: 'B2', scanId: 'API-T2-02', materials: [material('m3')] },
+          { barcodeId: 'ZZ', scanId: 'API-T22-01', materials: [material('m4')] }, // another claim
         ],
         hasMore: false,
       });
-    downloadZip.mockResolvedValue(await zipOf({ 'API-T2/B1/m1.jpg': '1', 'API-T2/B2/m2.jpg': '2' }));
+    downloadZip.mockResolvedValue(await zipOf({ 'API-T2/B1/page-10.jpg': '10', 'API-T2/B1/page-2.jpg': '2', 'API-T2/B1/page-1.jpg': '1', 'API-T2/B2/m3.jpg': '3' }));
 
     const result = await job.process({ caseRecord, input: inputFor(LONG_AGO) });
 
     expect(listMaterials.mock.calls).toEqual([['API-T2', 0], ['API-T2', 1]]);
     expect(downloadZip.mock.calls[0][1].map((i) => i.barcodeId)).toEqual(['B1', 'B2']);
+    // Pages in file order (page-1, page-2, page-10), sized for the AI's rendering resolution.
+    expect(mergeToPdf.mock.calls[0][0].map((f) => f.filename)).toEqual(['page-1.jpg', 'page-2.jpg', 'page-10.jpg']);
+    expect(mergeToPdf.mock.calls[0][1]).toEqual({ imageDpi: 100 });
     // Under the day stored (UTC), like every stored file.
     const day = new Date().toISOString().slice(0, 10).replace(/-/g, '/');
-    expect([...storage.files.keys()]).toEqual([`${day}/api/API-T2/B1/m1.jpg`, `${day}/api/API-T2/B2/m2.jpg`]);
-    expect(models.docs[0]).toMatchObject({ origin: 'CONSOLE', barcodeId: 'B1', scanId: 'API-T2-01', originalFilename: 'm1.jpg', contentType: 'image/jpeg' });
+    expect([...storage.files.keys()]).toEqual([`${day}/api/API-T2/B1/B1.pdf`, `${day}/api/API-T2/B2/B2.pdf`]);
+    expect(models.docs[0]).toMatchObject({ origin: 'CONSOLE', barcodeId: 'B1', scanId: 'API-T2-01', originalFilename: 'B1.pdf', contentType: 'application/pdf' });
     expect(result).toEqual({
       nextStatus: 'API_MATERIALS_DOWNLOADED',
-      message: expect.any(String),
+      message: '4 image(s) from 2 console submission(s) stored as 2 PDF document(s)',
       output: {
         scanId: 'API-T2',
         fileCount: 2,
         documents: [
-          { barcodeId: 'B1', scanId: 'API-T2-01', createdAt: undefined, expected: 1, documentIds: ['doc-1'] },
+          { barcodeId: 'B1', scanId: 'API-T2-01', createdAt: undefined, expected: 3, documentIds: ['doc-1'] },
           { barcodeId: 'B2', scanId: 'API-T2-02', createdAt: undefined, expected: 1, documentIds: ['doc-2'] },
         ],
       },
     });
+  });
+
+  it("an image that can't go into a PDF stores that submission image by image — the case is never stuck", async () => {
+    listMaterials.mockResolvedValue({ items: [{ barcodeId: 'B1', scanId: 'API-T2-01', materials: [material('a'), material('b')] }], hasMore: false });
+    downloadZip.mockResolvedValue(await zipOf({ 'API-T2/B1/a.jpg': 'a', 'API-T2/B1/b.jpg': 'b' }));
+    mergeToPdf.mockRejectedValueOnce(new Error('SOI not found in JPEG'));
+    const result = await job.process({ caseRecord, input: inputFor(LONG_AGO) });
+    expect(models.docs.map((d) => d.originalFilename)).toEqual(['a.jpg', 'b.jpg']);
+    expect(result).toMatchObject({ nextStatus: 'API_MATERIALS_DOWNLOADED', output: { documents: [{ documentIds: ['doc-1', 'doc-2'] }] } });
+  });
+
+  it("pages follow the console's own order when the file names match it", async () => {
+    listMaterials.mockResolvedValue({ items: [{ barcodeId: 'B1', scanId: 'API-T2-01', materials: [material('zz'), material('aa')] }], hasMore: false });
+    downloadZip.mockResolvedValue(await zipOf({ 'API-T2/B1/aa.jpg': 'a', 'API-T2/B1/zz.jpg': 'z' }));
+    await job.process({ caseRecord, input: inputFor(LONG_AGO) });
+    expect(mergeToPdf.mock.calls[0][0].map((f) => f.filename)).toEqual(['zz.jpg', 'aa.jpg']);
+  });
+
+  it('a submission downloaded before as images is not downloaded again, and keeps its images', async () => {
+    models.docs.push({ id: 'old-1', caseId: 'case-1', barcodeId: 'B1', originalFilename: 'm1.jpg' });
+    listMaterials.mockResolvedValue({ items: [{ barcodeId: 'B1', scanId: 'API-T2-01', materials: [material('m1')] }], hasMore: false });
+    const result = await job.process({ caseRecord, input: inputFor(LONG_AGO) });
+    expect(downloadZip).not.toHaveBeenCalled();
+    expect(result.output.documents[0].documentIds).toEqual(['old-1']);
   });
 
   it('never downloads our own case-page uploads (api-console-upload) — the case read them already', async () => {
@@ -165,7 +197,7 @@ describe('job.process', () => {
     expect(result).toMatchObject({ nextStatus: 'API_NO_DOCUMENTS', output: { fileCount: 0, documents: [] } });
   });
 
-  it('keeps a partial download and waits; the retry fetches only the incomplete submission', async () => {
+  it('stores a complete submission; one with an image missing waits whole for the next run (never a PDF missing pages)', async () => {
     const items = [
       { barcodeId: 'B1', scanId: 'API-T2-01', materials: [material('a'), material('b')] },
       { barcodeId: 'B2', scanId: 'API-T2-02', materials: [material('c')] },
@@ -174,14 +206,15 @@ describe('job.process', () => {
     downloadZip.mockResolvedValueOnce(await zipOf({ 'API-T2/B1/a.jpg': 'a', 'API-T2/B2/c.jpg': 'c' })); // b failed
 
     const first = await job.process({ caseRecord, input: inputFor(LONG_AGO) });
-    expect(first).toMatchObject({ wait: true, output: { fileCount: 2, reason: expect.stringMatching(/2 of 3/) } });
+    expect(first).toMatchObject({ wait: true, output: { reason: expect.stringMatching(/B1 \(1 of 2 images\)/) } });
+    expect(models.docs.map((d) => d.originalFilename)).toEqual(['B2.pdf']);
 
     downloadZip.mockResolvedValueOnce(await zipOf({ 'API-T2/B1/a.jpg': 'a', 'API-T2/B1/b.jpg': 'b' }));
     const second = await job.process({ caseRecord, input: inputFor(LONG_AGO) });
 
-    expect(downloadZip.mock.calls[1][1].map((i) => i.barcodeId)).toEqual(['B1']); // B2 already complete
-    expect(models.docs.map((d) => d.originalFilename)).toEqual(['a.jpg', 'c.jpg', 'b.jpg']); // a.jpg not stored twice
-    expect(second).toMatchObject({ nextStatus: 'API_MATERIALS_DOWNLOADED', output: { fileCount: 3 } });
+    expect(downloadZip.mock.calls[1][1].map((i) => i.barcodeId)).toEqual(['B1']); // B2 already stored
+    expect(models.docs.map((d) => d.originalFilename)).toEqual(['B2.pdf', 'B1.pdf']);
+    expect(second).toMatchObject({ nextStatus: 'API_MATERIALS_DOWNLOADED', output: { fileCount: 2 } });
   });
 
   it('lets a middleware failure throw (the runner records it and retries next run)', async () => {

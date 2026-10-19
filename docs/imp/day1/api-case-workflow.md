@@ -277,14 +277,16 @@ Logic:
    - within `API_MATERIAL_GRACE_MINUTES` (default 120) after ULINK received the claim (the case's `createdAt`; from 2026-10-19 — the UAT IAS writes `crtDate` in UTC+7, so it is no longer compared) → **WAITING**, retried next
      run (the console may still be uploading, S4);
    - after that → `API_NO_DOCUMENTS` with `fileCount: 0`; the customer will be asked for documents (Phase 6).
-4. **Download** only the submissions still missing pages, as zips (at most 100 images per request). Every zip entry
+4. **Download** only the submissions not stored yet, as zips (at most 100 images per request). Every zip entry
    must be exactly `<scanId>/<one of this scan's barcodes>/<safe file name>`, or the case fails.
-5. **Store each image as a case document** through the same storage adapter as email attachments. An image that
-   already exists (same case + barcode + file name) is **skipped**, never replaced. Every barcode is kept, with
-   `expected` = how many images the console listed.
-6. **Partial download** (fewer stored than expected) → **WAITING**; what arrived is kept and only the rest is
-   fetched next run (S5). An image that can never be downloaded keeps the case waiting; the step row shows
-   "x of y images downloaded" for an operator.
+5. **Store each submission as one PDF** (`<barcode>.pdf`, from 2026-10-19): its images become pages in file order,
+   each sized so that the AI's rendering gives back the photo's own pixels. The PDF is one case document, through
+   the same storage adapter as email attachments; recognition reads it page by page. A submission already stored
+   (its PDF, or all its images for a case downloaded before) is **skipped**, never replaced. Every barcode is kept,
+   with `expected` = how many images the console listed.
+6. **Partial download** (a submission with an image missing) → **WAITING**; the complete submissions are stored, the
+   incomplete one is downloaded again whole next run (S5) — never a PDF with pages missing. An image that can never
+   be downloaded keeps the case waiting; the step row names the submission and "x of y images" for an operator.
 7. **Middleware down / timeout** → **FAILED**, retried next run.
 
 `console_barcode` is not set yet: which barcode claim revision needs is decided in Phase 8.

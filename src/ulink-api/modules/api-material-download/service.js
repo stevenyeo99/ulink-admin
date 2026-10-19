@@ -6,14 +6,17 @@ const { getStorageAdapter } = require('../../storage');
 const { runApiJob } = require('../api-pipeline/runApiJob');
 const { datePathSegments } = require('../shared/datePathSegments');
 const { listMaterials, downloadZip } = require('./middlewareClient');
+const { mergeToPdf } = require('../console-upload/mergePdf');
 
 // api-material-download: API case workflow job 2 (docs/imp/day1/api-case-workflow.md section 6.3).
 //
 //   input:  { 'api-claim-intake': { clNo, tpaCaseNumber, crtDate } }
 //   output: { scanId, fileCount, documents: [{ barcodeId, scanId, createdAt, expected, documentIds }] }
 //
-// Downloads the case's console images through ulink-console-middleware's zip endpoint and stores
-// each one as a case document (ulink_case_documents, same storage adapter as email attachments).
+// Downloads the case's console images through ulink-console-middleware's zip endpoint and stores each
+// console submission (barcode) as one PDF case document, its images as pages in file order (owner,
+// 2026-10-19: reviewers see one document per submission; recognition reads it page by page like any PDF).
+// Cases downloaded before keep one document per image; both are read and shown.
 
 const JOB = 'api-material-download';
 const MAX_MATERIALS_PER_ZIP = 100; // the middleware's own per-request limit
@@ -96,7 +99,43 @@ function withinGrace(receivedAt, now = new Date()) {
   return Number.isFinite(received) && now.getTime() < received + config.apiMaterialDownload.graceMinutes * 60000;
 }
 
-const docKey = (barcodeId, filename) => `${barcodeId}/${filename}`;
+// The one PDF a console submission is stored as.
+const pdfName = (barcodeId) => `${barcodeId}.pdf`;
+
+// The console's own order (item.materials) where a file name matches it, else file-name order (page-2 before page-10).
+function inConsoleOrder(item, files) {
+  const position = new Map((item.materials || []).map((m, i) => [m.originalname, i]));
+  const rank = (f) => (position.has(f.filename) ? position.get(f.filename) : Infinity);
+  return [...files].sort((a, b) => (rank(a) === rank(b) ? 0 : rank(a) < rank(b) ? -1 : 1)
+    || a.filename.localeCompare(b.filename, undefined, { numeric: true }));
+}
+
+// One submission as one PDF (owner, 2026-10-19). An image that can't go into a PDF (a broken file, a file name that
+// doesn't match its content) must not stop the case: that submission is stored image by image instead, as before.
+async function storeSubmission(storage, caseId, scanId, item, files) {
+  const put = async (filename, bytes, contentType) => {
+    // Under the day it is stored (yyyy/MM/dd, UTC, like every stored file).
+    const { storageRef } = await storage.put(`${datePathSegments(new Date())}/api/${scanId}/${item.barcodeId}/${filename}`, bytes);
+    return CaseDocument.create({
+      caseId, origin: 'CONSOLE', barcodeId: item.barcodeId, scanId: item.scanId,
+      originalFilename: filename, contentType, sizeBytes: bytes.length, storageRef,
+    });
+  };
+  const typed = files.map((f) => ({ bytes: f.bytes, filename: f.filename, contentType: CONTENT_TYPES[path.extname(f.filename).toLowerCase()] || null }));
+  let merged = null;
+  try {
+    merged = await mergeToPdf(typed, { imageDpi: config.claimRecognition.rasterDpi });
+  } catch {
+    merged = null;
+  }
+  if (merged && !merged.skipped.length) return [await put(pdfName(item.barcodeId), merged.pdf, 'application/pdf')];
+  const docs = [];
+  for (const f of typed) docs.push(await put(f.filename, f.bytes, f.contentType));
+  return docs;
+}
+
+// ponytail: a submission is stored once — images the console adds later under the same barcode are not fetched (a
+// barcode is one upload, so this is not expected); compare the PDF's page count with the console's if it happens.
 
 // Customer email for a claim with no console images at all (S4) — the email flow's
 // MISSING_DOCUMENTS template with one line. Placeholder wording, not from the approved
@@ -127,54 +166,60 @@ async function processCase({ caseRecord, input }) {
     };
   }
 
-  // Existing documents are skipped, never replaced; only submissions still missing pages are
-  // downloaded (a retry after a partial download fetches just those).
+  // A submission is stored once: as its PDF, or (downloaded before 2026-10-19) as all its images. Stored ones are
+  // never downloaded again; the rest are, whole.
   const stored = await CaseDocument.findAll({ where: { caseId: caseRecord.id } });
-  const have = new Set(stored.map((d) => docKey(d.barcodeId, d.originalFilename)));
-  const storedPerBarcode = (barcodeId) => stored.filter((d) => d.barcodeId === barcodeId).length;
-  const incomplete = items.filter((item) => storedPerBarcode(item.barcodeId) < materialCount(item));
+  const storedFor = (barcodeId) => stored.filter((d) => d.barcodeId === barcodeId);
+  const isStored = (item) => {
+    const docs = storedFor(item.barcodeId);
+    return docs.some((d) => d.originalFilename === pdfName(item.barcodeId)) || docs.length >= materialCount(item);
+  };
+  const missing = items.filter((item) => materialCount(item) > 0 && !isStored(item));
 
-  const storage = getStorageAdapter();
+  // Each zip batch holds whole submissions: they are stored as their batch arrives, so a later failure keeps them.
+  // Only a complete submission is stored: one with an image missing is left for the next run (S5) — never a PDF with
+  // pages missing.
   const barcodeIds = new Set(items.map((item) => item.barcodeId));
-  const itemByBarcode = new Map(items.map((item) => [item.barcodeId, item]));
-  for (const batch of zipBatches(incomplete)) {
+  const storage = getStorageAdapter();
+  const incomplete = [];
+  for (const batch of zipBatches(missing)) {
+    const filesByBarcode = new Map();
     for (const file of await readZip(await downloadZip(scanId, batch), scanId, barcodeIds)) {
-      if (have.has(docKey(file.barcodeId, file.filename))) continue;
-      // Under the day it is stored (yyyy/MM/dd, UTC, like every stored file).
-      const { storageRef } = await storage.put(`${datePathSegments(new Date())}/api/${scanId}/${file.barcodeId}/${file.filename}`, file.bytes);
-      stored.push(await CaseDocument.create({
-        caseId: caseRecord.id,
-        origin: 'CONSOLE',
-        barcodeId: file.barcodeId,
-        scanId: itemByBarcode.get(file.barcodeId).scanId,
-        originalFilename: file.filename,
-        contentType: CONTENT_TYPES[path.extname(file.filename).toLowerCase()] || null,
-        sizeBytes: file.bytes.length,
-        storageRef,
-      }));
-      have.add(docKey(file.barcodeId, file.filename));
+      filesByBarcode.set(file.barcodeId, [...(filesByBarcode.get(file.barcodeId) || []), file]);
+    }
+    for (const item of batch) {
+      const files = inConsoleOrder(item, filesByBarcode.get(item.barcodeId) || []);
+      if (files.length < materialCount(item)) {
+        incomplete.push(`${item.barcodeId} (${files.length} of ${materialCount(item)} images)`);
+        continue;
+      }
+      stored.push(...(await storeSubmission(storage, caseRecord.id, scanId, item, files)));
     }
   }
 
-  const documents = items.map((item) => ({
-    barcodeId: item.barcodeId,
-    scanId: item.scanId,
-    createdAt: item.createdAt,
-    expected: materialCount(item),
-    documentIds: stored.filter((d) => d.barcodeId === item.barcodeId).map((d) => d.id),
-  }));
+  const documents = items.map((item) => {
+    const docs = storedFor(item.barcodeId);
+    const pdfDoc = docs.find((d) => d.originalFilename === pdfName(item.barcodeId));
+    return {
+      barcodeId: item.barcodeId,
+      scanId: item.scanId,
+      createdAt: item.createdAt,
+      expected: materialCount(item),
+      documentIds: pdfDoc ? [pdfDoc.id] : docs.map((d) => d.id),
+    };
+  });
   const fileCount = documents.reduce((n, d) => n + d.documentIds.length, 0);
   const output = { scanId, fileCount, documents };
 
-  // Partial download (some images failed): keep what arrived, retry the rest next run instead of
-  // continuing with missing pages (S5).
-  if (fileCount < expected) {
-    return { wait: true, output: { ...output, reason: `${fileCount} of ${expected} images downloaded; retrying the rest` } };
+  // Partial download (some images failed): what is complete is stored, the rest is downloaded again next run instead
+  // of continuing with missing pages (S5).
+  if (incomplete.length) {
+    return { wait: true, output: { ...output, reason: `Not all images downloaded yet: ${incomplete.join(', ')}; retrying` } };
   }
   return {
     output,
     nextStatus: 'API_MATERIALS_DOWNLOADED',
-    message: `${fileCount} image(s) from ${documents.length} console submission(s) stored`,
+    message: `${expected} image(s) from ${documents.length} console submission(s) stored as ${documents.length} PDF document(s)`,
   };
 }
 

@@ -4,7 +4,11 @@ const sharp = require('sharp');
 // cl-upload takes one file per case: every attachment merged into a single PDF, in attachment order.
 // PDFs are copied page by page; JPEG/PNG are placed one per page at their own size; other images
 // (WEBP, TIFF, …) are converted to PNG first. Anything else can't go into a PDF and is reported back.
-async function mergeToPdf(files) {
+// imageDpi: size each image page so that rendering the page at this resolution gives back the image's own pixels
+// (api-material-download: the AI reads the page rendered at CLAIM_RECOGNITION_RASTER_DPI, so the console photo reaches
+// it at its own size). Without it, one PDF point per pixel, as before.
+async function mergeToPdf(files, { imageDpi = 72 } = {}) {
+  if (!(imageDpi > 0)) throw new Error(`imageDpi must be a positive number, got ${imageDpi}`);
   const merged = await PDFDocument.create();
   const skipped = [];
 
@@ -19,8 +23,9 @@ async function mergeToPdf(files) {
       const image = type === 'image/jpeg' || /\.jpe?g$/.test(name)
         ? await merged.embedJpg(bytes)
         : await merged.embedPng(type === 'image/png' || name.endsWith('.png') ? bytes : await sharp(bytes).png().toBuffer());
-      const page = merged.addPage([image.width, image.height]);
-      page.drawImage(image, { x: 0, y: 0, width: image.width, height: image.height });
+      const scale = 72 / imageDpi;
+      const page = merged.addPage([image.width * scale, image.height * scale]);
+      page.drawImage(image, { x: 0, y: 0, width: image.width * scale, height: image.height * scale });
     } else {
       skipped.push(filename || '(unnamed)');
     }
