@@ -3,7 +3,7 @@ import clsx from 'clsx';
 import { useReviewQueue } from '../hooks/useCases';
 import { reviewColumns } from '../components/cases/reviewColumns';
 import { SourceTabs } from '../components/common/SourceTabs';
-import { pickSource, useEnabledSources } from '../hooks/useSource';
+import { pickView, sourceOf, viewParam, useEnabledSources } from '../hooks/useSource';
 import { DataTable } from '../components/common/DataTable';
 import type { ReviewQueueItem } from '../types/case';
 import { getSession } from '../lib/session';
@@ -19,10 +19,10 @@ const EMPTY: ReviewQueueItem[] = [];
 export function ReviewQueuePage() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const source = pickSource(params.get('source'), useEnabledSources());
+  const source = pickView(params.get('source'), useEnabledSources());
   const reason = params.get('reason') ?? '';
   const page = Math.max(0, Number(params.get('page')) || 0);
-  const { data, isLoading, isFetching, isError } = useReviewQueue(source);
+  const { data, isLoading, isFetching, isError } = useReviewQueue(sourceOf(source));
 
   const update = (patch: Record<string, string>) => {
     const next = new URLSearchParams(params);
@@ -46,7 +46,7 @@ export function ReviewQueuePage() {
   return (
     <div className="mx-auto h-full w-full max-w-6xl overflow-y-auto px-4 py-6 sm:px-6">
       <div className="mb-4">
-        <SourceTabs source={source} onChange={(next) => update({ source: next === 'API' ? 'api' : '', reason: '' })} />
+        <SourceTabs withAll source={source} onChange={(next) => update({ source: viewParam(next), reason: '' })} />
       </div>
 
       {reasons.length > 0 && (

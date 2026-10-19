@@ -22,6 +22,21 @@ export function pickSource(param: string | null, enabled: Source[]): Source {
   return enabled.includes(asked) ? asked : enabled[0];
 }
 
+// The work lists (Cases, Review queue, Approvals) also show both flows together (owner, 2026-10-19 — DRT demo item 7):
+// ALL, their default while both flows are switched on. ?source=email / ?source=api pick one; with only one flow on,
+// that one.
+export type SourceView = Source | 'ALL';
+
+export function pickView(param: string | null, enabled: Source[]): SourceView {
+  if (enabled.length < 2) return enabled[0];
+  const asked = param?.toUpperCase();
+  return asked === 'API' || asked === 'EMAIL' ? asked : 'ALL';
+}
+
+// The URL value of a work-list tab ('' = ALL, the default) and the source to ask the API for (undefined = both).
+export const viewParam = (view: SourceView) => (view === 'ALL' ? '' : view.toLowerCase());
+export const sourceOf = (view: SourceView): Source | undefined => (view === 'ALL' ? undefined : view);
+
 /**
  * Which workflow a page shows, kept in the URL (?source=api) so a link or reload keeps the tab.
  * Email is the default while email cases are switched on — otherwise the first source that is.

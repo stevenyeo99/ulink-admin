@@ -24,7 +24,8 @@ export function OverviewPage() {
   const { data, isLoading, isError } = useCaseOverview(source);
 
   const casesLink = (filters: Record<string, string>) => {
-    const qs = new URLSearchParams({ ...(source === 'API' ? { source: 'api' } : {}), ...filters });
+    // The Overview is per flow; the Cases list it opens shows that flow (its own default is All).
+    const qs = new URLSearchParams({ source: source === 'API' ? 'api' : 'email', ...filters });
     return `/cases?${qs}`;
   };
   const groups = CARD_ORDER.map((id) => catalog?.groups.find((g) => g.id === id)).filter((g) => g !== undefined);

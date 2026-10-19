@@ -1,18 +1,19 @@
 import clsx from 'clsx';
-import { useEnabledSources } from '../../hooks/useSource';
-import type { Source } from '../../types/pipeline';
+import { useEnabledSources, type SourceView } from '../../hooks/useSource';
 
-const TABS: { source: Source; label: string }[] = [
+const TABS: { source: SourceView; label: string }[] = [
   { source: 'EMAIL', label: 'Email' },
   { source: 'API', label: 'API' },
 ];
 
 // Only the sources switched on (SYSTEM_4 E4-01); with just one, no tab bar. showAll: every source regardless
-// (STP settings — rules can be prepared for a source before it goes live).
-export function SourceTabs({ source, onChange, showAll = false }: { source: Source; onChange: (source: Source) => void; showAll?: boolean }) {
+// (STP settings — rules can be prepared for a source before it goes live). withAll: an "All" tab first, both flows
+// together (the work lists).
+export function SourceTabs<V extends SourceView>({ source, onChange, showAll = false, withAll = false }: { source: V; onChange: (source: V) => void; showAll?: boolean; withAll?: boolean }) {
   const enabled = useEnabledSources();
-  const tabs = showAll ? TABS : TABS.filter((tab) => enabled.includes(tab.source));
-  if (tabs.length < 2) return null;
+  const flows = showAll ? TABS : TABS.filter((tab) => tab.source !== 'ALL' && enabled.includes(tab.source));
+  if (flows.length < 2) return null;
+  const tabs = (withAll ? [{ source: 'ALL' as SourceView, label: 'All' }, ...flows] : flows) as { source: V; label: string }[];
   return (
     <div role="tablist" aria-label="Workflow" className="flex w-fit items-center gap-1 rounded-full bg-slate-100/80 p-1">
       {tabs.map((tab) => (

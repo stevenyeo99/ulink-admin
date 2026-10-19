@@ -1,7 +1,8 @@
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useApprovals } from '../hooks/useCases';
+import { SourceTag } from '../components/common/SourceTag';
 import { SourceTabs } from '../components/common/SourceTabs';
-import { pickSource, useEnabledSources } from '../hooks/useSource';
+import { pickView, sourceOf, viewParam, useEnabledSources } from '../hooks/useSource';
 import { DataTable, type Column } from '../components/common/DataTable';
 import { WaitingCell } from '../components/common/WaitingCell';
 import type { ApprovalItem } from '../types/case';
@@ -17,9 +18,9 @@ const EMPTY: ApprovalItem[] = [];
 export function ApprovalsPage() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const source = pickSource(params.get('source'), useEnabledSources());
+  const source = pickView(params.get('source'), useEnabledSources());
   const page = Math.max(0, Number(params.get('page')) || 0);
-  const { data, isLoading, isFetching, isError } = useApprovals(source);
+  const { data, isLoading, isFetching, isError } = useApprovals(sourceOf(source));
   const items = data?.items ?? EMPTY;
 
   const columns: Column<ApprovalItem>[] = [
@@ -28,6 +29,7 @@ export function ApprovalsPage() {
       header: source === 'API' ? 'IAS claim' : 'Claim',
       render: (i) => (
         <>
+          {source === 'ALL' && <SourceTag source={i.source} />}
           <span className="text-slate-800">{i.claimNo ?? '—'}</span>
           {i.tpaCaseNumber && <span className="block whitespace-nowrap text-xs text-slate-500">{i.tpaCaseNumber}</span>}
           {i.claim && <span className="block text-xs text-ulink-teal-dark">Being reviewed by {i.claim.name}</span>}
@@ -57,7 +59,7 @@ export function ApprovalsPage() {
   return (
     <div className="mx-auto h-full w-full max-w-6xl overflow-y-auto px-4 py-6 sm:px-6">
       <div className="mb-4">
-        <SourceTabs source={source} onChange={(next) => setParams(next === 'API' ? { source: 'api' } : {}, { replace: true })} />
+        <SourceTabs withAll source={source} onChange={(next) => setParams(viewParam(next) ? { source: viewParam(next) } : {}, { replace: true })} />
       </div>
       <p className="mb-4 max-w-2xl text-sm text-slate-600">
         Claims that passed every check and are in IAS, waiting for approval. Open one to see the full AI assessment, then approve

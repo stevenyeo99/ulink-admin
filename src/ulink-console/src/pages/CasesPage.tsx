@@ -7,7 +7,7 @@ import { useCaseStatuses } from '../hooks/useCaseStatuses';
 import { caseColumns } from '../components/cases/caseColumns';
 import { Button } from '../components/common/Button';
 import { SourceTabs } from '../components/common/SourceTabs';
-import { pickSource, useEnabledSources } from '../hooks/useSource';
+import { pickView, sourceOf, viewParam, useEnabledSources } from '../hooks/useSource';
 import { DataTable, type SortState } from '../components/common/DataTable';
 import type { CaseListQuery, CaseSummary } from '../types/case';
 
@@ -24,7 +24,7 @@ export function CasesPage() {
   const [params, setParams] = useSearchParams();
   const { data: catalog, info } = useCaseStatuses();
 
-  const source = pickSource(params.get('source'), useEnabledSources());
+  const source = pickView(params.get('source'), useEnabledSources());
   const group = params.get('group') ?? '';
   const moduleId = params.get('module') ?? '';
   const q = params.get('q') ?? '';
@@ -56,7 +56,7 @@ export function CasesPage() {
   }, [searchText]);
 
   const query: CaseListQuery = {
-    source,
+    source: sourceOf(source),
     group: group || undefined,
     module: moduleId || undefined,
     q: q || undefined,
@@ -76,7 +76,7 @@ export function CasesPage() {
   return (
     <div className="mx-auto h-full w-full max-w-6xl overflow-y-auto px-4 py-6 sm:px-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <SourceTabs source={source} onChange={(next) => update({ source: next === 'API' ? 'api' : '' })} />
+        <SourceTabs withAll source={source} onChange={(next) => update({ source: viewParam(next) })} />
         <Button variant="ghost" onClick={() => refetch()} disabled={isFetching}>
           <RefreshCw size={14} className={isFetching ? 'animate-spin' : undefined} />
           Refresh

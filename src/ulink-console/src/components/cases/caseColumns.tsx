@@ -2,10 +2,11 @@ import { CaseStatusPill } from './CaseStatusPill';
 import type { Column } from '../common/DataTable';
 import { relativeTime } from '../../lib/relativeTime';
 import type { CaseSummary } from '../../types/case';
-import type { Source } from '../../types/pipeline';
+import type { SourceView } from '../../hooks/useSource';
+import { SourceTag } from '../common/SourceTag';
 
 /** The case list's columns (Cases page; reusable by later lists such as Approvals). */
-export function caseColumns(source: Source, stepLabel: (status: string) => string): Column<CaseSummary>[] {
+export function caseColumns(source: SourceView, stepLabel: (status: string) => string): Column<CaseSummary>[] {
   return [
     { key: 'status', header: 'Status', sortKey: 'status', render: (c) => <CaseStatusPill status={c.currentStatus} /> },
     {
@@ -14,7 +15,8 @@ export function caseColumns(source: Source, stepLabel: (status: string) => strin
       sortKey: 'claimNo',
       render: (c) => (
         <>
-          <span className="text-slate-800">{c.claimNo ?? (source === 'API' ? '—' : c.recognizedType ?? '—')}</span>
+          {source === 'ALL' && <SourceTag source={c.source} />}
+          <span className="text-slate-800">{c.claimNo ?? (c.source === 'API' ? '—' : c.recognizedType ?? '—')}</span>
           {c.tpaCaseNumber && <span className="block whitespace-nowrap text-xs text-slate-500">{c.tpaCaseNumber}</span>}
         </>
       ),

@@ -32,7 +32,7 @@ function CaseSearch() {
     try {
       const { cases, total } = await listCases({ q, limit: 1 });
       if (total === 1) navigate(`/cases/${cases[0].id}`);
-      else navigate(`/cases?${new URLSearchParams({ q, ...(cases[0]?.source === 'API' ? { source: 'api' } : {}) })}`);
+      else navigate(`/cases?${new URLSearchParams({ q })}`); // several matches: the Cases list's All tab shows them all
       setText('');
     } catch {
       navigate(`/cases?${new URLSearchParams({ q })}`); // the list page shows the error

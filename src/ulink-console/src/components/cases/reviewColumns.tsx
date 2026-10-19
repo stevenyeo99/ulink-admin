@@ -3,7 +3,8 @@ import { CaseStatusPill } from './CaseStatusPill';
 import type { Column } from '../common/DataTable';
 import { WaitingCell } from '../common/WaitingCell';
 import type { ReviewQueueItem } from '../../types/case';
-import type { Source } from '../../types/pipeline';
+import type { SourceView } from '../../hooks/useSource';
+import { SourceTag } from '../common/SourceTag';
 
 const REASON_STYLE: Record<string, string> = {
   'System issue': 'bg-red-100 text-red-700',
@@ -15,7 +16,7 @@ const REASON_STYLE: Record<string, string> = {
 };
 
 /** The Review Queue's columns (Review queue page; reusable wherever queued cases are listed). */
-export function reviewColumns(source: Source): Column<ReviewQueueItem>[] {
+export function reviewColumns(source: SourceView): Column<ReviewQueueItem>[] {
   return [
     {
       key: 'reason',
@@ -43,7 +44,8 @@ export function reviewColumns(source: Source): Column<ReviewQueueItem>[] {
       header: source === 'API' ? 'IAS claim' : 'Claim',
       render: (i) => (
         <>
-          <span className="text-slate-800">{i.claimNo ?? (source === 'API' ? '—' : i.recognizedType ?? '—')}</span>
+          {source === 'ALL' && <SourceTag source={i.source} />}
+          <span className="text-slate-800">{i.claimNo ?? (i.source === 'API' ? '—' : i.recognizedType ?? '—')}</span>
           {i.tpaCaseNumber && <span className="block whitespace-nowrap text-xs text-slate-500">{i.tpaCaseNumber}</span>}
         </>
       ),
