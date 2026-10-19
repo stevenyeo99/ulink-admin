@@ -35,7 +35,7 @@ function baselineFrom(cases, threshold) {
 
     for (const item of c.documentCheckResult?.checklist || []) {
       if (item.passed === null || item.passed === undefined) continue;
-      if (item.code === 'DOCUMENT_LIST' || item.code === 'BENEFIT_TYPE') continue; // information only, not checks
+      if (['DOCUMENT_LIST', 'BENEFIT_TYPE', 'DOCUMENT_DATES'].includes(item.code)) continue; // information only, not checks
       const key = item.code === 'MISSING_MANDATORY_FIELD' ? 'MISSING_MANDATORY_FIELD' : item.code;
       const entry = items.get(key) || { label: key === 'MISSING_MANDATORY_FIELD' ? 'Mandatory fields (each)' : item.label || key, evaluated: 0, failed: 0, scores: [] };
       entry.evaluated += 1;

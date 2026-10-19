@@ -890,6 +890,56 @@ function benefitTypeCheck(fields, list = documentListCheck(fields)) {
   };
 }
 
+// Medical documents dated (system checklist step 3, owner 2026-10-19): every medical document shows a date (the staff
+// asked for a dated eye test slip in AYA-CL-26043392). A rule on the documents found, no AI. Pages that follow each
+// other in the same file with the same kind are one document (a discharge summary is often dated on its first page
+// only), dated if any of its pages is. Vouchers have their own date check; claim form, bank / ID, delegation letter,
+// medical book cover and other are not medical documents here. A document without a date is a review point
+// ("Missing information", owner 2026-10-19: prevent risky processing), never an issue: the documents stay complete and
+// the customer is not asked (no approved wording yet). Like the format check: confidence 0, so with the switches it
+// stops STP ("open review points block STP") and holds a passed check for a person (switch #3). No list: no line.
+const MEDICAL_KINDS = new Set([
+  'consultation_note', 'discharge_summary', 'operation_or_procedure_note', 'investigation_report', 'eye_test_slip',
+  'dental_consultation', 'vaccination_record', 'doctor_recommendation', 'prescription',
+]);
+// One-page documents: two of them side by side are two documents (two prescriptions from two visits), never one.
+const ONE_PAGE_KINDS = new Set(['eye_test_slip', 'prescription', 'doctor_recommendation']);
+const fileOf = (page) => (page ? String(page).replace(/ - page \d+$/, '') : null);
+// ponytail: "same kind, next page, same file" is the whole rule — a document split by another page counts as two (a
+// false review point, the safe side); two separate multi-page documents side by side count as one. Ask the AI whether a
+// page continues the one before if the samples show either.
+
+// list: the documents-found line already built for these fields (documentListCheck).
+function documentDatesCheck(fields, list = documentListCheck(fields)) {
+  if (!list) return null;
+  const groups = [];
+  for (const d of list.documents) {
+    const last = groups[groups.length - 1];
+    const continues = last && last.kind === d.kind && !ONE_PAGE_KINDS.has(d.kind)
+      && fileOf(d.page) != null && fileOf(last.pages[0].page) === fileOf(d.page);
+    if (continues) last.pages.push(d);
+    else groups.push({ kind: d.kind, label: d.label, pages: [d] });
+  }
+  const medical = groups.filter((g) => MEDICAL_KINDS.has(g.kind));
+  if (medical.length === 0) return null;
+  const undated = medical.filter((g) => !g.pages.some((p) => p.date)).map((g) => ({
+    label: g.label,
+    pages: g.pages.map((p) => p.page).filter(Boolean),
+    dateRead: g.pages.map((p) => p.dateRead).find(Boolean) ?? null,
+  }));
+  const describe = (g) => `${g.label} has ${g.dateRead ? `an unclear date ("${g.dateRead}")` : 'no date'}${g.pages.length ? ` (${g.pages.join(', ')})` : ''}`;
+  return {
+    code: 'DOCUMENT_DATES',
+    label: 'Medical documents dated',
+    passed: true,
+    confidence: undated.length ? 0 : null,
+    undated,
+    note: undated.length
+      ? `${undated.map(describe).join('; ')}.`
+      : medical.length === 1 ? 'The medical document shows a date.' : `All ${medical.length} medical documents show a date.`,
+  };
+}
+
 // Format checks on the values the AI read (SYSTEM_4 E4-08): rules, no AI. A value that fails is most likely misread, so
 // the line is "unsure", not an issue — confidence 0, which makes it an "AI unsure" review point (assessment-summary),
 // holds a passed check for a person with switch #3 (holdForReview.js), and counts for "open review points block STP".
@@ -1086,4 +1136,4 @@ function fieldsReadCheck(fields, checklist = []) {
   };
 }
 
-module.exports = { ISSUES, FIELD_LABELS, evaluateDocumentChecks, evaluateJudgmentDependentChecks, vitaminCheck, vitaminRejection, documentListCheck, benefitTypeCheck, formatCheck, fieldsReadCheck, isRealDate, valueAt };
+module.exports = { ISSUES, FIELD_LABELS, evaluateDocumentChecks, evaluateJudgmentDependentChecks, vitaminCheck, vitaminRejection, documentListCheck, benefitTypeCheck, documentDatesCheck, formatCheck, fieldsReadCheck, isRealDate, valueAt };

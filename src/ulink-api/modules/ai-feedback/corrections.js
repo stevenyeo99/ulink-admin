@@ -18,8 +18,9 @@ const WRONG_STEP_LABELS = {
 // Checklist lines a person may set pass / fail. Not: mandatory fields (correct the value instead), and the lines that
 // only report on the values read (format, evidence) or vitamins (a person approves those claims anyway).
 // PERSON_REQUEST: a reviewer's own lines (SYSTEM_4 E4-28) — closed by Confirm and continue, never by a correction.
-// DOCUMENT_LIST / BENEFIT_TYPE: information only (documents found, the benefit type they show), nothing to pass or fail.
-const NOT_VERDICT_ITEMS = new Set(['MISSING_MANDATORY_FIELD', 'VALUE_FORMAT', 'FIELDS_READ', 'VITAMIN_OR_SUPPLEMENT', 'PERSON_REQUEST', 'DOCUMENT_LIST', 'BENEFIT_TYPE']);
+// DOCUMENT_LIST / BENEFIT_TYPE / DOCUMENT_DATES: information only (documents found, the benefit type they show, whether
+// the medical ones are dated), nothing to pass or fail.
+const NOT_VERDICT_ITEMS = new Set(['MISSING_MANDATORY_FIELD', 'VALUE_FORMAT', 'FIELDS_READ', 'VITAMIN_OR_SUPPLEMENT', 'PERSON_REQUEST', 'DOCUMENT_LIST', 'BENEFIT_TYPE', 'DOCUMENT_DATES']);
 
 const AMOUNT_FIELDS = new Set(['claim.total_claim_amount']);
 // What the member check compares with IAS (member-verification): a correction of one of these is checked again from

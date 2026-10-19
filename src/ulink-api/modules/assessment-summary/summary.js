@@ -229,6 +229,19 @@ function documentLines(documentCheckResult) {
       lines.push(line({ decision: 'Documents found', result: 'Info', status: 'ok', why: item.note, verified: VERIFIED.AI }));
       continue;
     }
+    if (item.code === 'DOCUMENT_DATES') {
+      // Medical documents dated (document-checking/checklist.js documentDatesCheck): one without a date is a review point,
+      // never an issue — a person confirms it is really undated, then asks the customer (reviewer checklist).
+      lines.push(line({
+        decision: 'Medical documents dated',
+        result: item.undated.length ? `${item.undated.length} without a date` : 'All dated',
+        status: 'ok',
+        why: item.note,
+        verified: VERIFIED.AI,
+        review: item.undated.length ? REVIEW.MISSING : null,
+      }));
+      continue;
+    }
     if (item.code === 'BENEFIT_TYPE') {
       // Benefit type: information only, a rule on the AI's documents found (document-checking/checklist.js
       // benefitTypeCheck) — so as sure as the AI's reading of those pages.

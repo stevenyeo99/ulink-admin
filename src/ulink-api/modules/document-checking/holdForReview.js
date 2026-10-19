@@ -29,6 +29,7 @@ function unsurePassedPoints(documentCheckResult) {
     .filter((item) => item.passed === true && isLowConfidence(item.confidence))
     .map((item) => {
       if (item.code === 'VALUE_FORMAT') return `Values read: ${item.note}`;
+      if (item.code === 'DOCUMENT_DATES') return `Medical documents without a date: ${item.note}`;
       if (item.code === 'FIELDS_READ') {
         const unsure = item.fields.filter((f) => !f.reportedBy && isLowConfidence(f.confidence)).map((f) => `${f.label} (AI confidence ${f.confidence})`);
         return `Values read with low confidence: ${unsure.join('; ')}`;
