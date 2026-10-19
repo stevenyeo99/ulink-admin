@@ -16,10 +16,12 @@ const check = (...pages) => documentDatesCheck({ document_list: pages });
 
 beforeEach(() => getSettings());
 
-it('an undated eye test slip is named with its page; a dated one passes (AYA-CL-26043392)', () => {
-  expect(check(p('a.pdf - page 1', 'claim_form', '2026-10-08'), p('a.pdf - page 3', 'eye_test_slip'), p('a.pdf - page 4', 'voucher')))
-    .toMatchObject({ code: 'DOCUMENT_DATES', passed: true, undated: [{ label: 'eye test slip', pages: ['a.pdf - page 3'] }], note: 'eye test slip has no date (a.pdf - page 3).' });
-  expect(check(p('a.pdf - page 3', 'eye_test_slip', '2026-10-01'))).toMatchObject({ undated: [], note: 'The medical document shows a date.' });
+it('an undated medical document is named with its page; a dated one passes', () => {
+  expect(check(p('a.pdf - page 1', 'claim_form', '2026-10-08'), p('a.pdf - page 3', 'prescription'), p('a.pdf - page 4', 'voucher')))
+    .toMatchObject({ code: 'DOCUMENT_DATES', passed: true, undated: [{ label: 'prescription', pages: ['a.pdf - page 3'] }], note: 'prescription has no date (a.pdf - page 3).' });
+  expect(check(p('a.pdf - page 3', 'prescription', '2026-10-01'))).toMatchObject({ undated: [], note: 'The medical document shows a date.' });
+  // Eye test slips are a customer item instead (EYE_TEST_SLIP_UNDATED, documentChecks below).
+  expect(check(p('a.pdf - page 3', 'eye_test_slip'))).toBeNull();
 });
 
 it('a document over several pages is dated if one of its pages is; the same kind in another file is another document', () => {
@@ -44,17 +46,47 @@ it('only medical documents: vouchers, claim form, bank / ID and the like are not
 });
 
 it('an undated document is a review point (STP stops, a passed check waits for a person) — never an issue', () => {
-  const documentCheckResult = { passed: true, issues: [], details: [], checklist: [check(p('a.pdf - page 3', 'eye_test_slip'))] };
+  const documentCheckResult = { passed: true, issues: [], details: [], checklist: [check(p('a.pdf - page 3', 'prescription'))] };
   const summary = buildAssessmentSummary({ documentCheckResult });
   expect(summary.lines.find((l) => l.decision === 'Medical documents dated')).toMatchObject({ result: '1 without a date', review: { reason: 'Missing information' } });
   expect(summary.reviewPoints.map((r) => r.decision)).toEqual(['Medical documents dated']);
-  expect(unsurePassedPoints(documentCheckResult)).toEqual(['Medical documents without a date: eye test slip has no date (a.pdf - page 3).']);
+  expect(unsurePassedPoints(documentCheckResult)).toEqual(['Medical documents without a date: prescription has no date (a.pdf - page 3).']);
   expect(documentCheckResult.issues).toEqual([]);
   expect(correctionOptions({}, documentCheckResult).some((o) => o.item === 'DOCUMENT_DATES')).toBe(false);
 });
 
 it('all dated: no review point', () => {
-  const documentCheckResult = { passed: true, issues: [], details: [], checklist: [check(p('a.pdf - page 3', 'eye_test_slip', '2026-10-01'))] };
+  const documentCheckResult = { passed: true, issues: [], details: [], checklist: [check(p('a.pdf - page 3', 'prescription', '2026-10-01'))] };
   expect(buildAssessmentSummary({ documentCheckResult }).reviewPoints).toEqual([]);
   expect(unsurePassedPoints(documentCheckResult)).toEqual([]);
+});
+
+// AYA-CL-26043392 as the ULINK staff handled it (2026-10-19): the eye test slip is the vision claim's medical record, and
+// the only request to the customer is "Need to fill treatment date in the eye test record".
+describe('vision claim (AYA-CL-26043392)', () => {
+  const { evaluateDocumentChecks, ISSUES } = require('../modules/document-checking/checklist');
+  const fields = (slipDate) => ({
+    claim: { appointment_date: '2026-10-08', appointment_time: null },
+    medical: { detail_of_illness_injury: 'Glasses' },
+    bank: { bank_name: 'AYA bank', bank_account_name: 'Phyo Phyo Han', bank_account_number: '3571050036770244' },
+    medical_record: { present: false },
+    invoices: { present: true, items: [] },
+    document_list: [p('a.pdf - page 1', 'claim_form', '2026-10-08'), p('a.pdf - page 3', 'eye_test_slip', slipDate), p('a.pdf - page 4', 'itemized_invoice', '2026-10-08')],
+  });
+
+  it('an undated eye test slip is the one customer item, in the staff wording; no medical report and no appointment time asked', () => {
+    const { issues } = evaluateDocumentChecks(fields(null));
+    expect(issues).toContain('Need to fill treatment date in the eye test record');
+    expect(issues).not.toContain(ISSUES.NO_MEDICAL_REPORT);
+    expect(issues.some((i) => /appointment/i.test(i))).toBe(false);
+  });
+
+  it('a dated eye test slip: nothing to ask for that slip', () => {
+    expect(evaluateDocumentChecks(fields('2026-10-08')).issues).not.toContain(ISSUES.EYE_TEST_SLIP_UNDATED);
+  });
+
+  it('without an eye test slip, a missing medical record is still asked for', () => {
+    const { issues } = evaluateDocumentChecks({ ...fields(null), document_list: [p('a.pdf - page 1', 'claim_form', '2026-10-08')] });
+    expect(issues).toContain(ISSUES.NO_MEDICAL_REPORT);
+  });
 });

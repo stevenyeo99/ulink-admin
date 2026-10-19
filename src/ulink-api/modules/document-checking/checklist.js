@@ -45,6 +45,8 @@ const ISSUES = {
   MISSING_BANK_INFO: 'Missing bank information',
   INCORRECT_BANK_DETAILS: 'Incorrect bank details',
   DELEGATION_LETTER_REQUIRED: 'Please fill in the attached delegation letter to proceed with the payment process',
+  // ULINK staff's own wording (their reply to AYA-CL-26043392, 2026-10-19).
+  EYE_TEST_SLIP_UNDATED: 'Need to fill treatment date in the eye test record',
   MEMBER_NOT_VERIFIED:
     'We could not verify your membership/policy details in our system. Please double check your NRC/passport number and policy number and resubmit.',
   POLICY_NOT_ACTIVE_ON_TREATMENT_DATE:
@@ -65,8 +67,18 @@ function checkMissingVoucher(fields) {
   return fields.invoices?.present === false ? ISSUES.MISSING_VOUCHER : null;
 }
 
+// An eye test slip is a vision claim's medical record (owner, 2026-10-19: the staff did not ask AYA-CL-26043392 for a
+// medical report, only for a dated eye test slip).
+const hasEyeTestSlip = (fields) => (fields.document_list || []).some((d) => d.kind === 'eye_test_slip');
+
 function checkNoMedicalReport(fields) {
-  return fields.medical_record.present === false ? ISSUES.NO_MEDICAL_REPORT : null;
+  return fields.medical_record.present === false && !hasEyeTestSlip(fields) ? ISSUES.NO_MEDICAL_REPORT : null;
+}
+
+// An eye test slip without a date (owner, 2026-10-19): the customer is asked, in the staff's own wording. Each slip is
+// its own document; one without a date (or with a date that is not a real date) is enough.
+function checkEyeTestSlipUndated(fields) {
+  return (fields.document_list || []).some((d) => d.kind === 'eye_test_slip' && !isRealDate(d.date)) ? ISSUES.EYE_TEST_SLIP_UNDATED : null;
 }
 
 function checkUnclearVoucher(fields) {
@@ -401,6 +413,7 @@ const EVALUATORS = [
   { code: 'INCOMPLETE_CLAIM_FORM', check: checkIncompleteClaimForm },
   { code: 'MISSING_VOUCHER', check: checkMissingVoucher },
   { code: 'NO_MEDICAL_REPORT', check: checkNoMedicalReport },
+  { code: 'EYE_TEST_SLIP_UNDATED', check: checkEyeTestSlipUndated },
   { code: 'UNCLEAR_VOUCHER', check: checkUnclearVoucher },
   { code: 'INCORRECT_VOUCHER', check: checkIncorrectVoucher },
   { code: 'MISSING_VOUCHER_BREAKDOWN', check: checkMissingVoucherBreakdown },
@@ -437,6 +450,10 @@ function reasonForIssue(issue, fields) {
       return { code: 'MISSING_VOUCHER', reason: 'No voucher or invoice was attached to the claim.' };
     case ISSUES.NO_MEDICAL_REPORT:
       return { code: 'NO_MEDICAL_REPORT', reason: 'No medical report or doctor\'s record was attached to the claim.' };
+    case ISSUES.EYE_TEST_SLIP_UNDATED: {
+      const pages = (fields.document_list || []).filter((d) => d.kind === 'eye_test_slip' && !isRealDate(d.date)).map((d) => d.page).filter(Boolean);
+      return { code: 'EYE_TEST_SLIP_UNDATED', reason: `The eye test slip shows no treatment date${pages.length ? ` (${pages.join(', ')})` : ''}.` };
+    }
     case ISSUES.UNCLEAR_VOUCHER:
       return {
         code: 'UNCLEAR_VOUCHER',
@@ -514,7 +531,6 @@ const MANDATORY_FIELDS = [
   // Missed in the original pass (2026-09-14) — SOP §4's row is "Appointment/Visited Date &
   // Time" as one combined requirement; only the date half was added, confirmed while
   // rechecking §7/§8 later the same day.
-  { section: 'Claim & Treatment Information', field: 'Appointment / Visited Time', get: (f) => f.claim?.appointment_time },
   { section: 'Claim & Treatment Information', field: 'Hospital / Clinic Name', get: (f) => f.medical?.hospital_or_clinic_name },
   { section: 'Claim & Treatment Information', field: 'Claim Amount', get: (f) => f.claim?.total_claim_amount },
   // SOP §9 treats Bank Name/Address/Account Holder Name/Account Number as four separate
@@ -621,7 +637,10 @@ function passReason(code, fields) {
     case 'MISSING_VOUCHER':
       return fields.invoices?.present === true ? `${items.length || 'A'} voucher(s) found.` : "The AI couldn't tell whether a voucher is attached.";
     case 'NO_MEDICAL_REPORT':
-      return fields.medical_record?.present === true ? 'A medical record was found.' : "The AI couldn't tell whether a medical record is attached.";
+      if (fields.medical_record?.present === true) return 'A medical record was found.';
+      return hasEyeTestSlip(fields) ? 'An eye test slip was found; for a vision claim it is the medical record.' : "The AI couldn't tell whether a medical record is attached.";
+    case 'EYE_TEST_SLIP_UNDATED':
+      return hasEyeTestSlip(fields) ? 'Every eye test slip shows a date.' : 'No eye test slip.';
     case 'UNCLEAR_VOUCHER':
       return fields.invoices?.present === true ? `No voucher marked unreadable (${vouchers}).` : noVoucher;
     case 'INCORRECT_VOUCHER':
@@ -898,8 +917,9 @@ function benefitTypeCheck(fields, list = documentListCheck(fields)) {
 // ("Missing information", owner 2026-10-19: prevent risky processing), never an issue: the documents stay complete and
 // the customer is not asked (no approved wording yet). Like the format check: confidence 0, so with the switches it
 // stops STP ("open review points block STP") and holds a passed check for a person (switch #3). No list: no line.
+// Eye test slips are left out: an undated one is a customer item with the staff's wording (EYE_TEST_SLIP_UNDATED).
 const MEDICAL_KINDS = new Set([
-  'consultation_note', 'discharge_summary', 'operation_or_procedure_note', 'investigation_report', 'eye_test_slip',
+  'consultation_note', 'discharge_summary', 'operation_or_procedure_note', 'investigation_report',
   'dental_consultation', 'vaccination_record', 'doctor_recommendation', 'prescription',
 ]);
 // One-page documents: two of them side by side are two documents (two prescriptions from two visits), never one.

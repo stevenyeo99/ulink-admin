@@ -1,5 +1,5 @@
 {
-  "description": "Same real case with bank_address and appointment_time deliberately nulled. Non-blocking flags only — checkMissingBankInfo still requires all 3 of name/account-name/account-number missing together, so issues/passed unaffected.",
+  "description": "Same real case with bank_address and appointment_time deliberately nulled. Non-blocking flags only — checkMissingBankInfo still requires all 3 of name/account-name/account-number missing together, so issues/passed unaffected. Appointment time is no longer mandatory (owner 2026-10-19: the staff accept \"N/A\" and never ask), so only the bank address is flagged.",
   "extractedFields": {
     "bank": {
       "bank_name": "AYA",
@@ -90,19 +90,12 @@
   "expected": {
     "passed": false,
     "issues": [
-      "Please provide the missing appointment / visited time.",
       "Please provide the missing bank address / branch."
     ],
     "flagCodes": [
-      "MISSING_MANDATORY_FIELD",
       "MISSING_MANDATORY_FIELD"
     ],
     "flags": [
-      {
-        "code": "MISSING_MANDATORY_FIELD",
-        "section": "Claim & Treatment Information",
-        "field": "Appointment / Visited Time"
-      },
       {
         "code": "MISSING_MANDATORY_FIELD",
         "section": "Bank Information",

@@ -68,6 +68,7 @@ const DOCUMENT_REVIEW = {
   UNCLEAR_VOUCHER: REVIEW.UNREADABLE,
   MISSING_VOUCHER: REVIEW.MISSING,
   NO_MEDICAL_REPORT: REVIEW.MISSING,
+  EYE_TEST_SLIP_UNDATED: REVIEW.MISSING,
   MISSING_BANK_INFO: REVIEW.MISSING,
   INCOMPLETE_CLAIM_FORM: REVIEW.MISSING,
   MISSING_VOUCHER_BREAKDOWN: REVIEW.MISSING,
@@ -78,6 +79,7 @@ const DOCUMENT_REVIEW = {
 const PLAIN_DOCUMENT_REASONS = {
   MISSING_VOUCHER: 'No voucher or invoice was found in the submitted documents.',
   NO_MEDICAL_REPORT: 'No medical record was found in the submitted documents.',
+  EYE_TEST_SLIP_UNDATED: 'The eye test slip shows no treatment date.',
   INCOMPLETE_MEDICAL_REPORT: 'A medical record was found but could not be read clearly.',
   MISSING_BANK_INFO: 'Bank name, account name and account number are all missing.',
 };
@@ -88,6 +90,7 @@ const DOCUMENT_DECISIONS = {
   INCOMPLETE_CLAIM_FORM: 'Claim form complete (diagnosis in section B)',
   MISSING_VOUCHER: 'Voucher present',
   NO_MEDICAL_REPORT: 'Medical record present',
+  EYE_TEST_SLIP_UNDATED: 'Eye test slip dated',
   UNCLEAR_VOUCHER: 'Voucher readable',
   INCORRECT_VOUCHER: 'Voucher correct',
   MISSING_VOUCHER_BREAKDOWN: 'Pharmacy breakdown on voucher',

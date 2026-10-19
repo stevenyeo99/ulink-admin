@@ -34,6 +34,8 @@ AYA-CL-26043951
 
 
  1. AYA-CL-26043392, vision (9 pages). Expect VS Vision, an eye test slip with no date, and a review point. The staff asked the member for a dated slip.
+
+
   2. AYA-CL-26043792, vision (14 pages). Expect VS Vision, all documents dated, and no review point. The staff found it complete, so it is the "good" vision case to compare with.
   3. AYA-CL-26043772, dental (4 files, 8 pages). Expect DT Dental with a dental consultation and a medical book cover. It is complete. It is also the case with the most separate files, so it checks that the page labels work across files.
   4. AYA-CL-26043766, dental (12 pages). Expect DT Dental, complete. It is the second dental case, to confirm the result.
