@@ -224,6 +224,11 @@ function documentLines(documentCheckResult) {
       continue;
     }
     if (item.code === 'PERSON_REQUEST') continue; // the reviewer checklist — its own area (reviewerLines)
+    if (item.code === 'DOCUMENT_LIST') {
+      // Documents found: information only — never a review point (document-checking/checklist.js documentListCheck).
+      lines.push(line({ decision: 'Documents found', result: 'Info', status: 'ok', why: item.note, verified: VERIFIED.AI }));
+      continue;
+    }
     if (item.code === 'VALUE_FORMAT') {
       lines.push(formatLine(item));
       continue;

@@ -61,6 +61,18 @@ export interface ChecklistItem {
   reason?: string | null; // why it passed or failed (SYSTEM_4 E4-08); checks before 2026-10-15 have none
   fields?: FieldRead[]; // FIELDS_READ only: every value the AI read with its evidence (SYSTEM_4 E3b)
   usedFields?: string[]; // a rule check made unsure by the values it read: those values (SYSTEM_4 E3b)
+  documents?: DocumentFound[]; // DOCUMENT_LIST only: the kind and date of each page (system checklist step 1)
+}
+
+// One page as the AI classified it (document_list), with its own confidence and reason. Information only.
+export interface DocumentFound {
+  page: string | null;
+  kind: string;
+  label: string;
+  date: string | null;
+  dateRead?: string; // the AI's date when it is not a real YYYY-MM-DD date
+  confidence: number | null;
+  reason: string | null;
 }
 
 // One value the AI read and how sure it was (SYSTEM_4 E3b); field is a path like "claimant.claimant_nrc_passport" or "voucher 1".

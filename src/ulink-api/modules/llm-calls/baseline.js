@@ -35,6 +35,7 @@ function baselineFrom(cases, threshold) {
 
     for (const item of c.documentCheckResult?.checklist || []) {
       if (item.passed === null || item.passed === undefined) continue;
+      if (item.code === 'DOCUMENT_LIST') continue; // information only (documents found), not a check
       const key = item.code === 'MISSING_MANDATORY_FIELD' ? 'MISSING_MANDATORY_FIELD' : item.code;
       const entry = items.get(key) || { label: key === 'MISSING_MANDATORY_FIELD' ? 'Mandatory fields (each)' : item.label || key, evaluated: 0, failed: 0, scores: [] };
       entry.evaluated += 1;

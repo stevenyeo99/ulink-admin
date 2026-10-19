@@ -189,7 +189,7 @@ function fieldEvidenceList(parsed) {
 
 // A confidence outside 0–1 (e.g. 95 meant as a percentage) becomes null — "not recorded" — so a bad score on the
 // evidence never fails the whole claim's schema check. Guessing 95 → 0.95 would be inventing a number. field_evidence
-// may be the keyed answer or the list (same fix for each value).
+// may be the keyed answer or the list (same fix for each value). Same for each document_list entry.
 function dropOutOfRangeEvidence(parsed) {
   const inRange = (v) => (typeof v === 'number' && v >= 0 && v <= 1 ? v : null);
   const fix = (e) => (e && typeof e === 'object' && 'confidence' in e ? { ...e, confidence: inRange(e.confidence) } : e);
@@ -199,6 +199,7 @@ function dropOutOfRangeEvidence(parsed) {
   return {
     ...parsed,
     ...(parsed.field_evidence && typeof parsed.field_evidence === 'object' ? { field_evidence: fixAll(parsed.field_evidence) } : {}),
+    ...(Array.isArray(parsed.document_list) ? { document_list: parsed.document_list.map(fix) } : {}),
     ...(Array.isArray(items) ? {
       invoices: {
         ...parsed.invoices,
@@ -210,6 +211,20 @@ function dropOutOfRangeEvidence(parsed) {
       },
     } : {}),
   };
+}
+
+// document_list (system checklist step 1) is information only: the model is asked for it (required in the schema it
+// gets), but a missing or malformed list is dropped — never a failed reading. Returns the fields and the schema to check
+// them against (document_list not required).
+// ponytail: a very long claim can still hit the answer's token reserve partly because of this list; cap or move it to
+// its own call if that shows up in the AI call log.
+function withoutBadDocumentList(parsed, schema) {
+  const listSchema = schema.properties?.document_list;
+  if (!listSchema || !parsed || typeof parsed !== 'object') return { fields: parsed, schema };
+  const readingSchema = { ...schema, required: (schema.required || []).filter((k) => k !== 'document_list') };
+  if ('document_list' in parsed && ajv.validate(listSchema, parsed.document_list)) return { fields: parsed, schema: readingSchema };
+  const { document_list: _dropped, ...rest } = parsed;
+  return { fields: rest, schema: readingSchema };
 }
 
 // field_evidence (SYSTEM_4 E3b) must describe the value actually kept: when code replaces a key field, its entry is
@@ -639,12 +654,13 @@ async function extractFields(transcriptChunks, matchedRoute) {
     })
   );
 
-  const validate = ajv.compile(responseSchema);
-  if (!validate(parsed)) {
+  const { fields: checked, schema: readingSchema } = withoutBadDocumentList(parsed, responseSchema);
+  const validate = ajv.compile(readingSchema);
+  if (!validate(checked)) {
     return { extractedFields: null, schemaValidationError: ajv.errorsText(validate.errors) };
   }
 
-  const normalizedFields = normalizeClaimantDob(normalizeDelegationLetter(dedupeInvoiceItems(fieldEvidenceList(parsed))), transcriptChunks);
+  const normalizedFields = normalizeClaimantDob(normalizeDelegationLetter(dedupeInvoiceItems(fieldEvidenceList(checked))), transcriptChunks);
   const withFallback = await applyMedicalRecordFallback(normalizedFields, transcriptChunks);
   // The fallback may have re-read the medical record from another page: the first read's evidence for its date no longer applies.
   const extractedFields = withFallback.medical_record?.date !== normalizedFields.medical_record?.date
@@ -856,6 +872,7 @@ module.exports = {
   dedupeInvoiceItems,
   normalizeClaimantDob,
   dropOutOfRangeEvidence,
+  withoutBadDocumentList,
   fieldEvidenceList,
   mentionsBillLikeDocument,
 };

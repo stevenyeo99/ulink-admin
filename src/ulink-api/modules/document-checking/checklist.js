@@ -808,6 +808,41 @@ function vitaminCheck(fields) {
   };
 }
 
+// Documents found (SYSTEM_4 system checklist, step 1, owner 2026-10-19): the kind and the date of each page, from the
+// AI's own document_list, each with its confidence and reason. Information only — never an issue, never unsure (no
+// confidence on the line itself), so it never stops a case or blocks STP. Old cases (no list): no line.
+const DOCUMENT_KIND_LABELS = {
+  claim_form: 'claim form', voucher: 'voucher', itemized_invoice: 'itemized invoice', consultation_note: 'consultation note',
+  discharge_summary: 'discharge summary', operation_or_procedure_note: 'operation / procedure note',
+  investigation_report: 'investigation report', eye_test_slip: 'eye test slip', dental_consultation: 'dental consultation',
+  vaccination_record: 'vaccination record', doctor_recommendation: "doctor's recommendation", medical_book_cover: 'medical book cover',
+  prescription: 'prescription', bank_or_id_document: 'bank / ID document', delegation_letter: 'delegation letter', other: 'other',
+};
+
+// A date the AI gave that is not a real YYYY-MM-DD date is kept as read (dateRead) but not shown as the page's date.
+// note: short (kind and date per page) because it goes into team emails and the IAS remark; each page's page label,
+// confidence and reason stay in documents for the case and review pages.
+function documentListCheck(fields) {
+  if (!Array.isArray(fields.document_list) || fields.document_list.length === 0) return null;
+  const documents = fields.document_list.map((d) => ({
+    page: d.page ?? null,
+    kind: d.kind ?? 'other',
+    label: DOCUMENT_KIND_LABELS[d.kind] || d.kind || 'other',
+    date: isRealDate(d.date) ? d.date : null,
+    ...(d.date != null && !isRealDate(d.date) ? { dateRead: d.date } : {}),
+    confidence: typeof d.confidence === 'number' ? d.confidence : null,
+    reason: d.reason ?? null,
+  }));
+  const dateText = (d) => d.date || (d.dateRead ? `date unclear ("${d.dateRead}")` : 'no date');
+  return {
+    code: 'DOCUMENT_LIST',
+    label: 'Documents found',
+    passed: true,
+    documents,
+    note: `${documents.length} page${documents.length === 1 ? '' : 's'}: ${documents.map((d) => `${d.label}, ${dateText(d)}`).join('; ')}.`,
+  };
+}
+
 // Format checks on the values the AI read (SYSTEM_4 E4-08): rules, no AI. A value that fails is most likely misread, so
 // the line is "unsure", not an issue — confidence 0, which makes it an "AI unsure" review point (assessment-summary),
 // holds a passed check for a person with switch #3 (holdForReview.js), and counts for "open review points block STP".
@@ -1004,4 +1039,4 @@ function fieldsReadCheck(fields, checklist = []) {
   };
 }
 
-module.exports = { ISSUES, FIELD_LABELS, evaluateDocumentChecks, evaluateJudgmentDependentChecks, vitaminCheck, vitaminRejection, formatCheck, fieldsReadCheck, isRealDate, valueAt };
+module.exports = { ISSUES, FIELD_LABELS, evaluateDocumentChecks, evaluateJudgmentDependentChecks, vitaminCheck, vitaminRejection, documentListCheck, formatCheck, fieldsReadCheck, isRealDate, valueAt };

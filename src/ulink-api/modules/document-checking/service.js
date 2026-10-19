@@ -1,6 +1,6 @@
 const { sequelize, Case, CaseEvent } = require('../../db/models');
 const config = require('../../config');
-const { evaluateDocumentChecks, evaluateJudgmentDependentChecks, vitaminCheck, formatCheck, fieldsReadCheck } = require('./checklist');
+const { evaluateDocumentChecks, evaluateJudgmentDependentChecks, vitaminCheck, documentListCheck, formatCheck, fieldsReadCheck } = require('./checklist');
 const { applyVerdicts, correctionHold } = require('../ai-feedback/corrections');
 const { entityMatch } = require('./identityJudgment');
 const { queueDedupedTask } = require('../shared/emailTaskQueue');
@@ -93,8 +93,8 @@ async function checkCase(caseRecord) {
     flags: [...stage1.flags, ...stage2.flags],
     passed: stage1.issues.length + stage2.issues.length === 0,
     // + the vitamins / supplements line (SYSTEM_4 E4-10), the format checks on values read and how sure the AI was of
-    // them (E4-08) — information for STP and the reviewer, never an issue.
-    checklist: [...stage1.checklist, ...stage2.checklist, ...[vitaminCheck(fields), formatCheck(fields), fieldsReadCheck(fields, stage1.checklist)].filter(Boolean)],
+    // them (E4-08), and the documents found (kind and date per page) — information for STP and the reviewer, never an issue.
+    checklist: [...stage1.checklist, ...stage2.checklist, ...[vitaminCheck(fields), documentListCheck(fields), formatCheck(fields), fieldsReadCheck(fields, stage1.checklist)].filter(Boolean)],
   }, fields.corrections);
 
   const outcome = result.passed ? 'DOCUMENT_CHECKED' : 'INCOMPLETE';

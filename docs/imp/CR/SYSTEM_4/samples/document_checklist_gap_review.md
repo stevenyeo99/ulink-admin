@@ -141,7 +141,7 @@ or "if available" items. Those stay with the reviewer.
 
 ### Suggested order
 
-1. Items 1 and 2 (info only, no ULINK input).
+1. Items 1 and 2 (info only, no ULINK input). Item 2 built 2026-10-19 (*Documents found*, migration `20261019120000-document-list`).
 2. Item 7 (review point, no ULINK input).
 3. Items 4 and 5 (review points).
 4. Items 3 and 4 as blocking, after the customer wording is approved.
