@@ -79,7 +79,6 @@ const DOCUMENT_REVIEW = {
 const PLAIN_DOCUMENT_REASONS = {
   MISSING_VOUCHER: 'No voucher or invoice was found in the submitted documents.',
   NO_MEDICAL_REPORT: 'No medical record was found in the submitted documents.',
-  EYE_TEST_SLIP_UNDATED: 'The eye test slip shows no treatment date.',
   INCOMPLETE_MEDICAL_REPORT: 'A medical record was found but could not be read clearly.',
   MISSING_BANK_INFO: 'Bank name, account name and account number are all missing.',
 };

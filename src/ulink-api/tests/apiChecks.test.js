@@ -89,7 +89,8 @@ describe('api-document-checking', () => {
         email: {
           taskType: 'MISSING_DOCUMENTS',
           audience: 'customer',
-          payload: { issues: ['No Medical Report(s)', 'Missing voucher(s)\n  Reason: No voucher page found'] },
+          // The approved wording only — the reason ('No voucher page found') is for the reviewer, not the customer.
+          payload: { issues: ['No Medical Report(s)', 'Missing voucher(s)'] },
           dedupeKey: 'Missing voucher(s)|No Medical Report(s)',
         },
       },

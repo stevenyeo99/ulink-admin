@@ -79,10 +79,46 @@ describe('vision claim (AYA-CL-26043392)', () => {
     expect(issues).toContain('Need to fill treatment date in the eye test record');
     expect(issues).not.toContain(ISSUES.NO_MEDICAL_REPORT);
     expect(issues.some((i) => /appointment/i.test(i))).toBe(false);
+    expect(evaluateDocumentChecks(fields(null)).checklist.some((l) => l.label === 'Claim & Treatment Information: Appointment / Visited Time')).toBe(false);
+  });
+
+  it('a date in another form is still a date on the slip: not asked for', () => {
+    expect(evaluateDocumentChecks(fields('08/10/2026')).issues).not.toContain(ISSUES.EYE_TEST_SLIP_UNDATED);
+  });
+
+  it('a page the AI was unsure is an eye test slip does not stand in for the medical record', () => {
+    const f = { ...fields('2026-10-08'), document_list: [{ ...p('a.pdf - page 3', 'eye_test_slip', '2026-10-08'), confidence: 0.3 }] };
+    expect(evaluateDocumentChecks(f).issues).toContain(ISSUES.NO_MEDICAL_REPORT);
+  });
+
+  it('no eye test slip: no eye test slip line at all (it does not apply)', () => {
+    const f = { ...fields(null), document_list: [p('a.pdf - page 1', 'claim_form', '2026-10-08')] };
+    expect(evaluateDocumentChecks(f).checklist.some((l) => l.code === 'EYE_TEST_SLIP_UNDATED')).toBe(false);
   });
 
   it('a dated eye test slip: nothing to ask for that slip', () => {
     expect(evaluateDocumentChecks(fields('2026-10-08')).issues).not.toContain(ISSUES.EYE_TEST_SLIP_UNDATED);
+  });
+
+  it('the eye test slip line carries the least sure score and the AI reason with the pages', () => {
+    const slip = (page, confidence, reason) => ({ ...p(page, 'eye_test_slip'), confidence, reason });
+    const f = { ...fields(null), document_list: [slip('a.pdf - page 3', 0.95, 'SPH/CYL table'), slip('b.pdf - page 2', 0.8, 'eye power slip')] };
+    expect(evaluateDocumentChecks(f).checklist.find((l) => l.code === 'EYE_TEST_SLIP_UNDATED')).toMatchObject({
+      passed: false, confidence: 0.8, reason: 'SPH/CYL table — no date (a.pdf - page 3); eye power slip — no date (b.pdf - page 2).',
+    });
+  });
+
+  it('an eye test slip the AI was unsure of holds the customer email for a person', () => {
+    const { unsureDocumentPoints } = require('../modules/document-checking/holdForReview');
+    const f = { ...fields(null), document_list: [{ ...p('a.pdf - page 3', 'eye_test_slip'), confidence: 0.4 }] };
+    expect(unsureDocumentPoints(evaluateDocumentChecks(f))).toEqual(['Need to fill treatment date in the eye test record (AI confidence 0.4)']);
+  });
+
+  it('the medical record line passes with the eye test slip score and reason, not the AI "no medical record" text', () => {
+    const f = { ...fields(null), medical_record: { present: false, presence_confidence: 1, presence_reason: 'No medical record document found.' } };
+    expect(evaluateDocumentChecks(f).checklist.find((l) => l.code === 'NO_MEDICAL_REPORT')).toMatchObject({
+      passed: true, confidence: 0.9, reason: 'An eye test slip was found; for a vision claim it is the medical record (r (a.pdf - page 3)).',
+    });
   });
 
   it('without an eye test slip, a missing medical record is still asked for', () => {
