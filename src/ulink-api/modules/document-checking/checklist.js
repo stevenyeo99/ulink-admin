@@ -843,6 +843,53 @@ function documentListCheck(fields) {
   };
 }
 
+// Benefit type (system checklist step 2, owner 2026-10-19): a rule, no AI — the IAS benefit type the documents point
+// to, from "Type of Patient" on the claim form, the documents found and the optical voucher type. IAS's own benefit types
+// (member data): IP Inpatient, DT Dental, VS Vision, OP Outpatient (and PA Personal Accident, not read here). IAS has
+// no vaccination type: a vaccination is paid under OP, so it is "OP Outpatient (vaccination)". IAS gives no benefit
+// type when the claim arrives (ClaimType is always "M"), and the claim form's claim_benefit_type is the way of payment
+// (Reimbursement, …), so this is a best guess from the documents — as sure as the AI's reading of those pages.
+// Information only, like the documents found: never an issue, never a review point; claim preparation's benefit pick
+// for IAS is unchanged. First match wins (the order ULINK may change); other matches are named too. A doctor's
+// recommendation alone is not vaccination: consultations carry them too. No document list (an older case): no line.
+const INPATIENT = /\bin[\s-]?patient\b|\bIPD\b/i; // Inpatient, In-patient, In Patient, IPD
+const BENEFIT_TYPES = [
+  { code: 'IP', desc: 'Inpatient', kinds: ['discharge_summary'], patient: INPATIENT },
+  { code: 'OP', desc: 'Outpatient', treatment: 'vaccination', kinds: ['vaccination_record'] },
+  { code: 'DT', desc: 'Dental', kinds: ['dental_consultation'] },
+  { code: 'VS', desc: 'Vision', kinds: ['eye_test_slip'], voucherType: 'optical' },
+];
+const benefitText = (t) => `${t.code} ${t.desc}${t.treatment ? ` (${t.treatment})` : ''}`;
+
+// list: the documents-found line already built for these fields (documentListCheck).
+function benefitTypeCheck(fields, list = documentListCheck(fields)) {
+  if (!list) return null;
+  const patient = fields.claim?.type_of_patient || null;
+  const vouchers = fields.invoices?.items || [];
+  const evidenceFor = ({ kinds, patient: patientRule, voucherType }) => [
+    ...(patientRule && patientRule.test(patient || '') ? [`claim form: ${patient}`] : []),
+    ...list.documents.filter((d) => kinds.includes(d.kind)).map((d) => `${d.label}${d.page ? `, ${d.page}` : ''}`),
+    ...(voucherType ? vouchers.map((v, i) => (v.voucher_type === voucherType ? `${voucherType} voucher ${i + 1}${v.evidence?.page ? `, ${v.evidence.page}` : ''}` : null)).filter(Boolean) : []),
+  ];
+  const matches = BENEFIT_TYPES.map((t) => ({ ...t, evidence: evidenceFor(t) })).filter((m) => m.evidence.length);
+  const [first, ...others] = matches;
+  const picked = first || { code: 'OP', desc: 'Outpatient' };
+  const notes = [
+    first ? `${benefitText(first)} — ${first.evidence.join('; ')}`
+      : `OP Outpatient — no inpatient, vaccination, dental or vision document found${patient ? `; claim form: ${patient}` : ''}`,
+    others.length ? `Also: ${others.map(benefitText).join(', ')}` : null,
+    picked.code === 'IP' && patient && !INPATIENT.test(patient) ? `The claim form says ${patient}` : null,
+  ].filter(Boolean);
+  return {
+    code: 'BENEFIT_TYPE',
+    label: 'Benefit type',
+    passed: true,
+    benefitType: { code: picked.code, desc: picked.desc, treatment: picked.treatment ?? null },
+    alsoTypes: others.map((m) => ({ code: m.code, desc: m.desc, treatment: m.treatment ?? null })),
+    note: `${notes.join('. ')}.`,
+  };
+}
+
 // Format checks on the values the AI read (SYSTEM_4 E4-08): rules, no AI. A value that fails is most likely misread, so
 // the line is "unsure", not an issue — confidence 0, which makes it an "AI unsure" review point (assessment-summary),
 // holds a passed check for a person with switch #3 (holdForReview.js), and counts for "open review points block STP".
@@ -1039,4 +1086,4 @@ function fieldsReadCheck(fields, checklist = []) {
   };
 }
 
-module.exports = { ISSUES, FIELD_LABELS, evaluateDocumentChecks, evaluateJudgmentDependentChecks, vitaminCheck, vitaminRejection, documentListCheck, formatCheck, fieldsReadCheck, isRealDate, valueAt };
+module.exports = { ISSUES, FIELD_LABELS, evaluateDocumentChecks, evaluateJudgmentDependentChecks, vitaminCheck, vitaminRejection, documentListCheck, benefitTypeCheck, formatCheck, fieldsReadCheck, isRealDate, valueAt };

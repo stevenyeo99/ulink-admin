@@ -62,6 +62,7 @@ export interface ChecklistItem {
   fields?: FieldRead[]; // FIELDS_READ only: every value the AI read with its evidence (SYSTEM_4 E3b)
   usedFields?: string[]; // a rule check made unsure by the values it read: those values (SYSTEM_4 E3b)
   documents?: DocumentFound[]; // DOCUMENT_LIST only: the kind and date of each page (system checklist step 1)
+  benefitType?: { code: string; desc: string; treatment: string | null }; // BENEFIT_TYPE only: the IAS benefit type the documents show (step 2)
 }
 
 // One page as the AI classified it (document_list), with its own confidence and reason. Information only.

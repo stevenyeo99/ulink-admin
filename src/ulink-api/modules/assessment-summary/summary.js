@@ -229,6 +229,13 @@ function documentLines(documentCheckResult) {
       lines.push(line({ decision: 'Documents found', result: 'Info', status: 'ok', why: item.note, verified: VERIFIED.AI }));
       continue;
     }
+    if (item.code === 'BENEFIT_TYPE') {
+      // Benefit type: information only, a rule on the AI's documents found (document-checking/checklist.js
+      // benefitTypeCheck) — so as sure as the AI's reading of those pages.
+      const { code, desc, treatment } = item.benefitType;
+      lines.push(line({ decision: 'Benefit type', result: `${code} ${desc}${treatment ? ` (${treatment})` : ''}`, status: 'ok', why: item.note, verified: VERIFIED.AI }));
+      continue;
+    }
     if (item.code === 'VALUE_FORMAT') {
       lines.push(formatLine(item));
       continue;

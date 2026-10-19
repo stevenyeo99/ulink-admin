@@ -49,8 +49,15 @@ function buildFindings(checklist: ChecklistItem[], options: CorrectionOption[]):
   }));
   const mandatory = checklist.filter((c) => c.code === 'MISSING_MANDATORY_FIELD');
   const missing = mandatory.filter((c) => c.passed === false).map((c) => c.label);
-  // Documents found: one row per page, opening that page. Information only, so never "unsure": the AI's confidence
-  // is in the text, not on the row.
+  // Benefit type and documents found: information only, so never "unsure" (the AI's confidence is in the text, not on the
+  // row); one row per page, opening that page.
+  const benefit = checklist.find((c) => c.code === 'BENEFIT_TYPE');
+  const benefitValue = benefit?.benefitType
+    ? `${benefit.benefitType.code} ${benefit.benefitType.desc}${benefit.benefitType.treatment ? ` (${benefit.benefitType.treatment})` : ''}`
+    : null;
+  const info: Finding[] = benefit
+    ? [{ key: 'benefit-type', label: 'Benefit type', value: benefitValue, passed: true, confidence: null, why: benefit.note ?? null, page: null, correct: null, confirms: [] }]
+    : [];
   const documents: Finding[] = (checklist.find((c) => c.code === 'DOCUMENT_LIST')?.documents ?? []).map((d, i) => ({
     key: `document-${i}`, label: `Document: ${d.label}`, value: d.date, passed: true, confidence: null,
     why: [d.date ? null : d.dateRead ? `Date unclear: "${d.dateRead}"` : 'No date on this page', d.confidence != null ? `AI ${Math.round(d.confidence * 100)}%` : null, d.reason]
@@ -58,7 +65,7 @@ function buildFindings(checklist: ChecklistItem[], options: CorrectionOption[]):
     page: d.page, correct: null, confirms: [],
   }));
   const checks: Finding[] = checklist
-    .filter((c) => c.code !== 'FIELDS_READ' && c.code !== 'MISSING_MANDATORY_FIELD' && c.code !== 'DOCUMENT_LIST')
+    .filter((c) => !['FIELDS_READ', 'MISSING_MANDATORY_FIELD', 'DOCUMENT_LIST', 'BENEFIT_TYPE'].includes(c.code ?? ''))
     .map((c) => ({
       key: `check-${c.code}`, label: c.label, passed: c.passed, confidence: c.confidence ?? null,
       why: c.note ?? c.reason ?? null, page: pageOf(c.usedFields), correct: canCorrect(`verdict:${c.code}`),
@@ -70,7 +77,7 @@ function buildFindings(checklist: ChecklistItem[], options: CorrectionOption[]):
       why: missing.length ? `Not found: ${missing.join('; ')}` : `All ${mandatory.length} found.`, page: null, correct: null, confirms: [],
     });
   }
-  return [...values, ...checks, ...documents];
+  return [...values, ...checks, ...info, ...documents];
 }
 
 /**
