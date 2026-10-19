@@ -182,12 +182,12 @@ export interface CaseEvent {
   createdAt: string;
 }
 
-// A case-level document (ulink_case_documents) — an API case's console image.
+// A case-level document (ulink_case_documents) — an API case's console image, or a case-page upload (no barcode).
 export interface CaseDocument {
   id: string;
   caseId: string;
-  origin: 'CONSOLE';
-  barcodeId: string;
+  origin: 'CONSOLE' | 'UPLOAD';
+  barcodeId: string | null;
   scanId: string | null;
   originalFilename: string;
   contentType: string | null;

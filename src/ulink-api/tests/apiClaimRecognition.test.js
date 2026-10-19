@@ -26,16 +26,28 @@ const docs = [
 beforeEach(() => {
   jest.clearAllMocks();
   ClaimRoute.findOne.mockResolvedValue(route);
-  CaseDocument.findAll.mockResolvedValue(docs);
+  CaseDocument.findAll.mockImplementation(async ({ where }) => (where.origin === 'UPLOAD' ? [] : docs)); // no case-page uploads
   transcribePages.mockImplementation(async (_buffer, filename) => [{ pageNumber: 1, text: `text of ${filename}` }]);
 });
 
-it('receives api-material-download output (+ replies once there are any), and runs again after a reply', () => {
+it('receives api-material-download output (+ replies once there are any), and runs again after a reply or a case-page upload', () => {
   expect(job).toMatchObject({
-    inputStatus: ['API_MATERIALS_DOWNLOADED', 'API_REPLY_RECEIVED'],
+    inputStatus: ['API_MATERIALS_DOWNLOADED', 'API_REPLY_RECEIVED', 'API_UPLOAD_RECEIVED'],
     inputs: ['api-material-download'],
     optionalInputs: ['api-reply-intake'],
   });
+});
+
+it('reads every case-page upload (stored, no barcode yet) after the console images', async () => {
+  extractFields.mockResolvedValue({ extractedFields: {}, schemaValidationError: null });
+  CaseDocument.findAll.mockImplementation(async ({ where }) => (where.origin === 'UPLOAD'
+    ? [{ id: 'u1', barcodeId: null, originalFilename: 'UPLOAD-T2-20261019T031900.pdf', storageRef: 'api/T2/upload/u.pdf' }]
+    : docs));
+
+  await job.process({ caseRecord, input });
+
+  expect(CaseDocument.findAll.mock.calls[1][0].where).toEqual({ caseId: 'case-1', origin: 'UPLOAD' });
+  expect(extractFields.mock.calls[0][0][2]).toBe('[upload/UPLOAD-T2-20261019T031900.pdf - page 1]\ntext of UPLOAD-T2-20261019T031900.pdf');
 });
 
 it('reads every reply attachment together with the console images', async () => {

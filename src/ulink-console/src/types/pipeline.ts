@@ -30,6 +30,8 @@ export type BlockName =
   | 'api-document-checking'
   | 'api-email-sender'
   | 'api-reply-intake'
+  | 'api-console-upload'
+  | 'api-console-barcode'
   | 'api-claim-preparation'
   | 'api-claim-revision'
   | 'api-claim-stp';

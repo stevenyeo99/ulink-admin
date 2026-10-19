@@ -10,7 +10,7 @@ const { checkCase } = require('../modules/ias-claim-preparation/service');
 const { job, barcodeFields, apiFlags } = require('../modules/api-claim-preparation/service');
 
 const createdAt = new Date('2026-09-24T03:00:00Z');
-const caseRecord = { id: 'case-1', createdAt, currentStatus: 'API_DOCUMENTS_VERIFIED' };
+const caseRecord = { id: 'case-1', createdAt, currentStatus: 'API_READY_FOR_CLAIM_PREPARATION' };
 const extractedFields = { claim: { insurer_case_number: 'OCR-READ-NUMBER' } };
 const inputWith = (documentCheck) => ({
   'api-claim-intake': { clNo: '2604050015', tpaCaseNumber: 'STEVENEVERHILLC58', crtDate: '2026-09-24T09:00:00' },
@@ -34,9 +34,10 @@ const prepared = (isStp) => ({
 
 beforeEach(() => jest.clearAllMocks());
 
-it('runs whether the documents passed or not, with every earlier output it needs', () => {
+it('runs whether the documents passed or not (after api-console-upload), with every earlier output it needs', () => {
   expect(job).toMatchObject({
-    inputStatus: ['API_DOCUMENTS_VERIFIED', 'API_INCOMPLETE'],
+    inputStatus: ['API_READY_FOR_CLAIM_PREPARATION'],
+    optionalInputs: ['case-override', 'api-console-barcode'],
     inputs: ['api-claim-intake', 'api-material-download', 'api-claim-recognition', 'api-member-verification', 'api-document-checking'],
   });
 });
@@ -83,10 +84,17 @@ it("builds the email flow's payload from the earlier outputs, then the revision 
 it('prepares a suspended revision when documents are missing, without a completion date', async () => {
   checkCase.mockResolvedValue(prepared(true)); // even an STP amount
 
-  const result = await job.process({ caseRecord: { ...caseRecord, currentStatus: 'API_INCOMPLETE' }, input: inputWith(failed) });
+  const result = await job.process({ caseRecord, input: inputWith(failed) });
 
   expect(checkCase.mock.calls[0][0].consoleUploadResult).toEqual({ completedAt: null });
   expect(result.output).toMatchObject({ documentsComplete: false, payload: { isValidation: 'Y', isCSR: 'N', isSuspense: 'Y' } });
+});
+
+it("adds the case-page uploads' barcodes (api-console-barcode) after the console's own, by time", async () => {
+  checkCase.mockResolvedValue(prepared(false));
+  const input = { ...inputWith(passed), 'api-console-barcode': { barcodes: [{ barcodeId: 'OURS', scanId: 'API-STEVENEVERHILLC58-01', createdAt: '2026-09-25T01:00:00Z' }] } };
+  const result = await job.process({ caseRecord, input });
+  expect(result.output.payload).toMatchObject({ suppBarcode1: 'LATER', suppBarcode2: 'OURS', suppBarcode3: null });
 });
 
 describe('apiFlags (confirmed rules)', () => {

@@ -5,8 +5,8 @@ import { uploadCaseDocuments } from '../../api/casesApi';
 import { Button } from '../common/Button';
 import type { CaseDetail } from '../../types/case';
 
-// API cases waiting on documents (ulink-api modules/api-console-watch WATCHED_STATUSES, SYSTEM_4 E4-04).
-const UPLOADABLE = ['API_NO_DOCUMENTS', 'API_CLAIM_SUSPENDED', 'API_DOCUMENTS_REVIEW', 'API_DOCUMENTS_UNSURE', 'API_DOCUMENTS_UPLOADED', 'API_UPLOAD_NOT_IN_CONSOLE'];
+// API cases waiting on documents (ulink-api modules/case-upload UPLOADABLE_STATUSES, SYSTEM_4 E4-04).
+const UPLOADABLE = ['API_NO_DOCUMENTS', 'API_CLAIM_SUSPENDED', 'API_DOCUMENTS_REVIEW', 'API_DOCUMENTS_UNSURE'];
 const MAX_FILES = 10;
 const MAX_BYTES = 20 * 1024 * 1024;
 
@@ -19,8 +19,8 @@ const toBase64 = (file: File) =>
   });
 
 /**
- * Upload the documents the customer sent (SYSTEM_4 E4-04): they go to the IAS console as the case's next submission;
- * once the console gives them a barcode the case is read and checked again, and the IAS claim revised. Any user.
+ * Upload the documents the customer sent (SYSTEM_4 E4-04): merged into one PDF, read and checked again on the next run,
+ * then sent to the IAS console as the case's next submission before the IAS claim is revised. Any user.
  */
 export function CaseUploadPanel({ caseRecord }: { caseRecord: CaseDetail }) {
   const queryClient = useQueryClient();
@@ -50,8 +50,8 @@ export function CaseUploadPanel({ caseRecord }: { caseRecord: CaseDetail }) {
     <section className="mb-6 rounded-xl2 border border-ulink-teal/30 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
       <h2 className="text-sm font-semibold text-slate-800">Upload documents</h2>
       <p className="mb-3 mt-1 text-sm text-slate-600">
-        Documents the customer sent you (PDF, JPG or PNG, up to {MAX_FILES} files, 20 MB). They go to the IAS console as this case's next
-        submission; once the console gives them a barcode (usually 15–30 minutes) the case is checked again and the IAS claim revised.
+        Documents the customer sent you (PDF, JPG or PNG, up to {MAX_FILES} files, 20 MB). They are read and checked again on the next
+        run, then go to the IAS console as this case's next submission; the IAS claim is revised once the console gives them a barcode (usually 15–30 minutes).
       </p>
       <input
         type="file"
@@ -73,10 +73,10 @@ export function CaseUploadPanel({ caseRecord }: { caseRecord: CaseDetail }) {
       </label>
       <Button onClick={() => upload.mutate()} disabled={!canSend}>
         <Upload size={15} className="mr-1.5 inline" />
-        {upload.isPending ? 'Uploading…' : `Upload ${files.length || ''} file${files.length === 1 ? '' : 's'} to the console`}
+        {upload.isPending ? 'Uploading…' : `Upload ${files.length || ''} file${files.length === 1 ? '' : 's'}`}
       </Button>
       {upload.isError && <p className="mt-2 text-sm text-red-600">{(upload.error as Error).message}</p>}
-      {upload.isSuccess && <p className="mt-2 text-sm text-ulink-teal-dark">Uploaded. The case waits for the console, then is checked again.</p>}
+      {upload.isSuccess && <p className="mt-2 text-sm text-ulink-teal-dark">Uploaded. The case is read and checked again on the next run.</p>}
     </section>
   );
 }

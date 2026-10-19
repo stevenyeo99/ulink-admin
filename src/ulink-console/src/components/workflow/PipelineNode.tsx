@@ -24,6 +24,8 @@ const ICONS: Record<BlockName, LucideIcon> = {
   'api-document-checking': ClipboardCheck,
   'api-email-sender': SendHorizonal,
   'api-reply-intake': Reply,
+  'api-console-upload': FolderUp,
+  'api-console-barcode': Barcode,
   'api-claim-preparation': FileText,
   'api-claim-revision': ShieldCheck,
   'api-claim-stp': FileDown,

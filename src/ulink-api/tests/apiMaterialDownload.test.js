@@ -103,7 +103,7 @@ describe('withinGrace', () => {
 describe('job.process', () => {
   // + API_NEW_DOCUMENTS: new console documents for a case waiting on them (api-console-watch, SYSTEM_4 E4-04).
   it('receives api-claim-intake output and runs on API_RECEIVED and on new console documents', () => {
-    expect(job).toMatchObject({ inputStatus: ['API_RECEIVED', 'API_NEW_DOCUMENTS'], inputs: ['api-claim-intake'] });
+    expect(job).toMatchObject({ inputStatus: ['API_RECEIVED', 'API_NEW_DOCUMENTS'], inputs: ['api-claim-intake'], optionalInputs: ['api-console-upload'] });
   });
 
   it("stores every image of the scan's own submissions as case documents", async () => {
@@ -136,6 +136,18 @@ describe('job.process', () => {
         ],
       },
     });
+  });
+
+  it('never downloads our own case-page uploads (api-console-upload) — the case read them already', async () => {
+    listMaterials.mockResolvedValue({ items: [
+      { barcodeId: 'B1', scanId: 'API-T2-01', materials: [material('m1')] },
+      { barcodeId: 'B2', scanId: 'API-T2-02', materials: [material('m2')] }, // ours
+    ], hasMore: false });
+    downloadZip.mockResolvedValue(await zipOf({ 'API-T2/B1/m1.jpg': '1' }));
+    const input = { ...inputFor(LONG_AGO), 'api-console-upload': { uploads: [{ scanId: 'API-T2-02' }] } };
+    const result = await job.process({ caseRecord, input });
+    expect(downloadZip.mock.calls[0][1].map((i) => i.barcodeId)).toEqual(['B1']);
+    expect(result.output.documents.map((d) => d.barcodeId)).toEqual(['B1']);
   });
 
   it('waits while the console has no images yet, within the grace period', async () => {

@@ -40,6 +40,12 @@ it('a new submission in the console (any uploader) → new documents, downloaded
   expect(listScanItems).toHaveBeenCalledWith('API-AYA-CL-26100012');
 });
 
+it("our own case-page upload (api-console-upload) is not new — the case read it already", async () => {
+  listScanItems.mockResolvedValue([item('API-AYA-CL-26100012', 'B1'), item('API-AYA-CL-26100012-01', 'B2')]);
+  const own = { 'api-console-upload': { uploads: [{ scanId: 'API-AYA-CL-26100012-01' }] } };
+  expect(await run('API_CLAIM_SUSPENDED', own)).toMatchObject({ wait: true });
+});
+
 it('nothing new, or a submission still without images → keeps waiting', async () => {
   listScanItems.mockResolvedValue([item('API-AYA-CL-26100012', 'B1'), item('API-AYA-CL-26100012-01', 'B2', 0)]);
   expect(await run('API_NO_DOCUMENTS')).toMatchObject({ wait: true });

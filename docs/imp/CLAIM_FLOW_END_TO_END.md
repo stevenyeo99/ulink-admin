@@ -148,24 +148,28 @@ A **non-STP** claim ends at *Created in IAS*: JD3 approves it in IAS. ULINK can'
 
 ## 3. API case, step by step
 
-Pipeline order (API): api-claim-intake → api-console-watch → api-material-download → api-claim-recognition → api-member-verification → api-document-checking → api-claim-preparation → api-claim-revision →
+Pipeline order (API): api-claim-intake → api-console-watch → api-material-download → api-claim-recognition → api-member-verification → api-document-checking → api-console-upload → api-console-barcode → api-claim-preparation → api-claim-revision →
 api-claim-stp → api-email-sender.
 
 Only what differs from the email case is described; the checks themselves are the same code.
 
 **No inbox (from 2026-10-18):** the API pipeline does not read the mailbox. When documents are missing, ULINK sends
 the customer the *Email draft to the customer* from the case page (switch *API cases: email the customer about missing
-documents* off on System settings). ULINK uploads the documents that come back on the case page. Console watch then restarts the case.
+documents* off on System settings). ULINK uploads the documents that come back on the case page. The case reads and
+checks them on the next run, then sends them to the IAS console before the IAS revision (from 2026-10-19).
 
 | # | Step | What happens | Status (label) |
 |---|---|---|---|
 | 1 | **API claim intake** | Lists the claims created in IAS today (Myanmar time); one case per IAS claim number. A second IAS claim with the same TPA case number is refused (reported, not merged). | `API_RECEIVED` *Received from IAS* |
-| 1b | **Console watch** | For a case **waiting on documents** (*No documents*, *Documents incomplete*, *Check before emailing customer*, *Check the AI's documents finding*, *Uploaded — waiting for the console*, *Upload not in the console*): a console submission the case doesn't have yet — uploaded on the case page or put in the console by anyone — sends it on to be downloaded and checked again; complete, the next revision lifts the suspense. Our upload not in the console after 2 hours → *Upload not in the console* (still watched). | `API_NEW_DOCUMENTS` *New documents in the console* · `API_UPLOAD_NOT_IN_CONSOLE` *Upload not in the console* |
+| 1a | **Upload on the case page** | A person uploads the customer's documents on a case **waiting on documents** (*No documents*, *Documents incomplete*, *Check before emailing customer*, *Check the AI's documents finding*). The files are merged into one PDF and stored on the case, and the case is read and checked again on the next run (steps 4–6). The PDF goes to the console after the check (steps 6a–6b). | `API_UPLOAD_RECEIVED` *Uploaded — being read* |
+| 1b | **Console watch** | For a case **waiting on documents**: a console submission the case doesn't have yet, put in the console by anyone, sends it on to be downloaded and checked again; complete, the next revision lifts the suspense. Our own case-page uploads are skipped (the case read them already). Uploads from before 2026-10-19 (*Uploaded — waiting for the console*) still finish here; not in the console after 2 hours → *Upload not in the console* (still watched). | `API_NEW_DOCUMENTS` *New documents in the console* · `API_UPLOAD_NOT_IN_CONSOLE` *Upload not in the console* |
 | 2 | **Console material download** | Downloads the images the customer uploaded to the console (only the ones not stored yet). None after **2 hours** → the customer is asked for documents. Also runs on *New documents in the console*. | `API_MATERIALS_DOWNLOADED` *Images downloaded* · `API_NO_DOCUMENTS` *No documents* |
-| 4 | **Recognition** | Same as 2.2. | `API_RECOGNIZED` · `API_MANUAL_REVIEW` |
+| 4 | **Recognition** | Same as 2.2, on the console images plus every case-page upload. | `API_RECOGNIZED` · `API_MANUAL_REVIEW` |
 | 5 | **Member check** | Same as 2.3 (internal email on an issue). | `API_READY_FOR_DOCUMENT_CHECKING` · `API_MEMBER_REVIEW_REQUIRED` |
 | 6 | **Document check** | Same checklist. Missing documents: customer emailed (unless switched off — 4.5), and — unlike email — the case **continues** so the IAS claim can be suspended. Switch #2 on and the AI unsure: waits at *Check before emailing customer* instead. Switch #3 on and all passed but the AI unsure — or a reviewer's own line still open — waits at *Check the AI's documents finding* before the IAS revision. | `API_DOCUMENTS_VERIFIED` *Documents complete* · `API_INCOMPLETE` *Documents missing* · `API_DOCUMENTS_REVIEW` *Check before emailing customer* · `API_DOCUMENTS_UNSURE` *Check the AI's documents finding* |
-| 7 | **Claim preparation** | Same builder as 2.7, plus the API flags: documents missing → `isSuspense=Y`; STP → `isValidation=Y, isCSR=Y`; otherwise `N`. All the customer's console barcodes → `barcode` + `suppBarcode1–5`. | `API_CLAIM_PAYLOAD_PREPARED` *Revision prepared* |
+| 6a | **Console upload** | Each case-page upload not in the console yet goes there through cl-upload, one PDF per upload, under `API-<TPA case number>-NN`. Nothing to send → straight to claim preparation in the same run. Refused → a person looks. | `API_CONSOLE_BARCODE_PENDING` *Waiting for console barcode* · `API_CONSOLE_UPLOAD_FAILED` *Console upload refused* · `API_READY_FOR_CLAIM_PREPARATION` *Preparing the revision* |
+| 6b | **Console barcode** | Waits until every sent upload has its console barcode (usually 15–30 minutes). After 2 hours without one → *Console barcode not received* (still checked every run). | `API_READY_FOR_CLAIM_PREPARATION` · `API_CONSOLE_BARCODE_MISSING` *Console barcode not received* |
+| 7 | **Claim preparation** | Same builder as 2.7, plus the API flags: documents missing → `isSuspense=Y`; STP → `isValidation=Y, isCSR=Y`; otherwise `N`. All the console barcodes, the customer's and our uploads', → `barcode` + `suppBarcode1–5`. | `API_CLAIM_PAYLOAD_PREPARED` *Revision prepared* |
 | 8 | **Claim revision** | The claim already exists in IAS, so it is **revised** (never created). Complete + STP → settlement report next. Complete, not STP → JD3 email. Documents missing → **suspense** in IAS + internal "Documents incomplete" email; the documents uploaded on the case page (or by the customer in the console) restart the case, and the next revision lifts the suspense. | `API_AWAITING_CSR` *Waiting for settlement report* · `API_CLAIM_REVISED` *Revised in IAS* · `API_CLAIM_SUSPENDED` *Documents incomplete* · `API_CLAIM_REVISION_FAILED` *IAS rejected the revision* |
 | 9 | **Settlement report** | Same as 2.9. | `API_CSR_SENT` *Settlement report sent* |
 | — | **API email sender** | Sends every email the API jobs asked for. API emails start their own thread (subject "AYA Sompo claim … (Ref: …)"); customer and internal emails are kept in separate threads. With *API cases: email the customer about missing documents* off, the customer's missing-documents email is not sent (case history: "Customer not emailed …"); the team's emails say to contact the customer, and a case with no console images gets a team email instead. | — |
@@ -176,7 +180,7 @@ documents* off on System settings). ULINK uploads the documents that come back o
 |---|---|---|
 | Starts from | Customer's email | Claim created in IAS |
 | Documents come from | Email attachments | Console (customer's upload, or ULINK's upload on the case page) |
-| Console / barcode | We upload (`cl-upload`) and wait for the barcode — or folder copy | Already in the console; barcodes read from it |
+| Console / barcode | We upload (`cl-upload`) and wait for the barcode — or folder copy | Already in the console; barcodes read from it. A case-page upload is read first, then we upload it (`cl-upload`) and wait for its barcode |
 | IAS action | **Create** the claim | **Revise** the claim |
 | Documents missing | No IAS claim yet; wait for the customer | Claim **suspended** in IAS; wait for the customer |
 | STP rules used | *Email* column | *API* column |
@@ -250,7 +254,7 @@ See 2.5–2.6. Normal wait 15–30 minutes; flagged after 2 hours; always keeps 
 | *Documents incomplete* | Case page | **Override and continue** if the documents are fine |
 | *Check before emailing customer* | Case page | **Send the request to the customer**, or **Override and continue** |
 | *Check the AI's documents finding* | Case page | Check the review points against the documents, then **Confirm and continue** |
-| An API case waiting on documents | Case page → **Upload documents** (any user; PDF/JPG/PNG, ≤ 10 files, 20 MB; comment required) | The files go to the IAS console as the case's next submission (cl-upload) → *Uploaded — waiting for the console* → checked again once the console has them |
+| An API case waiting on documents | Case page → **Upload documents** (any user; PDF/JPG/PNG, ≤ 10 files, 20 MB; comment required) | The files are merged into one PDF → *Uploaded — being read* → read and checked again on the next run → sent to the IAS console as the case's next submission (cl-upload) → the revision waits for its barcode |
 | *Upload not in the console* | Case page / IAS console | Check the console (or upload again); the case continues once the documents appear |
 | *Needs manual reading*, *Case number unclear*, *Console upload refused*, *Console barcode not received* | Case page / internal email | Check and fix; *Reset* reprocesses a case from reading (not allowed once it has an IAS claim number) |
 | Non-STP claim in IAS | **Approvals** page + JD3 email | JD3 approves in IAS |
@@ -280,10 +284,12 @@ stay visible, marked *✔ Overridden by … — why*, in the console, the emails
 | Reviewer checklist (reviewer's own lines, SYSTEM_4 E4-28 / E4-29) — add / remove lines, *Done* per line; *Email draft* (both checklists, copy only, any user) | From `DOCUMENTS_REVIEW` / `DOCUMENTS_UNSURE` (+ `API_`) → `INCOMPLETE` / `API_INCOMPLETE` | Both | **Person** — the lines go to the team email (*contact the customer*), the case page and the IAS remark, never the customer email; the AI's own items go to the customer as usual. Open lines stop every passed re-check at *Check the AI's documents finding*; *Confirm and continue* marks them done |
 | Checks passed / Documents complete | `MEMBER_VERIFIED` / `API_DOCUMENTS_VERIFIED` | Both | System |
 | Documents missing | `API_INCOMPLETE` | API | System (→ suspense) |
-| Waiting for console barcode | `CONSOLE_BARCODE_PENDING` | Email | Console (15–30 min) |
-| Console barcode not received | `CONSOLE_BARCODE_MISSING` | Email | **Person** (still checked) |
+| Waiting for console barcode | `CONSOLE_BARCODE_PENDING` / `API_CONSOLE_BARCODE_PENDING` | Both | Console (15–30 min) |
+| Console barcode not received | `CONSOLE_BARCODE_MISSING` / `API_CONSOLE_BARCODE_MISSING` | Both | **Person** (still checked) |
 | Case number unclear | `CASE_NUMBER_UNCLEAR` | Email | **Person** |
-| Console upload refused | `CONSOLE_UPLOAD_FAILED` | Email | **Person** |
+| Console upload refused | `CONSOLE_UPLOAD_FAILED` / `API_CONSOLE_UPLOAD_FAILED` | Both | **Person** |
+| Uploaded — being read | `API_UPLOAD_RECEIVED` | API | System |
+| Preparing the revision | `API_READY_FOR_CLAIM_PREPARATION` | API | System |
 | Documents uploaded | `DOCUMENTS_UPLOADED` | Email | System |
 | Claim prepared / Revision prepared | `CLAIM_PAYLOAD_PREPARED` / `API_CLAIM_PAYLOAD_PREPARED` | Both | System |
 | Created in IAS | `CLAIM_CREATED` | Email | JD3 (non-STP) / System (STP) |

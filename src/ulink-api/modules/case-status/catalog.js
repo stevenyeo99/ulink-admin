@@ -66,13 +66,21 @@ const CASE_STATUSES = {
   API_READY_FOR_DOCUMENT_CHECKING: status('documents', 'in_progress', 'Checking documents', 'The member check passed; the document checklist runs next.'),
   API_INCOMPLETE: status('documents', 'in_progress', 'Documents missing', 'Documents are missing; the claim will be revised with suspense and the customer asked.'),
   API_DOCUMENTS_REVIEW: status('documents', 'needs_review', 'Check before emailing customer', "Documents look incomplete, but the AI wasn't sure. The customer has NOT been emailed and IAS is unchanged: check the documents, then send the request or override the check."),
-  // New documents for a case waiting on them (SYSTEM_4 E4-04): uploaded from the case page, or put in the console by
-  // anyone — api-console-watch notices them, api-material-download fetches them, and the case is checked again.
+  // Uploaded on the case page (SYSTEM_4 E4-04): read and checked at once, then sent to the IAS console before the revision.
+  API_UPLOAD_RECEIVED: status('recognition', 'in_progress', 'Uploaded — being read', 'Documents were uploaded on the case page; they are read and checked again on the next run, then sent to the IAS console.'),
+  // New documents for a case waiting on them, put in the console by anyone — api-console-watch notices them,
+  // api-material-download fetches them, and the case is checked again. API_DOCUMENTS_UPLOADED / API_UPLOAD_NOT_IN_CONSOLE:
+  // case-page uploads from before 2026-10-19, which went to the console first.
   API_DOCUMENTS_UPLOADED: status('documents', 'in_progress', 'Uploaded — waiting for the console', 'Documents were uploaded to the IAS console from the case page; the console gives them a barcode (usually 15–30 minutes), then they are read and the case is checked again.'),
   API_NEW_DOCUMENTS: status('documents', 'in_progress', 'New documents in the console', 'New documents for this case appeared in the IAS console; they are downloaded and the case is checked again.'),
   API_UPLOAD_NOT_IN_CONSOLE: status('documents', 'needs_review', 'Upload not in the console', 'Documents uploaded from the case page have not appeared in the IAS console after the waiting time. Check the console; the case keeps being checked and continues once they appear.'),
   API_DOCUMENTS_UNSURE: status('documents', 'needs_review', "Check the AI's documents finding", "All documents passed, but the AI wasn't sure about some of them, or a person asked for something the AI can't check (see the review points). Check them against the documents, then confirm to continue — or request more information; IAS is unchanged."),
   API_DOCUMENTS_VERIFIED: status('documents', 'in_progress', 'Documents complete', 'Member and documents are checked; the IAS revision is being prepared.'),
+  // Case-page uploads go to the IAS console after the document check; the revision waits for their barcodes.
+  API_CONSOLE_BARCODE_PENDING: status('claim', 'in_progress', 'Waiting for console barcode', 'The uploaded documents were sent to the IAS console; the console creates the barcode about every 15 minutes. The system checks again on every run.'),
+  API_CONSOLE_BARCODE_MISSING: status('claim', 'needs_review', 'Console barcode not received', 'The uploaded documents were sent to the IAS console, but no barcode came back within the expected time. The system keeps checking; check the console side.'),
+  API_CONSOLE_UPLOAD_FAILED: status('claim', 'needs_review', 'Console upload refused', 'The console upload API refused the uploaded documents, or did not say where it filed them; the reason is in the case history. IAS is unchanged.'),
+  API_READY_FOR_CLAIM_PREPARATION: status('claim', 'in_progress', 'Preparing the revision', 'Documents are checked and in the IAS console; the IAS revision is being prepared.'),
   API_CLAIM_PAYLOAD_PREPARED: status('claim', 'in_progress', 'Revision prepared', 'The IAS claim revision is built and about to be sent.'),
   API_CLAIM_SUSPENDED: status('claim', 'waiting_customer', 'Documents incomplete', "Revised in IAS with suspense; the missing documents are asked for, and the case continues once they are in the IAS console (uploaded on the case page or by the customer)."),
   API_CLAIM_REVISED: status('claim', 'done', 'Revised in IAS', 'Documents are complete; handed to JD3 for approval in IAS.'),

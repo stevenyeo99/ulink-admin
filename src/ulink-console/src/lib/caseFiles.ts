@@ -17,7 +17,7 @@ export interface PageRef {
 
 /**
  * The case's files under the names the AI's reading used (claim-recognition / api-claim-recognition): API console
- * images "<barcode>/<file>", API reply attachments "reply-N/<file>" (in the order the reply intake gathered them), email
+ * images "<barcode>/<file>", case-page uploads "upload/<file>", API reply attachments "reply-N/<file>" (in the order the reply intake gathered them), email
  * attachments "<file>". So an evidence page "12345/page-002.jpg - page 1" finds its file.
  */
 export function caseFiles(caseRecord: CaseDetail, documents: CaseDocument[], apiSteps: ApiCaseStep[] = []): ViewFile[] {
@@ -30,8 +30,8 @@ export function caseFiles(caseRecord: CaseDetail, documents: CaseDocument[], api
     });
   }
   const consoleFiles = documents.map((d) => ({
-    key: d.id, name: `${d.barcodeId}/${d.originalFilename}`, path: documentPath(caseRecord.id, d.id),
-    pdf: isPdf(d.contentType, d.originalFilename), group: `Console ${d.barcodeId}`,
+    key: d.id, name: `${d.barcodeId ?? 'upload'}/${d.originalFilename}`, path: documentPath(caseRecord.id, d.id),
+    pdf: isPdf(d.contentType, d.originalFilename), group: d.barcodeId ? `Console ${d.barcodeId}` : 'Uploaded on the case page',
   }));
   const reply = [...apiSteps].reverse().find((s) => s.job === 'api-reply-intake' && s.status === 'DONE');
   const replyIds = new Set(((reply?.output as { attachmentIds?: string[] } | null)?.attachmentIds) ?? []);

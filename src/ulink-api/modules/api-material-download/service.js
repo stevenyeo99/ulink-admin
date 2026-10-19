@@ -42,6 +42,10 @@ async function listScanItems(scanId) {
   }
 }
 
+// Our own case-page uploads (scanIds) for a case, from api-console-upload's last output: already stored and read, so
+// never downloaded again or treated as new.
+const ownScanIds = (input) => new Set((input['api-console-upload']?.uploads || []).map((u) => u.scanId).filter(Boolean));
+
 const materialCount = (item) => (Array.isArray(item.materials) ? item.materials.length : 0);
 
 // Groups items into zip requests of at most MAX_MATERIALS_PER_ZIP images. Only items with
@@ -105,7 +109,9 @@ const NO_DOCUMENTS_EMAIL = {
 async function processCase({ caseRecord, input }) {
   const claim = input['api-claim-intake'];
   const scanId = scanIdFor(claim.tpaCaseNumber);
-  const items = await listScanItems(scanId);
+  // Our own case-page uploads are already stored and read; their barcodes come from api-console-barcode.
+  const own = ownScanIds(input);
+  const items = (await listScanItems(scanId)).filter((item) => !own.has(item.scanId));
   const expected = items.reduce((n, item) => n + materialCount(item), 0);
 
   if (expected === 0) {
@@ -175,8 +181,9 @@ const job = {
   // the ones not stored yet are downloaded, and the case is read and checked again with all of them.
   inputStatus: ['API_RECEIVED', 'API_NEW_DOCUMENTS'],
   inputs: ['api-claim-intake'],
+  optionalInputs: ['api-console-upload'],
   batchLimit: config.apiMaterialDownload.batchLimit,
   process: processCase,
 };
 
-module.exports = { run: () => runApiJob(job), job, scanIdFor, belongsToScan, listScanItems, materialCount, zipBatches, readZip, withinGrace };
+module.exports = { run: () => runApiJob(job), job, scanIdFor, belongsToScan, listScanItems, ownScanIds, materialCount, zipBatches, readZip, withinGrace };

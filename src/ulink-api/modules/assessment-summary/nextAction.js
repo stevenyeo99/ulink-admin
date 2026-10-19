@@ -51,11 +51,14 @@ function nextAction(fields = {}, summary = null, events = []) {
     case 'API_MANUAL_REVIEW':
       return act(`${said || "The AI couldn't read the documents reliably."} Read the documents and handle the claim manually.`);
     case 'CONSOLE_BARCODE_MISSING':
+    case 'API_CONSOLE_BARCODE_MISSING':
       return act("The console barcode hasn't arrived. Check the console upload; the case is still checked every run.");
     case 'CASE_NUMBER_UNCLEAR':
       return act("The TPA case number on the form isn't AYA-CL- followed by 8 digits. Check the form, fix it, then reset the case.");
     case 'CONSOLE_UPLOAD_FAILED':
       return act(`${said || 'The console upload was refused.'} Fix it, then reset the case.`);
+    case 'API_CONSOLE_UPLOAD_FAILED':
+      return act(`${said || 'The console upload was refused.'} Check the console upload with IT; IAS is unchanged and the case waits here.`);
     case 'INCOMPLETE':
       return wait(`Waiting for the customer's documents${missing ? `: ${missing}` : ''}. Their reply restarts the case.`, 'Customer');
     case 'API_NO_DOCUMENTS':
@@ -74,7 +77,7 @@ function nextAction(fields = {}, summary = null, events = []) {
     case 'API_NEW_DOCUMENTS':
       return wait('Nothing to do — the new documents are downloaded and the case is checked again on the next run.');
     case 'API_UPLOAD_NOT_IN_CONSOLE':
-      return act("The uploaded documents haven't appeared in the IAS console. Check the console (or upload again); the case continues once they appear.");
+      return act("The uploaded documents haven't appeared in the IAS console. Check the console; the case continues once they appear.");
     case 'CLAIM_CREATED':
     case 'API_CLAIM_REVISED':
       if (fields.isStp) return wait('Nothing to do — STP; the settlement report follows.');
@@ -88,6 +91,7 @@ function nextAction(fields = {}, summary = null, events = []) {
     case 'API_CLAIM_REVISION_FAILED':
       return act(`IAS refused it${said ? `: ${said}` : '.'} Fix it in IAS; it is not retried automatically.`);
     case 'CONSOLE_BARCODE_PENDING':
+    case 'API_CONSOLE_BARCODE_PENDING':
       return wait('Nothing to do — waiting for the console barcode (usually 15–30 minutes).');
     case 'API_AWAITING_CSR':
       return wait("Nothing to do — waiting for IAS's settlement report.");

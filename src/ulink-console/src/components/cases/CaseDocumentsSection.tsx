@@ -4,21 +4,25 @@ import { FileLink } from '../common/FileLink';
 import { formatBytes } from '../../lib/formatBytes';
 import type { CaseDocument } from '../../types/case';
 
-/** An API case's console images, grouped by barcode (one group per console submission). */
+/** An API case's console images, grouped by barcode (one group per console submission), then the case-page uploads. */
 export function CaseDocumentsSection({ caseId, documents }: { caseId: string; documents: CaseDocument[] }) {
   if (documents.length === 0) {
     return <p className="text-sm text-slate-400">No console documents yet.</p>;
   }
 
+  const UPLOADS = 'Uploaded on the case page';
   const byBarcode = new Map<string, CaseDocument[]>();
-  for (const doc of documents) byBarcode.set(doc.barcodeId, [...(byBarcode.get(doc.barcodeId) ?? []), doc]);
+  for (const doc of documents) {
+    const group = doc.barcodeId ?? UPLOADS;
+    byBarcode.set(group, [...(byBarcode.get(group) ?? []), doc]);
+  }
 
   return (
     <div className="space-y-3">
-      {[...byBarcode.entries()].map(([barcodeId, docs]) => (
-        <div key={barcodeId}>
+      {[...byBarcode.entries()].map(([group, docs]) => (
+        <div key={group}>
           <p className="mb-1.5 text-xs text-slate-500">
-            <span className="font-semibold text-slate-700">{barcodeId}</span>
+            <span className="font-semibold text-slate-700">{group}</span>
             {docs[0].scanId && <span className="ml-2 font-mono">{docs[0].scanId}</span>}
           </p>
           <div className="flex flex-wrap gap-2">

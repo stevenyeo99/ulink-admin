@@ -9,7 +9,8 @@ const { openRequests } = require('../case-requests/requests');
 //   input:  { 'api-claim-intake': { clNo, tpaCaseNumber }, 'api-material-download': { documents },
 //             'api-claim-recognition': { extractedFields, recognizedType },
 //             'api-member-verification': { iasMemberInfoResponse },
-//             'api-document-checking': { outcome, checkedAt } }
+//             'api-document-checking': { outcome, checkedAt },
+//             'api-console-barcode'?: { barcodes } }   (case-page uploads sent to the console)
 //   output: { payload, documentsComplete, diagnosis, lines, isStp, claimPrepMeta }
 //
 // The email flow's own claim preparation, unchanged: ias-claim-preparation's checkCase does the
@@ -39,7 +40,8 @@ async function processCase({ caseRecord, input }) {
   // A reviewer's own line still open (SYSTEM_4 E4-28): not complete, whatever an earlier override said.
   const documentsComplete = (documentCheck.outcome === 'DOCUMENT_CHECKED' || input['case-override']?.from === 'API_DOCUMENTS_REVIEW')
     && (await openRequests(caseRecord.id)).length === 0;
-  const { barcode, ...suppBarcodes } = barcodeFields(input['api-material-download'].documents);
+  // The console's own submissions plus our case-page uploads (api-material-download never downloads those).
+  const { barcode, ...suppBarcodes } = barcodeFields([...input['api-material-download'].documents, ...(input['api-console-barcode']?.barcodes || [])]);
 
   const prepared = await checkCase({
     id: caseRecord.id,
@@ -82,10 +84,11 @@ async function processCase({ caseRecord, input }) {
 
 const job = {
   name: 'api-claim-preparation',
-  // Both document-check outcomes continue here (incomplete → isSuspense=Y).
-  inputStatus: ['API_DOCUMENTS_VERIFIED', 'API_INCOMPLETE'],
+  // Both document-check outcomes continue here (incomplete → isSuspense=Y), after api-console-upload (and its
+  // barcode wait, if a case-page upload went to the console).
+  inputStatus: ['API_READY_FOR_CLAIM_PREPARATION'],
   inputs: ['api-claim-intake', 'api-material-download', 'api-claim-recognition', 'api-member-verification', 'api-document-checking'],
-  optionalInputs: ['case-override'],
+  optionalInputs: ['case-override', 'api-console-barcode'],
   batchLimit: config.iasClaimPreparation.batchLimit,
   process: processCase,
 };

@@ -197,9 +197,12 @@ export const API_BLOCKS: BlockMeta[] = [
   { id: 'api-claim-recognition', label: 'Claim Recognition', description: 'AI OCR Document Processing', x: 0, y: 570 },
   { id: 'api-member-verification', label: 'Member Verification', description: 'Verifies the IAS member information', x: 0, y: 760 },
   { id: 'api-document-checking', label: 'Document Checking', description: 'AI Document Completeness Check', x: 0, y: 950 },
-  { id: 'api-claim-preparation', label: 'Claim Preparation', description: 'IAS Claim Revision Preparation', x: 0, y: 1140 },
-  { id: 'api-claim-revision', label: 'Claim Revision', description: 'Revises the IAS Claim', x: 0, y: 1330 },
-  { id: 'api-claim-stp', label: 'Claim STP', description: 'Downloads CSR, emails customer (STP claims only)', x: 0, y: 1520 },
+  // Case-page uploads (read already) go to the IAS console; the revision waits for their barcodes.
+  { id: 'api-console-upload', label: 'Console Upload', description: 'Sends case-page uploads to the IAS Console', x: 0, y: 1140 },
+  { id: 'api-console-barcode', label: 'Console Barcode', description: 'Waits for their console barcodes', x: 0, y: 1330 },
+  { id: 'api-claim-preparation', label: 'Claim Preparation', description: 'IAS Claim Revision Preparation', x: 0, y: 1520 },
+  { id: 'api-claim-revision', label: 'Claim Revision', description: 'Revises the IAS Claim', x: 0, y: 1710 },
+  { id: 'api-claim-stp', label: 'Claim STP', description: 'Downloads CSR, emails customer (STP claims only)', x: 0, y: 1900 },
 ];
 
 const apiEdge = (source: BlockName, target: BlockName): StaticEdge => ({
@@ -218,8 +221,8 @@ export const API_EMAIL_BADGES: EmailBadgeMeta[] = [
   { id: 'api-email-badge-claim-recognition', producer: 'api-claim-recognition', blockName: 'api-email-sender', label: 'Claim received', audience: 'customer', x: 300, y: 570 },
   { id: 'api-email-badge-member-verification', producer: 'api-member-verification', blockName: 'api-email-sender', label: 'Member verification hold', audience: 'internal', x: 300, y: 760 },
   { id: 'api-email-badge-document-checking', producer: 'api-document-checking', blockName: 'api-email-sender', label: 'Missing documents list + copy to the team', audience: 'customer', x: 300, y: 950 },
-  { id: 'api-email-badge-claim-revision', producer: 'api-claim-revision', blockName: 'api-email-sender', label: 'Ready for review, IAS rejected, or documents incomplete', audience: 'internal', x: 300, y: 1330 },
-  { id: 'api-email-badge-claim-stp', producer: 'api-claim-stp', blockName: 'api-email-sender', label: 'Settlement report', audience: 'customer', x: 300, y: 1520 },
+  { id: 'api-email-badge-claim-revision', producer: 'api-claim-revision', blockName: 'api-email-sender', label: 'Ready for review, IAS rejected, or documents incomplete', audience: 'internal', x: 300, y: 1710 },
+  { id: 'api-email-badge-claim-stp', producer: 'api-claim-stp', blockName: 'api-email-sender', label: 'Settlement report', audience: 'customer', x: 300, y: 1900 },
 ];
 
 export const API_EMAIL_BADGE_EDGES: EmailBadgeEdge[] = API_EMAIL_BADGES.map((badge) => ({

@@ -9,6 +9,7 @@ const { DocumentsTooLongError } = require('../claim-recognition/llmClient');
 //
 //   input:  { 'api-material-download': { scanId, fileCount, documents: [{ barcodeId, documentIds }] },
 //             'api-reply-intake': { attachmentIds } }        (only once the customer has replied)
+//           + every case-page upload (case documents with origin UPLOAD, modules/case-upload)
 //   output: { recognizedType, extractedFields, pageCount, transcripts, email }   (or reasonCode/message on review)
 //
 // Reads the case's console images with exactly the email flow's OCR: the same page-transcription
@@ -29,13 +30,16 @@ async function processCase({ caseRecord, input }) {
   if (!route) throw new Error(`Claim route ${API_ROUTE_KEY} is missing or disabled (ulink_claim_routes)`);
 
   const documentIds = input['api-material-download'].documents.flatMap((d) => d.documentIds);
-  const documents = await CaseDocument.findAll({
+  const consoleDocuments = await CaseDocument.findAll({
     where: { caseId: caseRecord.id, id: documentIds },
     order: [['barcodeId', 'ASC'], ['originalFilename', 'ASC']],
   });
-  if (documents.length !== documentIds.length) {
-    throw new Error(`Expected ${documentIds.length} case documents, found ${documents.length}`);
+  if (consoleDocuments.length !== documentIds.length) {
+    throw new Error(`Expected ${documentIds.length} case documents, found ${consoleDocuments.length}`);
   }
+  // Then every case-page upload so far, oldest first (never downloaded from the console: api-material-download ownScanIds).
+  const uploads = await CaseDocument.findAll({ where: { caseId: caseRecord.id, origin: 'UPLOAD' }, order: [['createdAt', 'ASC']] });
+  const documents = [...consoleDocuments, ...uploads];
 
   // Every reply attachment received so far (all rounds), read together with the console images.
   const replyAttachmentIds = input['api-reply-intake']?.attachmentIds || [];
@@ -55,7 +59,7 @@ async function processCase({ caseRecord, input }) {
     const pages = await transcribePages(await storage.get(storageRef), filename, label);
     for (const page of pages) transcripts.push(`[${name} - page ${page.pageNumber}]\n${page.text}`);
   };
-  for (const doc of documents) await read(`${doc.barcodeId}/${doc.originalFilename}`, doc.storageRef, doc.originalFilename, doc.id);
+  for (const doc of documents) await read(`${doc.barcodeId || 'upload'}/${doc.originalFilename}`, doc.storageRef, doc.originalFilename, doc.id);
   for (const [i, att] of attachments.entries()) {
     await read(`reply-${i + 1}/${att.originalFilename || 'attachment'}`, att.storageRef, att.originalFilename, att.id);
   }
@@ -106,8 +110,9 @@ async function processCase({ caseRecord, input }) {
 
 const job = {
   name: JOB,
-  // A customer reply with new attachments sends the case back here (API_REPLY_RECEIVED).
-  inputStatus: ['API_MATERIALS_DOWNLOADED', 'API_REPLY_RECEIVED'],
+  // A customer reply with new attachments (API_REPLY_RECEIVED) or a case-page upload (API_UPLOAD_RECEIVED) sends the
+  // case back here.
+  inputStatus: ['API_MATERIALS_DOWNLOADED', 'API_REPLY_RECEIVED', 'API_UPLOAD_RECEIVED'],
   inputs: ['api-material-download'],
   optionalInputs: ['api-reply-intake'],
   // Same cost profile as the email OCR job (vision call per page + extraction), same batch size.

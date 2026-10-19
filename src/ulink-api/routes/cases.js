@@ -532,13 +532,14 @@ router.post('/:id/email-draft', getEmailDraft);
  * /api/cases/{id}/documents:
  *   post:
  *     tags: [cases]
- *     summary: Upload missing documents to the IAS console for an API case waiting on them (SYSTEM_4 E4-04)
+ *     summary: Upload missing documents for an API case waiting on them (SYSTEM_4 E4-04)
  *     description: >
- *       Any logged-in user. Only for an API case at API_NO_DOCUMENTS, API_CLAIM_SUSPENDED, API_DOCUMENTS_REVIEW,
- *       API_DOCUMENTS_UNSURE, API_DOCUMENTS_UPLOADED or API_UPLOAD_NOT_IN_CONSOLE. 1–10 PDF / JPG / PNG files, 20 MB in
- *       total, merged into one PDF and sent through cl-upload with the case's TPA case number. The case moves to
- *       API_DOCUMENTS_UPLOADED; api-console-watch picks the documents up once the console has them, and the case is
- *       checked again. A comment is required and kept in the case history.
+ *       Any logged-in user. Only for an API case at API_NO_DOCUMENTS, API_CLAIM_SUSPENDED, API_DOCUMENTS_REVIEW or
+ *       API_DOCUMENTS_UNSURE. 1–10 PDF / JPG / PNG files, 20 MB in total, merged into one PDF and stored on the case.
+ *       The case moves to API_UPLOAD_RECEIVED and is read and checked again on the next pipeline run. After the
+ *       document check, api-console-upload sends the PDF to the IAS console (cl-upload) with the case's TPA case
+ *       number, and api-console-barcode waits for its barcode before the IAS revision. A comment is required and kept
+ *       in the case history.
  *     parameters:
  *       - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
  *     requestBody:
@@ -559,12 +560,11 @@ router.post('/:id/email-draft', getEmailDraft);
  *                     contentType: { type: string }
  *                     data: { type: string, description: base64 }
  *     responses:
- *       200: { description: Uploaded; the case waits for the console }
+ *       200: { description: Stored; the case is read and checked again }
  *       400: { description: No comment, wrong files, or the case isn't waiting on documents }
+ *       409: { description: The case moved on during the upload — nothing changed }
  *       413: { description: Over 20 MB }
- *       422: { description: The console refused the upload }
- *       502: { description: Console upload failed (network / server) — nothing changed }
- *       503: { description: Console upload not set up on this server }
+ *       502: { description: Storing the upload failed — nothing changed }
  */
 router.post('/:id/documents', requireNotHeldByOther, uploadCaseDocuments);
 

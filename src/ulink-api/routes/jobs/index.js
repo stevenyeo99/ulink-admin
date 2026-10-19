@@ -19,6 +19,8 @@ const apiMemberVerificationService = require('../../modules/api-member-verificat
 const apiDocumentCheckingService = require('../../modules/api-document-checking/service');
 const apiEmailSenderService = require('../../modules/api-email-sender/service');
 const apiReplyIntakeService = require('../../modules/api-reply-intake/service');
+const apiConsoleUploadService = require('../../modules/api-console-upload/service');
+const apiConsoleBarcodeService = require('../../modules/api-console-barcode/service');
 const apiClaimPreparationService = require('../../modules/api-claim-preparation/service');
 const apiClaimRevisionService = require('../../modules/api-claim-revision/service');
 const apiClaimStpService = require('../../modules/api-claim-stp/service');
@@ -757,9 +759,10 @@ router.use('/api-material-download', createJobRouter('api-material-download', ap
  *     description: >
  *       For each API case waiting on documents (API_NO_DOCUMENTS, API_CLAIM_SUSPENDED, API_DOCUMENTS_REVIEW,
  *       API_DOCUMENTS_UNSURE, API_DOCUMENTS_UPLOADED, API_UPLOAD_NOT_IN_CONSOLE), lists console scan API-{tpaCaseNumber}
- *       and looks for a submission the case doesn't have yet. Found → API_NEW_DOCUMENTS (api-material-download fetches it
- *       and the case is checked again). An upload from the case page not in the console after
- *       CONSOLE_BARCODE_WAIT_MINUTES → API_UPLOAD_NOT_IN_CONSOLE. SYSTEM_4 E4-04.
+ *       and looks for a submission the case doesn't have yet (case-page uploads sent by api-console-upload are skipped).
+ *       Found → API_NEW_DOCUMENTS (api-material-download fetches it and the case is checked again). An old-flow upload
+ *       from the case page (API_DOCUMENTS_UPLOADED) not in the console after CONSOLE_BARCODE_WAIT_MINUTES →
+ *       API_UPLOAD_NOT_IN_CONSOLE. SYSTEM_4 E4-04.
  *     responses:
  *       200:
  *         description: Started, or skipped because a prior run is still in progress
@@ -901,12 +904,57 @@ router.use('/api-reply-intake', createJobRouter('api-reply-intake', apiReplyInta
 
 /**
  * @openapi
+ * /api/jobs/api-console-upload/run:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Start the api-console-upload job (fire-and-forget) — case-page uploads to the IAS console
+ *     description: >
+ *       For API_DOCUMENTS_VERIFIED and API_INCOMPLETE cases, sends each case-page upload not in the console yet (one
+ *       merged PDF per upload) through cl-upload → API_CONSOLE_BARCODE_PENDING. Nothing to send →
+ *       API_READY_FOR_CLAIM_PREPARATION. Refused → API_CONSOLE_UPLOAD_FAILED. Real cl-upload.
+ *     responses:
+ *       200:
+ *         description: Started, or skipped because a prior run is still in progress
+ *
+ * /api/jobs/api-console-upload/release:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Manually clear a stuck api-console-upload lock
+ *     responses:
+ *       200:
+ *         description: Lock cleared
+ *
+ * /api/jobs/api-console-barcode/run:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Start the api-console-barcode job (fire-and-forget) — barcodes of case-page uploads
+ *     description: >
+ *       For API_CONSOLE_BARCODE_PENDING and API_CONSOLE_BARCODE_MISSING cases, lists console scan API-{tpaCaseNumber}
+ *       and waits until every upload api-console-upload sent has its barcode → API_READY_FOR_CLAIM_PREPARATION. None
+ *       after CONSOLE_BARCODE_WAIT_MINUTES → API_CONSOLE_BARCODE_MISSING, still checked every run.
+ *     responses:
+ *       200:
+ *         description: Started, or skipped because a prior run is still in progress
+ *
+ * /api/jobs/api-console-barcode/release:
+ *   post:
+ *     tags: [jobs]
+ *     summary: Manually clear a stuck api-console-barcode lock
+ *     responses:
+ *       200:
+ *         description: Lock cleared
+ */
+router.use('/api-console-upload', createJobRouter('api-console-upload', apiConsoleUploadService));
+router.use('/api-console-barcode', createJobRouter('api-console-barcode', apiConsoleBarcodeService));
+
+/**
+ * @openapi
  * /api/jobs/api-claim-preparation/run:
  *   post:
  *     tags: [jobs]
  *     summary: Start the api-claim-preparation job (fire-and-forget) — API case workflow
  *     description: >
- *       For API_DOCUMENTS_VERIFIED and API_INCOMPLETE cases, runs the email flow's own claim preparation (diagnosis
+ *       For API_READY_FOR_CLAIM_PREPARATION cases, runs the email flow's own claim preparation (diagnosis
  *       and benefit picks, STP eligibility, CL_CLAIM_API payload) on the earlier jobs' outputs,
  *       and adds the claim's claimNo, IAS's TpaCaseNumber, barcode + suppBarcode1-5 and the API flags
  *       (isValidation / isCSR / isSuspense) — the IAS claim revision body. API_CLAIM_PAYLOAD_PREPARED. Real LLM

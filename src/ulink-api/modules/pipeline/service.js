@@ -20,6 +20,8 @@ const apiClaimRecognitionService = require('../api-claim-recognition/service');
 const apiMemberVerificationService = require('../api-member-verification/service');
 const apiDocumentCheckingService = require('../api-document-checking/service');
 const apiEmailSenderService = require('../api-email-sender/service');
+const apiConsoleUploadService = require('../api-console-upload/service');
+const apiConsoleBarcodeService = require('../api-console-barcode/service');
 const apiClaimPreparationService = require('../api-claim-preparation/service');
 const apiClaimRevisionService = require('../api-claim-revision/service');
 const apiClaimStpService = require('../api-claim-stp/service');
@@ -82,10 +84,13 @@ const API_STEPS = [
   ['api-console-watch', apiConsoleWatchService],
   ['api-material-download', apiMaterialDownloadService],
   // No inbox steps: ULINK emails the customer (draft on the case page) and uploads what comes back on the case
-  // page; console watch picks it up. The api-reply-intake job stays callable on its own (old cases' history).
+  // page; it is read at once (api-claim-recognition). The api-reply-intake job stays callable on its own (old cases' history).
   ['api-claim-recognition', apiClaimRecognitionService],
   ['api-member-verification', apiMemberVerificationService],
   ['api-document-checking', apiDocumentCheckingService],
+  // Case-page uploads (read already) go to the IAS console, and their barcodes are awaited, before the IAS revision.
+  ['api-console-upload', apiConsoleUploadService],
+  ['api-console-barcode', apiConsoleBarcodeService],
   ['api-claim-preparation', apiClaimPreparationService],
   ['api-claim-revision', apiClaimRevisionService],
   ['api-claim-stp', apiClaimStpService],

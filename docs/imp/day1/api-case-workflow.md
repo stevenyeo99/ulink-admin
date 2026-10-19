@@ -111,11 +111,18 @@ stateDiagram-v2
   API_RECOGNIZED --> API_MEMBER_REVIEW_REQUIRED: member issue
   API_READY_FOR_DOCUMENT_CHECKING --> API_DOCUMENTS_VERIFIED: docs ok
   API_READY_FOR_DOCUMENT_CHECKING --> API_INCOMPLETE: docs missing
-  API_INCOMPLETE --> API_CLAIM_PAYLOAD_PREPARED: api-claim-preparation (isSuspense=Y)
+  API_INCOMPLETE --> API_READY_FOR_CLAIM_PREPARATION: api-console-upload (nothing to send)
+  API_INCOMPLETE --> API_CONSOLE_BARCODE_PENDING: api-console-upload (case-page upload sent)
+  API_DOCUMENTS_VERIFIED --> API_READY_FOR_CLAIM_PREPARATION: api-console-upload (nothing to send)
+  API_DOCUMENTS_VERIFIED --> API_CONSOLE_BARCODE_PENDING: api-console-upload (case-page upload sent)
+  API_CONSOLE_BARCODE_PENDING --> API_READY_FOR_CLAIM_PREPARATION: api-console-barcode
+  API_CONSOLE_BARCODE_PENDING --> API_CONSOLE_BARCODE_MISSING: no barcode in time (still checked)
+  API_READY_FOR_CLAIM_PREPARATION --> API_CLAIM_PAYLOAD_PREPARED: api-claim-preparation
+  API_CLAIM_SUSPENDED --> API_UPLOAD_RECEIVED: upload on the case page
+  API_UPLOAD_RECEIVED --> API_RECOGNIZED: api-claim-recognition
   API_CLAIM_PAYLOAD_PREPARED --> API_CLAIM_SUSPENDED: revised with suspense
   API_CLAIM_SUSPENDED --> API_REPLY_RECEIVED: reply with new attachments
   API_MEMBER_REVIEW_REQUIRED --> API_REPLY_RECEIVED: reply with attachment
-  API_DOCUMENTS_VERIFIED --> API_CLAIM_PAYLOAD_PREPARED: api-claim-preparation
   API_CLAIM_PAYLOAD_PREPARED --> API_CLAIM_REVISED: api-claim-revision
   API_CLAIM_PAYLOAD_PREPARED --> API_CLAIM_REVISION_FAILED: IAS rejects
   API_CLAIM_PAYLOAD_PREPARED --> API_AWAITING_CSR: revised, STP
@@ -132,8 +139,13 @@ stateDiagram-v2
 | `API_MANUAL_REVIEW` | Extraction didn't fit the `ayas_member_claim` schema; waits for an operator | `api-claim-recognition` | operator | 5 |
 | `API_MEMBER_REVIEW_REQUIRED` | Member/coverage issue (internal email: 6c). Re-checked every run; **also waits for a reply** | `api-member-verification` | `api-member-verification` (re-check), `email-intake` (reply) | 6 |
 | `API_READY_FOR_DOCUMENT_CHECKING` | Member check passed | `api-member-verification` | `api-document-checking` | 6 |
-| `API_INCOMPLETE` | Documents missing; customer emailed. Continues to preparation (suspense) | `api-document-checking` | `api-claim-preparation` | 6 |
-| `API_DOCUMENTS_VERIFIED` | Both checks passed | `api-document-checking` | `api-claim-preparation` | 6 |
+| `API_UPLOAD_RECEIVED` | A person uploaded documents on the case page (one merged PDF, stored on the case) | case page (`case-upload`) | `api-claim-recognition` | E4-04 |
+| `API_INCOMPLETE` | Documents missing; customer emailed. Continues to preparation (suspense) | `api-document-checking` | `api-console-upload` | 6 |
+| `API_DOCUMENTS_VERIFIED` | Both checks passed | `api-document-checking` | `api-console-upload` | 6 |
+| `API_CONSOLE_BARCODE_PENDING` | Case-page uploads sent to the IAS console; waiting for their barcodes | `api-console-upload` | `api-console-barcode` | E4-04 |
+| `API_CONSOLE_BARCODE_MISSING` | No barcode within `CONSOLE_BARCODE_WAIT_MINUTES`; a person checks the console. Still checked every run | `api-console-barcode` | `api-console-barcode` | E4-04 |
+| `API_CONSOLE_UPLOAD_FAILED` | cl-upload refused an upload, or answered without the scan id; a person looks | `api-console-upload` | operator | E4-04 |
+| `API_READY_FOR_CLAIM_PREPARATION` | Documents checked and every case-page upload in the console | `api-console-upload` / `api-console-barcode` | `api-claim-preparation` | E4-04 |
 | `API_CLAIM_PAYLOAD_PREPARED` | Revision payload built | `api-claim-preparation` | `api-claim-revision` | 7 |
 | `API_CLAIM_SUSPENDED` | Revised in IAS with suspense (documents missing). **Waits for a reply** | `api-claim-revision` | `api-reply-intake` | 8 |
 | `API_CLAIM_REVISED` | IAS accepted the revision, documents complete, non-STP — JD2 approves in IAS (end) | `api-claim-revision` | — | 8 |
@@ -333,14 +345,30 @@ order as email: member check first, then documents. Tests: `tests/apiChecks.test
 Verified on the sample scan: download → OCR → member verified (IAS) → documents incomplete ("Incomplete medical
 report(s)", missing case number, missing claimant DOB), about a minute end to end.
 
+### 6.5b Case-page uploads: read first, console second (2026-10-19)
+
+A person uploads the customer's documents on the case page (`modules/case-upload/upload.js`). The files of one
+upload are merged into one PDF and stored as a case document (`origin: 'UPLOAD'`, no barcode). The case goes to
+`API_UPLOAD_RECEIVED`, and `api-claim-recognition` reads the console images plus every upload so far on the next run.
+Member verification and the document check follow as usual.
+
+After the document check, `api-console-upload` sends each upload not in the console yet through cl-upload, one PDF
+per upload, and records its scan id (`API-<TpaCaseNumber>-NN`). `api-console-barcode` waits until every sent upload
+has its barcode. `api-claim-preparation` then sends the console's own barcodes plus ours. `api-console-watch` and
+`api-material-download` skip our scan ids, because the case already read those documents. With no upload, the case
+passes `api-console-upload` in the same run.
+
+Before 2026-10-19 an upload went to the console first (`API_DOCUMENTS_UPLOADED` / `API_UPLOAD_NOT_IN_CONSOLE`,
+handled by `api-console-watch`). Cases still at those statuses finish that way.
+
 ### 6.6 `api-claim-preparation` (Phase 7, built 2026-09-24)
 
 | | |
 |---|---|
 | Module | `modules/api-claim-preparation/service.js` — a runner job. Tests: `tests/apiClaimPreparation.test.js` |
 | Job | `POST /api/jobs/api-claim-preparation/run` |
-| Input status | `API_DOCUMENTS_VERIFIED` **and** `API_INCOMPLETE` — unlike email cases, missing documents don't stop an API case |
-| Input | intake (`clNo`, `tpaCaseNumber`), material download (`documents`), OCR (`extractedFields`), member check (`iasMemberInfoResponse`), document check (`outcome`, `checkedAt`) |
+| Input status | `API_READY_FOR_CLAIM_PREPARATION`, from both `API_DOCUMENTS_VERIFIED` **and** `API_INCOMPLETE` through `api-console-upload` — unlike email cases, missing documents don't stop an API case |
+| Input | intake (`clNo`, `tpaCaseNumber`), material download (`documents`), OCR (`extractedFields`), member check (`iasMemberInfoResponse`), document check (`outcome`, `checkedAt`), and `api-console-barcode` (`barcodes` of case-page uploads, if any) |
 | Output | `{ payload, documentsComplete, diagnosis, lines, isStp, claimPrepMeta }` — `payload` is the IAS claim revision body |
 | Next | `API_CLAIM_PAYLOAD_PREPARED` |
 
