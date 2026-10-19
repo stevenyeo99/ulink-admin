@@ -65,11 +65,12 @@ it('reads every reply attachment together with the console images', async () => 
   ]);
 });
 
-it('sends a thread with too many pages to manual review instead of one huge extraction (S21)', async () => {
+it('has no page cap: a long claim goes on to the extraction (the size check is the one limit)', async () => {
+  extractFields.mockResolvedValue({ extractedFields: {}, schemaValidationError: null });
   transcribePages.mockResolvedValue(Array.from({ length: 31 }, (_, i) => ({ pageNumber: i + 1, text: 'x' })));
   const result = await job.process({ caseRecord, input });
-  expect(result).toMatchObject({ nextStatus: 'API_MANUAL_REVIEW', output: { reasonCode: 'TOO_MANY_PAGES', pageCount: 62 } });
-  expect(extractFields).not.toHaveBeenCalled();
+  expect(extractFields.mock.calls[0][0]).toHaveLength(62);
+  expect(result).toMatchObject({ nextStatus: 'API_RECOGNIZED', output: { pageCount: 62 } });
 });
 
 it("reads every document with the email flow's OCR and extracts with the ayas_member_claim route", async () => {

@@ -20,10 +20,9 @@ const { DocumentsTooLongError } = require('../claim-recognition/llmClient');
 
 const JOB = 'api-claim-recognition';
 const API_ROUTE_KEY = 'ayas_member_claim';
-// A long email thread keeps adding reply attachments, and every page goes into one extraction
-// prompt. Past this, a person should look instead (S21).
-// ponytail: fixed page cap; cache per-page transcripts and trim duplicates if real threads hit it.
-const MAX_PAGES = 60;
+// No page cap (removed 2026-10-19): the size check below is the one limit — a claim too long for the model goes to a
+// person (DOCUMENTS_TOO_LONG). A 60-page cap stopped AYA-CL-26040093 (62 pages, about 12,000 tokens of text, which
+// fits) after every page had already been read.
 
 async function processCase({ caseRecord, input }) {
   const route = await ClaimRoute.findOne({ where: { routeKey: API_ROUTE_KEY, enabled: true } });
@@ -62,14 +61,6 @@ async function processCase({ caseRecord, input }) {
   for (const doc of documents) await read(`${doc.barcodeId || 'upload'}/${doc.originalFilename}`, doc.storageRef, doc.originalFilename, doc.id);
   for (const [i, att] of attachments.entries()) {
     await read(`reply-${i + 1}/${att.originalFilename || 'attachment'}`, att.storageRef, att.originalFilename, att.id);
-  }
-
-  if (transcripts.length > MAX_PAGES) {
-    return {
-      output: { recognizedType: API_ROUTE_KEY, reasonCode: 'TOO_MANY_PAGES', message: `${transcripts.length} pages (max ${MAX_PAGES})`, pageCount: transcripts.length },
-      nextStatus: 'API_MANUAL_REVIEW',
-      message: `${transcripts.length} pages across console images and replies — too many to read in one pass; needs an operator`,
-    };
   }
 
   // Too long for the model's context (SYSTEM_4 E4-27): a person reads it — never a call with pages cut off.
