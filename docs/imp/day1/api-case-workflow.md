@@ -274,7 +274,7 @@ Logic:
    (`API-X68` also returns `API-X688-01`), so only the exact scanId and its numbered submissions (`API-X68-01`,
    `API-X68-02`) are kept.
 3. **No images in the console:**
-   - within `API_MATERIAL_GRACE_MINUTES` (default 120) after the IAS claim's `crtDate` → **WAITING**, retried next
+   - within `API_MATERIAL_GRACE_MINUTES` (default 120) after ULINK received the claim (the case's `createdAt`; from 2026-10-19 — the UAT IAS writes `crtDate` in UTC+7, so it is no longer compared) → **WAITING**, retried next
      run (the console may still be uploading, S4);
    - after that → `API_NO_DOCUMENTS` with `fileCount: 0`; the customer will be asked for documents (Phase 6).
 4. **Download** only the submissions still missing pages, as zips (at most 100 images per request). Every zip entry

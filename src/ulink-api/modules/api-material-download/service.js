@@ -88,11 +88,12 @@ async function readZip(buffer, scanId, barcodeIds) {
   return files;
 }
 
-// Still inside the grace period after the IAS claim was created? crtDate has no offset; it is
-// IAS's own time, Myanmar (UTC+6:30). An unreadable date means no grace.
-function withinGrace(crtDate, now = new Date()) {
-  const created = Date.parse(`${crtDate}+06:30`);
-  return Number.isFinite(created) && now.getTime() < created + config.apiMaterialDownload.graceMinutes * 60000;
+// Still inside the grace period after ULINK received the claim? Counted from the case's own createdAt (our clock), not
+// IAS's crtDate: crtDate has no time zone, and the UAT IAS writes it in UTC+7, not Myanmar time (2026-10-19) — so no
+// time zone is guessed. Intake lists the day's claims every run, so a claim is received within one run of its creation.
+function withinGrace(receivedAt, now = new Date()) {
+  const received = new Date(receivedAt).getTime();
+  return Number.isFinite(received) && now.getTime() < received + config.apiMaterialDownload.graceMinutes * 60000;
 }
 
 const docKey = (barcodeId, filename) => `${barcodeId}/${filename}`;
@@ -116,8 +117,8 @@ async function processCase({ caseRecord, input }) {
   const expected = items.reduce((n, item) => n + materialCount(item), 0);
 
   if (expected === 0) {
-    if (withinGrace(claim.crtDate)) {
-      return { wait: true, output: { scanId, reason: `No images in the console yet; waiting up to ${config.apiMaterialDownload.graceMinutes} min after the claim was created` } };
+    if (withinGrace(caseRecord.createdAt)) {
+      return { wait: true, output: { scanId, reason: `No images in the console yet; waiting up to ${config.apiMaterialDownload.graceMinutes} min after ULINK received the claim` } };
     }
     return {
       output: { scanId, fileCount: 0, documents: [], email: NO_DOCUMENTS_EMAIL },

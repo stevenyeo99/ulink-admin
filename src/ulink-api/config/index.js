@@ -96,8 +96,8 @@ module.exports = {
   apiMaterialDownload: {
     // ulink-console-middleware base URL — API cases' console images come from its zip endpoint.
     middlewareUrl: process.env.CONSOLE_MIDDLEWARE_URL,
-    // IAS can list a claim before its images reach the console. Until this long after the
-    // claim's crtDate, "no images yet" means wait; after it, the case continues without them
+    // IAS can list a claim before its images reach the console. Until this long after ULINK
+    // received the claim (the case's createdAt), "no images yet" means wait; after it, the case continues without them
     // and the customer is asked for documents (docs/imp/day1/api-case-workflow.md, S4).
     graceMinutes: parseInt(process.env.API_MATERIAL_GRACE_MINUTES, 10) || 120,
     // Each case is one middleware zip call (about 0.5 s per image) — keep modest.

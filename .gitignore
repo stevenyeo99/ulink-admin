@@ -3,3 +3,5 @@
 
 # graphify knowledge graph (generated locally; rebuild with /graphify)
 graphify-out/
+
+.playwright-mcp

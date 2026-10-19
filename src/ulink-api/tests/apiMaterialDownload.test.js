@@ -35,11 +35,10 @@ async function zipOf(entries) {
 }
 
 const material = (id) => ({ material: id, originalname: `${id}.jpg` });
-const caseRecord = { id: 'case-1' };
+const caseRecord = { id: 'case-1', createdAt: new Date('2026-06-30T08:00:00Z') }; // received long ago: past the grace period
 const LONG_AGO = '2026-06-30T14:50:18'; // far past the grace period
 const inputFor = (crtDate) => ({ 'api-claim-intake': { clNo: '2604050015', tpaCaseNumber: 'T2', crtDate } });
-// A Myanmar-local timestamp (no offset, like IAS crtDate) `minutesAgo` minutes before now.
-const myanmarLocal = (minutesAgo) => new Date(Date.now() - minutesAgo * 60000 + 390 * 60000).toISOString().slice(0, 19);
+const minutesAgo = (n) => new Date(Date.now() - n * 60000);
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -93,9 +92,9 @@ describe('readZip', () => {
 });
 
 describe('withinGrace', () => {
-  it('waits for 120 minutes after crtDate (Myanmar time)', () => {
-    expect(withinGrace(myanmarLocal(30))).toBe(true);
-    expect(withinGrace(myanmarLocal(150))).toBe(false);
+  it('waits for 120 minutes after ULINK received the claim (the case createdAt — no time zone guessed)', () => {
+    expect(withinGrace(minutesAgo(30))).toBe(true);
+    expect(withinGrace(minutesAgo(150))).toBe(false);
     expect(withinGrace('not a date')).toBe(false);
   });
 });
@@ -154,7 +153,8 @@ describe('job.process', () => {
 
   it('waits while the console has no images yet, within the grace period', async () => {
     listMaterials.mockResolvedValue({ items: [], hasMore: false });
-    const result = await job.process({ caseRecord, input: inputFor(myanmarLocal(30)) });
+    // IAS's crtDate is ignored (the UAT IAS writes it in UTC+7): only when ULINK received the claim counts.
+    const result = await job.process({ caseRecord: { ...caseRecord, createdAt: minutesAgo(30) }, input: inputFor(LONG_AGO) });
     expect(result).toMatchObject({ wait: true, output: { scanId: 'API-T2' } });
     expect(downloadZip).not.toHaveBeenCalled();
   });
