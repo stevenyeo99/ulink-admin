@@ -19,6 +19,8 @@ interface Finding {
   correct: string | null;
   /** What "✓ Right" confirms: the item itself — for a voucher both its amount and its date (one evidence covers both). */
   confirms: string[];
+  /** A rule check: the values it compared ("value:…"), each offered for ✎ Edit on the check's own line. */
+  edits?: string[];
 }
 
 // A voucher's evidence ("voucher 2") covers its amount and its date: Right confirms both.
@@ -76,6 +78,7 @@ function buildFindings(checklist: ChecklistItem[], options: CorrectionOption[]):
       key: `check-${c.code}`, label: c.label, passed: c.passed, confidence: c.confidence ?? null,
       why: c.note ?? c.reason ?? null, page: pageOf(c.usedFields), correct: canCorrect(`verdict:${c.code}`),
       confirms: canCorrect(`verdict:${c.code}`) ? [`verdict:${c.code}`] : [],
+      edits: (c.editItems ?? []).map((item) => `value:${item}`).filter((item) => canCorrect(item)),
     }));
   if (mandatory.length) {
     checks.push({
@@ -139,6 +142,9 @@ export function FindingsPanel({
   const handled = documentsOverridden ? open : [];
   const passed = findings.filter((f) => !open.includes(f) && !notChecked.includes(f));
   const decisions = lines.filter((l) => l.area === 'member' || l.area === 'claim');
+  // Values claim preparation reads that are picked from a list (voucher type, type of patient): shown so a wrong one can
+  // be corrected before the claim goes to IAS.
+  const choiceValues = options.filter((o) => o.type === 'choice');
   // Open member findings, each marked OK on its own (not coverage: the whole-check override covers that).
   const memberFindings = options.filter((o) => o.kind === 'verdict' && o.item.startsWith('member:'));
 
@@ -177,8 +183,25 @@ export function FindingsPanel({
             return option.canFail ? action('Mark wrong', false) : null;
           })()}
         </div>
+        {/* A failed or unsure rule check: fix the value it compared, right here (usually better than Mark OK — the
+            corrected value is what goes to IAS). */}
+        {canCorrect && f.edits?.length && open.includes(f) && !editing?.key.startsWith(`${f.key}|`) ? (
+          <div className="mt-1 flex flex-wrap gap-x-3 text-xs">
+            {f.edits.map((item) => {
+              const o = optionOf(item)!;
+              return (
+                <button key={item} onClick={() => setEditing({ key: `${f.key}|${item}` })} className="text-ulink-orange-dark hover:underline">
+                  ✎ Edit {o.label}{o.current != null ? ` (${typeof o.current === 'number' ? o.current.toLocaleString('en-US') : String(o.current)})` : ''}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
         {editing?.key === f.key && optionOf(f.correct) && (
           <InlineCorrection caseId={caseId} option={optionOf(f.correct)!} passed={editing.passed} onDone={() => setEditing(null)} />
+        )}
+        {editing?.key.startsWith(`${f.key}|`) && optionOf(editing.key.slice(f.key.length + 1)) && (
+          <InlineCorrection caseId={caseId} option={optionOf(editing.key.slice(f.key.length + 1))!} onDone={() => setEditing(null)} />
         )}
       </li>
     );
@@ -218,6 +241,23 @@ export function FindingsPanel({
                   <button onClick={() => setEditing({ key: o.item, passed: true })} className="mt-1 text-xs text-ulink-orange-dark hover:underline">Mark OK</button>
                 )}
                 {editing?.key === o.item && <InlineCorrection caseId={caseId} option={o} passed onDone={() => setEditing(null)} />}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {choiceValues.length > 0 && (
+        <section className="mb-4">
+          <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Used for the IAS claim</h3>
+          <ul className="divide-y divide-slate-900/5">
+            {choiceValues.map((o) => (
+              <li key={o.item} className="py-2 text-sm">
+                <span className="font-medium text-slate-800">{o.label}</span>{' '}
+                <span className="text-slate-700">"{o.current == null ? 'not read' : String(o.current)}"</span>
+                {canCorrect && editing?.key !== o.item && (
+                  <button onClick={() => setEditing({ key: o.item })} className="ml-3 text-xs text-ulink-orange-dark hover:underline">✎ Edit</button>
+                )}
+                {editing?.key === o.item && <InlineCorrection caseId={caseId} option={o} onDone={() => setEditing(null)} />}
               </li>
             ))}
           </ul>

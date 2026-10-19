@@ -30,6 +30,8 @@ const MEMBER_CHECK_FIELDS = new Set([
   'claimant.claimant_name', 'claimant.claimant_nrc_passport', 'claimant.claimant_dob', 'policy.policy_no',
   'claim.appointment_date', 'claim.accident_date', 'bank.bank_name', 'bank.bank_account_name', 'bank.bank_account_number',
 ]);
+// The voucher types the AI reads — keep in line with extract-fields.md (voucher_type) and its schema enum.
+const VOUCHER_TYPES = ['consultation', 'pharmacy', 'lab', 'optical', 'other'];
 const DATE_FIELDS = new Set(['claimant.claimant_dob', 'claim.appointment_date', 'claim.accident_date', 'medical_record.date']);
 const VOUCHER_ITEM = /^invoices\.items\.(\d+)\.(subtotal|date)$/;
 
@@ -54,6 +56,11 @@ function correctionOptions(fields = {}, documentCheckResult = null, memberVerify
     type: AMOUNT_FIELDS.has(item) ? 'amount' : DATE_FIELDS.has(item) ? 'date' : 'text',
     current: valueAt(fields, item) ?? null,
   }));
+  // Each voucher's type, which claim preparation reads, chosen from a fixed list (type: choice): a wrong type picks the
+  // wrong IAS benefit (and its STP limit). Not the type of patient: it is free text on the claim form ("Outpatient",
+  // "optical care"), and the member check compares it with the member's IAS benefit types as written.
+  const choices = (fields.invoices?.items || []).map((voucher, i) => (
+    { kind: 'value', item: `invoices.items.${i}.voucher_type`, label: `Voucher ${i + 1} type`, type: 'choice', choices: VOUCHER_TYPES, current: voucher.voucher_type ?? null }));
   const vouchers = (fields.invoices?.items || []).flatMap((voucher, i) => [
     // A voucher amount may be zero or negative: a refund / cash-return slip (claim-recognition keeps those).
     { kind: 'value', item: `invoices.items.${i}.subtotal`, label: `Voucher ${i + 1} amount`, type: 'amount', current: voucher.subtotal ?? null, signed: true },
@@ -66,7 +73,7 @@ function correctionOptions(fields = {}, documentCheckResult = null, memberVerify
   const member = (memberVerifyResult?.issues || [])
     .filter((issue) => ACCEPTABLE_MEMBER_ITEMS.has(issue.item))
     .map((issue) => ({ kind: 'verdict', item: issue.item, label: MEMBER_ITEM_LABELS[issue.item], type: 'verdict', current: false, canFail: false, note: issue.reason }));
-  return [...values, ...vouchers, ...verdicts, ...member];
+  return [...values, ...choices, ...vouchers, ...verdicts, ...member];
 }
 
 /**
@@ -92,6 +99,8 @@ function validateCorrection(body, options) {
     if (!option.signed && value <= 0) return { error: `${option.label}: enter an amount above zero.` };
   } else if (option.type === 'date') {
     if (!isRealDate(value)) return { error: `${option.label}: enter a date as YYYY-MM-DD.` };
+  } else if (option.type === 'choice') {
+    if (!option.choices.includes(value)) return { error: `${option.label}: choose one of ${option.choices.join(', ')}.` };
   } else {
     value = typeof value === 'string' ? value.trim() : '';
     if (!value || value.length > 200) return { error: `${option.label}: enter the value (up to 200 characters).` };
@@ -141,7 +150,8 @@ function applyCorrection(fields, correction) {
         page: item.evidence?.page ?? correction.page ?? null,
         corrected,
       };
-    } else {
+    } else if (FIELD_LABELS[correction.item]) {
+      // Evidence for the key values only (the "Values read" list); a chosen voucher type / type of patient has none.
       next.field_evidence = [...(next.field_evidence || []).filter((e) => e.field !== correction.item),
         { field: correction.item, confidence: 1, reason, page: correction.page ?? null }];
     }

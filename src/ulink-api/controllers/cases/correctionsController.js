@@ -9,7 +9,12 @@ const logger = require('../../utils/logger');
 // Saving checks the case again with the corrected fields — from the member check when the value is one it compares
 // with IAS, else from the document check (corrections.js recheckFrom) — and the usual jobs run. No IAS write here
 // (Q16: a correction changes our checks, decision and AI remark; the claim built later uses the corrected fields).
-const CORRECTABLE_STATUSES = Object.keys(OVERRIDE_TARGETS);
+// While a member or document finding holds the case, and while it waits for the customer (owner, 2026-10-19: a value
+// the AI read wrong is corrected before the claim goes — or goes again — to IAS; email INCOMPLETE is an override
+// status already). After the correction the case is checked again: documents complete → claim preparation and (API)
+// a new IAS revision that lifts the suspense; documents still missing → it waits for that person, who sends the
+// request (correctionHold — a correction never emails the customer on its own).
+const CORRECTABLE_STATUSES = [...new Set([...Object.keys(OVERRIDE_TARGETS), 'API_CLAIM_SUSPENDED', 'INCOMPLETE'])];
 const RECOGNITION_JOB = 'api-claim-recognition';
 
 // Member findings are marked OK only while the member check holds the case — after a whole-check override the case is
@@ -46,7 +51,7 @@ async function createCorrection(req, res) {
   const caseRecord = await Case.findByPk(req.params.id);
   if (!caseRecord) return res.status(404).json({ error: { message: `Case ${req.params.id} not found`, status: 404 } });
   if (!CORRECTABLE_STATUSES.includes(caseRecord.currentStatus)) {
-    return res.status(400).json({ error: { message: 'Corrections are made while a member or document finding holds the case.', status: 400 } });
+    return res.status(400).json({ error: { message: 'Corrections are made while a member or document finding holds the case, or while it waits for the customer.', status: 400 } });
   }
   const { fields, recognitionStep } = await caseFields(caseRecord);
   if (!fields.extractedFields || (caseRecord.source === 'API' && !recognitionStep)) {

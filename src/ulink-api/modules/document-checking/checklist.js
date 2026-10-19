@@ -793,7 +793,8 @@ function evaluateDocumentChecks(extractedFields) {
     ...buildEvaluatorChecklist(extractedFields),
     ...buildMandatoryFieldChecklist(extractedFields),
     ...buildDateConsistencyChecklist(extractedFields),
-  ].map((item) => withFieldConfidence(item, entries));
+  ].map((item) => withFieldConfidence(item, entries))
+    .map((item) => (CHECK_FIELDS[item.code] ? { ...item, editItems: editItemsFor(item.code, extractedFields) } : item));
   return { issues, passed: issues.length === 0, details, flags, checklist };
 }
 
@@ -1052,9 +1053,10 @@ function formatCheck(fields, today = todayInIasTimezone()) {
   (fields.invoices?.items || []).forEach((item, i) => {
     if (item.subtotal != null && !isAmount(item.subtotal)) problems.push(`Voucher ${i + 1} amount "${item.subtotal}" is not a number`);
   });
-  // The voucher's printed lines, added up by the AI (line_total, SYSTEM_4 E3b), against the total it read.
+  // The voucher's printed lines, added up by the AI (line_total, SYSTEM_4 E3b), against the total it read — not once a
+  // person corrected the total (the person's amount stands; the AI's recount is of its own misreading).
   const withLines = (fields.invoices?.items || []).map((item, i) => ({ item, n: i + 1 }))
-    .filter(({ item }) => isAmount(item.line_total) && isAmount(item.subtotal) && item.subtotal > 0);
+    .filter(({ item }) => isAmount(item.line_total) && isAmount(item.subtotal) && item.subtotal > 0 && !(item.evidence?.corrected || []).includes('subtotal'));
   if (withLines.length) checked.push('voucher lines');
   for (const { item, n } of withLines) {
     if (Math.abs(item.line_total - item.subtotal) >= 1) {
@@ -1132,13 +1134,35 @@ const leastSure = (entries) => entries.filter((e) => typeof e.confidence === 'nu
 // vouchers: which vouchers the check compared (the amount check skips refund slips; the date check, undated vouchers).
 // compared: whether the check compared anything — a check that had nothing to compare used no value.
 // Checks about how a document looks (legible, stamp, breakdown) and the presence checks have their own scores.
+// voucherField: which value of each voucher the check compares — so the review page can offer it for correction.
 const CHECK_FIELDS = {
   INCOMPLETE_CLAIM_FORM: { paths: ['medical.detail_of_illness_injury', 'medical.full_description_of_treatment'] },
   MISSING_BANK_INFO: { paths: ['bank.bank_name', 'bank.bank_account_name', 'bank.bank_account_number'] },
-  VOUCHER_AMOUNT_MISMATCH: { paths: ['claim.total_claim_amount'], vouchers: (v) => v.subtotal > 0, compared: (item) => item.confidence != null },
+  VOUCHER_AMOUNT_MISMATCH: { paths: ['claim.total_claim_amount'], vouchers: (v) => v.subtotal > 0, voucherField: 'subtotal', compared: (item) => item.confidence != null },
   TREATMENT_DATE_INCONSISTENT: { paths: ['claim.appointment_date', 'claim.accident_date', 'medical_record.date'], compared: (item) => item.confidence != null },
-  INVOICE_DATE_INCONSISTENT: { paths: ['medical_record.date'], vouchers: (v) => v.date != null, compared: (item) => item.confidence != null },
+  INVOICE_DATE_INCONSISTENT: { paths: ['medical_record.date'], vouchers: (v) => v.date != null, voucherField: 'date', compared: (item) => item.confidence != null },
 };
+
+// The values a check compared, as correction items ("claim.total_claim_amount", "invoices.items.0.subtotal") — the
+// review page offers ✎ Edit for each on the check's own line (owner, 2026-10-19: fix the misread value where the
+// failed check shows, not only by marking the check OK).
+function editItemsFor(code, fields) {
+  const uses = CHECK_FIELDS[code];
+  if (!uses) return null;
+  const vouchers = uses.voucherField
+    ? (fields.invoices?.items || []).map((v, i) => (uses.vouchers(v) ? `invoices.items.${i}.${uses.voucherField}` : null)).filter(Boolean)
+    : [];
+  return [...uses.paths, ...vouchers];
+}
+
+// The same on a stored check result (cases checked before editItems existed get them when the case page loads).
+function withEditItems(documentCheckResult, extractedFields) {
+  if (!documentCheckResult?.checklist || !extractedFields) return documentCheckResult;
+  return {
+    ...documentCheckResult,
+    checklist: documentCheckResult.checklist.map((item) => (CHECK_FIELDS[item.code] && !item.editItems ? { ...item, editItems: editItemsFor(item.code, extractedFields) } : item)),
+  };
+}
 
 // Only a PASSED check that compared something, and only when a value it used is unsure: then the check is unsure too,
 // with a note naming the value (usedFields: every unsure value it used, so "Key values read clearly" doesn't repeat
@@ -1180,4 +1204,4 @@ function fieldsReadCheck(fields, checklist = []) {
   };
 }
 
-module.exports = { ISSUES, FIELD_LABELS, evaluateDocumentChecks, evaluateJudgmentDependentChecks, vitaminCheck, vitaminRejection, documentListCheck, benefitTypeCheck, documentDatesCheck, formatCheck, fieldsReadCheck, isRealDate, valueAt };
+module.exports = { ISSUES, FIELD_LABELS, evaluateDocumentChecks, evaluateJudgmentDependentChecks, vitaminCheck, vitaminRejection, documentListCheck, benefitTypeCheck, documentDatesCheck, withEditItems, formatCheck, fieldsReadCheck, isRealDate, valueAt };

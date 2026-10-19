@@ -16,6 +16,7 @@ const { getStorageAdapter } = require('../../storage');
 const { resetOneCase } = require('../dev/casesController');
 const logger = require('../../utils/logger');
 const { releaseMissingDocumentsEmail } = require('../../modules/document-checking/service');
+const { withEditItems } = require('../../modules/document-checking/checklist');
 const { uploadDocuments, UploadRefused } = require('../../modules/case-upload/upload');
 const { correctionsInfo } = require('./correctionsController');
 const { claimView, activeClaims, endClaim } = require('../../modules/case-claim/claim');
@@ -417,6 +418,9 @@ async function getCase(req, res) {
   // page's Job Steps section. Email cases take the branch above, unchanged.
   const apiSteps = await ApiCaseStep.findAll({ where: { caseId: caseRecord.id }, order: [['createdAt', 'ASC']] });
   const fields = { ...caseRecord.toJSON(), ...apiCaseView(apiSteps) };
+  // API cases checked before each rule check carried its compared values (editItems): added here for the review page.
+  // Email cases get them at their next document check.
+  fields.documentCheckResult = withEditItems(fields.documentCheckResult, fields.extractedFields);
   res.json({ case: fields, events, documents, apiSteps, ...reviewInfo(fields), corrections: await correctionsInfo(caseRecord, fields), requests: await requestsInfo(caseRecord), claim });
 }
 

@@ -64,6 +64,12 @@ export function InlineCorrection({
         ) : (
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-slate-600">Correct value</span>
+            {option.type === 'choice' ? (
+              <select value={value} onChange={(e) => setValue(e.target.value)} className={inputClass}>
+                {!option.choices?.includes(value) && <option value={value}>{value || 'Choose one'}</option>}
+                {option.choices?.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            ) : (
             <input
               type={option.type === 'date' ? 'date' : 'text'}
               inputMode={option.type === 'amount' ? 'decimal' : undefined}
@@ -72,6 +78,7 @@ export function InlineCorrection({
               className={inputClass}
               autoFocus
             />
+            )}
           </label>
         )}
         <label className="block">

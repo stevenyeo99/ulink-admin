@@ -1,0 +1,53 @@
+// Correctness before the claim goes (again) to IAS (owner, 2026-10-19 — AYA-CL-26043792: the AI read the voucher as
+// 198,000, the receipt says 190,000, and the claim was suspended for an amount mismatch):
+//   - a value can be corrected while the case waits for the customer (API: revised with suspense; email: INCOMPLETE);
+//   - a voucher amount a person corrected is not compared with the AI's own recount of the lines any more;
+//   - the voucher type (read by claim preparation for the IAS benefit) can be corrected, from a fixed list.
+
+jest.mock('../db/models', () => ({ Setting: { findAll: jest.fn(async () => []) } }));
+
+const { getSettings } = require('../modules/settings/settings');
+const { CORRECTABLE_STATUSES } = require('../controllers/cases/correctionsController');
+const { correctionOptions, validateCorrection, applyCorrection, recheckFrom } = require('../modules/ai-feedback/corrections');
+const { formatCheck, evaluateDocumentChecks, withEditItems } = require('../modules/document-checking/checklist');
+
+const fields = () => ({
+  claim: { total_claim_amount: 190000, appointment_date: '2026-10-08', type_of_patient: 'optical care' },
+  invoices: { items: [{ subtotal: 198000, line_total: 198000, date: '2026-10-08', voucher_type: 'consultation', evidence: { confidence: 0.95, page: 'B.pdf - page 6' } }] },
+});
+const correct = (f, option, value) => applyCorrection(f, { kind: 'value', item: option.item, label: option.label, corrected: value, reason: 'The receipt shows 190,000', by: 'Ulink (ulink)', wrongStep: 'reading' });
+
+beforeEach(() => getSettings()); // formatCheck reads the voucher-date limit from the settings
+
+it('corrections are allowed while the case waits for the customer, never on a finished case', () => {
+  expect(CORRECTABLE_STATUSES).toEqual(expect.arrayContaining(['API_CLAIM_SUSPENDED', 'INCOMPLETE', 'API_MEMBER_REVIEW_REQUIRED', 'API_DOCUMENTS_REVIEW']));
+  for (const done of ['API_CLAIM_REVISED', 'API_CSR_SENT', 'CLAIM_CREATED', 'CSR_SENT']) expect(CORRECTABLE_STATUSES).not.toContain(done);
+  expect(recheckFrom('invoices.items.0.subtotal', 'API_CLAIM_SUSPENDED').API).toBe('API_READY_FOR_DOCUMENT_CHECKING');
+});
+
+it("a corrected voucher amount is not compared with the AI's recount (no false review point)", () => {
+  expect(formatCheck(correct(fields(), { item: 'invoices.items.0.subtotal', label: 'Voucher 1 amount' }, 190000)).problems)
+    .not.toEqual(expect.arrayContaining([expect.stringContaining('lines add up')]));
+  const misread = { ...fields(), invoices: { items: [{ ...fields().invoices.items[0], subtotal: 190000 }] } };
+  expect(formatCheck(misread).problems).toEqual(expect.arrayContaining([expect.stringContaining('lines add up to 198,000')]));
+});
+
+it('the voucher type is corrected from a fixed list, and claim preparation then reads it', () => {
+  const options = correctionOptions(fields());
+  const type = options.find((o) => o.item === 'invoices.items.0.voucher_type');
+  expect(type).toMatchObject({ type: 'choice', current: 'consultation', choices: ['consultation', 'pharmacy', 'lab', 'optical', 'other'] });
+  expect(validateCorrection({ kind: 'value', item: type.item, value: 'optical', reason: 'an optical shop receipt', wrongStep: 'reading' }, options).corrected).toBe('optical');
+  expect(validateCorrection({ kind: 'value', item: type.item, value: 'glasses', reason: 'x x x', wrongStep: 'reading' }, options).error).toMatch(/choose one of/);
+  expect(correct(fields(), type, 'optical').invoices.items[0].voucher_type).toBe('optical');
+  // Not the type of patient: free text ("optical care") the member check compares with IAS as written.
+  expect(options.some((o) => o.item === 'claim.type_of_patient')).toBe(false);
+});
+
+it('a failed amount check names the values it compared, so each can be edited on its line (old results too)', () => {
+  const f = { ...fields(), medical: { detail_of_illness_injury: 'Glasses' }, medical_record: { present: true }, bank: { bank_name: 'AYA' } };
+  f.invoices.present = true;
+  const line = evaluateDocumentChecks(f).checklist.find((l) => l.code === 'VOUCHER_AMOUNT_MISMATCH');
+  expect(line).toMatchObject({ passed: false, editItems: ['claim.total_claim_amount', 'invoices.items.0.subtotal'] });
+  const stored = { checklist: [{ code: 'VOUCHER_AMOUNT_MISMATCH', passed: false }] };
+  expect(withEditItems(stored, f).checklist[0].editItems).toEqual(['claim.total_claim_amount', 'invoices.items.0.subtotal']);
+});

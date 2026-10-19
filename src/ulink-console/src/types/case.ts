@@ -61,6 +61,7 @@ export interface ChecklistItem {
   reason?: string | null; // why it passed or failed (SYSTEM_4 E4-08); checks before 2026-10-15 have none
   fields?: FieldRead[]; // FIELDS_READ only: every value the AI read with its evidence (SYSTEM_4 E3b)
   usedFields?: string[]; // a rule check made unsure by the values it read: those values (SYSTEM_4 E3b)
+  editItems?: string[]; // the values a rule check compared, as correction items — offered for ✎ Edit on its line
   documents?: DocumentFound[]; // DOCUMENT_LIST only: the kind and date of each page (system checklist step 1)
   benefitType?: { code: string; desc: string; treatment: string | null }; // BENEFIT_TYPE only: the IAS benefit type the documents show (step 2)
 }
@@ -359,8 +360,10 @@ export interface CorrectionOption {
   kind: 'value' | 'verdict';
   item: string;
   label: string;
-  type: 'text' | 'date' | 'amount' | 'verdict';
+  type: 'text' | 'date' | 'amount' | 'verdict' | 'choice';
   current: string | number | boolean | null;
+  /** type 'choice': the values a person picks from (voucher type, type of patient). */
+  choices?: string[];
   canFail?: boolean;
   /** A member finding ("member:…"): what the member check found — the reviewer marks it OK one by one. */
   note?: string;
