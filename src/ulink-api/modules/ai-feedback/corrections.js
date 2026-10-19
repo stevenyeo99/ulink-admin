@@ -8,6 +8,7 @@
 // The AI's own value is kept in the correction (aiValue) — and, for API cases, in the earlier recognition step.
 
 const { ISSUES, FIELD_LABELS, isRealDate, valueAt } = require('../document-checking/checklist');
+const { ACCEPTABLE_MEMBER_ITEMS, MEMBER_ITEM_LABELS } = require('../member-verification/checks');
 
 const WRONG_STEP_LABELS = {
   reading: 'the page was misread',
@@ -43,10 +44,11 @@ const priorCorrection = (fields, item) => (fields.corrections || []).find((c) =>
 
 /**
  * What a person can correct on this case: the key values (whether or not the AI read them), each voucher's amount
- * and date, and the checklist lines with a verdict. { kind, item, label, type: text|date|amount|verdict, current,
- * canFail? }. current: the value / verdict in force now (corrected or the AI's).
+ * and date, the checklist lines with a verdict, and each open member finding (Mark OK only — "member:dob",
+ * "member:bank", "member:policy"; never coverage). { kind, item, label, type: text|date|amount|verdict, current,
+ * canFail?, note? }. current: the value / verdict in force now (corrected or the AI's).
  */
-function correctionOptions(fields = {}, documentCheckResult = null) {
+function correctionOptions(fields = {}, documentCheckResult = null, memberVerifyResult = null) {
   const values = Object.entries(FIELD_LABELS).map(([item, label]) => ({
     kind: 'value', item, label,
     type: AMOUNT_FIELDS.has(item) ? 'amount' : DATE_FIELDS.has(item) ? 'date' : 'text',
@@ -60,7 +62,11 @@ function correctionOptions(fields = {}, documentCheckResult = null) {
   const verdicts = (documentCheckResult?.checklist || [])
     .filter((line) => line.code && !NOT_VERDICT_ITEMS.has(line.code) && typeof line.passed === 'boolean')
     .map((line) => ({ kind: 'verdict', item: line.code, label: line.label, type: 'verdict', current: line.passed, canFail: Boolean(ISSUES[line.code]) }));
-  return [...values, ...vouchers, ...verdicts];
+  // A member finding marked OK is no longer an issue (checks.js sets it aside): only the open ones are offered.
+  const member = (memberVerifyResult?.issues || [])
+    .filter((issue) => ACCEPTABLE_MEMBER_ITEMS.has(issue.item))
+    .map((issue) => ({ kind: 'verdict', item: issue.item, label: MEMBER_ITEM_LABELS[issue.item], type: 'verdict', current: false, canFail: false, note: issue.reason }));
+  return [...values, ...vouchers, ...verdicts, ...member];
 }
 
 /**
@@ -101,6 +107,7 @@ function validateCorrection(body, options) {
 function aiOriginal(fields, option, documentCheckResult) {
   const prior = priorCorrection(fields, option.item);
   if (prior) return { aiValue: prior.aiValue, aiConfidence: prior.aiConfidence ?? null, page: prior.page ?? null };
+  if (option.kind === 'verdict' && option.item.startsWith('member:')) return { aiValue: false, aiConfidence: null, page: null };
   if (option.kind === 'verdict') {
     const line = (documentCheckResult?.checklist || []).find((l) => l.code === option.item);
     return { aiValue: line?.passed ?? null, aiConfidence: line?.confidence ?? null, page: null };
@@ -181,13 +188,15 @@ const shown = (value) => (value === true ? 'passed' : value === false ? 'failed'
 
 // One line per correction for the case history, the summary and the IAS remark: AI value → corrected value, who, why.
 function correctionText(c) {
+  // A member Mark OK: the rules on IAS found it, not the AI — accepted, not "AI failed".
+  if (c.item?.startsWith('member:')) return `${c.label}: marked OK by ${c.by} — ${c.reason}`;
   return `${c.label}: AI ${shown(c.aiValue)} → ${shown(c.corrected)} (corrected by ${c.by} — ${WRONG_STEP_LABELS[c.wrongStep]}: ${c.reason})`;
 }
 
 // Where the case is checked again: the member check when the corrected value is one it compares with IAS, or the case
 // is still held there; the document check otherwise. { EMAIL, API } status pairs.
 function recheckFrom(item, currentStatus) {
-  const member = MEMBER_CHECK_FIELDS.has(item) || /MEMBER_REVIEW_REQUIRED$/.test(currentStatus);
+  const member = MEMBER_CHECK_FIELDS.has(item) || item.startsWith('member:') || /MEMBER_REVIEW_REQUIRED$/.test(currentStatus);
   return member
     ? { EMAIL: 'RECOGNIZED', API: 'API_RECOGNIZED', label: 'the member check' }
     : { EMAIL: 'READY_FOR_DOCUMENT_CHECKING', API: 'API_READY_FOR_DOCUMENT_CHECKING', label: 'the document check' };

@@ -139,6 +139,8 @@ export function FindingsPanel({
   const handled = documentsOverridden ? open : [];
   const passed = findings.filter((f) => !open.includes(f) && !notChecked.includes(f));
   const decisions = lines.filter((l) => l.area === 'member' || l.area === 'claim');
+  // Open member findings, each marked OK on its own (not coverage: the whole-check override covers that).
+  const memberFindings = options.filter((o) => o.kind === 'verdict' && o.item.startsWith('member:'));
 
   const row = (f: Finding) => {
     const ref = pageRef(f.page, files);
@@ -202,6 +204,23 @@ export function FindingsPanel({
             <ChevronDown size={14} className={clsx(showPassed && 'rotate-180')} /> Passed · {passed.length}
           </button>
           {showPassed && <ul className="divide-y divide-slate-900/5">{passed.map(row)}</ul>}
+        </section>
+      )}
+      {memberFindings.length > 0 && (
+        <section className="mb-4">
+          <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-red-700">Member findings · {memberFindings.length}</h3>
+          <ul className="divide-y divide-slate-900/5">
+            {memberFindings.map((o) => (
+              <li key={o.item} className="py-2 text-sm">
+                <span className="font-medium text-slate-800">{o.label}</span>
+                {o.note && <p className="mt-0.5 text-xs text-slate-500">{o.note}</p>}
+                {canCorrect && editing?.key !== o.item && (
+                  <button onClick={() => setEditing({ key: o.item, passed: true })} className="mt-1 text-xs text-ulink-orange-dark hover:underline">Mark OK</button>
+                )}
+                {editing?.key === o.item && <InlineCorrection caseId={caseId} option={o} passed onDone={() => setEditing(null)} />}
+              </li>
+            ))}
+          </ul>
         </section>
       )}
       {decisions.length > 0 && (

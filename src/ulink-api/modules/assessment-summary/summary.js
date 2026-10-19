@@ -126,7 +126,11 @@ function lowConfidenceReview(confidence) {
 
 function memberLines(memberVerifyResult) {
   if (!memberVerifyResult) return [];
-  const { outcome, reasonCode, reason, checks, flags } = memberVerifyResult;
+  const { outcome, reasonCode, reason, checks, flags, accepted = [] } = memberVerifyResult;
+  // Member findings a person marked OK one by one (member-verification/checks.js): who and why, on the member line.
+  const acceptedText = accepted.length
+    ? `Accepted by a person: ${accepted.map((a) => `${a.reason} — ${a.by}: ${a.acceptedReason}`).join('; ')}.`
+    : null;
   const hard = checks?.hard || {};
   const labelsWhere = (value) => Object.keys(MEMBER_CHECK_LABELS).filter((key) => hard[key] === value).map((key) => MEMBER_CHECK_LABELS[key]);
 
@@ -141,6 +145,7 @@ function memberLines(memberVerifyResult) {
       why: [
         matched.length ? `Matches IAS: ${matched.join(', ')}.` : null,
         notChecked.length ? `Not compared (no value to compare): ${notChecked.join(', ')}.` : null,
+        acceptedText,
       ].filter(Boolean).join(' '),
       verified: VERIFIED.CROSS_CHECK,
     }));
@@ -149,7 +154,7 @@ function memberLines(memberVerifyResult) {
       decision: 'Member check',
       result: reasonCode || outcome,
       status: 'issue',
-      why: reason,
+      why: [reason, acceptedText].filter(Boolean).join(' '),
       verified: VERIFIED.CROSS_CHECK,
       review: MEMBER_REVIEW[reasonCode] || REVIEW.DATA_MISMATCH,
     }));

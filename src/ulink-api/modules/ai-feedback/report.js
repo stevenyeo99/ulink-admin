@@ -19,7 +19,7 @@ function feedbackRow(f) {
   return {
     at: f.createdAt,
     caseId: f.caseId,
-    type: confirm ? 'Confirmed right' : 'Correction',
+    type: confirm ? 'Confirmed right' : f.item?.startsWith('member:') ? 'Member finding accepted (not AI)' : 'Correction',
     item: f.label,
     aiFinding: shown(f.aiValue),
     aiConfidence: f.aiConfidence ?? null,

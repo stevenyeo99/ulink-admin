@@ -92,6 +92,10 @@ function checkCoverageActive(plan, treatmentDateYYYYMMDD) {
   return treatmentDateYYYYMMDD >= start && treatmentDateYYYYMMDD <= end;
 }
 
+// The member findings a person may mark OK one by one (not coverage — see evaluate).
+const MEMBER_ITEM_LABELS = { 'member:dob': 'Member check: date of birth', 'member:bank': 'Member check: bank details', 'member:policy': 'Member check: policy number' };
+const ACCEPTABLE_MEMBER_ITEMS = new Set(Object.keys(MEMBER_ITEM_LABELS));
+
 function evaluate(extractedFields, iasResponse) {
   if (!iasResponse || iasResponse.success !== true) {
     return {
@@ -147,12 +151,14 @@ function evaluate(extractedFields, iasResponse) {
     const start = iasDateToYYYYMMDD(plan?.REINST_DATE) || iasDateToYYYYMMDD(plan?.EFF_DATE);
     const end = iasDateToYYYYMMDD(plan?.TERM_DATE) || iasDateToYYYYMMDD(plan?.EXP_DATE);
     issues.push({
+      item: 'member:coverage',
       reasonCode: 'COVERAGE_NOT_ACTIVE',
       reason: `Treatment date ${readableDate(treatmentDate)} falls outside the active coverage period (${readableDate(start)} to ${readableDate(end)}).`,
     });
   }
   if (hard.dobMatch === false) {
     issues.push({
+      item: 'member:dob',
       reasonCode: 'MEMBER_DETAILS_MISMATCH',
       reason: `Claimant DOB "${extractedFields.claimant?.claimant_dob}" does not match IAS record DOB "${readableDate(iasDateToYYYYMMDD(member.DOB)) ?? member.DOB}".`,
     });
@@ -168,26 +174,40 @@ function evaluate(extractedFields, iasResponse) {
     if (hard.bankAccountNumberMatch === false) {
       mismatches.push(`account number ("${extractedFields.bank?.bank_account_number}" vs IAS "${member.CL_PAY_ACCT_NO}")`);
     }
-    issues.push({ reasonCode: 'BANK_DETAILS_MISMATCH', reason: `Bank details do not match IAS record: ${mismatches.join('; ')}.` });
+    issues.push({ item: 'member:bank', reasonCode: 'BANK_DETAILS_MISMATCH', reason: `Bank details do not match IAS record: ${mismatches.join('; ')}.` });
   }
   if (hard.policyNoMatch === false) {
     issues.push({
+      item: 'member:policy',
       reasonCode: 'MEMBER_DETAILS_MISMATCH',
       reason: `Policy number "${extractedFields.policy?.policy_no}" does not match IAS record "${policy?.POCY_REF_NO}".`,
     });
   }
 
-  if (issues.length > 0) {
+  // Findings a person marked OK one by one (review page, a "member:…" verdict correction): set aside with who and why,
+  // only while the finding is the one they saw (covers: its text, with both values) — a changed bank account or a new
+  // IAS record is a new finding, held again. The case goes on once none is left. Coverage is never accepted this way (owner, 2026-10-19: paying outside the
+  // policy period is a business decision — the whole-check override stays for that).
+  const marked = new Map((extractedFields.corrections || [])
+    .filter((c) => c.kind === 'verdict' && ACCEPTABLE_MEMBER_ITEMS.has(c.item) && c.corrected === true)
+    .map((c) => [c.item, c]));
+  const isMarked = (issue) => marked.has(issue.item) && marked.get(issue.item).covers === issue.reason;
+  const accepted = issues.filter(isMarked)
+    .map((issue) => ({ ...issue, by: marked.get(issue.item).by ?? 'a person', acceptedReason: marked.get(issue.item).reason ?? '' }));
+  const open = issues.filter((issue) => !isMarked(issue));
+
+  if (open.length > 0) {
     return {
       outcome: 'MEMBER_REVIEW_REQUIRED',
-      reasonCode: issues[0].reasonCode,
+      reasonCode: open[0].reasonCode,
       checks,
-      reason: issues.length === 1 ? issues[0].reason : issues.map((issue, i) => `${i + 1}. ${issue.reason}`).join(' '),
-      issues,
+      reason: open.length === 1 ? open[0].reason : open.map((issue, i) => `${i + 1}. ${issue.reason}`).join(' '),
+      issues: open,
+      ...(accepted.length ? { accepted } : {}),
     };
   }
 
-  return { outcome: 'MEMBER_VERIFIED', reasonCode: null, checks, reason: null };
+  return { outcome: 'MEMBER_VERIFIED', reasonCode: null, checks, reason: null, ...(accepted.length ? { accepted } : {}) };
 }
 
-module.exports = { evaluate };
+module.exports = { evaluate, ACCEPTABLE_MEMBER_ITEMS, MEMBER_ITEM_LABELS };

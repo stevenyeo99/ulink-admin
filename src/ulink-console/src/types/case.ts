@@ -362,6 +362,8 @@ export interface CorrectionOption {
   type: 'text' | 'date' | 'amount' | 'verdict';
   current: string | number | boolean | null;
   canFail?: boolean;
+  /** A member finding ("member:…"): what the member check found — the reviewer marks it OK one by one. */
+  note?: string;
 }
 
 export interface Correction {

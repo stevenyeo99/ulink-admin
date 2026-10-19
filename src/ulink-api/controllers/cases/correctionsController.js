@@ -12,6 +12,10 @@ const logger = require('../../utils/logger');
 const CORRECTABLE_STATUSES = Object.keys(OVERRIDE_TARGETS);
 const RECOGNITION_JOB = 'api-claim-recognition';
 
+// Member findings are marked OK only while the member check holds the case — after a whole-check override the case is
+// past it, and a Mark OK there would send it back through the member check.
+const heldByMember = (fields) => (/MEMBER_REVIEW_REQUIRED$/.test(fields.currentStatus || '') ? fields.memberVerifyResult : null);
+
 const operatorOf = (user) => (user.name ? `${user.name} (${user.username})` : user.username);
 
 // The case's fields as the jobs read them; API: from the latest recognition step (the one a correction replaces).
@@ -31,7 +35,7 @@ async function correctionsInfo(caseRecord, fields) {
   const list = rows.map((row) => ({ ...(row.toJSON ? row.toJSON() : row), applied: inForce.has(row.id) }));
   const allowed = CORRECTABLE_STATUSES.includes(fields.currentStatus) && Boolean(fields.extractedFields);
   // options: what can be corrected (when allowed) or confirmed (whenever the AI has read the case — E5b "✓ Right").
-  return { allowed, options: fields.extractedFields ? correctionOptions(fields.extractedFields, fields.documentCheckResult) : [], list };
+  return { allowed, options: fields.extractedFields ? correctionOptions(fields.extractedFields, fields.documentCheckResult, heldByMember(fields)) : [], list };
 }
 
 /**
@@ -49,7 +53,7 @@ async function createCorrection(req, res) {
     return res.status(400).json({ error: { message: 'The AI has not read this case yet — nothing to correct.', status: 400 } });
   }
 
-  const checked = validateCorrection(req.body, correctionOptions(fields.extractedFields, fields.documentCheckResult));
+  const checked = validateCorrection(req.body, correctionOptions(fields.extractedFields, fields.documentCheckResult, heldByMember(fields)));
   if (checked.error) return res.status(400).json({ error: { message: checked.error, status: 400 } });
   const { option, corrected } = checked;
   const original = aiOriginal(fields.extractedFields, option, fields.documentCheckResult);
@@ -68,6 +72,8 @@ async function createCorrection(req, res) {
       id: row.id, kind: option.kind, item: option.item, label: option.label, aiValue: original.aiValue,
       aiConfidence: original.aiConfidence, corrected, reason: row.reason, wrongStep: row.wrongStep, page: original.page,
       by: operator, at: row.createdAt,
+      // A member Mark OK covers exactly the finding the person saw (member-verification/checks.js).
+      ...(option.item.startsWith('member:') ? { covers: option.note } : {}),
     };
     const extractedFields = applyCorrection(fields.extractedFields, correction);
 
@@ -117,9 +123,9 @@ async function createConfirmation(req, res) {
   const { fields } = await caseFields(caseRecord);
   if (!fields.extractedFields) return res.status(400).json({ error: { message: 'The AI has not read this case yet — nothing to confirm.', status: 400 } });
 
-  const option = correctionOptions(fields.extractedFields, fields.documentCheckResult)
+  const option = correctionOptions(fields.extractedFields, fields.documentCheckResult, heldByMember(fields))
     .find((o) => o.kind === req.body?.kind && o.item === req.body?.item);
-  if (!option) return res.status(400).json({ error: { message: 'Pick a value or check of this case.', status: 400 } });
+  if (!option || option.item.startsWith('member:')) return res.status(400).json({ error: { message: 'Pick a value or check of this case.', status: 400 } });
   if (option.current == null) return res.status(400).json({ error: { message: `${option.label}: the AI read nothing to confirm.`, status: 400 } });
 
   // A value a person corrected is no longer the AI's: confirming it would count a wrong AI read as right. Agreeing with
