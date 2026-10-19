@@ -26,14 +26,11 @@ export function ReviewWorkspacePage() {
   const queryClient = useQueryClient();
   const threshold = useConfidenceThreshold();
   const [open, setOpen] = useState<PageRef | null>(null);
-  const [correcting, setCorrecting] = useState<string | null>(null);
   const [queueEmpty, setQueueEmpty] = useState(false);
   const [moving, setMoving] = useState(false);
   const [nextError, setNextError] = useState<string | null>(null);
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
-  const [correctCount, setCorrectCount] = useState(0); // remounts the form even when the same item is chosen again
-  const correctionRef = useRef<HTMLDivElement>(null);
   const claimTried = useRef<string | null>(null);
 
   const { data, isLoading, isError } = useQuery({ queryKey: ['case', id], queryFn: () => getCase(id as string), enabled: !!id });
@@ -60,7 +57,6 @@ export function ReviewWorkspacePage() {
 
   useEffect(() => {
     setOpen(null);
-    setCorrecting(null);
     setQueueEmpty(false);
     setNextError(null);
   }, [id]);
@@ -95,11 +91,6 @@ export function ReviewWorkspacePage() {
       setConfirming(false);
       queryClient.invalidateQueries({ queryKey: ['case', id] });
     }
-  };
-  const correct = (item: string) => {
-    setCorrecting(item);
-    setCorrectCount((n) => n + 1);
-    setTimeout(() => correctionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
   };
   // Find the next case first; only moving on gives this one back (leaving the page releases it). Nothing next: stay,
   // still holding this case. Both sources — the queue the reviewer sees.
@@ -156,7 +147,8 @@ export function ReviewWorkspacePage() {
             options={corrections.options}
             files={files}
             onOpenPage={setOpen}
-            onCorrect={corrections.allowed && isSuperAdmin() ? correct : null}
+            caseId={id}
+            canCorrect={corrections.allowed && isSuperAdmin()}
             onConfirm={isSuperAdmin() ? confirm : null}
             confirming={confirming}
             confirmed={confirmed}
@@ -165,9 +157,8 @@ export function ReviewWorkspacePage() {
           {/* Override and continue (same rules as the case page): a reviewer who checked the member or documents by hand,
               or fixed it in IAS, lets the case go on to the next job without leaving the review page. */}
           {isSuperAdmin() && <CaseOverridePanel key={`override-${id}`} caseRecord={caseRecord} override={override} summary={assessmentSummary} />}
-          <div ref={correctionRef}>
-            <CaseCorrectionPanel key={`${id}-${correcting ?? ''}-${correctCount}`} caseId={id} corrections={corrections} initialItem={correcting ?? ''} />
-          </div>
+          {/* Each finding is corrected in place (Edit / Mark OK / Mark wrong); here only the corrections made so far. */}
+          <CaseCorrectionPanel key={id} caseId={id} corrections={corrections} />
           <ReviewerChecklistPanel key={id} caseId={id} requests={requests} />
         </section>
       </div>

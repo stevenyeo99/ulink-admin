@@ -5,6 +5,7 @@ import { ConfidenceBadge } from '../common/ConfidenceBadge';
 import { useConfidenceThreshold } from '../../hooks/useConfidenceThreshold';
 import type { AssessmentLine, ChecklistItem, CorrectionOption, FieldRead } from '../../types/case';
 import { pageRef, type PageRef, type ViewFile } from '../../lib/caseFiles';
+import { InlineCorrection } from './InlineCorrection';
 
 /** One thing the AI decided or read, as the review workspace lists it. correct: the correction item ("value:…" / "verdict:…"). */
 interface Finding {
@@ -96,7 +97,8 @@ export function FindingsPanel({
   options,
   files,
   onOpenPage,
-  onCorrect,
+  caseId,
+  canCorrect,
   onConfirm,
   confirming = false,
   confirmed,
@@ -115,7 +117,9 @@ export function FindingsPanel({
   options: CorrectionOption[];
   files: ViewFile[];
   onOpenPage: (ref: PageRef) => void;
-  onCorrect: ((item: string) => void) | null;
+  caseId: string;
+  /** Corrections allowed now and by this person: each finding offers Edit / Mark OK / Mark wrong in place. */
+  canCorrect: boolean;
 }) {
   const threshold = useConfidenceThreshold();
   // The value / verdict a "✓ Right" would confirm now (as the API's option.current); items read as nothing are skipped.
@@ -123,6 +127,9 @@ export function FindingsPanel({
   const toConfirm = (f: Finding) => f.confirms.filter((item) => currentOf(item) != null);
   const isConfirmed = (f: Finding) => toConfirm(f).length > 0 && toConfirm(f).every((item) => confirmed.has(item) && confirmed.get(item) === currentOf(item));
   const [showPassed, setShowPassed] = useState(false);
+  // The finding being corrected in place, and the verdict to set (a value: undefined).
+  const [editing, setEditing] = useState<{ key: string; passed?: boolean } | null>(null);
+  const optionOf = (item: string | null) => (item ? options.find((o) => `${o.kind}:${o.item}` === item) ?? null : null);
   const findings = buildFindings(checklist, options);
   const notChecked = findings.filter((f) => f.passed === null);
   const isUnsure = (f: Finding) => f.passed === true && f.confidence != null && f.confidence <= threshold;
@@ -158,10 +165,19 @@ export function FindingsPanel({
               <button disabled={confirming} onClick={() => onConfirm(toConfirm(f))} className="text-ulink-teal-dark hover:underline disabled:opacity-50">✓ Right</button>
             )
           )}
-          {onCorrect && f.correct && (
-            <button onClick={() => onCorrect(f.correct!)} className="text-ulink-orange-dark hover:underline">✗ Wrong — correct it</button>
-          )}
+          {canCorrect && optionOf(f.correct) && editing?.key !== f.key && (() => {
+            const option = optionOf(f.correct)!;
+            const action = (label: string, passed?: boolean) => (
+              <button onClick={() => setEditing({ key: f.key, passed })} className="text-ulink-orange-dark hover:underline">{label}</button>
+            );
+            if (option.kind === 'value') return action('✎ Edit');
+            if (option.current === false) return action('Mark OK', true);
+            return option.canFail ? action('Mark wrong', false) : null;
+          })()}
         </div>
+        {editing?.key === f.key && optionOf(f.correct) && (
+          <InlineCorrection caseId={caseId} option={optionOf(f.correct)!} passed={editing.passed} onDone={() => setEditing(null)} />
+        )}
       </li>
     );
   };

@@ -141,7 +141,8 @@ export function CaseDetailPage() {
 
       {isSuperAdmin() && <CaseOverridePanel caseRecord={caseRecord} override={override} summary={assessmentSummary} />}
       <ReviewerChecklistPanel key={caseRecord.id} caseId={caseRecord.id} requests={requests} />
-      {corrections && <CaseCorrectionPanel caseId={caseRecord.id} corrections={corrections} />}
+      {/* Corrections are made per finding on the review page; here the ones made so far and a link there. */}
+      {corrections && <CaseCorrectionPanel caseId={caseRecord.id} corrections={corrections} linkToReview />}
 
       {isApi && (
         <Section title="Documents">
