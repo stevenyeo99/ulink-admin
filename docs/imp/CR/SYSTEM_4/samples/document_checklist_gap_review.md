@@ -78,3 +78,71 @@ Suggested order:
    case (AYA-CL-26040946) cannot be built.
 3. The approved document list for each claim type, including outpatient claims. The outpatient samples
    show only the supplement question and no document list.
+
+## System checklist purpose (added 2026-10-19)
+
+Status: advice for review with the owner. No code changed.
+
+On Day 1 the document check came from the approved canned responses, and `ULINK_SOP.docx` described the staff
+checks. The staff notes in the samples (`human_checklist.md`) do not match the SOP exactly. The staff also use their
+own judgment, for example when they send Montelukast to the coverage team. So the system checklist cannot copy the
+SOP as strict rules. It must report facts, and a person adds the judgment. The reviewer checklist (SYSTEM_4 E4-28)
+holds that judgment as free lines.
+
+### Three levels
+
+Each system item has one of three levels:
+
+| Level | What happens | Who acts |
+|---|---|---|
+| Blocking | The case is incomplete. The item goes to the customer in approved wording. | Customer |
+| Review point | The case stops for a person, who confirms, adds a reviewer line, or asks the customer. | Reviewer |
+| Info | The item is shown on the case page as evidence only. The case does not stop. | Nobody |
+
+Today almost every item blocks. A new item starts as info or a review point. It becomes blocking only after ULINK
+approves the customer wording and the samples show that the staff always act on it.
+
+### Items to add, from the samples
+
+| # | Item | Level | Sample evidence | Needs from ULINK |
+|---|---|---|---|---|
+| 1 | Claim type, from "Type of Patient" and the IAS benefit type | Info | Every staff note starts with the claim type | Nothing |
+| 2 | Document list: the kind and the date of each page | Info | The staff check the kinds of document for each claim type | Nothing |
+| 3 | A date on every medical document | Blocking | AYA-CL-26043392: the staff asked for a new eye test slip with a date | Customer wording |
+| 4 | An itemized breakdown on every voucher, not only pharmacy | Review point, then blocking | All four claim types in the staff notes | Customer wording |
+| 5 | A support document for each treatment date | Review point | AYA-CL-26043951, AYA-CL-26044486 (one note per vaccination date) | Nothing |
+| 6 | An expected document kind for the claim type is not found | Review point, never blocking | 8 of 10 samples | Optional document list per claim type |
+| 7 | Every medicine and supplement line with its amount, for a coverage check | Review point | AYA-CL-26040946 (Montelukast), AYA-CL-26041363 | Nothing (the person decides coverage) |
+
+The system checklist does not decide coverage, clinical need (for example, whether an operation note is necessary),
+or "if available" items. Those stay with the reviewer.
+
+### Workflow for the user
+
+1. The AI reads the documents and builds the system checklist.
+2. If an item blocks, the customer gets the approved missing-documents list.
+3. If a review point is open, the case waits in the review queue. The reviewer sees the system checklist, the
+   document list and the review points first.
+4. The reviewer confirms, adds reviewer lines in free text, or sends the request. Reviewer lines go to the team
+   email, the case page and the IAS remark, never to the customer email (E4-28).
+5. If nothing blocks and no review point is open, the case continues, and an STP case is paid with no person.
+
+### Points to decide
+
+- A reviewer can add lines only when the case stops for a person (`DOCUMENTS_REVIEW` / `DOCUMENTS_UNSURE`, and the
+  `API_` statuses). A case that passes with the AI sure never stops, so nobody can add a line to it. The system
+  checklist alone must therefore be enough for an STP case.
+- Each new review point sends more cases to the review queue. The owner must decide which review points stop the
+  case and which ones are only shown. Item 7 stops every claim that has a medicine line, so it can start as info
+  for medicines on the prescription and as a review point for the others.
+- Free reviewer lines are not the same from person to person. Each month, review the lines in `ulink_case_requests`
+  by claim type. A line that staff add again and again is a candidate for a new system item, first as a review
+  point. The checklist then follows what the staff do, and an accurate SOP is not necessary.
+
+### Suggested order
+
+1. Items 1 and 2 (info only, no ULINK input).
+2. Item 7 (review point, no ULINK input).
+3. Items 4 and 5 (review points).
+4. Items 3 and 4 as blocking, after the customer wording is approved.
+5. Item 6, with or without a document list per claim type from ULINK.
