@@ -56,9 +56,9 @@ function nextAction(fields = {}, summary = null, events = []) {
     case 'CASE_NUMBER_UNCLEAR':
       return act("The TPA case number on the form isn't AYA-CL- followed by 8 digits. Check the form, fix it, then reset the case.");
     case 'CONSOLE_UPLOAD_FAILED':
-      return act(`${said || 'The console upload was refused.'} Fix it, then reset the case.`);
+      return act(`${said || 'The console upload was refused.'} Fix the cause, then Try again on this page.`);
     case 'API_CONSOLE_UPLOAD_FAILED':
-      return act(`${said || 'The console upload was refused.'} Check the console upload with IT; IAS is unchanged and the case waits here.`);
+      return act(`${said || 'The console upload was refused.'} Check the console upload with IT — the Try again panel on this page says whether it can be uploaded again; IAS is unchanged until then.`);
     case 'INCOMPLETE':
       return wait(`Waiting for the customer's documents${missing ? `: ${missing}` : ''}. Their reply restarts the case.`, 'Customer');
     case 'API_NO_DOCUMENTS':
@@ -89,7 +89,7 @@ function nextAction(fields = {}, summary = null, events = []) {
       return wait("Nothing to do — not a claim we handle; the sender was told.");
     case 'CLAIM_SUBMIT_FAILED':
     case 'API_CLAIM_REVISION_FAILED':
-      return act(`IAS refused it${said ? `: ${said}` : '.'} Fix it in IAS; it is not retried automatically.`);
+      return act(`IAS refused it${said ? `: ${said}` : '.'} Fix the cause in IAS, then Try again on this page.`);
     case 'CONSOLE_BARCODE_PENDING':
     case 'API_CONSOLE_BARCODE_PENDING':
       return wait('Nothing to do — waiting for the console barcode (usually 15–30 minutes).');

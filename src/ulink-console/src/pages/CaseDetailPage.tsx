@@ -10,6 +10,7 @@ import { JobStepsSection } from '../components/cases/JobStepsSection';
 import { EmailThreadSection } from '../components/cases/EmailThreadSection';
 import { CaseAdminActions } from '../components/cases/CaseAdminActions';
 import { CaseOverridePanel } from '../components/cases/CaseOverridePanel';
+import { CaseRetryPanel } from '../components/cases/CaseRetryPanel';
 import { ReviewerChecklistPanel } from '../components/cases/ReviewerChecklistPanel';
 import { LlmCallsSection } from '../components/cases/LlmCallsSection';
 import { CaseUploadPanel } from '../components/cases/CaseUploadPanel';
@@ -91,7 +92,7 @@ export function CaseDetailPage() {
   if (isLoading) return <div className="p-6 text-sm text-slate-400">Loading…</div>;
   if (isError || !data) return <div className="p-6 text-sm text-red-600">Couldn't load this case. It may have been removed.</div>;
 
-  const { case: caseRecord, events, documents, apiSteps, assessmentSummary, override, nextAction, corrections, requests, claim } = data;
+  const { case: caseRecord, events, documents, apiSteps, assessmentSummary, override, nextAction, corrections, requests, claim, retry } = data;
   const fieldsRead = caseRecord.documentCheckResult?.checklist?.find((item) => item.code === 'FIELDS_READ')?.fields;
   const isApi = caseRecord.source === 'API';
 
@@ -139,6 +140,7 @@ export function CaseDetailPage() {
         </Section>
       ) : null}
 
+      <CaseRetryPanel key={caseRecord.id} caseId={caseRecord.id} retry={retry} />
       {isSuperAdmin() && <CaseOverridePanel caseRecord={caseRecord} override={override} summary={assessmentSummary} />}
       <ReviewerChecklistPanel key={caseRecord.id} caseId={caseRecord.id} requests={requests} />
       {/* Corrections are made per finding on the review page; here the ones made so far and a link there. */}

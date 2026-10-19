@@ -41,6 +41,11 @@ export function getLlmCalls(id: string): Promise<{ calls: LlmCall[] }> {
   return request<{ calls: LlmCall[] }>(`/api/cases/${id}/llm-calls`);
 }
 
+// Try a case IAS or the console refused again: back one step, the next pipeline run does the rest (any logged-in user).
+export function retryCase(id: string, action: string, comment: string): Promise<{ caseId: string; previousStatus: string; currentStatus: string }> {
+  return request(`/api/cases/${id}/retry`, { method: 'POST', body: JSON.stringify({ action, comment }) });
+}
+
 // finding: why the check was wrong (an id from the case's override.findings). Who overrode is the
 // logged-in user (the API reads it from the token).
 export function overrideCase(id: string, reason: string, finding: string): Promise<OverrideCaseResponse> {

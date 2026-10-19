@@ -1,6 +1,6 @@
 const express = require('express');
 const { requireRole } = require('../modules/auth/auth');
-const { getCaseStatuses, getOverview, getReviewQueue, getNextCase, getApprovals, listCases, getCase, getTimeline, getLlmCalls, getAttachment, getDocument, overrideCase, resetCase, releaseMissingDocuments, uploadCaseDocuments } = require('../controllers/cases/casesController');
+const { getCaseStatuses, getOverview, getReviewQueue, getNextCase, getApprovals, listCases, getCase, getTimeline, getLlmCalls, getAttachment, getDocument, overrideCase, resetCase, retryCase, releaseMissingDocuments, uploadCaseDocuments } = require('../controllers/cases/casesController');
 const { createCorrection, createConfirmation, trustCorrection } = require('../controllers/cases/correctionsController');
 const { claim, release } = require('../controllers/cases/claimController');
 const { requestInformation, markRequestDone, getEmailDraft } = require('../controllers/cases/requestsController');
@@ -421,6 +421,31 @@ router.post('/:id/corrections/:feedbackId/trust', requireRole('super_admin'), tr
  *         description: Case already has a real IAS claim number — refusing to reset
  */
 router.post('/:id/reset', requireRole('super_admin'), requireNotHeldByOther, resetCase);
+
+/**
+ * @openapi
+ * /api/cases/{id}/retry:
+ *   post:
+ *     tags: [cases]
+ *     summary: Try a case IAS or the console refused again (any logged-in user)
+ *     description: >
+ *       For CLAIM_SUBMIT_FAILED / API_CLAIM_REVISION_FAILED (send = the same claim again, prepare = claim preparation
+ *       again first) and CONSOLE_UPLOAD_FAILED / API_CONSOLE_UPLOAD_FAILED (upload = to the console again; API only when
+ *       the console refused the file). Moves the case back one step; the next pipeline run does the rest. A comment is
+ *       required and kept in the case history.
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { type: object, required: [action, comment], properties: { action: { type: string, enum: [send, prepare, upload] }, comment: { type: string, minLength: 3 } } }
+ *     responses:
+ *       200: { description: "{ caseId, previousStatus, currentStatus }" }
+ *       400: { description: No comment, or not possible at the case's status }
+ *       409: { description: The case changed meanwhile }
+ */
+router.post('/:id/retry', requireNotHeldByOther, retryCase);
 
 /**
  * @openapi

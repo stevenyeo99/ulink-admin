@@ -17,6 +17,7 @@ const { resetOneCase } = require('../dev/casesController');
 const logger = require('../../utils/logger');
 const { releaseMissingDocumentsEmail } = require('../../modules/document-checking/service');
 const { withEditItems } = require('../../modules/document-checking/checklist');
+const { retryOptions, consoleUploadReasonOf } = require('../../modules/case-retry/retry');
 const { uploadDocuments, UploadRefused } = require('../../modules/case-upload/upload');
 const { correctionsInfo } = require('./correctionsController');
 const { claimView, activeClaims, endClaim } = require('../../modules/case-claim/claim');
@@ -410,7 +411,7 @@ async function getCase(req, res) {
   // claim: who is reviewing the case right now, or null (SYSTEM_4 E4-22).
   const claim = claimView(await CaseClaim.findByPk(caseRecord.id));
   if (caseRecord.source !== 'API') {
-    return res.json({ case: caseRecord, events, documents, ...reviewInfo(caseRecord), corrections: await correctionsInfo(caseRecord, caseRecord), requests: await requestsInfo(caseRecord), claim });
+    return res.json({ case: caseRecord, events, documents, ...reviewInfo(caseRecord), retry: retryOptions(caseRecord.currentStatus), corrections: await correctionsInfo(caseRecord, caseRecord), requests: await requestsInfo(caseRecord), claim });
   }
 
   // API cases: their job data lives in ulink_api_case_steps. Fill the same case fields the page
@@ -421,7 +422,8 @@ async function getCase(req, res) {
   // API cases checked before each rule check carried its compared values (editItems): added here for the review page.
   // Email cases get them at their next document check.
   fields.documentCheckResult = withEditItems(fields.documentCheckResult, fields.extractedFields);
-  res.json({ case: fields, events, documents, apiSteps, ...reviewInfo(fields), corrections: await correctionsInfo(caseRecord, fields), requests: await requestsInfo(caseRecord), claim });
+  const consoleUploadReason = consoleUploadReasonOf(apiSteps);
+  res.json({ case: fields, events, documents, apiSteps, ...reviewInfo(fields), retry: retryOptions(caseRecord.currentStatus, { consoleUploadReason }), corrections: await correctionsInfo(caseRecord, fields), requests: await requestsInfo(caseRecord), claim });
 }
 
 /**
@@ -636,6 +638,38 @@ async function resetCase(req, res) {
 }
 
 /**
+ * POST /api/cases/:id/retry — { action: send|prepare|upload, comment }. Any logged-in user. A case IAS or the console
+ * refused goes back one step (modules/case-retry/retry.js); the next pipeline run does the rest. Only if the case is
+ * still where it was; the history keeps who, which action and why.
+ */
+async function retryCase(req, res) {
+  const comment = requiredComment(req, res, 'you are trying this case again (what was fixed)');
+  if (comment === null) return undefined;
+  const caseRecord = await Case.findByPk(req.params.id);
+  if (!caseRecord) return res.status(404).json({ error: { message: `Case ${req.params.id} not found`, status: 404 } });
+  const consoleUploadReason = caseRecord.source === 'API'
+    ? consoleUploadReasonOf(await ApiCaseStep.findAll({ where: { caseId: caseRecord.id, job: 'api-console-upload' }, order: [['createdAt', 'ASC']] }))
+    : null;
+  const action = retryOptions(caseRecord.currentStatus, { consoleUploadReason })?.actions.find((a) => a.id === req.body?.action);
+  if (!action) return res.status(400).json({ error: { message: 'This case cannot be tried again that way at its status.', status: 400 } });
+
+  const operator = req.user.name ? `${req.user.name} (${req.user.username})` : req.user.username;
+  const prevStatus = caseRecord.currentStatus;
+  const moved = await sequelize.transaction(async (transaction) => {
+    const [count] = await Case.update({ currentStatus: action.target }, { where: { id: caseRecord.id, currentStatus: prevStatus }, transaction });
+    if (count !== 1) return false;
+    await CaseEvent.create({
+      caseId: caseRecord.id, blockName: BLOCK_NAME, prevStatus, newStatus: action.target, reasonCode: 'MANUAL_RETRY',
+      message: `${action.label} by ${operator} — comment: ${comment}`,
+    }, { transaction });
+    return true;
+  });
+  if (!moved) return res.status(409).json({ error: { message: 'The case changed while you were reviewing it. Reload the page and check again.', status: 409 } });
+  logger.info('Case tried again', { caseId: caseRecord.id, action: action.id, username: req.user.username });
+  return res.json({ caseId: caseRecord.id, previousStatus: prevStatus, currentStatus: action.target });
+}
+
+/**
  * POST /api/cases/:id/release-missing-documents — a held case (switch "hold the missing-documents email
  * when the AI is unsure"): a person checked the documents and they really are missing, so the customer
  * gets the request the document check prepared. Email case: → INCOMPLETE. API case: → API_INCOMPLETE
@@ -704,4 +738,4 @@ async function uploadCaseDocuments(req, res) {
   }
 }
 
-module.exports = { requiredComment, getCaseStatuses, getOverview, getReviewQueue, getNextCase, getApprovals, listCases, getCase, getTimeline, getLlmCalls, getAttachment, getDocument, overrideCase, resetCase, releaseMissingDocuments, uploadCaseDocuments, OVERRIDE_TARGETS, REVIEWABLE_STATUSES };
+module.exports = { retryCase, requiredComment, getCaseStatuses, getOverview, getReviewQueue, getNextCase, getApprovals, listCases, getCase, getTimeline, getLlmCalls, getAttachment, getDocument, overrideCase, resetCase, releaseMissingDocuments, uploadCaseDocuments, OVERRIDE_TARGETS, REVIEWABLE_STATUSES };

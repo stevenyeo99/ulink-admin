@@ -146,12 +146,14 @@ async function persistOutcome(caseRecord, outcome) {
 const CASE_NUMBER = /^AYA-CL-\d{8}$/;
 
 // Internal notice when a cl-upload case needs a person (also used by console-barcode). Once per problem.
-async function queueConsoleUploadIssue(transaction, caseRecord, { status, problem, detail }) {
+// dedupeKey: once per problem — the status by default; a refused upload adds the console's answer, so a refusal after
+// Try again (a new answer) is a new notice.
+async function queueConsoleUploadIssue(transaction, caseRecord, { status, problem, detail, dedupeKey = status }) {
   const fields = { ...(caseRecord.toJSON ? caseRecord.toJSON() : caseRecord), currentStatus: status };
   await queueDedupedTask(transaction, {
     caseId: caseRecord.id,
     taskType: 'CONSOLE_UPLOAD_ISSUE',
-    dedupeKey: status,
+    dedupeKey,
     payload: { caseId: caseRecord.id, problem, detail, assessment: assessmentSummaryText(buildAssessmentSummary(fields)) },
   });
 }
@@ -210,7 +212,7 @@ async function runByApi(caseRecord) {
     result = await uploadByApi(caseRecord, tpaCaseNumber);
   } catch (error) {
     if (!(error instanceof UploadRejected)) throw error; // technical: stays at MEMBER_VERIFIED, retried next run
-    return persistStatus(caseRecord, { status: 'CONSOLE_UPLOAD_FAILED', reasonCode: 'CONSOLE_UPLOAD_REFUSED', message: error.message, issue: { problem: 'Upload refused', detail: error.message } });
+    return persistStatus(caseRecord, { status: 'CONSOLE_UPLOAD_FAILED', reasonCode: 'CONSOLE_UPLOAD_REFUSED', message: error.message, issue: { problem: 'Upload refused', detail: error.message, dedupeKey: `CONSOLE_UPLOAD_FAILED|${error.message}` } });
   }
   const skipped = result.skipped.length ? ` (not a PDF or image, left out: ${result.skipped.join(', ')})` : '';
   return persistStatus(caseRecord, {

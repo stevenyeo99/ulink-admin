@@ -315,6 +315,13 @@ export interface GetCaseResponse {
   corrections: CorrectionsInfo;
   requests: RequestsInfo;
   claim: CaseClaim | null;
+  /** A case IAS or the console refused: what a person can try again (ulink-api modules/case-retry/retry.js). */
+  retry: RetryInfo | null;
+}
+
+export interface RetryInfo {
+  actions: { id: 'send' | 'prepare' | 'upload'; label: string; target: string }[];
+  note: string;
 }
 
 // A reviewer's own checklist lines on this case (SYSTEM_4 E4-28, ulink-api modules/case-requests/requests.js).

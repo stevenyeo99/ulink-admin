@@ -33,7 +33,7 @@ it("uses the job's own words for manual reading and IAS refusals", () => {
   expect(nextAction({ currentStatus: 'API_MANUAL_REVIEW' }, null, events).text)
     .toBe('Documents too long for the AI: about 31,000 tokens, limit 24,976. A person reads them. Read the documents and handle the claim manually.');
   const refused = [{ newStatus: 'API_CLAIM_REVISION_FAILED', message: 'Claim already exists' }];
-  expect(nextAction({ currentStatus: 'API_CLAIM_REVISION_FAILED' }, null, refused)).toMatchObject({ text: 'IAS refused it: Claim already exists. Fix it in IAS; it is not retried automatically.', act: true });
+  expect(nextAction({ currentStatus: 'API_CLAIM_REVISION_FAILED' }, null, refused)).toMatchObject({ text: 'IAS refused it: Claim already exists. Fix the cause in IAS, then Try again on this page.', act: true });
 });
 
 it('waits for the customer — or tells ULINK to contact them when the missing-documents email is off', async () => {
