@@ -7,8 +7,10 @@ import { isSuperAdmin } from '../../lib/session';
 
 interface SidebarProps {
   reviewCount?: number;
-  /** Small screens: the sidebar is a drawer, open or closed. Always shown from lg up. */
+  /** Small screens: the sidebar is a drawer, open or closed. */
   open: boolean;
+  /** Large screens: the sidebar is hidden (menu button in the top bar). */
+  collapsed: boolean;
   onClose: () => void;
 }
 
@@ -23,7 +25,7 @@ const itemClass = ({ isActive }: { isActive: boolean }) =>
  * Left navigation in the SB Admin pattern: brand at the top, pages grouped by who uses them.
  * On small screens it slides in over the page (opened from the top bar's menu button).
  */
-export function Sidebar({ reviewCount, open, onClose }: SidebarProps) {
+export function Sidebar({ reviewCount, open, collapsed, onClose }: SidebarProps) {
   return (
     <>
       {open && <div aria-hidden className="fixed inset-0 z-30 bg-slate-900/20 lg:hidden" onClick={onClose} />}
@@ -31,7 +33,8 @@ export function Sidebar({ reviewCount, open, onClose }: SidebarProps) {
         className={clsx(
           'fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-slate-900/5 bg-white/85 backdrop-blur-xl',
           'motion-safe:transition-transform lg:static lg:translate-x-0',
-          open ? 'translate-x-0' : '-translate-x-full'
+          open ? 'translate-x-0' : '-translate-x-full',
+          collapsed && 'lg:hidden'
         )}
         aria-label="Main navigation"
       >

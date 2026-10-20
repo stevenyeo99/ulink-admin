@@ -42,13 +42,17 @@ function Shell() {
   // The sidebar count: cases in the Review Queue, both workflows.
   const { data } = useReviewQueue();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  // Large screens: the menu button hides or shows the sidebar. Small screens: it opens the drawer.
+  const toggleMenu = () =>
+    window.matchMedia('(min-width: 1024px)').matches ? setCollapsed((c) => !c) : setMenuOpen(true);
 
   // Dashboard shell (SB Admin pattern): sidebar on the left, top bar + page on the right.
   return (
     <div className="relative flex h-screen overflow-hidden">
-      <Sidebar reviewCount={data?.total} open={menuOpen} onClose={() => setMenuOpen(false)} />
+      <Sidebar reviewCount={data?.total} open={menuOpen} collapsed={collapsed} onClose={() => setMenuOpen(false)} />
       <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
-        <TopBar onOpenMenu={() => setMenuOpen(true)} />
+        <TopBar onOpenMenu={toggleMenu} />
         {/* React Flow (PipelinePage) needs a bounded, non-scrolling container to measure
             against — it pans/zooms internally rather than relying on page scroll. The case
             pages are normal scrollable content instead, so each of them opts into its own

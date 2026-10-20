@@ -58,7 +58,7 @@ function CaseSearch() {
   );
 }
 
-/** Top bar in the SB Admin pattern: the page's name, case search, who is logged in and log out; the menu button on small screens. */
+/** Top bar in the SB Admin pattern: the page's name, case search, who is logged in and log out; the menu button (drawer on small screens, show or hide the sidebar on large ones). */
 export function TopBar({ onOpenMenu }: { onOpenMenu: () => void }) {
   const { pathname } = useLocation();
   const queryClient = useQueryClient();
@@ -74,8 +74,8 @@ export function TopBar({ onOpenMenu }: { onOpenMenu: () => void }) {
     <header className="flex items-center gap-3 border-b border-slate-900/5 bg-white/70 px-4 py-3 backdrop-blur-xl sm:px-6">
       <button
         onClick={onOpenMenu}
-        className="rounded-md p-1.5 text-slate-600 hover:bg-slate-900/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ulink-teal/60 lg:hidden"
-        aria-label="Open menu"
+        className="rounded-md p-1.5 text-slate-600 hover:bg-slate-900/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ulink-teal/60"
+        aria-label="Show or hide menu"
       >
         <Menu size={20} />
       </button>
