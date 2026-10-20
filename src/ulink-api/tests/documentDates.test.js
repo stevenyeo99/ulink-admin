@@ -126,3 +126,32 @@ describe('vision claim (AYA-CL-26043392)', () => {
     expect(issues).toContain(ISSUES.NO_MEDICAL_REPORT);
   });
 });
+
+// AYA-CL-26043772 / AYA-CL-26043766 (dental, owner 2026-10-20): the AI's medical_record said "no record" while its own
+// page list had the doctor's pages. A doctor's page the AI was sure of is the medical record.
+describe("doctor's pages stand in for the medical record", () => {
+  const { evaluateDocumentChecks, ISSUES } = require('../modules/document-checking/checklist');
+  const fields = (...pages) => ({
+    claim: { appointment_date: '2026-10-02', appointment_time: '10:00' },
+    medical: { detail_of_illness_injury: 'Toothache' },
+    bank: { bank_name: 'CB bank', bank_account_name: 'Zin Min Naing', bank_account_number: '0224100900012343' },
+    medical_record: { present: false, presence_confidence: 0, presence_reason: 'Actually, there is nothing here' },
+    invoices: { present: true, items: [] },
+    document_list: [p('a.pdf - page 1', 'claim_form', '2026-10-02'), ...pages],
+  });
+  const line = (f) => evaluateDocumentChecks(f).checklist.find((l) => l.code === 'NO_MEDICAL_REPORT');
+
+  it.each(['consultation_note', 'dental_consultation', 'discharge_summary', 'operation_or_procedure_note'])('%s: no medical report asked', (kind) => {
+    const f = fields(p('a.pdf - page 4', kind, '2026-10-02'));
+    expect(evaluateDocumentChecks(f).issues).not.toContain(ISSUES.NO_MEDICAL_REPORT);
+    expect(line(f)).toMatchObject({ passed: true, confidence: 0.9 });
+    expect(line(f).note).toMatch(/^The doctor's pages were found: .+ \(a\.pdf - page 4\)\.$/);
+  });
+
+  it('a book cover or a lab result alone, or a doctor page the AI was unsure of, is not a medical record', () => {
+    expect(evaluateDocumentChecks(fields(p('a.pdf - page 3', 'medical_book_cover'))).issues).toContain(ISSUES.NO_MEDICAL_REPORT);
+    expect(evaluateDocumentChecks(fields(p('a.pdf - page 3', 'investigation_report', '2026-10-02'))).issues).toContain(ISSUES.NO_MEDICAL_REPORT);
+    const unsure = { ...p('a.pdf - page 4', 'consultation_note', '2026-10-02'), confidence: 0.6 };
+    expect(evaluateDocumentChecks(fields(unsure)).issues).toContain(ISSUES.NO_MEDICAL_REPORT);
+  });
+});

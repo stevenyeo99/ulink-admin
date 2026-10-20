@@ -75,8 +75,15 @@ const trustedEyeTestSlips = (fields) => eyeTestSlips(fields).filter((d) => !isUn
 // No date written at all. A date the AI read in another form ("08/10/2026") is a date on the slip: not asked for.
 const undatedEyeTestSlips = (fields) => eyeTestSlips(fields).filter((d) => d.date == null || d.date === '');
 
+// A doctor's page the AI found in the page list stands in for the medical record too (owner, 2026-10-20: AYA-CL-26043772 /
+// AYA-CL-26043766, dental — the AI's medical_record said "no record" while its own page list had the consultation pages).
+// A medical book cover or a lab result alone is not one. A page the AI was unsure of does not count.
+const DOCTOR_PAGE_KINDS = new Set(['consultation_note', 'dental_consultation', 'discharge_summary', 'operation_or_procedure_note']);
+const trustedDoctorPages = (fields) => (fields.document_list || []).filter((d) => DOCTOR_PAGE_KINDS.has(d.kind) && !isUnsure(d.confidence));
+
 function checkNoMedicalReport(fields) {
-  return fields.medical_record.present === false && trustedEyeTestSlips(fields).length === 0 ? ISSUES.NO_MEDICAL_REPORT : null;
+  return fields.medical_record.present === false && trustedEyeTestSlips(fields).length === 0 && trustedDoctorPages(fields).length === 0
+    ? ISSUES.NO_MEDICAL_REPORT : null;
 }
 
 // An eye test slip without a date (owner, 2026-10-19): the customer is asked, in the staff's own wording.
@@ -626,6 +633,7 @@ const lowestScore = (pages) => {
   return scores.length ? Math.min(...scores) : null;
 };
 const slipText = (d, tail) => `${d.reason || 'eye test slip'}${tail}${d.page ? ` (${d.page})` : ''}`;
+const doctorPagesText = (pages) => `${pages.map((d) => `${DOCUMENT_KIND_LABELS[d.kind]}${d.page ? ` (${d.page})` : ''}`).join('; ')}`;
 
 const CHECKLIST_CONFIDENCE = {
   // A vision claim's eye test slip passes the medical record line: its score and reason, not the AI's "no medical
@@ -634,6 +642,10 @@ const CHECKLIST_CONFIDENCE = {
     const slips = trustedEyeTestSlips(fields);
     if (fields.medical_record?.present !== true && slips.length) {
       return { confidence: lowestScore(slips), note: `An eye test slip was found; for a vision claim it is the medical record (${slips.map((d) => slipText(d, '')).join('; ')}).` };
+    }
+    const pages = trustedDoctorPages(fields);
+    if (fields.medical_record?.present !== true && pages.length) {
+      return { confidence: lowestScore(pages), note: `The doctor's pages were found: ${doctorPagesText(pages)}.` };
     }
     return presenceConfidence(fields.medical_record);
   },
@@ -661,7 +673,8 @@ function passReason(code, fields) {
       return fields.invoices?.present === true ? `${items.length || 'A'} voucher(s) found.` : "The AI couldn't tell whether a voucher is attached.";
     case 'NO_MEDICAL_REPORT':
       if (fields.medical_record?.present === true) return 'A medical record was found.';
-      return trustedEyeTestSlips(fields).length ? 'An eye test slip was found; for a vision claim it is the medical record.' : "The AI couldn't tell whether a medical record is attached.";
+      if (trustedEyeTestSlips(fields).length) return 'An eye test slip was found; for a vision claim it is the medical record.';
+      return trustedDoctorPages(fields).length ? `The doctor's pages were found: ${doctorPagesText(trustedDoctorPages(fields))}.` : "The AI couldn't tell whether a medical record is attached.";
     case 'EYE_TEST_SLIP_UNDATED':
       return 'Every eye test slip shows a date.';
     case 'UNCLEAR_VOUCHER':
