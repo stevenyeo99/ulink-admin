@@ -144,6 +144,7 @@ export function ReviewWorkspacePage() {
           </h2>
           {confirmError && <p className="mb-2 text-sm text-red-600">{confirmError}</p>}
           <FindingsPanel
+            key={`findings-${id}`} // a new case starts with no open changes (they belong to the case they were made on)
             checklist={checklist}
             lines={assessmentSummary.lines}
             options={corrections.options}

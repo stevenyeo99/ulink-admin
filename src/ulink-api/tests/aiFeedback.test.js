@@ -1,6 +1,6 @@
 // Per-item correction (SYSTEM_4 E4-12, E4-15 step 1): a reviewer corrects one value the AI read or one check's verdict;
 // the correction is stored for learning (ulink_ai_feedback), written into the case's fields, and the case is checked
-// again from the member check. Models are mocked.
+// again (several corrections: saved together, one check). Models are mocked.
 
 jest.mock('../db/models', () => ({
   sequelize: { transaction: jest.fn(async (fn) => fn('tx')) },
@@ -17,7 +17,7 @@ const { Case, CaseEvent, ApiCaseStep, AiFeedback } = require('../db/models');
 const { evaluateDocumentChecks } = require('../modules/document-checking/checklist');
 const { correctionOptions, validateCorrection, aiOriginal, applyCorrection, applyVerdicts, recheckFrom, correctionHold } = require('../modules/ai-feedback/corrections');
 const { buildAssessmentSummary } = require('../modules/assessment-summary/summary');
-const { createCorrection, trustCorrection } = require('../controllers/cases/correctionsController');
+const { createCorrection, createCorrections, trustCorrection } = require('../controllers/cases/correctionsController');
 
 const fields = () => ({
   claimant: { claimant_name: 'Hsu Myat Pyae', claimant_nrc_passport: '12/DAGAYA(N)08144', claimant_dob: '1999-12-07' },
@@ -128,7 +128,7 @@ describe('POST /api/cases/:id/corrections', () => {
   };
   const body = { kind: 'value', item: 'invoices.items.0.date', value: '2026-08-14', reason: 'receipt shows the 14th', wrongStep: 'reading' };
 
-  it('email case: stores it, writes the corrected fields, sends the case back to the member check', async () => {
+  it('email case: stores it, writes the corrected fields, sends the case back to the document check', async () => {
     Case.findByPk.mockResolvedValue(emailCase());
     const { status } = await send(createCorrection, { body });
     expect(status).toBe(200);
@@ -137,7 +137,7 @@ describe('POST /api/cases/:id/corrections', () => {
     expect(update.currentStatus).toBe('READY_FOR_DOCUMENT_CHECKING'); // a voucher date: not a member-check value
     expect(update.extractedFields.invoices.items[0].date).toBe('2026-08-14');
     expect(where.where).toEqual({ id: 'c1', currentStatus: 'INCOMPLETE' });
-    expect(CaseEvent.create).toHaveBeenCalledWith(expect.objectContaining({ reasonCode: 'MANUAL_CORRECTION', newStatus: 'READY_FOR_DOCUMENT_CHECKING', message: expect.stringContaining('AI "2026-08-17" → "2026-08-14"') }), expect.anything());
+    expect(CaseEvent.create).toHaveBeenCalledWith(expect.objectContaining({ reasonCode: 'MANUAL_CORRECTION', newStatus: 'INCOMPLETE', message: expect.stringContaining('AI "2026-08-17" → "2026-08-14"') }), expect.anything());
   });
 
   it('API case: a new recognition step with the corrected fields; the AI\'s step is untouched', async () => {
@@ -164,6 +164,34 @@ describe('POST /api/cases/:id/corrections', () => {
     Case.update.mockResolvedValueOnce([0]);
     expect((await send(createCorrection, { body })).status).toBe(409);
     expect(CaseEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('Save all: every change saved together and the case checked once; one bad change saves nothing', async () => {
+    const date = { kind: 'value', item: 'invoices.items.0.date', value: '2026-08-14', reason: 'receipt shows the 14th', wrongStep: 'reading' };
+    const nrc = { kind: 'value', item: 'claimant.claimant_nrc_passport', value: '12/DAGAYA(N)081441', reason: 'last digit is 1', wrongStep: 'reading' };
+
+    Case.findByPk.mockResolvedValue(emailCase());
+    const { status, body: res1 } = await send(createCorrections, { body: { items: [date] } });
+    expect(status).toBe(200);
+    expect(res1.currentStatus).toBe('READY_FOR_DOCUMENT_CHECKING');
+    expect(Case.update).toHaveBeenCalledTimes(1);
+
+    jest.clearAllMocks();
+    const { body: res2 } = await send(createCorrections, { body: { items: [date, nrc] } });
+    expect(res2.currentStatus).toBe('RECOGNIZED'); // the NRC is a member-check value
+    expect(AiFeedback.create).toHaveBeenCalledTimes(2);
+    const [update] = Case.update.mock.calls[0];
+    expect(update.extractedFields.invoices.items[0].date).toBe('2026-08-14');
+    expect(update.extractedFields.claimant.claimant_nrc_passport).toBe('12/DAGAYA(N)081441');
+    expect(CaseEvent.create).toHaveBeenCalledWith(expect.objectContaining({ reasonCode: 'MANUAL_RECHECK', message: expect.stringContaining('2 correction(s)') }), expect.anything());
+
+    jest.clearAllMocks();
+    const bad = await send(createCorrections, { body: { items: [date, { ...nrc, reason: '' }] } });
+    expect(bad.status).toBe(400);
+    expect(bad.body.error.message).toMatch(/^NRC/); // named by what was changed, not a position
+    expect(AiFeedback.create).not.toHaveBeenCalled();
+    expect(Case.update).not.toHaveBeenCalled();
+    expect((await send(createCorrections, { body: { items: [date, date] } })).status).toBe(400);
   });
 
   it('trusted only by a different person', async () => {

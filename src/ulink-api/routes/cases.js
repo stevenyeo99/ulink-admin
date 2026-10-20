@@ -1,7 +1,7 @@
 const express = require('express');
 const { requireRole } = require('../modules/auth/auth');
 const { getCaseStatuses, getOverview, getReviewQueue, getNextCase, getApprovals, listCases, getCase, getTimeline, getLlmCalls, getAttachment, getDocument, overrideCase, resetCase, retryCase, releaseMissingDocuments, uploadCaseDocuments } = require('../controllers/cases/casesController');
-const { createCorrection, createConfirmation, trustCorrection } = require('../controllers/cases/correctionsController');
+const { createCorrection, createCorrections, createConfirmation, trustCorrection } = require('../controllers/cases/correctionsController');
 const { claim, release } = require('../controllers/cases/claimController');
 const { requestInformation, markRequestDone, getEmailDraft } = require('../controllers/cases/requestsController');
 const { requireNotHeldByOther } = require('../modules/case-claim/claim');
@@ -303,10 +303,10 @@ router.post('/:id/override', requireRole('super_admin'), requireNotHeldByOther, 
  *     description: >
  *       Allowed while a member or document finding holds the case (the override statuses). Stores the correction
  *       (ulink_ai_feedback: AI value and confidence, corrected value, reason, which step was wrong, page, who),
- *       writes it into the case's fields, and checks the case again with it — from the member check (RECOGNIZED /
+ *       writes it into the case's fields, and checks the case again — from the member check (RECOGNIZED /
  *       API_RECOGNIZED) for a value the member check compares with IAS, else from the document check. Missing documents
- *       found after a correction wait for the person (no automatic customer email). Super admin. Logs a CaseEvent
- *       (MANUAL_CORRECTION). No IAS write.
+ *       found after a correction wait for the person (no automatic customer email). Several at once: POST
+ *       /api/cases/{id}/corrections/batch. Super admin. Logs CaseEvents (MANUAL_CORRECTION, MANUAL_RECHECK). No IAS write.
  *     parameters:
  *       - name: id
  *         in: path
@@ -333,6 +333,30 @@ router.post('/:id/override', requireRole('super_admin'), requireNotHeldByOther, 
  *       409: { description: The case moved while the person was reviewing it }
  */
 router.post('/:id/corrections', requireRole('super_admin'), requireNotHeldByOther, createCorrection);
+
+/**
+ * @openapi
+ * /api/cases/{id}/corrections/batch:
+ *   post:
+ *     tags: [cases]
+ *     summary: Save several corrections at once and check the case again (review page "Save all and check again")
+ *     description: >
+ *       Each item as in POST /api/cases/{id}/corrections. Every item is validated first; one invalid item saves nothing
+ *       (400 names it). Then all are saved together and the case moves once — to the member check when one of them is a
+ *       value the member check compares with IAS, else to the document check. Super admin.
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { type: object, required: [items], properties: { items: { type: array, minItems: 1, maxItems: 50, items: { type: object } } } }
+ *     responses:
+ *       200: { description: "{ caseId, previousStatus, currentStatus, corrections }" }
+ *       400: { description: Not correctable now, or an item is invalid (nothing saved) }
+ *       409: { description: The case moved meanwhile }
+ */
+router.post('/:id/corrections/batch', requireRole('super_admin'), requireNotHeldByOther, createCorrections);
 
 /**
  * @openapi

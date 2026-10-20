@@ -67,11 +67,12 @@ export function overrideCase(id: string, reason: string, finding: string): Promi
 
 // Correct one value the AI read or one check's verdict (correctionsController.js, SYSTEM_4 E4-12); the case is checked
 // again from the member check. value: kind=value; passed: kind=verdict.
-export function createCorrection(
+// "Save all and check again" (review workspace): every change at once — all saved or none — and the case checked once.
+export function createCorrections(
   id: string,
-  correction: { kind: 'value' | 'verdict'; item: string; value?: string; passed?: boolean; reason: string; wrongStep: WrongStep }
+  items: { kind: 'value' | 'verdict'; item: string; value?: string; passed?: boolean; reason: string; wrongStep: WrongStep }[]
 ): Promise<{ caseId: string; currentStatus: string }> {
-  return request(`/api/cases/${id}/corrections`, { method: 'POST', body: JSON.stringify(correction) });
+  return request(`/api/cases/${id}/corrections/batch`, { method: 'POST', body: JSON.stringify({ items }) });
 }
 
 // "✓ Right" (review workspace, SYSTEM_4 E5b): the AI's value or verdict was checked and is right — learning data only.

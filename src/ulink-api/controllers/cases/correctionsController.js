@@ -6,8 +6,9 @@ const logger = require('../../utils/logger');
 
 // Per-item correction (SYSTEM_4 E4-12, E4-15 step 1). Allowed where a whole-check override is (a member or document
 // finding stopped the case), by the same people (super admin — a corrected bank account or amount reaches the claim).
-// Saving checks the case again with the corrected fields — from the member check when the value is one it compares
-// with IAS, else from the document check (corrections.js recheckFrom) — and the usual jobs run. No IAS write here
+// Several findings are corrected in one go (owner, 2026-10-20: not one per pipeline run — the review page's "Save all and
+// check again"), and the case is checked once with all of them — from the member check when one of them is a value it
+// compares with IAS, else from the document check (corrections.js recheckFrom). No IAS write here
 // (Q16: a correction changes our checks, decision and AI remark; the claim built later uses the corrected fields).
 // While a member or document finding holds the case, and while it waits for the customer (owner, 2026-10-19: a value
 // the AI read wrong is corrected before the claim goes — or goes again — to IAS; email INCOMPLETE is an override
@@ -43,11 +44,19 @@ async function correctionsInfo(caseRecord, fields) {
   return { allowed, options: fields.extractedFields ? correctionOptions(fields.extractedFields, fields.documentCheckResult, heldByMember(fields)) : [], list };
 }
 
+// Where "check again" starts for these corrected items: the member check when one of them is a value it compares with
+// IAS (or the member check holds the case), else the document check.
+function recheckTarget(items, prevStatus, source) {
+  const rechecks = items.map((item) => recheckFrom(item, prevStatus));
+  const recheck = rechecks.find((r) => r.API === 'API_RECOGNIZED') || rechecks[0];
+  return { label: recheck.label, status: recheck[source === 'API' ? 'API' : 'EMAIL'] };
+}
+
 /**
- * POST /api/cases/:id/corrections — { kind: value|verdict, item, value? | passed?, reason, wrongStep }.
- * Stores the correction, writes it into the case's fields, and sends the case back to the member check.
+ * Saves corrections ([{ kind: value|verdict, item, value? | passed?, reason, wrongStep }]) on a held case — all or none:
+ * every item is checked first — and checks the case again once. Responds itself; returns nothing.
  */
-async function createCorrection(req, res) {
+async function saveCorrections(req, res, items) {
   const caseRecord = await Case.findByPk(req.params.id);
   if (!caseRecord) return res.status(404).json({ error: { message: `Case ${req.params.id} not found`, status: 404 } });
   if (!CORRECTABLE_STATUSES.includes(caseRecord.currentStatus)) {
@@ -58,29 +67,42 @@ async function createCorrection(req, res) {
     return res.status(400).json({ error: { message: 'The AI has not read this case yet — nothing to correct.', status: 400 } });
   }
 
-  const checked = validateCorrection(req.body, correctionOptions(fields.extractedFields, fields.documentCheckResult, heldByMember(fields)));
-  if (checked.error) return res.status(400).json({ error: { message: checked.error, status: 400 } });
-  const { option, corrected } = checked;
-  const original = aiOriginal(fields.extractedFields, option, fields.documentCheckResult);
+  const options = correctionOptions(fields.extractedFields, fields.documentCheckResult, heldByMember(fields));
+  const checked = [];
+  for (const [i, body] of items.entries()) {
+    const result = validateCorrection(body, options);
+    const error = result.error || (checked.some((c) => c.option.item === body.item) && `${result.option.label} is changed twice.`);
+    // Several changes: named by what was changed (the page shows no numbers).
+    const name = result.option?.label || options.find((o) => o.item === body?.item)?.label || `Change ${i + 1}`;
+    if (error) return res.status(400).json({ error: { message: items.length > 1 && !error.startsWith(name) ? `${name}: ${error}` : error, status: 400 } });
+    checked.push({ ...result, body });
+  }
+
   const operator = operatorOf(req.user);
   const prevStatus = caseRecord.currentStatus;
-  const recheck = recheckFrom(option.item, prevStatus);
-  const newStatus = recheck[caseRecord.source === 'API' ? 'API' : 'EMAIL'];
+  const target = recheckTarget(checked.map((c) => c.option.item), prevStatus, caseRecord.source);
+  const newStatus = target.status;
 
-  const feedback = await sequelize.transaction(async (transaction) => {
-    const row = await AiFeedback.create({
-      caseId: caseRecord.id, kind: option.kind, item: option.item, label: option.label,
-      aiValue: original.aiValue, aiConfidence: original.aiConfidence, correctedValue: corrected,
-      reason: req.body.reason.trim(), wrongStep: req.body.wrongStep, page: original.page, createdBy: req.user.username,
-    }, { transaction });
-    const correction = {
-      id: row.id, kind: option.kind, item: option.item, label: option.label, aiValue: original.aiValue,
-      aiConfidence: original.aiConfidence, corrected, reason: row.reason, wrongStep: row.wrongStep, page: original.page,
-      by: operator, at: row.createdAt,
-      // A member Mark OK covers exactly the finding the person saw (member-verification/checks.js).
-      ...(option.item.startsWith('member:') ? { covers: option.note } : {}),
-    };
-    const extractedFields = applyCorrection(fields.extractedFields, correction);
+  const rows = await sequelize.transaction(async (transaction) => {
+    let { extractedFields } = fields;
+    const saved = []; // { row, correction }
+    for (const { option, corrected, body } of checked) {
+      const original = aiOriginal(fields.extractedFields, option, fields.documentCheckResult);
+      const row = await AiFeedback.create({
+        caseId: caseRecord.id, kind: option.kind, item: option.item, label: option.label,
+        aiValue: original.aiValue, aiConfidence: original.aiConfidence, correctedValue: corrected,
+        reason: body.reason.trim(), wrongStep: body.wrongStep, page: original.page, createdBy: req.user.username,
+      }, { transaction });
+      const correction = {
+        id: row.id, kind: option.kind, item: option.item, label: option.label, aiValue: original.aiValue,
+        aiConfidence: original.aiConfidence, corrected, reason: row.reason, wrongStep: row.wrongStep, page: original.page,
+        by: operator, at: row.createdAt,
+        // A member Mark OK covers exactly the finding the person saw (member-verification/checks.js).
+        ...(option.item.startsWith('member:') ? { covers: option.note } : {}),
+      };
+      extractedFields = applyCorrection(extractedFields, correction);
+      saved.push({ row, correction });
+    }
 
     // Only if nothing moved the case meanwhile (same guard as override).
     const [count] = await Case.update(
@@ -88,32 +110,56 @@ async function createCorrection(req, res) {
       { where: { id: caseRecord.id, currentStatus: prevStatus }, transaction }
     );
     if (count !== 1) throw Object.assign(new Error('moved'), { moved: true });
+    for (const { correction } of saved) {
+      await CaseEvent.create({
+        caseId: caseRecord.id, blockName: 'case-review', prevStatus, newStatus: prevStatus, reasonCode: 'MANUAL_CORRECTION',
+        message: `${correctionText(correction)}.`,
+      }, { transaction });
+    }
     if (caseRecord.source === 'API') {
       // A new recognition step with the corrected fields: every later API job reads the latest one; the AI's own
       // step stays as it was.
       const now = new Date();
       await ApiCaseStep.create({
         caseId: caseRecord.id, job: RECOGNITION_JOB, status: 'DONE',
-        input: { correction: row.id, username: req.user.username },
+        input: { correction: saved[0].row.id, corrections: saved.map((s) => s.row.id), username: req.user.username },
         output: { ...recognitionStep.output, extractedFields },
         startedAt: now, finishedAt: now,
       }, { transaction });
     }
     await CaseEvent.create({
-      caseId: caseRecord.id, blockName: 'case-review', prevStatus, newStatus, reasonCode: 'MANUAL_CORRECTION',
-      message: `${correctionText(correction)}. Checked again from ${recheck.label}.`,
+      caseId: caseRecord.id, blockName: 'case-review', prevStatus, newStatus, reasonCode: 'MANUAL_RECHECK',
+      message: `Checked again from ${target.label} by ${operator}, with ${saved.length} correction(s).`,
     }, { transaction });
-    return row;
+    return saved.map((s) => s.row);
   }).catch((error) => {
     if (error.moved) return null;
     throw error;
   });
-  if (!feedback) {
+  if (!rows) {
     return res.status(409).json({ error: { message: 'The case changed while you were reviewing it. Reload the page and check again.', status: 409 } });
   }
 
-  logger.info('Case item corrected', { caseId: caseRecord.id, item: option.item, kind: option.kind, username: req.user.username });
-  res.json({ caseId: caseRecord.id, previousStatus: prevStatus, currentStatus: newStatus, correction: feedback });
+  logger.info('Case items corrected', { caseId: caseRecord.id, items: checked.map((c) => c.option.item), username: req.user.username });
+  return res.json({ caseId: caseRecord.id, previousStatus: prevStatus, currentStatus: newStatus, correction: rows[0], corrections: rows });
+}
+
+/**
+ * POST /api/cases/:id/corrections — { kind: value|verdict, item, value? | passed?, reason, wrongStep }. One correction,
+ * saved and checked again (the batch with one item).
+ */
+const createCorrection = (req, res) => saveCorrections(req, res, [req.body || {}]);
+
+/**
+ * POST /api/cases/:id/corrections/batch — { items: [correction, …] }. "Save all and check again" on the review page:
+ * every change saved together (or none), and the case checked once.
+ */
+function createCorrections(req, res) {
+  const items = req.body?.items;
+  if (!Array.isArray(items) || items.length === 0 || items.length > 50) {
+    return res.status(400).json({ error: { message: 'Send the changes to save (1 to 50).', status: 400 } });
+  }
+  return saveCorrections(req, res, items);
 }
 
 /**
@@ -180,4 +226,4 @@ async function trustCorrection(req, res) {
   res.json({ correction: row });
 }
 
-module.exports = { createCorrection, createConfirmation, trustCorrection, correctionsInfo, CORRECTABLE_STATUSES };
+module.exports = { createCorrection, createCorrections, createConfirmation, trustCorrection, correctionsInfo, CORRECTABLE_STATUSES };

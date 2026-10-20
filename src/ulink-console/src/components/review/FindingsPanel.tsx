@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { ChevronDown, FileText } from 'lucide-react';
 import { ConfidenceBadge } from '../common/ConfidenceBadge';
@@ -6,6 +7,9 @@ import { useConfidenceThreshold } from '../../hooks/useConfidenceThreshold';
 import type { AssessmentLine, ChecklistItem, CorrectionOption, FieldRead } from '../../types/case';
 import { pageRef, type PageRef, type ViewFile } from '../../lib/caseFiles';
 import { InlineCorrection } from './InlineCorrection';
+import { draftItem, draftProblem, newDraft, type CorrectionDraft } from '../../lib/correctionDraft';
+import { createCorrections } from '../../api/casesApi';
+import { Button } from '../common/Button';
 
 /** One thing the AI decided or read, as the review workspace lists it. correct: the correction item ("value:…" / "verdict:…"). */
 interface Finding {
@@ -130,8 +134,40 @@ export function FindingsPanel({
   const toConfirm = (f: Finding) => f.confirms.filter((item) => currentOf(item) != null);
   const isConfirmed = (f: Finding) => toConfirm(f).length > 0 && toConfirm(f).every((item) => confirmed.has(item) && confirmed.get(item) === currentOf(item));
   const [showPassed, setShowPassed] = useState(false);
-  // The finding being corrected in place, and the verdict to set (a value: undefined).
-  const [editing, setEditing] = useState<{ key: string; passed?: boolean } | null>(null);
+  // Changes not saved yet, by where they were opened ("finding key", "finding key|item" or the option item): several at
+  // once, saved together with "Save all and check again" (owner, 2026-10-20 — not one finding per pipeline run).
+  const [drafts, setDrafts] = useState<Record<string, CorrectionDraft>>({});
+  const openDraft = (key: string, option: CorrectionOption, passed?: boolean) => setDrafts((d) => ({ ...d, [key]: newDraft(option, passed) }));
+  const closeDraft = (key: string) => setDrafts(({ [key]: _closed, ...rest }) => rest);
+  // One draft per value or check: a value offered in two places (a finding and a rule check's ✎ Edit) opens once.
+  const hasDraft = (option: CorrectionOption) => Object.values(drafts).some((d) => d.option.kind === option.kind && d.option.item === option.item);
+  const draftForm = (key: string) => drafts[key] && (
+    <InlineCorrection draft={drafts[key]} onChange={(draft) => setDrafts((d) => ({ ...d, [key]: draft }))} onCancel={() => closeDraft(key)} />
+  );
+  const pending = Object.values(drafts);
+  const notReady = pending.filter((d) => draftProblem(d)).length;
+  const queryClient = useQueryClient();
+  const saveAll = useMutation({
+    mutationFn: () => createCorrections(caseId, pending.map(draftItem)),
+    onSuccess: () => {
+      setDrafts({});
+      for (const key of ['case', 'cases', 'review-queue', 'cases-overview', 'approvals']) queryClient.invalidateQueries({ queryKey: [key] });
+    },
+  });
+  // Corrections no longer allowed (the case moved, someone else decided it): open changes can't be saved.
+  useEffect(() => {
+    if (!canCorrect) setDrafts({});
+  }, [canCorrect]);
+  // Unsaved changes: the browser asks before the tab is closed or reloaded.
+  useEffect(() => {
+    if (!pending.length) return undefined;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [pending.length]);
   const optionOf = (item: string | null) => (item ? options.find((o) => `${o.kind}:${o.item}` === item) ?? null : null);
   const findings = buildFindings(checklist, options);
   const notChecked = findings.filter((f) => f.passed === null);
@@ -173,10 +209,10 @@ export function FindingsPanel({
               <button disabled={confirming} onClick={() => onConfirm(toConfirm(f))} className="text-ulink-teal-dark hover:underline disabled:opacity-50">✓ Right</button>
             )
           )}
-          {canCorrect && optionOf(f.correct) && editing?.key !== f.key && (() => {
+          {canCorrect && optionOf(f.correct) && !hasDraft(optionOf(f.correct)!) && (() => {
             const option = optionOf(f.correct)!;
             const action = (label: string, passed?: boolean) => (
-              <button onClick={() => setEditing({ key: f.key, passed })} className="text-ulink-orange-dark hover:underline">{label}</button>
+              <button onClick={() => openDraft(f.key, option, passed)} className="text-ulink-orange-dark hover:underline">{label}</button>
             );
             if (option.kind === 'value') return action('✎ Edit');
             if (option.current === false) return action('Mark OK', true);
@@ -185,24 +221,20 @@ export function FindingsPanel({
         </div>
         {/* A failed or unsure rule check: fix the value it compared, right here (usually better than Mark OK — the
             corrected value is what goes to IAS). */}
-        {canCorrect && f.edits?.length && open.includes(f) && !editing?.key.startsWith(`${f.key}|`) ? (
+        {canCorrect && f.edits?.length && open.includes(f) ? (
           <div className="mt-1 flex flex-wrap gap-x-3 text-xs">
-            {f.edits.map((item) => {
+            {f.edits.filter((item) => !hasDraft(optionOf(item)!)).map((item) => {
               const o = optionOf(item)!;
               return (
-                <button key={item} onClick={() => setEditing({ key: `${f.key}|${item}` })} className="text-ulink-orange-dark hover:underline">
+                <button key={item} onClick={() => openDraft(`${f.key}|${item}`, o)} className="text-ulink-orange-dark hover:underline">
                   ✎ Edit {o.label}{o.current != null ? ` (${typeof o.current === 'number' ? o.current.toLocaleString('en-US') : String(o.current)})` : ''}
                 </button>
               );
             })}
           </div>
         ) : null}
-        {editing?.key === f.key && optionOf(f.correct) && (
-          <InlineCorrection caseId={caseId} option={optionOf(f.correct)!} passed={editing.passed} onDone={() => setEditing(null)} />
-        )}
-        {editing?.key.startsWith(`${f.key}|`) && optionOf(editing.key.slice(f.key.length + 1)) && (
-          <InlineCorrection caseId={caseId} option={optionOf(editing.key.slice(f.key.length + 1))!} onDone={() => setEditing(null)} />
-        )}
+        {draftForm(f.key)}
+        {(f.edits ?? []).map((item) => <div key={item}>{draftForm(`${f.key}|${item}`)}</div>)}
       </li>
     );
   };
@@ -237,10 +269,10 @@ export function FindingsPanel({
               <li key={o.item} className="py-2 text-sm">
                 <span className="font-medium text-slate-800">{o.label}</span>
                 {o.note && <p className="mt-0.5 text-xs text-slate-500">{o.note}</p>}
-                {canCorrect && editing?.key !== o.item && (
-                  <button onClick={() => setEditing({ key: o.item, passed: true })} className="mt-1 text-xs text-ulink-orange-dark hover:underline">Mark OK</button>
+                {canCorrect && !hasDraft(o) && (
+                  <button onClick={() => openDraft(o.item, o, true)} className="mt-1 text-xs text-ulink-orange-dark hover:underline">Mark OK</button>
                 )}
-                {editing?.key === o.item && <InlineCorrection caseId={caseId} option={o} passed onDone={() => setEditing(null)} />}
+                {draftForm(o.item)}
               </li>
             ))}
           </ul>
@@ -254,10 +286,10 @@ export function FindingsPanel({
               <li key={o.item} className="py-2 text-sm">
                 <span className="font-medium text-slate-800">{o.label}</span>{' '}
                 <span className="text-slate-700">"{o.current == null ? 'not read' : String(o.current)}"</span>
-                {canCorrect && editing?.key !== o.item && (
-                  <button onClick={() => setEditing({ key: o.item })} className="ml-3 text-xs text-ulink-orange-dark hover:underline">✎ Edit</button>
+                {canCorrect && !hasDraft(o) && (
+                  <button onClick={() => openDraft(o.item, o)} className="ml-3 text-xs text-ulink-orange-dark hover:underline">✎ Edit</button>
                 )}
-                {editing?.key === o.item && <InlineCorrection caseId={caseId} option={o} onDone={() => setEditing(null)} />}
+                {draftForm(o.item)}
               </li>
             ))}
           </ul>
@@ -276,6 +308,18 @@ export function FindingsPanel({
             ))}
           </ul>
         </section>
+      )}
+      {pending.length > 0 && (
+        <div className="sticky bottom-0 mt-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-ulink-orange/30 bg-white px-3 py-2 shadow-glass">
+          <p className="text-sm text-slate-700">
+            {pending.length} change{pending.length === 1 ? '' : 's'} not saved{notReady ? ` — ${notReady} not ready yet` : ''}.
+          </p>
+          <div className="flex gap-2">
+            <Button variant="ghost" disabled={saveAll.isPending} onClick={() => setDrafts({})}>Discard all</Button>
+            <Button disabled={notReady > 0 || saveAll.isPending} onClick={() => saveAll.mutate()}>{saveAll.isPending ? 'Saving…' : 'Save all and check again'}</Button>
+          </div>
+          {saveAll.isError && <p className="w-full text-sm text-red-600">{(saveAll.error as Error).message}</p>}
+        </div>
       )}
     </div>
   );
