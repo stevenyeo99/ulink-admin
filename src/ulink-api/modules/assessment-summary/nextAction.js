@@ -47,8 +47,13 @@ function nextAction(fields = {}, summary = null, events = []) {
     case 'DOCUMENTS_UNSURE':
     case 'API_DOCUMENTS_UNSURE':
       return act(`The documents passed, but the AI was unsure about: ${points || 'see the review points'}. Check them against the documents, then Confirm and continue.`);
-    case 'API_DIAGNOSIS_REVIEW':
-      return act(`The AI wasn't sure of the diagnosis code (${fields.claimPrepMeta?.diagnosis?.pick?.diagCode || 'none'}). Choose the code on this page; the revision is then prepared with it.`);
+    case 'API_PREPARATION_REVIEW': {
+      // Step 2 of 2 (owner, 2026-10-20): after the documents, so a reviewer who just fixed the checklist sees why it stopped again.
+      const review = fields.claimPrepMeta?.review;
+      const what = [review?.diagnosis && 'the diagnosis code', review?.vouchers?.length && `the benefit of voucher ${review.vouchers.map((i) => i + 1).join(', ')}`]
+        .filter(Boolean).join(' and ') || 'the claim preparation';
+      return act(`Step 2 of 2: the documents are done. Check ${what} before the revision goes to IAS.`);
+    }
     case 'MANUAL_REVIEW':
     case 'API_MANUAL_REVIEW':
       return act(`${said || "The AI couldn't read the documents reliably."} Read the documents and handle the claim manually.`);

@@ -4,6 +4,7 @@ const { checkCase } = require('../ias-claim-preparation/service');
 const { barcodeFields } = require('../shared/barcodeFields');
 const { openRequests } = require('../case-requests/requests');
 const { getSettings } = require('../settings/settings');
+const { reviewNeeded } = require('../ias-claim-preparation/preparationReview');
 
 // api-claim-preparation: API case workflow job (docs/imp/day1/api-case-workflow.md section 6.6).
 //
@@ -58,8 +59,8 @@ async function processCase({ caseRecord, input }) {
     consoleBarcode: barcode,
     // Documents aren't complete yet on a suspended claim, so no completion date.
     consoleUploadResult: { completedAt: documentsComplete ? documentCheck.checkedAt : null },
-    // A person chose the diagnosis code (POST /api/cases/:id/diagnosis): used as is, on every later preparation too.
-    diagnosisChoice: input['diagnosis-review'] || null,
+    // What a person chose (POST /api/cases/:id/preparation): used as is, on every later preparation too.
+    preparationChoice: input['preparation-review'] || null,
   });
 
   const payload = {
@@ -79,19 +80,17 @@ async function processCase({ caseRecord, input }) {
     claimPrepMeta: prepared.claimPrepMeta,
   };
 
-  // The AI was unsure of the diagnosis code (switch holdUnsureDiagnosis, owner 2026-10-20): a person chooses it
-  // before anything goes to IAS. Unsure = the default code, or at or below the AI confidence threshold.
-  const diagnosis = prepared.claimPrepMeta?.diagnosis;
-  if (diagnosis && !diagnosis.chosen) {
-    const settings = await getSettings();
-    const unsure = diagnosis.defaulted || (typeof diagnosis.confidence === 'number' && diagnosis.confidence <= settings.aiConfidenceThreshold);
-    if (unsure && settings.holdUnsureDiagnosis) {
-      return {
-        output,
-        nextStatus: 'API_DIAGNOSIS_REVIEW',
-        message: `Claim ${claim.clNo}: the AI wasn't sure of the diagnosis code (${prepared.diagnosis?.diagCode ?? 'none'}); a person chooses it before the revision`,
-      };
-    }
+  // The AI wasn't sure of the diagnosis code or of a voucher's benefit (switches holdUnsureDiagnosis /
+  // holdUnsureBenefit, owner 2026-10-20): a person decides before anything goes to IAS (preparationReview.js).
+  const review = prepared.claimPrepMeta ? reviewNeeded(prepared.claimPrepMeta, await getSettings()) : null;
+  if (review) {
+    const what = [review.diagnosis && `the diagnosis code (${prepared.diagnosis?.diagCode ?? 'none'})`,
+      review.vouchers.length && `the benefit of voucher ${review.vouchers.map((i) => i + 1).join(', ')}`].filter(Boolean).join(' and ');
+    return {
+      output: { ...output, claimPrepMeta: { ...output.claimPrepMeta, review } },
+      nextStatus: 'API_PREPARATION_REVIEW',
+      message: `Claim ${claim.clNo}: the AI wasn't sure of ${what}; a person decides before the revision`,
+    };
   }
 
   return {
@@ -108,7 +107,7 @@ const job = {
   // barcode wait, if a case-page upload went to the console).
   inputStatus: ['API_READY_FOR_CLAIM_PREPARATION'],
   inputs: ['api-claim-intake', 'api-material-download', 'api-claim-recognition', 'api-member-verification', 'api-document-checking'],
-  optionalInputs: ['case-override', 'api-console-barcode', 'diagnosis-review'],
+  optionalInputs: ['case-override', 'api-console-barcode', 'preparation-review'],
   batchLimit: config.iasClaimPreparation.batchLimit,
   process: processCase,
 };

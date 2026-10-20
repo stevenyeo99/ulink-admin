@@ -46,9 +46,13 @@ export function retryCase(id: string, action: string, comment: string): Promise<
   return request(`/api/cases/${id}/retry`, { method: 'POST', body: JSON.stringify({ action, comment }) });
 }
 
-// The AI unsure of the diagnosis code (API_DIAGNOSIS_REVIEW): a person chooses it; claim preparation then uses it (super admin).
-export function chooseDiagnosis(id: string, diagCode: string, comment: string): Promise<{ caseId: string; currentStatus: string }> {
-  return request(`/api/cases/${id}/diagnosis`, { method: 'POST', body: JSON.stringify({ diagCode, comment }) });
+// The claim preparation stop (API_PREPARATION_REVIEW): a person decides the diagnosis code and/or voucher benefits the AI
+// wasn't sure of; claim preparation then uses them (super admin). voucher: 0-based.
+export function choosePreparation(
+  id: string,
+  choice: { diagCode?: string; benefits: { voucher: number; benefitType: string; benefitHead: string | null }[]; comment: string }
+): Promise<{ caseId: string; currentStatus: string }> {
+  return request(`/api/cases/${id}/preparation`, { method: 'POST', body: JSON.stringify(choice) });
 }
 
 // ICD-10 codes nearest to a text — an exact scan, several seconds.

@@ -81,7 +81,7 @@ const CASE_STATUSES = {
   API_CONSOLE_BARCODE_MISSING: status('claim', 'needs_review', 'Console barcode not received', 'The uploaded documents were sent to the IAS console, but no barcode came back within the expected time. The system keeps checking; check the console side.'),
   API_CONSOLE_UPLOAD_FAILED: status('claim', 'needs_review', 'Console upload refused', 'The console upload API refused the uploaded documents, or did not say where it filed them; the reason is in the case history. IAS is unchanged.'),
   API_READY_FOR_CLAIM_PREPARATION: status('claim', 'in_progress', 'Preparing the revision', 'Documents are checked and in the IAS console; the IAS revision is being prepared.'),
-  API_DIAGNOSIS_REVIEW: status('claim', 'needs_review', 'Check the diagnosis code', "The AI wasn't sure of the ICD-10 diagnosis code. Choose the code on this page; the revision is then prepared with it. IAS is unchanged until then."),
+  API_PREPARATION_REVIEW: status('claim', 'needs_review', 'Check the claim preparation', "The documents are done. The AI wasn't sure of the diagnosis code or of a voucher's benefit: choose them on this page, and the revision is prepared with them. IAS is unchanged until then."),
   API_CLAIM_PAYLOAD_PREPARED: status('claim', 'in_progress', 'Revision prepared', 'The IAS claim revision is built and about to be sent.'),
   API_CLAIM_SUSPENDED: status('claim', 'waiting_customer', 'Documents incomplete', "Revised in IAS with suspense; the missing documents are asked for, and the case continues once they are in the IAS console (uploaded on the case page or by the customer)."),
   API_CLAIM_REVISED: status('claim', 'done', 'Revised in IAS', 'Documents are complete; handed to JD3 for approval in IAS.'),

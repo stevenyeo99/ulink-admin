@@ -5,7 +5,7 @@ const { createCorrection, createCorrections, createConfirmation, trustCorrection
 const { claim, release } = require('../controllers/cases/claimController');
 const { requestInformation, markRequestDone, getEmailDraft } = require('../controllers/cases/requestsController');
 const { requireNotHeldByOther } = require('../modules/case-claim/claim');
-const { chooseDiagnosis, searchDiagnosis } = require('../controllers/cases/diagnosisController');
+const { choosePreparation, searchDiagnosis } = require('../controllers/cases/preparationController');
 
 const router = express.Router();
 
@@ -474,27 +474,35 @@ router.post('/:id/retry', requireNotHeldByOther, retryCase);
 
 /**
  * @openapi
- * /api/cases/{id}/diagnosis:
+ * /api/cases/{id}/preparation:
  *   post:
  *     tags: [cases]
- *     summary: Choose the ICD-10 diagnosis code of an API case the AI was unsure of (super admin)
+ *     summary: Decide what the AI was unsure of in claim preparation — diagnosis code and/or voucher benefits (super admin)
  *     description: >
- *       Only at API_DIAGNOSIS_REVIEW (switch holdUnsureDiagnosis), only a code in the ICD-10 table. Stores the choice
- *       (with the AI's own pick) as a diagnosis-review step and moves the case to API_READY_FOR_CLAIM_PREPARATION; claim
- *       preparation then uses this code and does not ask the AI again. A comment is required and kept in the history.
+ *       Only at API_PREPARATION_REVIEW (switches holdUnsureDiagnosis / holdUnsureBenefit). Everything the stop asked for
+ *       must be decided: the diagnosis code when it was unsure (a code in the ICD-10 table), and every flagged voucher
+ *       (a benefit type + head on the member's own plan). All or nothing. Stores the choices (with the AI's own picks) as
+ *       a preparation-review step and moves the case to API_READY_FOR_CLAIM_PREPARATION; claim preparation then uses
+ *       them and does not ask the AI again. A comment is required and kept in the history.
  *     parameters:
  *       - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
- *           schema: { type: object, required: [diagCode, comment], properties: { diagCode: { type: string }, comment: { type: string, minLength: 3 } } }
+ *           schema:
+ *             type: object
+ *             required: [comment]
+ *             properties:
+ *               diagCode: { type: string }
+ *               benefits: { type: array, items: { type: object, properties: { voucher: { type: integer, description: 0-based }, benefitType: { type: string }, benefitHead: { type: string, nullable: true } } } }
+ *               comment: { type: string, minLength: 3 }
  *     responses:
- *       200: { description: "{ caseId, currentStatus, diagnosis }" }
- *       400: { description: No comment, an unknown code, or the case is not waiting for a diagnosis code }
+ *       200: { description: "{ caseId, currentStatus }" }
+ *       400: { description: No comment, a choice missing or not allowed, or the case is not at the claim preparation check }
  *       409: { description: The case changed meanwhile }
  */
-router.post('/:id/diagnosis', requireRole('super_admin'), requireNotHeldByOther, chooseDiagnosis);
+router.post('/:id/preparation', requireRole('super_admin'), requireNotHeldByOther, choosePreparation);
 
 /**
  * @openapi

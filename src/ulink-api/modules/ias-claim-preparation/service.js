@@ -2,6 +2,7 @@ const { sequelize, Case, ClaimRoute, CaseEvent } = require('../../db/models');
 const config = require('../../config');
 const { pickDiagnosis } = require('./diagnosisPicker');
 const { pickBenefit } = require('./benefitPicker');
+const { voucherKey, sameVoucher } = require('./preparationReview');
 const { buildPayload } = require('./payloadBuilder');
 const { vitaminRejection } = require('../document-checking/checklist');
 const { stpDecision } = require('./stpEligibility');
@@ -46,13 +47,17 @@ async function checkCase(caseRecord) {
     illnessText && `Diagnosis/illness: ${illnessText}`,
     treatmentText && `Treatment: ${treatmentText}`,
   ].filter(Boolean).join('\n');
-  // A person chose the code (API: the case stopped at API_DIAGNOSIS_REVIEW): it wins, the AI is not asked again. The
-  // AI's own pick, reason and candidates stay alongside, for the assessment. Only for the text it was chosen for: new
-  // documents or a correction that change the diagnosis text get a new AI pick (and a new hold when unsure).
-  const choice = caseRecord.diagnosisChoice?.text === (diagnosisText || null) ? caseRecord.diagnosisChoice : null;
-  const diagnosisPick = choice
-    ? { ...choice.aiPick, pick: { diagCode: choice.diagCode, diagDesc: choice.diagDesc }, defaulted: false, chosen: { by: choice.by, comment: choice.comment } }
+  // What a person chose (API: the case stopped at API_PREPARATION_REVIEW): it wins, the AI is not asked again; the AI's
+  // own pick, reason and candidates stay alongside, for the assessment. The diagnosis only for the text it was chosen
+  // for, a voucher's benefit only while that voucher is the same: new documents or a correction get a new AI pick (and
+  // a new stop when unsure).
+  const choice = caseRecord.preparationChoice || null;
+  const chosen = choice && { by: choice.by, comment: choice.comment };
+  const chosenDiagnosis = choice?.diagnosis?.text === (diagnosisText || null) ? choice.diagnosis : null;
+  const diagnosisPick = chosenDiagnosis
+    ? { ...chosenDiagnosis.aiPick, pick: { diagCode: chosenDiagnosis.diagCode, diagDesc: chosenDiagnosis.diagDesc }, defaulted: false, chosen }
     : await pickDiagnosis(diagnosisText, { searchText: illnessText });
+  const chosenBenefit = (i, item) => (choice?.benefits || []).find((b) => b.voucher === i && sameVoucher(b.key, voucherKey(item)));
 
   const memberPlansRaw = iasMemberInfoResponse?.payload?.memberPlans;
   const benefitContext = {
@@ -71,8 +76,11 @@ async function checkCase(caseRecord) {
   const lines = [];
   const lineMeta = [];
   if (invoiceItems.length > 0) {
-    for (const item of invoiceItems) {
-      const benefitPick = await pickBenefit({ ...benefitContext, voucherType: item.voucher_type }, memberPlansRaw);
+    for (const [i, item] of invoiceItems.entries()) {
+      const mine = chosenBenefit(i, item);
+      const benefitPick = mine
+        ? { ...mine.aiPick, pick: { benefitType: mine.benefitType, benefitHead: mine.benefitHead }, chosen }
+        : await pickBenefit({ ...benefitContext, voucherType: item.voucher_type }, memberPlansRaw);
       // Vitamins / supplements on this voucher → man_rej set 1 on its IAS item (SYSTEM_4 E4-10, owner 2026-10-16).
       lines.push({ subtotal: item.subtotal, benefit: benefitPick.pick, vitamin: vitaminRejection(item) });
       lineMeta.push({ voucherType: item.voucher_type ?? null, subtotal: item.subtotal ?? null, ...benefitPick });

@@ -16,6 +16,9 @@ const DEFAULTS = {
   // API cases: the AI was unsure of the ICD-10 diagnosis code (it fell back to the default, or at or below the
   // threshold): the case stops for a person to choose the code before the IAS revision. On (owner, 2026-10-20).
   holdUnsureDiagnosis: true,
+  // API cases: the AI had no benefit, no head, or was unsure of a voucher's benefit: the case stops for a person to choose
+  // it (with the diagnosis, one stop: API_PREPARATION_REVIEW). On (owner, 2026-10-20).
+  holdUnsureBenefit: true,
   // A voucher with vitamins / supplements: the claim is approved by a person (JD3), never STP (SYSTEM_4 E4-10).
   // On from the start — ULINK asked for it at the 02-Oct demo.
   vitaminsBlockStp: true,

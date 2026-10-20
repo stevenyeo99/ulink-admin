@@ -14,7 +14,8 @@ const SYSTEM_ISSUE = 'System issue';
 
 // Most serious first — a case is filed under the first of its reasons found here.
 // A reviewer's own lines open (SYSTEM_4 E4-29) come before AI unsure: a person asked for them, the AI can't check them.
-const REASON_ORDER = [SYSTEM_ISSUE, 'Data mismatch', 'Rule hold', 'Unreadable', 'Reviewer checklist open', 'AI unsure', 'Missing information'];
+// Claim preparation (API_PREPARATION_REVIEW) too: its own unsure picks are what the stop is about — the queue names the step.
+const REASON_ORDER = [SYSTEM_ISSUE, 'Data mismatch', 'Rule hold', 'Unreadable', 'Reviewer checklist open', 'Claim preparation', 'AI unsure', 'Missing information'];
 
 // Points that don't by themselves need our team: the customer was already asked for missing
 // information, and "STP with open review points" only restates the points under it.
@@ -36,7 +37,7 @@ const STATUS_REASONS = {
   DOCUMENTS_UNSURE: 'AI unsure',
   API_DOCUMENTS_UNSURE: 'AI unsure',
   API_UPLOAD_NOT_IN_CONSOLE: SYSTEM_ISSUE,
-  API_DIAGNOSIS_REVIEW: 'AI unsure',
+  API_PREPARATION_REVIEW: 'Claim preparation',
 };
 
 const rank = (reason) => {

@@ -137,10 +137,20 @@ export interface DiagnosisCandidate {
   similarity?: number;
 }
 
+// A benefit type + head on the member's own plan (ulink-api modules/shared/iasBenefits.js).
+export interface BenefitCandidate {
+  type: string;
+  typeDesc: string | null;
+  head: string | null;
+  headDesc: string | null;
+}
+
 export interface ClaimPrepMeta {
-  // reason: the AI's own words; chosen: a person chose the code (API_DIAGNOSIS_REVIEW).
+  // reason: the AI's own words; chosen: a person chose it (API_PREPARATION_REVIEW).
   diagnosis: ClaimPickMeta & { text: string | null; reason?: string | null; chosen?: { by: string; comment: string } };
-  lines: (ClaimPickMeta & { voucherType: string | null; subtotal: number | null })[];
+  lines: (ClaimPickMeta & { voucherType: string | null; subtotal: number | null; reason?: string | null; chosen?: { by: string; comment: string } })[];
+  // What the claim preparation stop asked a person to decide: the diagnosis, and the vouchers (0-based).
+  review?: { diagnosis: boolean; vouchers: number[] };
 }
 
 export interface EmailAttachment {

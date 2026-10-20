@@ -387,7 +387,7 @@ function preparationLines(claimPrepMeta, isStp) {
     const translated = diagnosis.translation
       ? `Translated from Burmese as: "${diagnosis.text}"${diagnosis.translation.note ? ` (${diagnosis.translation.note})` : ''}.`
       : null;
-    // A person chose the code (API_DIAGNOSIS_REVIEW): no longer the AI's guess.
+    // A person chose the code (API_PREPARATION_REVIEW): no longer the AI's guess.
     if (diagnosis.chosen) {
       lines.push(line({
         decision: 'Diagnosis code',
@@ -414,6 +414,17 @@ function preparationLines(claimPrepMeta, isStp) {
 
   (claimPrepMeta?.lines || []).forEach((benefit, i) => {
     const picked = benefit.pick ? `${benefit.pick.benefitType}/${benefit.pick.benefitHead}` : 'None';
+    // A person chose it (API_PREPARATION_REVIEW): no longer the AI's guess.
+    if (benefit.chosen) {
+      lines.push(line({
+        decision: `Benefit (voucher ${i + 1}${benefit.voucherType ? `, ${benefit.voucherType}` : ''})`,
+        result: picked,
+        status: 'ok',
+        why: `Chosen by ${benefit.chosen.by}: ${benefit.chosen.comment}`,
+        verified: VERIFIED.PERSON,
+      }));
+      return;
+    }
     lines.push(line({
       decision: `Benefit (voucher ${i + 1}${benefit.voucherType ? `, ${benefit.voucherType}` : ''})`,
       result: picked,
