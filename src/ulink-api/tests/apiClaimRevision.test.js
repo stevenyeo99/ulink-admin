@@ -30,7 +30,7 @@ it('sends the prepared body as-is and marks a complete claim revised, handing no
   expect(reviseClaim).toHaveBeenCalledWith(input['api-claim-preparation'].payload);
   expect(result).toMatchObject({
     nextStatus: 'API_CLAIM_REVISED',
-    output: { isSuspense: 'N', email: { taskType: 'CLAIM_APPROVAL_REVIEW', audience: 'internal', payload: { caseId: 'case-1', claimNo: '2604050015' } } },
+    output: { isSuspense: 'N', email: { taskType: 'CLAIM_APPROVAL_REVIEW', audience: 'internal', payload: { caseId: 'case-1', claimNo: '2604050015', revised: true } } },
   });
 });
 

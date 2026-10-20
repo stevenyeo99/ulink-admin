@@ -174,11 +174,12 @@ function renderSubmissionNotRecognized() {
 // CLAIM_CREATED_NOTIFICATION. This is the hand-over to JD3 (approval in IAS): the automated JD1/JD2
 // work is done, a human now needs to review/approve before the customer is ever
 // told a claim number (which happens outside this system, manually, once approved).
+// revised: an API case — the claim already existed in IAS and this system revised it (api-claim-revision).
 function renderClaimApprovalReview(payload) {
-  const { claimNo } = payload;
+  const { claimNo, revised } = payload;
   return {
     subject: `${INTERNAL_SUBJECT_PREFIX}Claim ready for review — Claim ${claimNo}`,
-    bodyText: `A claim has been created in IAS and is ready for review and approval. The automated document and claim checks are complete.
+    bodyText: `A claim has been ${revised ? 'revised' : 'created'} in IAS and is ready for review and approval. The automated document and claim checks are complete.
 
 Claim Number: ${claimNo}
 

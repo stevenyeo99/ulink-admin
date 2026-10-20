@@ -46,4 +46,5 @@ Vision Complete
 
 Outpatient (Manual Reject Case)
   5. AYA-CL-26041363, supplements (22 pages). Expect the Vitamins / supplements line with the four items and their amounts: Minigadine-MV 22,000, Superkids 6,000, Chewy Vitamin C 11,000 and Iaminovit 17,000. The claim should not go STP.
+   
   6. AYA-CL-26040946, supplement (17 pages). The staff flagged Montelukast 4 mg (42,000) for a coverage check. Our system will not flag it, because it is a medicine, not a vitamin, and item 7 is not built yet. Test it last, as the known gap.

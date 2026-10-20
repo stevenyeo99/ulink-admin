@@ -72,7 +72,7 @@ async function processCase({ caseRecord, input }) {
           ? { taskType: 'DOCUMENTS_INCOMPLETE', audience: 'internal', payload: { caseId: caseRecord.id, claimNo, issues: missing, requested, assessment }, dedupeKey: requestedDedupeKey(requested, missing) }
           : { taskType: 'DOCUMENTS_INCOMPLETE', audience: 'internal', payload: { caseId: caseRecord.id, claimNo, issues: missing, assessment }, dedupeKey: [...missing].sort().join('|') }
         : !prepared.isStp
-          ? { taskType: 'CLAIM_APPROVAL_REVIEW', audience: 'internal', payload: { caseId: caseRecord.id, claimNo, assessment }, dedupeKey: null }
+          ? { taskType: 'CLAIM_APPROVAL_REVIEW', audience: 'internal', payload: { caseId: caseRecord.id, claimNo, assessment, revised: true }, dedupeKey: null }
           : null,
     },
     nextStatus,

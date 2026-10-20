@@ -48,6 +48,12 @@ describe('renderClaimApprovalReview (internal-only, SOP §13)', () => {
     expect(rendered.bodyText).not.toContain('Dear Valued Customer');
     expect(rendered.bodyText).toContain('ready for review and approval');
     expect(rendered.bodyText).toContain('before communicating the claim number to the customer');
+    expect(rendered.bodyText).toContain('A claim has been created in IAS');
+  });
+
+  it('says "revised" for an API case (the claim already existed in IAS)', () => {
+    const rendered = render('CLAIM_APPROVAL_REVIEW', { caseId: 'case-123', claimNo: 'CL-999', revised: true });
+    expect(rendered.bodyText).toContain('A claim has been revised in IAS');
   });
 });
 

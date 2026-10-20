@@ -163,8 +163,8 @@ export function ReviewWorkspacePage() {
               or fixed it in IAS, lets the case go on to the next job without leaving the review page. */}
           {isSuperAdmin() && <CaseOverridePanel key={`override-${id}`} caseRecord={caseRecord} override={override} summary={assessmentSummary} />}
           {/* Each finding is corrected in place (Edit / Mark OK / Mark wrong); here only the corrections made so far. */}
-          <CaseCorrectionPanel key={id} caseId={id} corrections={corrections} />
-          <ReviewerChecklistPanel key={id} caseId={id} requests={requests} />
+          <CaseCorrectionPanel key={`corrections-${id}`} caseId={id} corrections={corrections} />
+          <ReviewerChecklistPanel key={`requests-${id}`} caseId={id} requests={requests} />
         </section>
       </div>
     </div>
