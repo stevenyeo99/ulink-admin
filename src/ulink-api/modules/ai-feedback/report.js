@@ -6,7 +6,7 @@
 const { Op } = require('sequelize');
 const { Case, CaseEvent, AiFeedback } = require('../../db/models');
 const { OVERRIDE_AREAS, OVERRIDE_FINDINGS } = require('../case-override/override');
-const { WRONG_STEP_LABELS } = require('./corrections');
+const { WRONG_STEP_LABELS, EXCEPTION_STEPS } = require('./corrections');
 
 // ponytail: newest 5000 rows per source; page or stream when a date range really holds more.
 const ROW_LIMIT = 5000;
@@ -19,7 +19,9 @@ function feedbackRow(f) {
   return {
     at: f.createdAt,
     caseId: f.caseId,
-    type: confirm ? 'Confirmed right' : f.item?.startsWith('member:') ? 'Member finding accepted (not AI)' : 'Correction',
+    type: confirm ? 'Confirmed right'
+      : f.item?.startsWith('member:') ? 'Member finding accepted (not AI)'
+        : EXCEPTION_STEPS.includes(f.wrongStep) ? 'Accepted as an exception (not AI)' : 'Correction',
     item: f.label,
     aiFinding: shown(f.aiValue),
     aiConfidence: f.aiConfidence ?? null,

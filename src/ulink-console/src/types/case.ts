@@ -393,7 +393,8 @@ export interface CaseClaim {
 }
 
 // Per-item correction (SYSTEM_4 E4-12, ulink-api modules/ai-feedback/corrections.js).
-export type WrongStep = 'reading' | 'mapping' | 'check';
+// ias_outdated / exception: the AI was right, a person lets a check pass anyway (check verdicts only).
+export type WrongStep = 'reading' | 'mapping' | 'check' | 'ias_outdated' | 'exception';
 
 export interface CorrectionOption {
   kind: 'value' | 'verdict';

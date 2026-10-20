@@ -2,7 +2,7 @@
 // migrations/20261015120000-create-ai-feedback.js, 20261015140000-ai-feedback-confirm.js and modules/ai-feedback.
 // KINDS / WRONG_STEPS must match the table's check constraints (tests/aiFeedback.test.js guards that).
 const KINDS = ['value', 'verdict', 'confirm'];
-const WRONG_STEPS = ['reading', 'mapping', 'check'];
+const WRONG_STEPS = ['reading', 'mapping', 'check', 'ias_outdated', 'exception'];
 
 module.exports = (sequelize, DataTypes) => {
   const AiFeedback = sequelize.define(

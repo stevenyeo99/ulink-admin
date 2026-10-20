@@ -35,7 +35,7 @@ export interface FeedbackRow {
   claimNo: string | null;
   tpaCaseNumber: string | null;
   source: string | null;
-  type: 'Correction' | 'Confirmed right' | 'Override';
+  type: 'Correction' | 'Confirmed right' | 'Override' | 'Member finding accepted (not AI)' | 'Accepted as an exception (not AI)';
   item: string;
   aiFinding: string;
   aiConfidence: number | null;

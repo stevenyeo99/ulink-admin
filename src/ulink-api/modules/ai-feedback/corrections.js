@@ -14,7 +14,11 @@ const WRONG_STEP_LABELS = {
   reading: 'the page was misread',
   mapping: 'read right but put in the wrong field',
   check: "the check's decision was wrong",
+  // The AI was right; a person lets the check pass anyway (owner, 2026-10-20). Not AI mistakes: check verdicts only.
+  ias_outdated: 'the IAS record is out of date',
+  exception: 'the AI was right, accepted as an exception',
 };
+const EXCEPTION_STEPS = ['ias_outdated', 'exception'];
 
 // Checklist lines a person may set pass / fail. Not: mandatory fields (correct the value instead), and the lines that
 // only report on the values read (format, evidence) or vitamins (a person approves those claims anyway).
@@ -84,6 +88,7 @@ function validateCorrection(body, options) {
   const option = options.find((o) => o.kind === body?.kind && o.item === body?.item);
   if (!option) return { error: 'Pick a value or check that can be corrected on this case.' };
   if (!WRONG_STEP_LABELS[body.wrongStep]) return { error: `Say what went wrong: ${Object.keys(WRONG_STEP_LABELS).join(', ')}.` };
+  if (EXCEPTION_STEPS.includes(body.wrongStep) && option.kind !== 'verdict') return { error: 'A changed value is a misread or a wrong field, not an exception.' };
   if (typeof body.reason !== 'string' || body.reason.trim().length < 3) return { error: 'Add a comment: why the AI was wrong.' };
 
   if (option.kind === 'verdict') {
@@ -218,4 +223,4 @@ function correctionHold(result, fields) {
   return !result.passed && (fields?.corrections || []).length ? ['a person corrected items on this case and sends the request'] : [];
 }
 
-module.exports = { WRONG_STEP_LABELS, recheckFrom, correctionHold, correctionOptions, validateCorrection, aiOriginal, applyCorrection, applyVerdicts, correctionText };
+module.exports = { WRONG_STEP_LABELS, EXCEPTION_STEPS, recheckFrom, correctionHold, correctionOptions, validateCorrection, aiOriginal, applyCorrection, applyVerdicts, correctionText };

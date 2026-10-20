@@ -2,7 +2,7 @@ const { sequelize, Case, ClaimRoute, CaseEvent } = require('../../db/models');
 const config = require('../../config');
 const { pickDiagnosis } = require('./diagnosisPicker');
 const { pickBenefit } = require('./benefitPicker');
-const { voucherKey, sameVoucher } = require('./preparationReview');
+const { voucherKey, sameVoucher, diagnosisSource, sameDiagnosis } = require('./preparationReview');
 const { buildPayload } = require('./payloadBuilder');
 const { vitaminRejection } = require('../document-checking/checklist');
 const { stpDecision } = require('./stpEligibility');
@@ -53,7 +53,8 @@ async function checkCase(caseRecord) {
   // a new stop when unsure).
   const choice = caseRecord.preparationChoice || null;
   const chosen = choice && { by: choice.by, comment: choice.comment };
-  const chosenDiagnosis = choice?.diagnosis?.text === (diagnosisText || null) ? choice.diagnosis : null;
+  const source = diagnosisSource(medical);
+  const chosenDiagnosis = choice?.diagnosis && sameDiagnosis(choice.diagnosis, { source, text: diagnosisText || null }) ? choice.diagnosis : null;
   const diagnosisPick = chosenDiagnosis
     ? { ...chosenDiagnosis.aiPick, pick: { diagCode: chosenDiagnosis.diagCode, diagDesc: chosenDiagnosis.diagDesc }, defaulted: false, chosen }
     : await pickDiagnosis(diagnosisText, { searchText: illnessText });
@@ -111,7 +112,7 @@ async function checkCase(caseRecord) {
   // which is the literal IAS-bound submission (see payloadBuilder.js's header comment).
   const claimPrepMeta = {
     // text: what the pick actually searched with (English); translation: the Burmese original, when translated.
-    diagnosis: { text: diagnosisText || null, translation, ...diagnosisPick },
+    diagnosis: { text: diagnosisText || null, source, translation, ...diagnosisPick },
     lines: lineMeta,
   };
 

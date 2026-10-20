@@ -40,9 +40,9 @@ const correct = (f, body, check = evaluateDocumentChecks(f)) => {
 beforeEach(() => jest.clearAllMocks());
 
 it('the model lists match the table constraints', () => {
-  // The latest migration that sets each constraint (kind: E5b added 'confirm'; wrong_step: unchanged since E4a).
+  // The latest migration that sets each constraint (kind: E5b added 'confirm'; wrong_step: the two exception answers).
   const read = (file) => fs.readFileSync(path.join(__dirname, `../db/migrations/${file}`), 'utf8');
-  const latest = (name) => [read('20261015140000-ai-feedback-confirm.js'), read('20261015120000-create-ai-feedback.js')]
+  const latest = (name) => [read('20261020110000-ai-feedback-exception-steps.js'), read('20261015140000-ai-feedback-confirm.js'), read('20261015120000-create-ai-feedback.js')]
     .map((m) => m.match(new RegExp(`${name} CHECK \\(\\w+ IN \\(([^)]*)\\)`))).find(Boolean)[1];
   const constraint = (name) => latest(name).split(',').map((v) => v.trim().replace(/'/g, ''));
   const model = require('../db/models/aiFeedback')({ define: () => ({}) }, new Proxy({}, { get: () => () => ({}) }));
@@ -307,4 +307,15 @@ describe('POST /api/cases/:id/confirmations — "✓ Right" (E5b)', () => {
     expect(status).toBe(200);
     expect(body.confirmation.id).toBe('f7');
   });
+});
+
+it('the two exception answers are for check verdicts only, and the report shows them apart from AI corrections', () => {
+  const { validateCorrection } = require('../modules/ai-feedback/corrections');
+  const verdict = { kind: 'verdict', item: 'HOSPITAL_NAME_INCONSISTENT', label: 'Hospital', type: 'verdict', current: false, canFail: true };
+  const value = { kind: 'value', item: 'claim.total_claim_amount', label: 'Claimed amount', type: 'amount', current: 100 };
+  expect(validateCorrection({ kind: 'verdict', item: verdict.item, passed: true, reason: 'IAS census not updated', wrongStep: 'ias_outdated' }, [verdict]).error).toBeUndefined();
+  expect(validateCorrection({ kind: 'value', item: value.item, value: '120', reason: 'customer typed it', wrongStep: 'exception' }, [value]).error).toMatch(/not an exception/);
+  const { feedbackRow } = require('../modules/ai-feedback/report');
+  expect(feedbackRow({ kind: 'verdict', item: verdict.item, wrongStep: 'exception', aiValue: false, correctedValue: true }).type).toBe('Accepted as an exception (not AI)');
+  expect(feedbackRow({ kind: 'verdict', item: verdict.item, wrongStep: 'check', aiValue: false, correctedValue: true }).type).toBe('Correction');
 });

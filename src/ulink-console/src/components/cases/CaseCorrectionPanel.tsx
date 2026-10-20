@@ -10,6 +10,8 @@ const WRONG_STEPS: Record<WrongStep, string> = {
   reading: 'The page was misread',
   mapping: 'Read right, but put in the wrong field',
   check: "The check's decision was wrong",
+  ias_outdated: 'The IAS record is out of date',
+  exception: 'The AI was right, accepted as an exception',
 };
 
 const shown = (v: Correction['aiValue']) => (v === true ? 'passed' : v === false ? 'failed' : v == null ? '—' : String(v));

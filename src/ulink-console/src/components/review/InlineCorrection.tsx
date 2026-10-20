@@ -5,7 +5,11 @@ const WRONG_STEPS: Record<WrongStep, string> = {
   reading: 'The page was misread',
   mapping: 'Read right, but put in the wrong field',
   check: "The check's decision was wrong",
+  ias_outdated: 'IAS record is out of date',
+  exception: 'AI was right, accepted as an exception',
 };
+// For a changed value: only a misread or a wrong field (the API refuses the exceptions there).
+const VALUE_STEPS: WrongStep[] = ['reading', 'mapping'];
 
 const inputClass =
   'w-full rounded-lg border border-slate-900/10 bg-white px-2.5 py-1.5 text-sm text-slate-800 outline-none focus:border-ulink-orange focus:ring-2 focus:ring-ulink-orange/20';
@@ -51,7 +55,7 @@ export function InlineCorrection({ draft, onChange, onCancel }: { draft: Correct
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-slate-600">What went wrong?</span>
           <select value={draft.wrongStep} onChange={(e) => set({ wrongStep: e.target.value as WrongStep })} className={inputClass}>
-            {Object.entries(WRONG_STEPS).map(([id, label]) => (
+            {Object.entries(WRONG_STEPS).filter(([id]) => draft.option.kind === 'verdict' || VALUE_STEPS.includes(id as WrongStep)).map(([id, label]) => (
               <option key={id} value={id}>{label}</option>
             ))}
           </select>

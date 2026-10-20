@@ -49,4 +49,9 @@ function reviewNeeded(claimPrepMeta, { holdUnsureDiagnosis, holdUnsureBenefit, h
 const voucherKey = (item) => ({ subtotal: item?.subtotal ?? null, date: item?.date ?? null, voucherType: item?.voucher_type ?? null });
 const sameVoucher = (a, b) => a.subtotal === b.subtotal && a.date === b.date && a.voucherType === b.voucherType;
 
-module.exports = { diagnosisUnsure, benefitUnsure, rejectionUnsure, reviewNeeded, voucherKey, sameVoucher };
+// What identifies the diagnosis for a person's code: the claim form's own text (source), before the AI translates it —
+// the translation's wording changes from run to run. A choice saved before source was kept: the English text.
+const diagnosisSource = (medical) => `${medical?.detail_of_illness_injury || ''}\n${medical?.full_description_of_treatment || ''}`;
+const sameDiagnosis = (choice, now) => (choice?.source != null ? choice.source === now.source : choice?.text === now.text);
+
+module.exports = { diagnosisUnsure, benefitUnsure, rejectionUnsure, reviewNeeded, voucherKey, sameVoucher, diagnosisSource, sameDiagnosis };

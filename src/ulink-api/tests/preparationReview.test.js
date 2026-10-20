@@ -74,6 +74,17 @@ it('asks the AI again when the diagnosis text changed since the person chose (ne
   expect(prepared.claimPrepMeta.diagnosis.chosen).toBeUndefined();
 });
 
+it("keeps the person's code when the AI words the translation differently on the next run (case 401bce9c loop)", async () => {
+  const { toEnglishMedicalText } = require('../modules/ias-claim-preparation/medicalTranslation');
+  toEnglishMedicalText.mockResolvedValueOnce({ diagnosis: 'Itching', treatment: 'medication prescribed for low immunity', translation: 'my' });
+  const saved = { ...caseRecord.preparationChoice.diagnosis, text: 'Diagnosis/illness: Itching\nTreatment: prescribed medication for decreased immunity', source: 'Toothache\nUltrasonic scaling GI filling' };
+
+  const prepared = await checkCase({ ...caseRecord, preparationChoice: { ...caseRecord.preparationChoice, diagnosis: saved } });
+
+  expect(pickDiagnosis).not.toHaveBeenCalled();
+  expect(prepared.claimPrepMeta.diagnosis).toMatchObject({ pick: { diagCode: 'K05.1' }, source: 'Toothache\nUltrasonic scaling GI filling' });
+});
+
 // Vouchers on one claim may have different benefit types (owner, 2026-10-20) — each its own choice.
 describe('chosen benefits', () => {
   const items = [{ subtotal: 30000, date: '2026-10-02', voucher_type: 'consultation' }, { subtotal: 50000, date: '2026-10-02', voucher_type: 'pharmacy' }];

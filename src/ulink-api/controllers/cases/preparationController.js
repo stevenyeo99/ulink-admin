@@ -1,7 +1,7 @@
 const { sequelize, Case, CaseEvent, ApiCaseStep } = require('../../db/models');
 const { findCandidates, findByCode } = require('../../modules/icd10/lookup');
 const { uniqueBenefitCandidates } = require('../../modules/shared/iasBenefits');
-const { voucherKey, sameVoucher } = require('../../modules/ias-claim-preparation/preparationReview');
+const { voucherKey, sameVoucher, sameDiagnosis, diagnosisSource } = require('../../modules/ias-claim-preparation/preparationReview');
 const { requiredComment } = require('./casesController');
 const { endClaim } = require('../../modules/case-claim/claim');
 const logger = require('../../utils/logger');
@@ -34,7 +34,10 @@ async function choosePreparation(req, res) {
 
   const steps = await ApiCaseStep.findAll({ where: { caseId: caseRecord.id }, order: [['createdAt', 'ASC']] });
   const meta = latestDone(steps, 'api-claim-preparation')?.claimPrepMeta;
-  const items = latestDone(steps, 'api-claim-recognition')?.extractedFields?.invoices?.items || [];
+  const recognized = latestDone(steps, 'api-claim-recognition')?.extractedFields;
+  const items = recognized?.invoices?.items || [];
+  // The diagnosis's own text, before translation; a preparation from before it was kept: from the recognition.
+  const sourceNow = meta?.diagnosis?.source ?? diagnosisSource(recognized?.medical);
   const plan = uniqueBenefitCandidates(latestDone(steps, 'api-member-verification')?.iasMemberInfoResponse?.payload?.memberPlans);
   const previous = latestDone(steps, BLOCK_NAME);
   if (!meta) return bad(res, 'The claim has not been prepared yet.');
@@ -46,11 +49,11 @@ async function choosePreparation(req, res) {
   if (typeof diagCode === 'string' && diagCode.trim()) {
     const code = await findByCode(diagCode.trim());
     if (!code) return bad(res, 'Diagnosis: choose an ICD-10 code from the list or the search.');
-    const { text = null, translation, chosen, review: _review, ...ai } = meta.diagnosis || {};
-    diagnosis = { ...code, text, aiPick: chosen && previous?.diagnosis ? previous.diagnosis.aiPick : ai };
+    const { text = null, source: _source, translation, chosen, review: _review, ...ai } = meta.diagnosis || {};
+    diagnosis = { ...code, text, source: sourceNow, aiPick: chosen && previous?.diagnosis ? previous.diagnosis.aiPick : ai };
   } else if (review.diagnosis) {
     return bad(res, 'Diagnosis: choose the code — the AI was not sure of it.');
-  } else if (previous?.diagnosis?.text === meta.diagnosis?.text) {
+  } else if (previous?.diagnosis && sameDiagnosis(previous.diagnosis, { source: sourceNow, text: meta.diagnosis?.text ?? null })) {
     diagnosis = previous.diagnosis;
   }
 

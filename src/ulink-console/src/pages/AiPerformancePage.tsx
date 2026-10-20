@@ -140,7 +140,7 @@ function downloadCsv(rows: FeedbackRow[], from: string, to: string) {
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
-const TYPES: FeedbackRow['type'][] = ['Correction', 'Confirmed right', 'Override'];
+const TYPES: FeedbackRow['type'][] = ['Correction', 'Confirmed right', 'Override', 'Member finding accepted (not AI)', 'Accepted as an exception (not AI)'];
 const inputClass = 'rounded-lg border border-slate-900/10 bg-white px-2 py-1.5 text-sm text-slate-800';
 
 /**
