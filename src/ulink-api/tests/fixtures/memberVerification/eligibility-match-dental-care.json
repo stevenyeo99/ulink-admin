@@ -1,0 +1,6 @@
+{
+  "description": "Claim form says \"dental care\"; IAS names the type \"Dental\" (case AYA-CL-26043772) - covered, no flag.",
+  "extractedFields": { "claim": { "claim_benefit_type": "reimbursement", "type_of_patient": "dental care" } },
+  "memberPlansRaw": [{ "coverageLimits": [{ "limit_type_code": "H", "limit_type_desc": "Benefit Head", "benefits": [{ "benefit_type_code": "DT", "benefit_type_desc": "Dental", "benefit_head_code": "DT", "benefit_head_desc": "Dental" }], "amt_yr": 999999999, "amt_vis": null, "amt_life": null }] }],
+  "expected": { "eligibilityFlag": null }
+}

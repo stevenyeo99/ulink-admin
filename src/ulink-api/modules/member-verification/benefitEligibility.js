@@ -17,6 +17,9 @@ function norm(value) {
   return trimmed === '' ? null : trimmed;
 }
 
+// The claim form's own words for a type IAS names differently (case AYA-CL-26043772: "dental care" vs IAS "Dental").
+const PATIENT_TYPE_ALIASES = { 'dental care': 'dental', 'optical care': 'vision' };
+
 /**
  * Only `type_of_patient` (Outpatient/Inpatient) is comparable to IAS's benefit-type
  * candidates — `claim.claim_benefit_type` is the claim's payment MECHANISM (Reimbursement/
@@ -33,8 +36,9 @@ function checkBenefitEligibility(extractedFields, memberPlansRaw) {
   const candidates = uniqueBenefitCandidates(memberPlansRaw);
   if (candidates.length === 0) return null;
 
-  const typeOfPatient = norm(extractedFields.claim?.type_of_patient);
-  if (!typeOfPatient) return null;
+  const written = norm(extractedFields.claim?.type_of_patient);
+  if (!written) return null;
+  const typeOfPatient = PATIENT_TYPE_ALIASES[written] || written;
 
   const matches = candidates.some((c) => typeOfPatient === norm(c.type) || typeOfPatient === norm(c.typeDesc));
   if (matches) return null;
