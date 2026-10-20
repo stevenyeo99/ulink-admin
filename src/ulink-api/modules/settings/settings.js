@@ -13,6 +13,9 @@ const DEFAULTS = {
   // The document check passed, but the AI was unsure (at or below the threshold) about an item: the case stops for a
   // person to confirm before claim preparation / the IAS revision (SYSTEM_4 E4-09). Off until turned on.
   holdUnsureDocumentPass: false,
+  // API cases: the AI was unsure of the ICD-10 diagnosis code (it fell back to the default, or at or below the
+  // threshold): the case stops for a person to choose the code before the IAS revision. On (owner, 2026-10-20).
+  holdUnsureDiagnosis: true,
   // A voucher with vitamins / supplements: the claim is approved by a person (JD3), never STP (SYSTEM_4 E4-10).
   // On from the start — ULINK asked for it at the 02-Oct demo.
   vitaminsBlockStp: true,

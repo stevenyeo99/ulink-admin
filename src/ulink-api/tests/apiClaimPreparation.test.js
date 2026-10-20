@@ -5,8 +5,10 @@
 // A reviewer's own lines (SYSTEM_4 E4-28): none open — no database here.
 jest.mock('../modules/case-requests/requests', () => ({ ...jest.requireActual('../modules/case-requests/requests'), openRequests: jest.fn(async () => []) }));
 jest.mock('../modules/ias-claim-preparation/service', () => ({ checkCase: jest.fn() }));
+jest.mock('../modules/settings/settings', () => ({ getSettings: jest.fn() }));
 
 const { checkCase } = require('../modules/ias-claim-preparation/service');
+const { getSettings } = require('../modules/settings/settings');
 const { job, barcodeFields, apiFlags } = require('../modules/api-claim-preparation/service');
 
 const createdAt = new Date('2026-09-24T03:00:00Z');
@@ -37,7 +39,7 @@ beforeEach(() => jest.clearAllMocks());
 it('runs whether the documents passed or not (after api-console-upload), with every earlier output it needs', () => {
   expect(job).toMatchObject({
     inputStatus: ['API_READY_FOR_CLAIM_PREPARATION'],
-    optionalInputs: ['case-override', 'api-console-barcode'],
+    optionalInputs: ['case-override', 'api-console-barcode', 'diagnosis-review'],
     inputs: ['api-claim-intake', 'api-material-download', 'api-claim-recognition', 'api-member-verification', 'api-document-checking'],
   });
 });
@@ -59,6 +61,7 @@ it("builds the email flow's payload from the earlier outputs, then the revision 
     createdAt,
     consoleBarcode: 'FIRST',
     consoleUploadResult: { completedAt: '2026-09-24T06:00:00.000Z' },
+    diagnosisChoice: null,
   });
   expect(result).toMatchObject({
     nextStatus: 'API_CLAIM_PAYLOAD_PREPARED',
@@ -158,4 +161,36 @@ it("a reviewer's own line still open: the revision is suspended, even after an e
   checkCase.mockResolvedValue(prepared(false));
   const result = await job.process({ caseRecord, input: { ...inputWith(passed), 'case-override': { from: 'API_DOCUMENTS_REVIEW' } } });
   expect(result.output.payload.isSuspense).toBe('Y');
+});
+
+// The AI unsure of the diagnosis code (owner, 2026-10-20): with the switch on, a person chooses it before the revision.
+describe('unsure diagnosis code', () => {
+  const withDiagnosis = (diagnosis) => ({ ...prepared(false), claimPrepMeta: { lines: [], diagnosis } });
+  const settings = (holdUnsureDiagnosis) => getSettings.mockResolvedValue({ holdUnsureDiagnosis, aiConfidenceThreshold: 0.7 });
+
+  it.each([
+    ['the default code', { pick: { diagCode: 'R69' }, defaulted: true, confidence: 0.4 }],
+    ['at the threshold', { pick: { diagCode: 'K05.1' }, defaulted: false, confidence: 0.7 }],
+  ])('switch on + %s: waits for a person', async (_label, diagnosis) => {
+    settings(true);
+    checkCase.mockResolvedValue(withDiagnosis(diagnosis));
+    const result = await job.process({ caseRecord, input: inputWith(passed) });
+    expect(result.nextStatus).toBe('API_DIAGNOSIS_REVIEW');
+  });
+
+  it('switch off, the AI sure, or a person already chose: revision prepared', async () => {
+    settings(false);
+    checkCase.mockResolvedValue(withDiagnosis({ defaulted: true, confidence: 0.4 }));
+    expect((await job.process({ caseRecord, input: inputWith(passed) })).nextStatus).toBe('API_CLAIM_PAYLOAD_PREPARED');
+
+    settings(true);
+    checkCase.mockResolvedValue(withDiagnosis({ defaulted: false, confidence: 0.71 }));
+    expect((await job.process({ caseRecord, input: inputWith(passed) })).nextStatus).toBe('API_CLAIM_PAYLOAD_PREPARED');
+
+    checkCase.mockResolvedValue(withDiagnosis({ defaulted: false, confidence: 0.4, chosen: { by: 'ulink', comment: 'gingivitis on the slip' } }));
+    const choice = { diagCode: 'K05.1', diagDesc: 'Chronic gingivitis', aiPick: { confidence: 0.4 }, by: 'ulink', comment: 'gingivitis on the slip' };
+    const result = await job.process({ caseRecord, input: { ...inputWith(passed), 'diagnosis-review': choice } });
+    expect(checkCase.mock.calls.at(-1)[0].diagnosisChoice).toEqual(choice);
+    expect(result.nextStatus).toBe('API_CLAIM_PAYLOAD_PREPARED');
+  });
 });

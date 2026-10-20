@@ -47,6 +47,8 @@ function nextAction(fields = {}, summary = null, events = []) {
     case 'DOCUMENTS_UNSURE':
     case 'API_DOCUMENTS_UNSURE':
       return act(`The documents passed, but the AI was unsure about: ${points || 'see the review points'}. Check them against the documents, then Confirm and continue.`);
+    case 'API_DIAGNOSIS_REVIEW':
+      return act(`The AI wasn't sure of the diagnosis code (${fields.claimPrepMeta?.diagnosis?.pick?.diagCode || 'none'}). Choose the code on this page; the revision is then prepared with it.`);
     case 'MANUAL_REVIEW':
     case 'API_MANUAL_REVIEW':
       return act(`${said || "The AI couldn't read the documents reliably."} Read the documents and handle the claim manually.`);

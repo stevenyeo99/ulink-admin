@@ -36,6 +36,7 @@ const STATUS_REASONS = {
   DOCUMENTS_UNSURE: 'AI unsure',
   API_DOCUMENTS_UNSURE: 'AI unsure',
   API_UPLOAD_NOT_IN_CONSOLE: SYSTEM_ISSUE,
+  API_DIAGNOSIS_REVIEW: 'AI unsure',
 };
 
 const rank = (reason) => {

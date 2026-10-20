@@ -46,7 +46,13 @@ async function checkCase(caseRecord) {
     illnessText && `Diagnosis/illness: ${illnessText}`,
     treatmentText && `Treatment: ${treatmentText}`,
   ].filter(Boolean).join('\n');
-  const diagnosisPick = await pickDiagnosis(diagnosisText, { searchText: illnessText });
+  // A person chose the code (API: the case stopped at API_DIAGNOSIS_REVIEW): it wins, the AI is not asked again. The
+  // AI's own pick, reason and candidates stay alongside, for the assessment. Only for the text it was chosen for: new
+  // documents or a correction that change the diagnosis text get a new AI pick (and a new hold when unsure).
+  const choice = caseRecord.diagnosisChoice?.text === (diagnosisText || null) ? caseRecord.diagnosisChoice : null;
+  const diagnosisPick = choice
+    ? { ...choice.aiPick, pick: { diagCode: choice.diagCode, diagDesc: choice.diagDesc }, defaulted: false, chosen: { by: choice.by, comment: choice.comment } }
+    : await pickDiagnosis(diagnosisText, { searchText: illnessText });
 
   const memberPlansRaw = iasMemberInfoResponse?.payload?.memberPlans;
   const benefitContext = {

@@ -38,6 +38,11 @@ const AI_SWITCHES: { key: SwitchKey; title: string; text: string }[] = [
     text: 'When every document check passed but the AI was unsure about one (at or below the threshold above), the case waits for a person to confirm before anything goes to IAS.',
   },
   {
+    key: 'holdUnsureDiagnosis',
+    title: "Diagnosis code the AI wasn't sure of: a person chooses it first",
+    text: 'API cases: when the AI used the default code (R69) or was unsure of the ICD-10 code (at or below the threshold above), the case waits for a person to choose the code before the revision goes to IAS.',
+  },
+  {
     key: 'usePastCorrections',
     title: 'The AI learns from trusted corrections',
     text: "Before the AI reads a claim, it gets up to 5 trusted reviewer notes from past claims of the same hospital or clinic (what was misread, and why). It never gets a past amount, date or name — every value comes from this claim's own pages. The case page shows which notes it used.",

@@ -130,8 +130,16 @@ export interface ClaimPickMeta {
   defaulted?: boolean;
 }
 
+// An ICD-10 code the diagnosis search found (ulink-api modules/icd10/lookup.js).
+export interface DiagnosisCandidate {
+  diagCode: string;
+  diagDesc: string;
+  similarity?: number;
+}
+
 export interface ClaimPrepMeta {
-  diagnosis: ClaimPickMeta & { text: string | null };
+  // reason: the AI's own words; chosen: a person chose the code (API_DIAGNOSIS_REVIEW).
+  diagnosis: ClaimPickMeta & { text: string | null; reason?: string | null; chosen?: { by: string; comment: string } };
   lines: (ClaimPickMeta & { voucherType: string | null; subtotal: number | null })[];
 }
 

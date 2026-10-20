@@ -5,6 +5,7 @@ const { createCorrection, createConfirmation, trustCorrection } = require('../co
 const { claim, release } = require('../controllers/cases/claimController');
 const { requestInformation, markRequestDone, getEmailDraft } = require('../controllers/cases/requestsController');
 const { requireNotHeldByOther } = require('../modules/case-claim/claim');
+const { chooseDiagnosis, searchDiagnosis } = require('../controllers/cases/diagnosisController');
 
 const router = express.Router();
 
@@ -446,6 +447,46 @@ router.post('/:id/reset', requireRole('super_admin'), requireNotHeldByOther, res
  *       409: { description: The case changed meanwhile }
  */
 router.post('/:id/retry', requireNotHeldByOther, retryCase);
+
+/**
+ * @openapi
+ * /api/cases/{id}/diagnosis:
+ *   post:
+ *     tags: [cases]
+ *     summary: Choose the ICD-10 diagnosis code of an API case the AI was unsure of (super admin)
+ *     description: >
+ *       Only at API_DIAGNOSIS_REVIEW (switch holdUnsureDiagnosis), only a code in the ICD-10 table. Stores the choice
+ *       (with the AI's own pick) as a diagnosis-review step and moves the case to API_READY_FOR_CLAIM_PREPARATION; claim
+ *       preparation then uses this code and does not ask the AI again. A comment is required and kept in the history.
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { type: object, required: [diagCode, comment], properties: { diagCode: { type: string }, comment: { type: string, minLength: 3 } } }
+ *     responses:
+ *       200: { description: "{ caseId, currentStatus, diagnosis }" }
+ *       400: { description: No comment, an unknown code, or the case is not waiting for a diagnosis code }
+ *       409: { description: The case changed meanwhile }
+ */
+router.post('/:id/diagnosis', requireRole('super_admin'), requireNotHeldByOther, chooseDiagnosis);
+
+/**
+ * @openapi
+ * /api/cases/{id}/diagnosis-candidates:
+ *   get:
+ *     tags: [cases]
+ *     summary: ICD-10 codes nearest to a text, for choosing a diagnosis code (super admin; several seconds — an exact scan)
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+ *       - { name: text, in: query, required: true, schema: { type: string, minLength: 3 } }
+ *     responses:
+ *       200: { description: "{ candidates: [{ diagOid, diagCode, diagDesc, similarity }] }" }
+ *       400: { description: Text too short }
+ *       502: { description: The search is not available }
+ */
+router.get('/:id/diagnosis-candidates', requireRole('super_admin'), searchDiagnosis);
 
 /**
  * @openapi

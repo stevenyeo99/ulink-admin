@@ -23,6 +23,8 @@ export interface Switches {
   holdUnsureMissingDocsEmail: boolean;
   // Passed, but the AI unsure: a person confirms first (SYSTEM_4 E4-09).
   holdUnsureDocumentPass: boolean;
+  // API cases: the AI unsure of the diagnosis code — a person chooses it before the IAS revision. On by default.
+  holdUnsureDiagnosis: boolean;
   // A voucher with vitamins / supplements: a person approves, never STP (SYSTEM_4 E4-10). On by default.
   vitaminsBlockStp: boolean;
   // Reviewer notes from past claims of the same hospital given to the AI — lessons, never values (SYSTEM_4 F3). On by default.

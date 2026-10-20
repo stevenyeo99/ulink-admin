@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { ApprovalsResponse, CaseClaim, Correction, EmailDraft, TimelineEntry, WrongStep, CaseListQuery, CaseOverview, ReviewQueueResponse, CaseStatusCatalog, GetCaseResponse, ListCasesResponse, LlmCall, OverrideCaseResponse, ResetCaseResponse } from '../types/case';
+import type { ApprovalsResponse, CaseClaim, Correction, DiagnosisCandidate, EmailDraft, TimelineEntry, WrongStep, CaseListQuery, CaseOverview, ReviewQueueResponse, CaseStatusCatalog, GetCaseResponse, ListCasesResponse, LlmCall, OverrideCaseResponse, ResetCaseResponse } from '../types/case';
 import type { Source } from '../types/pipeline';
 
 export function listCases(query: CaseListQuery = {}): Promise<ListCasesResponse> {
@@ -44,6 +44,16 @@ export function getLlmCalls(id: string): Promise<{ calls: LlmCall[] }> {
 // Try a case IAS or the console refused again: back one step, the next pipeline run does the rest (any logged-in user).
 export function retryCase(id: string, action: string, comment: string): Promise<{ caseId: string; previousStatus: string; currentStatus: string }> {
   return request(`/api/cases/${id}/retry`, { method: 'POST', body: JSON.stringify({ action, comment }) });
+}
+
+// The AI unsure of the diagnosis code (API_DIAGNOSIS_REVIEW): a person chooses it; claim preparation then uses it (super admin).
+export function chooseDiagnosis(id: string, diagCode: string, comment: string): Promise<{ caseId: string; currentStatus: string }> {
+  return request(`/api/cases/${id}/diagnosis`, { method: 'POST', body: JSON.stringify({ diagCode, comment }) });
+}
+
+// ICD-10 codes nearest to a text — an exact scan, several seconds.
+export function searchDiagnosis(id: string, text: string): Promise<{ candidates: DiagnosisCandidate[] }> {
+  return request(`/api/cases/${id}/diagnosis-candidates?text=${encodeURIComponent(text)}`);
 }
 
 // finding: why the check was wrong (an id from the case's override.findings). Who overrode is the

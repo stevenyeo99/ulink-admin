@@ -387,7 +387,16 @@ function preparationLines(claimPrepMeta, isStp) {
     const translated = diagnosis.translation
       ? `Translated from Burmese as: "${diagnosis.text}"${diagnosis.translation.note ? ` (${diagnosis.translation.note})` : ''}.`
       : null;
-    lines.push(line({
+    // A person chose the code (API_DIAGNOSIS_REVIEW): no longer the AI's guess.
+    if (diagnosis.chosen) {
+      lines.push(line({
+        decision: 'Diagnosis code',
+        result: code,
+        status: 'ok',
+        why: [`Chosen by ${diagnosis.chosen.by}: ${diagnosis.chosen.comment}`, translated].filter(Boolean).join(' '),
+        verified: VERIFIED.PERSON,
+      }));
+    } else lines.push(line({
       decision: 'Diagnosis code',
       result: diagnosis.defaulted ? `${code} (default)` : code,
       status: diagnosis.defaulted ? 'issue' : 'ok',

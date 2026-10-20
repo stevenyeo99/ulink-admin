@@ -3,6 +3,7 @@ const { runApiJob } = require('../api-pipeline/runApiJob');
 const { checkCase } = require('../ias-claim-preparation/service');
 const { barcodeFields } = require('../shared/barcodeFields');
 const { openRequests } = require('../case-requests/requests');
+const { getSettings } = require('../settings/settings');
 
 // api-claim-preparation: API case workflow job (docs/imp/day1/api-case-workflow.md section 6.6).
 //
@@ -57,6 +58,8 @@ async function processCase({ caseRecord, input }) {
     consoleBarcode: barcode,
     // Documents aren't complete yet on a suspended claim, so no completion date.
     consoleUploadResult: { completedAt: documentsComplete ? documentCheck.checkedAt : null },
+    // A person chose the diagnosis code (POST /api/cases/:id/diagnosis): used as is, on every later preparation too.
+    diagnosisChoice: input['diagnosis-review'] || null,
   });
 
   const payload = {
@@ -67,15 +70,32 @@ async function processCase({ caseRecord, input }) {
     ...apiFlags({ isStp: prepared.isStp, documentsComplete }),
   };
 
+  const output = {
+    payload,
+    documentsComplete,
+    diagnosis: prepared.diagnosis,
+    lines: prepared.lines,
+    isStp: prepared.isStp,
+    claimPrepMeta: prepared.claimPrepMeta,
+  };
+
+  // The AI was unsure of the diagnosis code (switch holdUnsureDiagnosis, owner 2026-10-20): a person chooses it
+  // before anything goes to IAS. Unsure = the default code, or at or below the AI confidence threshold.
+  const diagnosis = prepared.claimPrepMeta?.diagnosis;
+  if (diagnosis && !diagnosis.chosen) {
+    const settings = await getSettings();
+    const unsure = diagnosis.defaulted || (typeof diagnosis.confidence === 'number' && diagnosis.confidence <= settings.aiConfidenceThreshold);
+    if (unsure && settings.holdUnsureDiagnosis) {
+      return {
+        output,
+        nextStatus: 'API_DIAGNOSIS_REVIEW',
+        message: `Claim ${claim.clNo}: the AI wasn't sure of the diagnosis code (${prepared.diagnosis?.diagCode ?? 'none'}); a person chooses it before the revision`,
+      };
+    }
+  }
+
   return {
-    output: {
-      payload,
-      documentsComplete,
-      diagnosis: prepared.diagnosis,
-      lines: prepared.lines,
-      isStp: prepared.isStp,
-      claimPrepMeta: prepared.claimPrepMeta,
-    },
+    output,
     nextStatus: 'API_CLAIM_PAYLOAD_PREPARED',
     message: `Claim ${claim.clNo} revision prepared (${prepared.lines.length} line(s), STP: ${prepared.isStp ? 'yes' : 'no'}, `
       + `documents ${documentsComplete ? 'complete' : 'incomplete → suspense'})`,
@@ -88,7 +108,7 @@ const job = {
   // barcode wait, if a case-page upload went to the console).
   inputStatus: ['API_READY_FOR_CLAIM_PREPARATION'],
   inputs: ['api-claim-intake', 'api-material-download', 'api-claim-recognition', 'api-member-verification', 'api-document-checking'],
-  optionalInputs: ['case-override', 'api-console-barcode'],
+  optionalInputs: ['case-override', 'api-console-barcode', 'diagnosis-review'],
   batchLimit: config.iasClaimPreparation.batchLimit,
   process: processCase,
 };

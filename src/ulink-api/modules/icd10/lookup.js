@@ -38,4 +38,13 @@ async function findCandidates(freeText, { topK = 5 } = {}) {
   }));
 }
 
-module.exports = { findCandidates };
+// One code exactly as IAS lists it (a person's choice is checked against the table, never taken on trust), or null.
+async function findByCode(diagCode) {
+  const [row] = await sequelize.query(
+    'select diag_oid, diag_code, diag_desc from ulink_icd10_diagnoses where diag_code = :diagCode limit 1',
+    { replacements: { diagCode }, type: sequelize.QueryTypes.SELECT }
+  );
+  return row ? { diagOid: row.diag_oid, diagCode: row.diag_code, diagDesc: row.diag_desc } : null;
+}
+
+module.exports = { findCandidates, findByCode };

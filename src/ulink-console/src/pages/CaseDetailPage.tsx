@@ -11,6 +11,7 @@ import { EmailThreadSection } from '../components/cases/EmailThreadSection';
 import { CaseAdminActions } from '../components/cases/CaseAdminActions';
 import { CaseOverridePanel } from '../components/cases/CaseOverridePanel';
 import { CaseRetryPanel } from '../components/cases/CaseRetryPanel';
+import { DiagnosisReviewPanel } from '../components/cases/DiagnosisReviewPanel';
 import { ReviewerChecklistPanel } from '../components/cases/ReviewerChecklistPanel';
 import { LlmCallsSection } from '../components/cases/LlmCallsSection';
 import { CaseUploadPanel } from '../components/cases/CaseUploadPanel';
@@ -141,6 +142,7 @@ export function CaseDetailPage() {
       ) : null}
 
       <CaseRetryPanel key={caseRecord.id} caseId={caseRecord.id} retry={retry} />
+      {isSuperAdmin() && <DiagnosisReviewPanel key={`diagnosis-${caseRecord.id}`} caseRecord={caseRecord} />}
       {isSuperAdmin() && <CaseOverridePanel caseRecord={caseRecord} override={override} summary={assessmentSummary} />}
       <ReviewerChecklistPanel key={caseRecord.id} caseId={caseRecord.id} requests={requests} />
       {/* Corrections are made per finding on the review page; here the ones made so far and a link there. */}
