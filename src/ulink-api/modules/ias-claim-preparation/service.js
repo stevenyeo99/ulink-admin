@@ -58,6 +58,8 @@ async function checkCase(caseRecord) {
     ? { ...chosenDiagnosis.aiPick, pick: { diagCode: chosenDiagnosis.diagCode, diagDesc: chosenDiagnosis.diagDesc }, defaulted: false, chosen }
     : await pickDiagnosis(diagnosisText, { searchText: illnessText });
   const chosenBenefit = (i, item) => (choice?.benefits || []).find((b) => b.voucher === i && sameVoucher(b.key, voucherKey(item)));
+  // A person's manual rejection (vitamins / supplements) on a voucher: theirs, on any voucher, while it is the same.
+  const chosenRejection = (i, item) => (choice?.rejections || []).find((r) => r.voucher === i && sameVoucher(r.key, voucherKey(item)));
 
   const memberPlansRaw = iasMemberInfoResponse?.payload?.memberPlans;
   const benefitContext = {
@@ -81,9 +83,19 @@ async function checkCase(caseRecord) {
       const benefitPick = mine
         ? { ...mine.aiPick, pick: { benefitType: mine.benefitType, benefitHead: mine.benefitHead }, chosen }
         : await pickBenefit({ ...benefitContext, voucherType: item.voucher_type }, memberPlansRaw);
-      // Vitamins / supplements on this voucher → man_rej set 1 on its IAS item (SYSTEM_4 E4-10, owner 2026-10-16).
-      lines.push({ subtotal: item.subtotal, benefit: benefitPick.pick, vitamin: vitaminRejection(item) });
-      lineMeta.push({ voucherType: item.voucher_type ?? null, subtotal: item.subtotal ?? null, ...benefitPick });
+      // Vitamins / supplements on this voucher → man_rej set 1 on its IAS item (SYSTEM_4 E4-10, owner 2026-10-16) — the
+      // AI's, or a person's (amount null: no rejection on this voucher).
+      const ai = vitaminRejection(item);
+      const rejection = chosenRejection(i, item);
+      const vitamin = rejection
+        ? (rejection.amount == null ? null : { vitamin_exclude_amount: rejection.amount, vitamin_remark: rejection.remark })
+        : ai;
+      lines.push({ subtotal: item.subtotal, benefit: benefitPick.pick, vitamin });
+      lineMeta.push({
+        voucherType: item.voucher_type ?? null, subtotal: item.subtotal ?? null, ...benefitPick,
+        // found / confidence: the AI's reading (has_vitamin_or_supplement); ai: its rejection; rejection: the one sent.
+        vitamin: { found: item.has_vitamin_or_supplement ?? null, confidence: item.vitamin_confidence ?? null, ai, rejection: vitamin, ...(rejection ? { chosen } : {}) },
+      });
     }
   } else {
     // Shouldn't reach this job in practice (document-checking would have flagged a missing
@@ -119,8 +131,9 @@ async function checkCase(caseRecord) {
     currency: 'MMK',
     lines: lines.map((line) => ({ benefitType: line.benefit?.benefitType ?? null, subtotal: line.subtotal })),
     diagCode: diagnosisPick.pick?.diagCode ?? null,
-    // Vouchers the AI read vitamins / supplements on (SYSTEM_4 E4-10) — numbered like the document check's line.
-    vitaminVouchers: invoiceItems.map((item, i) => (item.has_vitamin_or_supplement === true ? i + 1 : null)).filter(Boolean),
+    // Vouchers the AI read vitamins / supplements on, or a person rejected them on (SYSTEM_4 E4-10) — numbered like the
+    // document check's line.
+    vitaminVouchers: invoiceItems.map((item, i) => (item.has_vitamin_or_supplement === true || lines[i]?.vitamin ? i + 1 : null)).filter(Boolean),
   });
   const stp = stpResult.isStp;
   claimPrepMeta.stp = stpResult;

@@ -80,12 +80,13 @@ async function processCase({ caseRecord, input }) {
     claimPrepMeta: prepared.claimPrepMeta,
   };
 
-  // The AI wasn't sure of the diagnosis code or of a voucher's benefit (switches holdUnsureDiagnosis /
-  // holdUnsureBenefit, owner 2026-10-20): a person decides before anything goes to IAS (preparationReview.js).
+  // The AI wasn't sure of the diagnosis code, a voucher's benefit or its vitamins / supplements (switches
+  // holdUnsureDiagnosis / holdUnsureBenefit / holdUnsureVitamin, owner 2026-10-20): a person decides before anything goes to IAS (preparationReview.js).
   const review = prepared.claimPrepMeta ? reviewNeeded(prepared.claimPrepMeta, await getSettings()) : null;
   if (review) {
     const what = [review.diagnosis && `the diagnosis code (${prepared.diagnosis?.diagCode ?? 'none'})`,
-      review.vouchers.length && `the benefit of voucher ${review.vouchers.map((i) => i + 1).join(', ')}`].filter(Boolean).join(' and ');
+      review.vouchers.length && `the benefit of voucher ${review.vouchers.map((i) => i + 1).join(', ')}`,
+      review.rejections.length && `the vitamins / supplements of voucher ${review.rejections.map((i) => i + 1).join(', ')}`].filter(Boolean).join(' and ');
     return {
       output: { ...output, claimPrepMeta: { ...output.claimPrepMeta, review } },
       nextStatus: 'API_PREPARATION_REVIEW',

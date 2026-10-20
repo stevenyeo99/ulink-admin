@@ -69,7 +69,10 @@ it('found: one rejection per voucher — its lines added up, one remark naming t
   ]);
   // The same text is the "why" on the case, in team emails and in the IAS remark.
   expect(summaryOf(line).lines.find((l) => l.decision === 'Vitamins / supplements').why)
-    .toContain('Voucher 1: Vit C - 10,000 MMK, Calcium D - 2,500 MMK, Obimin - amount not read is not covered due to supplement.');
+    .toContain('Voucher 1: Vit C - 10,000 MMK, Calcium D - 2,500 MMK, Obimin - amount not read (subtotal 12,500 MMK, some amounts not read) is not covered due to supplement.');
+  // Each voucher's subtotal and the total: review page and team emails; the IAS item's remark stays without them.
+  expect(line.note).toContain('Voucher 3: Zinc - amount not read is not covered due to supplement.');
+  expect(line.note).toMatch(/Total vitamins \/ supplements: 12,500 MMK, some amounts not read\.$/);
   expect(vitaminPoint(summaryOf(line))).toBeDefined();
 });
 

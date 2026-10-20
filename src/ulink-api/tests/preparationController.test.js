@@ -64,3 +64,19 @@ it('saves the choices with the AI picks beside them and sends the case back to c
   })]);
   expect(CaseEvent.create).toHaveBeenCalledWith(expect.objectContaining({ reasonCode: 'MANUAL_PREPARATION', message: expect.stringContaining('voucher 1 DT/SCP (AI: DT/-)') }), expect.anything());
 });
+
+it('manual rejections (vitamins / supplements): on any voucher, flagged ones decided, amount within the voucher, a remark', async () => {
+  ApiCaseStep.findAll.mockResolvedValue(steps({ diagnosis: false, vouchers: [], rejections: [1] }));
+  expect((await send({ rejections: [{ voucher: 0, amount: 1000, remark: 'Zinc' }] })).body.error.message).toMatch(/voucher 2/);
+  expect((await send({ rejections: [{ voucher: 1, amount: 60000, remark: 'Zinc' }] })).body.error.message).toMatch(/more than the voucher/);
+  expect((await send({ rejections: [{ voucher: 1, amount: 0, remark: 'Zinc' }] })).body.error.message).toMatch(/more than 0/);
+  expect((await send({ rejections: [{ voucher: 1, amount: 6000, remark: ' ' }] })).body.error.message).toMatch(/remark/);
+  expect(ApiCaseStep.create).not.toHaveBeenCalled();
+
+  const { status } = await send({ rejections: [{ voucher: 1, amount: 6000, remark: 'Superkids Z - 6,000 MMK is not covered due to supplement.' }, { voucher: 0, amount: null }] });
+  expect(status).toBe(200);
+  expect(ApiCaseStep.create.mock.calls[0][0].output.rejections).toEqual([
+    { voucher: 1, key: { subtotal: 50000, date: '2026-10-02', voucherType: 'pharmacy' }, amount: 6000, remark: 'Superkids Z - 6,000 MMK is not covered due to supplement.' },
+    { voucher: 0, key: { subtotal: 30000, date: '2026-10-02', voucherType: 'consultation' }, amount: null, remark: null },
+  ]);
+});

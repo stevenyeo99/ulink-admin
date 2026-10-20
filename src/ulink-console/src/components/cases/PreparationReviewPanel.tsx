@@ -11,17 +11,23 @@ const percent = (c: number | null | undefined) => (typeof c === 'number' ? ` (${
 const named = (code: string | null | undefined, desc: string | null | undefined) => (code ? `${code}${desc ? ` ${desc}` : ''}` : '(none)');
 
 type Choice = { type: string; head: string };
+// A voucher's manual rejection as typed; removed: no rejection on this voucher.
+type Rejection = { amount: string; remark: string; removed: boolean };
+const money = (n: number | null | undefined) => (typeof n === 'number' ? n.toLocaleString('en-US') : '—');
 
 /**
  * Step 2 of 2 — the claim preparation stop (API_PREPARATION_REVIEW, ulink-api preparationController.js): the AI wasn't
  * sure of the diagnosis code or of a voucher's benefit. What needs a person is open; what the AI was sure of is folded
  * and can still be changed. A benefit is a type, then a head under it, from the member's own plan; vouchers on one claim
- * may have different types. One comment, one save; claim preparation then runs again with these. Super admin.
+ * may have different types. With vitamins / supplements on the claim, each voucher's manual rejection (IAS man_rej set 1:
+ * amount and remark) can be edited, removed or added on any voucher — the vouchers the AI was unsure of must be set.
+ * One comment, one save; claim preparation then runs again with these. Super admin.
  */
 export function PreparationReviewPanel({ caseRecord }: { caseRecord: CaseDetail }) {
   const queryClient = useQueryClient();
   const meta = caseRecord.claimPrepMeta;
   const review = meta?.review ?? { diagnosis: false, vouchers: [] };
+  const flaggedRejections = review.rejections ?? [];
   const diagnosis = meta?.diagnosis;
   const aiCode = diagnosis?.pick as DiagnosisCandidate | null | undefined;
   const lines = meta?.lines ?? [];
@@ -36,12 +42,18 @@ export function PreparationReviewPanel({ caseRecord }: { caseRecord: CaseDetail 
   const [choices, setChoices] = useState<Record<number, Choice>>({});
   const [showSure, setShowSure] = useState(false);
   const [comment, setComment] = useState('');
+  // Flagged vouchers start open with the AI's rejection, if any, to check.
+  const [rejections, setRejections] = useState<Record<number, Rejection>>(() => Object.fromEntries(flaggedRejections.map((i) => {
+    const ai = meta?.lines[i]?.vitamin?.ai;
+    return [i, { amount: ai?.vitamin_exclude_amount != null ? String(ai.vitamin_exclude_amount) : '', remark: ai?.vitamin_remark ?? '', removed: false }];
+  })));
   const search = useMutation({ mutationFn: () => searchDiagnosis(caseRecord.id, text.trim()) });
   const save = useMutation({
     mutationFn: () =>
       choosePreparation(caseRecord.id, {
         ...(code ? { diagCode: code } : {}),
         benefits: Object.entries(choices).map(([i, c]) => ({ voucher: Number(i), benefitType: c.type, benefitHead: c.head || null })),
+        rejections: Object.entries(rejections).map(([i, r]) => ({ voucher: Number(i), amount: r.removed ? null : Number(r.amount), remark: r.removed ? null : r.remark.trim() })),
         comment: comment.trim(),
       }),
     onSuccess: () => {
@@ -55,12 +67,27 @@ export function PreparationReviewPanel({ caseRecord }: { caseRecord: CaseDetail 
   const setChoice = (i: number, c: Choice | null) => setChoices(({ [i]: _old, ...rest }) => (c ? { ...rest, [i]: c } : rest));
   // A voucher choice is complete with a type, and a head when the plan has heads for that type.
   const complete = (c?: Choice) => Boolean(c?.type) && (!headsOf(c!.type).length || Boolean(c!.head));
+  const setRejection = (i: number, r: Rejection | null) => setRejections(({ [i]: _old, ...rest }) => (r ? { ...rest, [i]: r } : rest));
+  // A rejection is complete when removed, or with an amount above 0 up to the voucher's, and a remark.
+  const rejectionProblem = (i: number, r: Rejection) => {
+    if (r.removed) return null;
+    const amount = Number(r.amount);
+    if (!r.amount.trim() || !Number.isFinite(amount) || amount <= 0) return 'an amount above 0';
+    if (typeof lines[i]?.subtotal === 'number' && amount > lines[i].subtotal!) return `at most ${money(lines[i].subtotal)}`;
+    return r.remark.trim() ? null : 'a remark';
+  };
   const missing = [
     ...(review.diagnosis && !code ? ['the diagnosis code'] : []),
     ...flagged.filter((i) => !complete(choices[i])).map((i) => `voucher ${i + 1}`),
     ...Object.entries(choices).filter(([, c]) => !complete(c)).map(([i]) => `voucher ${Number(i) + 1}`),
+    ...Object.entries(rejections).map(([i, r]) => [i, rejectionProblem(Number(i), r)] as const).filter(([, p]) => p)
+      .map(([i, p]) => `voucher ${Number(i) + 1} rejection (${p})`),
   ].filter((m, i, all) => all.indexOf(m) === i);
-  const changed = Boolean(code) || Object.keys(choices).length > 0;
+  const changed = Boolean(code) || Object.keys(choices).length > 0 || Object.keys(rejections).length > 0;
+  // Shown only on a claim with vitamins / supplements: the AI found some, one was rejected, or the AI was unsure.
+  const vitaminCase = flaggedRejections.length > 0 || lines.some((l) => l.vitamin?.found === true || l.vitamin?.rejection);
+  const rejectionRows = lines.map((_, i) => i).filter((i) => rejections[i] || lines[i].vitamin?.rejection);
+  const addable = lines.map((_, i) => i).filter((i) => !rejectionRows.includes(i));
 
   const codes = [aiCode, ...((diagnosis?.candidates ?? []) as DiagnosisCandidate[]), ...(search.data?.candidates ?? [])]
     .filter((c): c is DiagnosisCandidate => Boolean(c?.diagCode))
@@ -159,6 +186,80 @@ export function PreparationReviewPanel({ caseRecord }: { caseRecord: CaseDetail 
               </button>
               {showSure && <ul className="divide-y divide-slate-900/5">{sure.map(voucherRow)}</ul>}
             </>
+          )}
+        </>
+      )}
+
+      {vitaminCase && (
+        <>
+          <h3 className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">Manual rejection (vitamins / supplements)</h3>
+          {flaggedRejections.length > 0 && (
+            <p className="mt-1 text-xs text-amber-700">The AI was not sure of voucher {flaggedRejections.map((i) => i + 1).join(', ')}: check the bill and set the rejection, or No rejection.</p>
+          )}
+          <ul className="divide-y divide-slate-900/5">
+            {rejectionRows.map((i) => {
+              const line = lines[i];
+              const r = rejections[i];
+              const sent = line.vitamin?.rejection;
+              return (
+                <li key={i} className="py-2 text-sm">
+                  <p className="text-slate-800">
+                    <span className="font-medium">Voucher {i + 1}</span>{line.voucherType ? ` · ${line.voucherType}` : ''} · {money(line.subtotal)}
+                    {!r && sent && <span className="text-slate-500"> — {line.vitamin?.chosen ? 'chosen' : 'AI'}: {money(sent.vitamin_exclude_amount)} MMK</span>}
+                  </p>
+                  {!r && sent?.vitamin_remark && <p className="mt-0.5 text-xs text-slate-500">{sent.vitamin_remark}</p>}
+                  {r && !r.removed && (
+                    <div className="mt-2 grid gap-2 sm:grid-cols-[8rem_1fr]">
+                      <input
+                        inputMode="numeric"
+                        value={r.amount}
+                        onChange={(e) => setRejection(i, { ...r, amount: e.target.value.replace(/[^0-9.]/g, '') })}
+                        placeholder="Amount"
+                        aria-label={`Voucher ${i + 1} rejected amount`}
+                        className={selectClass}
+                      />
+                      <input
+                        value={r.remark}
+                        onChange={(e) => setRejection(i, { ...r, remark: e.target.value })}
+                        placeholder="e.g. Vit C - 10,000 MMK is not covered due to supplement."
+                        aria-label={`Voucher ${i + 1} remark`}
+                        maxLength={500}
+                        className={selectClass}
+                      />
+                    </div>
+                  )}
+                  {r?.removed && <p className="mt-0.5 text-xs text-slate-500">No rejection on this voucher.</p>}
+                  <div className="mt-1 flex flex-wrap gap-3 text-xs">
+                    {(!r || r.removed) && (
+                      <button
+                        onClick={() => setRejection(i, { amount: sent?.vitamin_exclude_amount != null ? String(sent.vitamin_exclude_amount) : '', remark: sent?.vitamin_remark ?? '', removed: false })}
+                        className="text-ulink-orange-dark hover:underline"
+                      >
+                        Edit
+                      </button>
+                    )}
+                    {/* Added on a voucher with no rejection: Remove takes the row away; otherwise No rejection is a decision. */}
+                    {!r?.removed && (sent || flaggedRejections.includes(i)) && (
+                      <button onClick={() => setRejection(i, { amount: '', remark: '', removed: true })} className="text-ulink-orange-dark hover:underline">No rejection</button>
+                    )}
+                    {r && !flaggedRejections.includes(i) && (
+                      <button onClick={() => setRejection(i, null)} className="text-slate-500 hover:underline">{sent ? 'Keep as it was' : 'Remove'}</button>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          {addable.length > 0 && (
+            <select
+              value=""
+              onChange={(e) => e.target.value && setRejection(Number(e.target.value), { amount: '', remark: '', removed: false })}
+              aria-label="Add a rejection to a voucher"
+              className={`mt-2 sm:w-64 ${selectClass}`}
+            >
+              <option value="">+ Add rejection to a voucher</option>
+              {addable.map((i) => <option key={i} value={i}>Voucher {i + 1}{lines[i].voucherType ? ` · ${lines[i].voucherType}` : ''} · {money(lines[i].subtotal)}</option>)}
+            </select>
           )}
         </>
       )}

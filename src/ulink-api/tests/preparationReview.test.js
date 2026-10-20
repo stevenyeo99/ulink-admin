@@ -107,3 +107,38 @@ describe('chosen benefits', () => {
     expect(prepared.claimPrepMeta.lines[1].chosen).toBeUndefined();
   });
 });
+
+describe('manual rejections (vitamins / supplements)', () => {
+  const { reviewNeeded } = require('../modules/ias-claim-preparation/preparationReview');
+  const items = [
+    { subtotal: 16920, date: '2026-09-24', voucher_type: 'pharmacy', has_vitamin_or_supplement: false, vitamin_confidence: 1 },
+    { subtotal: 60200, date: '2026-09-26', voucher_type: 'pharmacy', has_vitamin_or_supplement: true, vitamin_confidence: 0.5, vitamin_items: [{ name: 'Chewy Vitamin C', amount: 11000 }] },
+  ];
+  const withRejections = (rejections) => ({
+    ...caseRecord,
+    extractedFields: { ...caseRecord.extractedFields, invoices: { items } },
+    preparationChoice: { diagnosis: null, benefits: [], rejections, by: 'ulink', comment: 'checked the bill' },
+  });
+  const key = (item) => ({ subtotal: item.subtotal, date: item.date, voucherType: item.voucher_type });
+  const settings = { holdUnsureVitamin: true, aiConfidenceThreshold: 0.7 };
+  beforeEach(() => pickDiagnosis.mockResolvedValue({ pick: { diagCode: 'K05.1', diagDesc: 'Chronic gingivitis' }, defaulted: false, confidence: 0.9, candidates: [] }));
+
+  it('the AI unsure of a voucher\'s vitamins: the stop names that voucher (switch on only)', async () => {
+    const prepared = await checkCase(withRejections([]));
+    expect(prepared.payload.Items[1]).toMatchObject({ man_rej_amt_1: 11000 });
+    expect(reviewNeeded(prepared.claimPrepMeta, settings)).toEqual({ diagnosis: false, vouchers: [], rejections: [1] });
+    expect(reviewNeeded(prepared.claimPrepMeta, { ...settings, holdUnsureVitamin: false })).toBeNull();
+  });
+
+  it("a person's rejections win: added on a voucher the AI missed, removed on another; the assessment says who", async () => {
+    const prepared = await checkCase(withRejections([
+      { voucher: 0, key: key(items[0]), amount: 6000, remark: 'Superkids Z - 6,000 MMK is not covered due to supplement.' },
+      { voucher: 1, key: key(items[1]), amount: null, remark: null },
+    ]));
+    expect(prepared.payload.Items[0]).toMatchObject({ man_rej_amt_1: 6000, man_rej_remark_1: 'Superkids Z - 6,000 MMK is not covered due to supplement.' });
+    expect(Object.keys(prepared.payload.Items[1]).filter((k) => k.includes('man_rej'))).toEqual([]);
+    expect(reviewNeeded(prepared.claimPrepMeta, settings)).toBeNull();
+    const line = buildAssessmentSummary({ source: 'API', claimPrepMeta: prepared.claimPrepMeta }).lines.find((l) => l.decision === 'Manual rejection (voucher 1)');
+    expect(line).toMatchObject({ result: '6,000 MMK', verified: 'Corrected by a person' });
+  });
+});

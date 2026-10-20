@@ -819,8 +819,9 @@ function evaluateDocumentChecks(extractedFields) {
 // couldn't tell for some voucher (unsureVouchers). No vouchers at all: no line.
 // Found (owner, 2026-10-16): per voucher, its vitamin / supplement lines become one rejection — vitamin_exclude_amount
 // (the amounts read, added up) and vitamin_remark ("Vit C - 10,000 MMK, Calcium D - 2,500 MMK is not covered due to
-// supplement.") — which go on that voucher's IAS item as man_rej set 1 (payloadBuilder.js). The remarks are this line's
-// note, so the reviewer, the team email and the IAS remark (AiSummaryRemark) carry them. The claimed amount is not
+// supplement.") — which go on that voucher's IAS item as man_rej set 1 (payloadBuilder.js). This line's note has the
+// same remarks with each voucher's subtotal, then the total of all vouchers (owner, 2026-10-20), so the reviewer, the
+// team email and the IAS remark (AiSummaryRemark, the same text as the team email) carry them. The claimed amount is not
 // changed. vitamin_items: { name, amount }; a plain name = an older case, no amount. A "none" the AI was unsure of
 // (vitamin_confidence at or below the threshold) counts as "couldn't tell", so a person checks the bill.
 const amountText = (n) => Number(n).toLocaleString('en-US');
@@ -828,18 +829,39 @@ const amountText = (n) => Number(n).toLocaleString('en-US');
 // One voucher's rejection, or null when the AI found none on it. vitamin_exclude_amount null = no amount read, and
 // vitamin_remark null = no item named (JD3 enters them in IAS).
 // Currency: MMK, as the IAS payload (payloadBuilder.js) — no multi-currency support yet.
+function vitaminLines(item) {
+  return (item.vitamin_items || []).filter((v) => typeof v === 'string' || v?.name)
+    .map((v) => (typeof v === 'string' ? { name: v, amount: null } : { name: v.name, amount: Number.isFinite(v.amount) ? v.amount : null }));
+}
+
+// The amounts read, added up (null = none read); partial = some line's amount was not read.
+function amountsRead(lines) {
+  const priced = lines.filter((v) => v.amount != null);
+  return { total: priced.length ? priced.reduce((sum, v) => sum + v.amount, 0) : null, partial: priced.length < lines.length };
+}
+
+const namedLines = (lines) => lines.map((v) => `${v.name} - ${v.amount == null ? 'amount not read' : `${amountText(v.amount)} MMK`}`).join(', ');
+const readText = ({ total, partial }) => `${amountText(total)} MMK${partial ? ', some amounts not read' : ''}`;
+
 function vitaminRejection(item) {
   if (item?.has_vitamin_or_supplement !== true) return null;
-  const lines = (item.vitamin_items || []).filter((v) => typeof v === 'string' || v?.name)
-    .map((v) => (typeof v === 'string' ? { name: v, amount: null } : { name: v.name, amount: Number.isFinite(v.amount) ? v.amount : null }));
-  const priced = lines.filter((v) => v.amount != null);
-  const named = lines.map((v) => `${v.name} - ${v.amount == null ? 'amount not read' : `${amountText(v.amount)} MMK`}`).join(', ');
-  const total = priced.length ? priced.reduce((sum, v) => sum + v.amount, 0) : null;
+  const lines = vitaminLines(item);
+  const named = namedLines(lines);
+  const { total } = amountsRead(lines);
   return {
     // More than the voucher itself = a misread; IAS would refuse the item, so JD3 enters it instead.
     vitamin_exclude_amount: total != null && typeof item.subtotal === 'number' && total > item.subtotal ? null : total,
     vitamin_remark: named ? `${named} is not covered due to supplement.` : null,
   };
+}
+
+// The note's line for one voucher: as the IAS remark, plus the voucher's subtotal (owner, 2026-10-20: review page and
+// team emails only, so man_rej_remark_1 stays without it).
+function vitaminNoteLine(n, item) {
+  const lines = vitaminLines(item);
+  if (!lines.length) return null;
+  const read = amountsRead(lines);
+  return `Voucher ${n}: ${namedLines(lines)}${read.total == null ? '' : ` (subtotal ${readText(read)})`} is not covered due to supplement.`;
 }
 
 function vitaminCheck(fields) {
@@ -851,6 +873,7 @@ function vitaminCheck(fields) {
     && (item.has_vitamin_or_supplement !== false || isUnsure(item.vitamin_confidence)));
   const list = (ns) => `voucher${ns.length > 1 ? 's' : ''} ${ns.join(', ')}`;
   const rejections = vouchers.map((n) => ({ voucher: n, ...vitaminRejection(items[n - 1]) }));
+  const all = amountsRead(vouchers.flatMap((n) => vitaminLines(items[n - 1])));
 
   return {
     code: 'VITAMIN_OR_SUPPLEMENT',
@@ -860,7 +883,8 @@ function vitaminCheck(fields) {
     unsureVouchers,
     rejections,
     note: vouchers.length
-      ? [`Vitamins / supplements on ${list(vouchers)}.`, ...rejections.filter((r) => r.vitamin_remark).map((r) => `Voucher ${r.voucher}: ${r.vitamin_remark}`)].join(' ')
+      ? [`Vitamins / supplements on ${list(vouchers)}.`, ...vouchers.map((n) => vitaminNoteLine(n, items[n - 1])).filter(Boolean),
+        ...(all.total == null ? [] : [`Total vitamins / supplements: ${readText(all)}.`])].join(' ')
       : unsureVouchers.length ? `The AI couldn't tell for ${list(unsureVouchers)} — check its items on the bill.` : null,
   };
 }

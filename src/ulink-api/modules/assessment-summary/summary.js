@@ -423,18 +423,29 @@ function preparationLines(claimPrepMeta, isStp) {
         why: `Chosen by ${benefit.chosen.by}: ${benefit.chosen.comment}`,
         verified: VERIFIED.PERSON,
       }));
-      return;
+    } else {
+      lines.push(line({
+        decision: `Benefit (voucher ${i + 1}${benefit.voucherType ? `, ${benefit.voucherType}` : ''})`,
+        result: picked,
+        status: benefit.pick ? 'ok' : 'issue',
+        why: benefit.pick ? benefit.reason
+          : ['No benefit could be picked with enough confidence.', benefit.reason && `AI: ${benefit.reason}`].filter(Boolean).join(' '),
+        confidence: formatConfidence(benefit.confidence),
+        verified: VERIFIED.AI,
+        review: benefit.pick ? lowConfidenceReview(benefit.confidence) : REVIEW.AI_UNSURE,
+      }));
     }
-    lines.push(line({
-      decision: `Benefit (voucher ${i + 1}${benefit.voucherType ? `, ${benefit.voucherType}` : ''})`,
-      result: picked,
-      status: benefit.pick ? 'ok' : 'issue',
-      why: benefit.pick ? benefit.reason
-        : ['No benefit could be picked with enough confidence.', benefit.reason && `AI: ${benefit.reason}`].filter(Boolean).join(' '),
-      confidence: formatConfidence(benefit.confidence),
-      verified: VERIFIED.AI,
-      review: benefit.pick ? lowConfidenceReview(benefit.confidence) : REVIEW.AI_UNSURE,
-    }));
+    // A person set this voucher's manual rejection (vitamins / supplements) at the preparation stop.
+    const vitamin = benefit.vitamin;
+    if (vitamin?.chosen) {
+      lines.push(line({
+        decision: `Manual rejection (voucher ${i + 1})`,
+        result: vitamin.rejection ? `${Number(vitamin.rejection.vitamin_exclude_amount).toLocaleString('en-US')} MMK` : 'None',
+        status: 'ok',
+        why: [`Chosen by ${vitamin.chosen.by}: ${vitamin.chosen.comment}`, vitamin.rejection && `Remark: ${vitamin.rejection.vitamin_remark}`].filter(Boolean).join(' '),
+        verified: VERIFIED.PERSON,
+      }));
+    }
   });
 
   if (isStp === true || isStp === false) {

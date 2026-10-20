@@ -178,7 +178,7 @@ describe('claim preparation stop', () => {
     checkCase.mockResolvedValue(withDiagnosis(diagnosis));
     const result = await job.process({ caseRecord, input: inputWith(passed) });
     expect(result.nextStatus).toBe('API_PREPARATION_REVIEW');
-    expect(result.output.claimPrepMeta.review).toEqual({ diagnosis: true, vouchers: [] });
+    expect(result.output.claimPrepMeta.review).toEqual({ diagnosis: true, vouchers: [], rejections: [] });
   });
 
   it("a voucher with no head on a plan that has heads, or an unsure pick: stops, naming the voucher", async () => {
@@ -192,7 +192,7 @@ describe('claim preparation stop', () => {
     checkCase.mockResolvedValue(withDiagnosis({ defaulted: false, confidence: 0.9 }, lines));
     const result = await job.process({ caseRecord, input: inputWith(passed) });
     expect(result.nextStatus).toBe('API_PREPARATION_REVIEW');
-    expect(result.output.claimPrepMeta.review).toEqual({ diagnosis: false, vouchers: [1, 2] });
+    expect(result.output.claimPrepMeta.review).toEqual({ diagnosis: false, vouchers: [1, 2], rejections: [] });
     expect(result.message).toMatch(/voucher 2, 3/);
   });
 

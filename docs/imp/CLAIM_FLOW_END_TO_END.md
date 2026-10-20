@@ -233,6 +233,7 @@ kept and counts as unsure.
 | **#1 Don't pay automatically when the AI was unsure** | Any open review point stops STP → JD3 approves. |
 | **#2 Don't email the customer when the AI is unsure a document is missing** | Customer email held; *Check before emailing customer*; the team sends the request or overrides. |
 | **#3 Documents the AI passed but wasn't sure about: a person confirms first** | All document checks passed, but one was scored at or below the threshold: *Check the AI's documents finding*; a person confirms before claim preparation / the IAS revision. Confirmed points then no longer block STP under #1. |
+| **#4 Vitamins / supplements the AI wasn't sure of: a person sets the manual rejection first** (API, `holdUnsureVitamin`, on) | The AI could not tell, was unsure, read no amount, or read an amount above the voucher: the case stops at `API_PREPARATION_REVIEW`. On the claim preparation panel, a person sets each voucher's rejected amount and remark (IAS `man_rej` set 1), removes one, or adds one on a voucher the AI missed. The revision then uses the person's values. |
 
 All only catch cases where the AI **knows** it is unsure. STP limits cap the risk of a "confidently wrong" case.
 

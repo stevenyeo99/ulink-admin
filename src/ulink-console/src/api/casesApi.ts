@@ -50,7 +50,13 @@ export function retryCase(id: string, action: string, comment: string): Promise<
 // wasn't sure of; claim preparation then uses them (super admin). voucher: 0-based.
 export function choosePreparation(
   id: string,
-  choice: { diagCode?: string; benefits: { voucher: number; benefitType: string; benefitHead: string | null }[]; comment: string }
+  choice: {
+    diagCode?: string;
+    benefits: { voucher: number; benefitType: string; benefitHead: string | null }[];
+    // A voucher's manual rejection (vitamins / supplements); amount null = none on that voucher.
+    rejections: { voucher: number; amount: number | null; remark: string | null }[];
+    comment: string;
+  }
 ): Promise<{ caseId: string; currentStatus: string }> {
   return request(`/api/cases/${id}/preparation`, { method: 'POST', body: JSON.stringify(choice) });
 }

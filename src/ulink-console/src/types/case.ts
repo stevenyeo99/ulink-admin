@@ -145,12 +145,26 @@ export interface BenefitCandidate {
   headDesc: string | null;
 }
 
+// A voucher's manual rejection for vitamins / supplements (IAS man_rej set 1). Amount null: none read.
+export interface ManualRejection {
+  vitamin_exclude_amount: number | null;
+  vitamin_remark: string | null;
+}
+
 export interface ClaimPrepMeta {
   // reason: the AI's own words; chosen: a person chose it (API_PREPARATION_REVIEW).
   diagnosis: ClaimPickMeta & { text: string | null; reason?: string | null; chosen?: { by: string; comment: string } };
-  lines: (ClaimPickMeta & { voucherType: string | null; subtotal: number | null; reason?: string | null; chosen?: { by: string; comment: string } })[];
-  // What the claim preparation stop asked a person to decide: the diagnosis, and the vouchers (0-based).
-  review?: { diagnosis: boolean; vouchers: number[] };
+  lines: (ClaimPickMeta & {
+    voucherType: string | null;
+    subtotal: number | null;
+    reason?: string | null;
+    chosen?: { by: string; comment: string };
+    // Vitamins / supplements on this voucher: the AI's reading (found, confidence) and rejection, and the one sent to IAS.
+    vitamin?: { found: boolean | null; confidence: number | null; ai: ManualRejection | null; rejection: ManualRejection | null; chosen?: { by: string; comment: string } };
+  })[];
+  // What the claim preparation stop asked a person to decide: the diagnosis, the vouchers' benefit and the vouchers'
+  // manual rejection (0-based).
+  review?: { diagnosis: boolean; vouchers: number[]; rejections?: number[] };
 }
 
 export interface EmailAttachment {

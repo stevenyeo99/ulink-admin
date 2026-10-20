@@ -1,5 +1,6 @@
 // Claim preparation stops for a person (API_PREPARATION_REVIEW, owner 2026-10-20) when the AI wasn't sure of the
-// diagnosis code or of a voucher's benefit — before anything goes to IAS. One rule for the job that stops the case
+// diagnosis code, of a voucher's benefit, or of a voucher's vitamins / supplements (its manual rejection) — before
+// anything goes to IAS. One rule for the job that stops the case
 // (api-claim-preparation), the save that lets it go on (preparationController) and the case page. Pure.
 
 const unsure = (confidence, threshold) => typeof confidence === 'number' && confidence <= threshold;
@@ -19,20 +20,33 @@ function benefitUnsure(line, threshold) {
   return unsure(line.confidence, threshold);
 }
 
+// A voucher's vitamins / supplements (line.vitamin, ias-claim-preparation): the AI couldn't tell, said "none" unsure, or
+// found some but was unsure, read no amount or an amount above the voucher, or named no item. A person's is decided.
+function rejectionUnsure(vitamin, threshold) {
+  if (!vitamin || vitamin.chosen) return false;
+  if (vitamin.found === null) return true;
+  if (unsure(vitamin.confidence, threshold)) return true;
+  return vitamin.found === true && (vitamin.ai?.vitamin_exclude_amount == null || !vitamin.ai?.vitamin_remark);
+}
+
 /**
- * What a person has to decide on this preparation, by the switches on: { diagnosis: bool, vouchers: [index…] } — or
+ * What a person has to decide on this preparation, by the switches on: { diagnosis: bool, vouchers: [index…],
+ * rejections: [index…] } (vouchers: the benefit; rejections: the manual rejection for vitamins / supplements) — or
  * null when nothing (the case goes on). claimPrepMeta: ias-claim-preparation's { diagnosis, lines }.
  */
-function reviewNeeded(claimPrepMeta, { holdUnsureDiagnosis, holdUnsureBenefit, aiConfidenceThreshold }) {
+function reviewNeeded(claimPrepMeta, { holdUnsureDiagnosis, holdUnsureBenefit, holdUnsureVitamin, aiConfidenceThreshold }) {
   const diagnosis = Boolean(holdUnsureDiagnosis) && diagnosisUnsure(claimPrepMeta?.diagnosis, aiConfidenceThreshold);
   const vouchers = holdUnsureBenefit
     ? (claimPrepMeta?.lines || []).map((line, i) => (benefitUnsure(line, aiConfidenceThreshold) ? i : null)).filter((i) => i !== null)
     : [];
-  return diagnosis || vouchers.length ? { diagnosis, vouchers } : null;
+  const rejections = holdUnsureVitamin
+    ? (claimPrepMeta?.lines || []).map((line, i) => (rejectionUnsure(line.vitamin, aiConfidenceThreshold) ? i : null)).filter((i) => i !== null)
+    : [];
+  return diagnosis || vouchers.length || rejections.length ? { diagnosis, vouchers, rejections } : null;
 }
 
 // What identifies a voucher for a person's benefit choice: a re-read that changes it drops the choice.
 const voucherKey = (item) => ({ subtotal: item?.subtotal ?? null, date: item?.date ?? null, voucherType: item?.voucher_type ?? null });
 const sameVoucher = (a, b) => a.subtotal === b.subtotal && a.date === b.date && a.voucherType === b.voucherType;
 
-module.exports = { diagnosisUnsure, benefitUnsure, reviewNeeded, voucherKey, sameVoucher };
+module.exports = { diagnosisUnsure, benefitUnsure, rejectionUnsure, reviewNeeded, voucherKey, sameVoucher };

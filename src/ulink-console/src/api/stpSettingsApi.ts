@@ -27,6 +27,8 @@ export interface Switches {
   holdUnsureDiagnosis: boolean;
   // API cases: no benefit, no head, or an unsure benefit on a voucher — a person chooses it first. On by default.
   holdUnsureBenefit: boolean;
+  // API cases: the AI unsure of a voucher's vitamins / supplements — a person sets the manual rejection first. On by default.
+  holdUnsureVitamin: boolean;
   // A voucher with vitamins / supplements: a person approves, never STP (SYSTEM_4 E4-10). On by default.
   vitaminsBlockStp: boolean;
   // Reviewer notes from past claims of the same hospital given to the AI — lessons, never values (SYSTEM_4 F3). On by default.
