@@ -1,6 +1,8 @@
 import { useEffect, useMemo } from 'react';
 import { ReactFlow, Background, BackgroundVariant, Controls, useReactFlow, type Node, type NodeMouseHandler } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { useQuery } from '@tanstack/react-query';
+import { getStpSettings } from '../../api/stpSettingsApi';
 import { PipelineNode } from './PipelineNode';
 import { PipelineEdge } from './PipelineEdge';
 import { EmailBadgeNode } from './EmailBadgeNode';
@@ -36,7 +38,9 @@ interface WorkflowCanvasProps {
 }
 
 export function WorkflowCanvas({ steps, source = 'EMAIL', onSelectNode }: WorkflowCanvasProps) {
-  const { nodes, edges } = useMemo(() => mergeStatus(steps, source), [steps, source]);
+  const { data: settings } = useQuery({ queryKey: ['stp-settings'], queryFn: getStpSettings, staleTime: 60_000 });
+  const customerMissingDocsEmail = settings?.switches.apiSendMissingDocumentsEmail ?? true;
+  const { nodes, edges } = useMemo(() => mergeStatus(steps, source, customerMissingDocsEmail), [steps, source, customerMissingDocsEmail]);
   const runningNodeId = nodes.find((node) => (node.data as PipelineNodeData).status === 'RUNNING')?.id;
 
   // Email badges aren't real blocks (see EMAIL_BADGES in pipelineGraph.ts) — clicking one

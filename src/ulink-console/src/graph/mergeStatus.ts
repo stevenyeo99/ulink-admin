@@ -55,7 +55,7 @@ function representativeStatus(steps: PipelineRunStep[]): NodeStatus {
  * from the graph layout itself and from WorkflowCanvas's rendering so the "what does the
  * data mean" logic has exactly one place to live.
  */
-export function mergeStatus(steps: PipelineRunStep[], source: Source = 'EMAIL'): { nodes: Node[]; edges: Edge[] } {
+export function mergeStatus(steps: PipelineRunStep[], source: Source = 'EMAIL', customerMissingDocsEmail = true): { nodes: Node[]; edges: Edge[] } {
   const layout = LAYOUTS[source];
   const stepsByBlock = new Map<string, PipelineRunStep[]>();
   for (const step of steps) {
@@ -86,20 +86,24 @@ export function mergeStatus(steps: PipelineRunStep[], source: Source = 'EMAIL'):
     };
   });
 
-  const badgeNodes: Node<EmailBadgeNodeData>[] = layout.badges.map((badge) => ({
-    id: badge.id,
-    type: 'emailBadgeNode',
-    position: { x: badge.x, y: badge.y },
-    width: 220,
-    height: 76,
-    data: {
-      label: badge.label,
-      blockName: badge.blockName,
-      audience: badge.audience,
-      status: representativeStatus(stepsByBlock.get(badge.blockName) ?? []),
-      steps: stepsByBlock.get(badge.blockName) ?? [],
-    },
-  }));
+  const badgeNodes: Node<EmailBadgeNodeData>[] = layout.badges.map((badge) => {
+    // The customer missing-documents email is off: the badge says who gets it instead.
+    const { label, audience } = (!customerMissingDocsEmail && badge.whenNoCustomerEmail) || badge;
+    return {
+      id: badge.id,
+      type: 'emailBadgeNode',
+      position: { x: badge.x, y: badge.y },
+      width: 220,
+      height: 76,
+      data: {
+        label,
+        blockName: badge.blockName,
+        audience,
+        status: representativeStatus(stepsByBlock.get(badge.blockName) ?? []),
+        steps: stepsByBlock.get(badge.blockName) ?? [],
+      },
+    };
+  });
 
   const nodes: Node[] = [...blockNodes, ...badgeNodes];
 

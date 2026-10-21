@@ -19,6 +19,8 @@ export interface EmailBadgeMeta {
   blockName: EmailSenderBlockName;
   label: string;
   audience: Audience;
+  /** Shown instead when the switch "API cases: email the customer about missing documents" is off (api-email-sender). */
+  whenNoCustomerEmail?: { label: string; audience: Audience };
   x: number;
   y: number;
 }
@@ -216,11 +218,13 @@ export const API_EDGES: StaticEdge[] = API_BLOCKS.slice(1).map((block, i) => api
 // one api-email-sender step that sends them all (the email pipeline splits its sender per
 // category; the API pipeline runs it once, so every API badge shows that same step).
 export const API_EMAIL_BADGES: EmailBadgeMeta[] = [
-  { id: 'api-email-badge-material-download', producer: 'api-material-download', blockName: 'api-email-sender', label: 'Missing documents (no images received)', audience: 'customer', x: 300, y: 380 },
+  { id: 'api-email-badge-material-download', producer: 'api-material-download', blockName: 'api-email-sender', label: 'Missing documents (no images received)', audience: 'customer',
+    whenNoCustomerEmail: { label: 'No images received: the team contacts the customer', audience: 'internal' }, x: 300, y: 380 },
   // "Claim received" goes out right after recognition, as on the email tab (api-claim-recognition queues it).
   { id: 'api-email-badge-claim-recognition', producer: 'api-claim-recognition', blockName: 'api-email-sender', label: 'Claim received', audience: 'customer', x: 300, y: 570 },
   { id: 'api-email-badge-member-verification', producer: 'api-member-verification', blockName: 'api-email-sender', label: 'Member verification hold', audience: 'internal', x: 300, y: 760 },
-  { id: 'api-email-badge-document-checking', producer: 'api-document-checking', blockName: 'api-email-sender', label: 'Missing documents list + copy to the team', audience: 'customer', x: 300, y: 950 },
+  { id: 'api-email-badge-document-checking', producer: 'api-document-checking', blockName: 'api-email-sender', label: 'Missing documents list + copy to the team', audience: 'customer',
+    whenNoCustomerEmail: { label: 'Missing documents: ULINK emails the customer', audience: 'internal' }, x: 300, y: 950 },
   { id: 'api-email-badge-claim-revision', producer: 'api-claim-revision', blockName: 'api-email-sender', label: 'Ready for review, IAS rejected, or documents incomplete', audience: 'internal', x: 300, y: 1710 },
   { id: 'api-email-badge-claim-stp', producer: 'api-claim-stp', blockName: 'api-email-sender', label: 'Settlement report', audience: 'customer', x: 300, y: 1900 },
 ];
