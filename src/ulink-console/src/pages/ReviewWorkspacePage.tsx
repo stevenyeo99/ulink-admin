@@ -16,6 +16,7 @@ import { useConfidenceThreshold } from '../hooks/useConfidenceThreshold';
 import { DocumentViewer } from '../components/review/DocumentViewer';
 import { caseFiles, type PageRef } from '../lib/caseFiles';
 import { FindingsPanel } from '../components/review/FindingsPanel';
+import { NextActionBox } from '../components/cases/NextActionBox';
 import type { PendingCorrections } from '../lib/correctionDraft';
 
 /**
@@ -71,7 +72,7 @@ export function ReviewWorkspacePage() {
   if (isLoading) return <div className="p-6 text-sm text-slate-400">Loading…</div>;
   if (isError || !data || !id) return <div className="p-6 text-sm text-red-600">Couldn't load this case.</div>;
 
-  const { case: caseRecord, assessmentSummary, corrections, requests, claim, override, retry } = data;
+  const { case: caseRecord, assessmentSummary, nextAction, corrections, requests, claim, override, retry } = data;
   const checklist = caseRecord.documentCheckResult?.checklist ?? [];
   const fields = (caseRecord.extractedFields ?? {}) as { claimant?: { claimant_name?: string | null }; claim?: { total_claim_amount?: number | null } };
   const unsureCount = assessmentSummary.reviewPoints.filter((p) => !p.overridden).length;
@@ -143,6 +144,8 @@ export function ReviewWorkspacePage() {
           <DocumentViewer files={files} open={open} onOpen={setOpen} />
         </section>
         <section aria-label="AI findings" className="min-h-0 overflow-y-auto rounded-xl2 border border-slate-900/10 bg-white/80 p-4">
+          {/* What to do with this case now, before the findings (the same "Next" as the case page). */}
+          {nextAction && <NextActionBox next={nextAction} className="mb-4" />}
           <h2 className="mb-2 text-sm font-semibold text-slate-800">
             AI findings <span className="font-normal text-slate-500">— unsure means at or below {Math.round(threshold * 100)}%</span>
           </h2>

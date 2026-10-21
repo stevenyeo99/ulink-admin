@@ -59,3 +59,17 @@ it('has a sentence for every status in the catalog', () => {
     if (CASE_STATUSES[status].group === 'needs_review') expect({ status, act: next.act }).toEqual({ status, act: true });
   }
 });
+
+it('documents review: names why the case waits and what is missing; with the API customer email off, ULINK emails', async () => {
+  Setting.findAll.mockResolvedValue([{ key: 'apiSendMissingDocumentsEmail', value: false }]);
+  await getSettings();
+  const fields = {
+    currentStatus: 'API_DOCUMENTS_REVIEW',
+    documentsHeldFor: ['a person corrected items on this case and sends the request'],
+    documentCheckResult: { issues: ['Need to fill treatment date in the eye test record'] },
+  };
+  expect(nextAction(fields).text).toBe('The case waits for you (a person corrected items on this case and sends the request). Missing: Need to fill treatment date in the eye test record. Check the documents: if they are missing, continue (ULINK emails the customer); if they are fine, override.');
+  // Email case, nothing stored about why: the old reason, and the customer is emailed.
+  expect(nextAction({ currentStatus: 'DOCUMENTS_REVIEW', documentCheckResult: { issues: ['No Medical Report(s)'] } }).text)
+    .toBe('The AI is unsure a document is missing. Missing: No Medical Report(s). Check the documents: if they are missing, send the request to the customer; if they are fine, override.');
+});
