@@ -17,6 +17,7 @@ import { DocumentViewer } from '../components/review/DocumentViewer';
 import { caseFiles, type PageRef } from '../lib/caseFiles';
 import { FindingsPanel } from '../components/review/FindingsPanel';
 import { NextActionBox } from '../components/cases/NextActionBox';
+import { CaseUploadPanel } from '../components/cases/CaseUploadPanel';
 import type { PendingCorrections } from '../lib/correctionDraft';
 
 /**
@@ -38,6 +39,8 @@ export function ReviewWorkspacePage() {
   const claimTried = useRef<string | null>(null);
   // Corrections not saved yet: at the claim preparation stop they are saved with its choices, in one save.
   const [pendingCorrections, setPendingCorrections] = useState<PendingCorrections>({ items: [], notReady: 0, lines: [] });
+  // What the last save did, so the reviewer sees it after its panel goes away (the case moved on).
+  const [saved, setSaved] = useState<string | null>(null);
 
   const { data, isLoading, isError } = useQuery({ queryKey: ['case', id], queryFn: () => getCase(id as string), enabled: !!id });
 
@@ -65,6 +68,7 @@ export function ReviewWorkspacePage() {
     setOpen(null);
     setQueueEmpty(false);
     setNextError(null);
+    setSaved(null);
   }, [id]);
 
   const files = useMemo(() => (data ? caseFiles(data.case, data.documents, data.apiSteps) : []), [data]);
@@ -145,7 +149,15 @@ export function ReviewWorkspacePage() {
         </section>
         <section aria-label="AI findings" className="min-h-0 overflow-y-auto rounded-xl2 border border-slate-900/10 bg-white/80 p-4">
           {/* What to do with this case now, before the findings (the same "Next" as the case page). */}
+          {saved && (
+            <div role="status" className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-ulink-teal/30 bg-ulink-teal/5 px-4 py-3 text-sm text-slate-800">
+              <span>{saved}</span>
+              <Button variant="ghost" disabled={moving} onClick={nextCase}>Next case</Button>
+            </div>
+          )}
           {nextAction && <NextActionBox next={nextAction} className="mb-4" />}
+          {/* Missing documents: upload them here too (shows only while the case waits on documents). */}
+          <CaseUploadPanel caseRecord={caseRecord} />
           <h2 className="mb-2 text-sm font-semibold text-slate-800">
             AI findings <span className="font-normal text-slate-500">— unsure means at or below {Math.round(threshold * 100)}%</span>
           </h2>
@@ -164,13 +176,14 @@ export function ReviewWorkspacePage() {
             confirmed={confirmed}
             documentsOverridden={assessmentSummary.lines.some((l) => l.area === 'documents' && l.overridden)}
             onPendingChange={setPendingCorrections}
+            onSaved={setSaved}
             saveBelow={atPreparationStop}
           />
           <CaseRetryPanel key={`retry-${id}`} caseId={id} retry={retry} />
-          {isSuperAdmin() && <PreparationReviewPanel key={`preparation-${id}`} caseRecord={caseRecord} corrections={pendingCorrections} />}
+          {isSuperAdmin() && <PreparationReviewPanel key={`preparation-${id}`} caseRecord={caseRecord} corrections={pendingCorrections} onSaved={setSaved} />}
           {/* Override and continue (same rules as the case page): a reviewer who checked the member or documents by hand,
               or fixed it in IAS, lets the case go on to the next job without leaving the review page. */}
-          {isSuperAdmin() && <CaseOverridePanel key={`override-${id}`} caseRecord={caseRecord} override={override} summary={assessmentSummary} />}
+          {isSuperAdmin() && <CaseOverridePanel key={`override-${id}`} caseRecord={caseRecord} override={override} summary={assessmentSummary} onSaved={setSaved} />}
           {/* Each finding is corrected in place (Edit / Mark OK / Mark wrong); here only the corrections made so far. */}
           <CaseCorrectionPanel key={`corrections-${id}`} caseId={id} corrections={corrections} />
           <ReviewerChecklistPanel key={`requests-${id}`} caseId={id} requests={requests} />

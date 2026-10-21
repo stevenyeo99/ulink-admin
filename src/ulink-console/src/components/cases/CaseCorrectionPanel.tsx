@@ -64,7 +64,7 @@ export function CaseCorrectionPanel({ caseId, corrections, linkToReview = false 
                   <CheckCircle2 size={13} /> Trusted by {c.trustedBy}
                 </span>
               ) : isSuperAdmin() && c.createdBy !== me ? (
-                <Button variant="ghost" disabled={trust.isPending} onClick={() => trust.mutate(c.id)}>Mark trusted</Button>
+                <Button variant="ghost" disabled={trust.isPending} onClick={() => trust.mutate(c.id)} title="A second person agrees with this correction, so it can teach the AI">I agree (teaches the AI)</Button>
               ) : (
                 <span className="text-xs text-slate-400">Not trusted yet{c.createdBy === me ? ' — another person marks it' : ''}</span>
               )}

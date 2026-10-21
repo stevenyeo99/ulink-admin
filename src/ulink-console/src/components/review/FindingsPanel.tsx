@@ -116,7 +116,10 @@ export function FindingsPanel({
   documentsOverridden = false,
   onPendingChange,
   saveBelow = false,
+  onSaved,
 }: {
+  /** After a save: what happened, for the page to show. */
+  onSaved?: (message: string) => void;
   /** The open changes, each time they change — for a save elsewhere on the page (the claim preparation stop). */
   onPendingChange?: (pending: PendingCorrections) => void;
   /** The changes are saved with the claim preparation below, in one save: no save button here. */
@@ -163,6 +166,7 @@ export function FindingsPanel({
     mutationFn: () => createCorrections(caseId, pending.map(draftItem)),
     onSuccess: () => {
       setDrafts({});
+      onSaved?.('Saved. The case is checked again on the next pipeline run.');
       for (const key of ['case', 'cases', 'review-queue', 'cases-overview', 'approvals']) queryClient.invalidateQueries({ queryKey: [key] });
     },
   });
@@ -266,6 +270,7 @@ export function FindingsPanel({
   return (
     <div>
       {findings.length === 0 && <p className="text-sm text-slate-500">The documents haven't been checked yet.</p>}
+      {findings.length > 0 && !canCorrect && <p className="mb-3 text-xs text-slate-500">Corrections are closed at this step.</p>}
       {section('Unsure', unsure, 'text-amber-700')}
       {section('Failed', failed, 'text-red-700')}
       {section('Handled by a person (override)', handled, 'text-slate-500')}

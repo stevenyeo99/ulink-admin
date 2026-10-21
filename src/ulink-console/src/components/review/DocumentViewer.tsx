@@ -41,7 +41,7 @@ export function DocumentViewer({ files, open, onOpen }: { files: ViewFile[]; ope
     };
   }, [filePath]);
 
-  if (!file) return <p className="p-4 text-sm text-slate-500">No documents on this case.</p>;
+  if (!file) return <p className="p-4 text-sm text-slate-500">No documents on this case yet. For an API case, upload them on the right when they come in, or they arrive from the IAS console.</p>;
   const groups = [...new Set(files.map((f) => f.group))];
 
   return (
@@ -87,7 +87,7 @@ export function DocumentViewer({ files, open, onOpen }: { files: ViewFile[]; ope
           )}
         </div>
         <div className="flex-1 overflow-auto rounded-lg border border-slate-900/10 bg-slate-50">
-          {failed && <p className="p-4 text-sm text-red-600">Couldn't open this file.</p>}
+          {failed && <p className="p-4 text-sm text-red-600">Couldn't open this file. Reload the page, or open it from the case page.</p>}
           {!failed && !url && <p className="p-4 text-sm text-slate-400">Loading…</p>}
           {url && file.pdf && <iframe key={`${url}#${page}`} title={file.name} src={`${url}#page=${page}`} className="h-full min-h-[32rem] w-full" />}
           {url && !file.pdf && (

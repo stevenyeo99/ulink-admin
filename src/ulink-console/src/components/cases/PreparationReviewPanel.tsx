@@ -28,7 +28,7 @@ const money = (n: number | null | undefined) => (typeof n === 'number' ? n.toLoc
 // corrections: the review page's corrections not saved yet (review workspace only). Saved with these choices in one save:
 // the choices first, kept without moving the case (recheck), then the corrections, which check the case again from the
 // document check; claim preparation then uses the choices and does not stop again unless a corrected voucher needs one.
-export function PreparationReviewPanel({ caseRecord, corrections }: { caseRecord: CaseDetail; corrections?: PendingCorrections }) {
+export function PreparationReviewPanel({ caseRecord, corrections, onSaved }: { caseRecord: CaseDetail; corrections?: PendingCorrections; onSaved?: (message: string) => void }) {
   const queryClient = useQueryClient();
   const meta = caseRecord.claimPrepMeta;
   const review = meta?.review ?? { diagnosis: false, vouchers: [] };
@@ -82,6 +82,9 @@ export function PreparationReviewPanel({ caseRecord, corrections }: { caseRecord
       return createCorrections(caseRecord.id, fixes);
     },
     onSuccess: () => {
+      onSaved?.(fixes.length
+        ? 'Saved. The case is checked again from the document check on the next pipeline run, then the revision is prepared with your choices.'
+        : 'Saved. The revision is prepared with your choices on the next pipeline run.');
       for (const key of ['case', 'cases', 'review-queue', 'cases-overview']) queryClient.invalidateQueries({ queryKey: [key] });
     },
   });
@@ -180,7 +183,7 @@ export function PreparationReviewPanel({ caseRecord, corrections }: { caseRecord
         <>
           <p className="mt-1 text-sm text-slate-600">
             The AI read “{diagnosis?.text || 'no diagnosis text'}” and {diagnosis?.defaulted ? 'found no confident match, so it used' : 'picked'}{' '}
-            <span className="font-mono">{aiCode?.diagCode ?? 'none'}</span>{percent(diagnosis?.confidence)}.{diagnosis?.reason ? ` AI: ${diagnosis.reason}` : ''}
+            <span className="font-mono">{aiCode?.diagCode ?? 'none'}</span>{aiCode?.diagDesc ? ` (${aiCode.diagDesc}${diagnosis?.defaulted ? ', the default code' : ''})` : ''}{percent(diagnosis?.confidence)}.{diagnosis?.reason ? ` AI: ${diagnosis.reason}` : ''}
           </p>
           <fieldset className="mt-2 space-y-1">
             {codes.map((c) => (

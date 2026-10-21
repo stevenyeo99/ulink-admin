@@ -16,7 +16,10 @@ export function CaseOverridePanel({
   caseRecord,
   override,
   summary,
+  onSaved,
 }: {
+  /** After a save: what happened, for the page to show. */
+  onSaved?: (message: string) => void;
   caseRecord: CaseDetail;
   override: CaseOverrideInfo;
   summary: AssessmentSummary;
@@ -30,6 +33,7 @@ export function CaseOverridePanel({
     mutationFn: () => overrideCase(caseRecord.id, reason.trim(), finding),
     onSuccess: () => {
       setConfirmOpen(false);
+      onSaved?.('Saved. The case continues on the next pipeline run.');
       for (const key of ['case', 'cases', 'review-queue', 'cases-overview', 'approvals']) queryClient.invalidateQueries({ queryKey: [key] });
     },
   });
@@ -59,7 +63,7 @@ export function CaseOverridePanel({
 
   return (
     <section className="mb-6 rounded-xl2 border border-ulink-orange/25 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
-      {isHeld && <HeldEmailActions caseRecord={caseRecord} />}
+      {isHeld && <HeldEmailActions caseRecord={caseRecord} onSaved={onSaved} />}
       <h2 className="text-sm font-semibold text-slate-800">{action}</h2>
       <p className="mb-4 mt-1 text-sm text-slate-600">
         {isUnsurePass
@@ -153,7 +157,7 @@ export function CaseOverridePanel({
  * continues with the request the check prepared: emailed to the customer, or, with the API customer email off, left to
  * ULINK. If the documents are fine, the override below is the other choice.
  */
-function HeldEmailActions({ caseRecord }: { caseRecord: CaseDetail }) {
+function HeldEmailActions({ caseRecord, onSaved }: { caseRecord: CaseDetail; onSaved?: (message: string) => void }) {
   const caseId = caseRecord.id;
   const queryClient = useQueryClient();
   const { data: settings } = useQuery({ queryKey: ['stp-settings'], queryFn: getStpSettings, staleTime: 60_000 });
@@ -164,6 +168,7 @@ function HeldEmailActions({ caseRecord }: { caseRecord: CaseDetail }) {
   const release = useMutation({
     mutationFn: () => releaseMissingDocuments(caseId, comment.trim()),
     onSuccess: () => {
+      onSaved?.('Saved. The case continues as documents missing on the next pipeline run.');
       for (const key of ['case', 'cases', 'review-queue', 'cases-overview']) queryClient.invalidateQueries({ queryKey: [key] });
     },
   });

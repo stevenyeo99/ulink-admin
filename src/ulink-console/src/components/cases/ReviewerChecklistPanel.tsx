@@ -48,7 +48,7 @@ export function ReviewerChecklistPanel({ caseId, requests }: { caseId: string; r
   return (
     <>
       <section className="mb-6 rounded-xl2 border border-slate-900/10 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
-        <h2 className="text-sm font-semibold text-slate-800">Reviewer checklist</h2>
+        <h2 className="text-sm font-semibold text-slate-800">Ask for more information</h2>
         <p className="mb-3 mt-1 text-sm text-slate-600">
           Your own lines for this case — what the system checklist doesn't cover. The AI can't check them: a person marks
           each one done. They are never in the customer's email; the team is emailed to contact the customer.
