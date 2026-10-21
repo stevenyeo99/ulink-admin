@@ -20,7 +20,8 @@ const money = (n: number | null | undefined) => (typeof n === 'number' ? n.toLoc
  * sure of the diagnosis code or of a voucher's benefit. What needs a person is open; what the AI was sure of is folded
  * and can still be changed. A benefit is a type, then a head under it, from the member's own plan; vouchers on one claim
  * may have different types. With vitamins / supplements on the claim, each voucher's manual rejection (IAS man_rej set 1:
- * amount and remark) can be edited, removed or added on any voucher — the vouchers the AI was unsure of must be set.
+ * amount and remark) can be edited, removed or added on any voucher (Add shows on every claim) — the vouchers the AI
+ * was unsure of must be set.
  * One comment, one save; claim preparation then runs again with these. Super admin.
  */
 export function PreparationReviewPanel({ caseRecord }: { caseRecord: CaseDetail }) {
@@ -84,7 +85,8 @@ export function PreparationReviewPanel({ caseRecord }: { caseRecord: CaseDetail 
       .map(([i, p]) => `voucher ${Number(i) + 1} rejection (${p})`),
   ].filter((m, i, all) => all.indexOf(m) === i);
   const changed = Boolean(code) || Object.keys(choices).length > 0 || Object.keys(rejections).length > 0;
-  // Shown only on a claim with vitamins / supplements: the AI found some, one was rejected, or the AI was unsure.
+  // The vouchers' rows show on a claim with vitamins / supplements (the AI found some, one was rejected, or the AI was
+  // unsure); Add shows on every claim, for an item the AI did not flag or that ULINK refers (owner, 2026-10-20).
   const vitaminCase = flaggedRejections.length > 0 || lines.some((l) => l.vitamin?.found === true || l.vitamin?.rejection);
   const rejectionRows = lines.map((_, i) => i).filter((i) => rejections[i] || lines[i].vitamin?.rejection);
   const addable = lines.map((_, i) => i).filter((i) => !rejectionRows.includes(i));
@@ -190,9 +192,12 @@ export function PreparationReviewPanel({ caseRecord }: { caseRecord: CaseDetail 
         </>
       )}
 
-      {vitaminCase && (
+      {lines.length > 0 && (
         <>
           <h3 className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">Manual rejection (vitamins / supplements)</h3>
+          {!vitaminCase && rejectionRows.length === 0 && (
+            <p className="mt-1 text-xs text-slate-500">The AI found no vitamins or supplements. Add a rejection if a voucher has an item that is not covered.</p>
+          )}
           {flaggedRejections.length > 0 && (
             <p className="mt-1 text-xs text-amber-700">The AI was not sure of voucher {flaggedRejections.map((i) => i + 1).join(', ')}: check the bill and set the rejection, or No rejection.</p>
           )}
