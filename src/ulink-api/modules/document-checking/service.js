@@ -1,7 +1,8 @@
-const { sequelize, Case, CaseEvent } = require('../../db/models');
+const { sequelize, Case, CaseEvent, AiFeedback } = require('../../db/models');
 const config = require('../../config');
 const { evaluateDocumentChecks, evaluateJudgmentDependentChecks, vitaminCheck, documentListCheck, benefitTypeCheck, documentDatesCheck, formatCheck, fieldsReadCheck } = require('./checklist');
 const { applyVerdicts, correctionHold } = require('../ai-feedback/corrections');
+const { withConfirmedValues, withConfirmedChecks } = require('../ai-feedback/confirmations');
 const { entityMatch } = require('./identityJudgment');
 const { queueDedupedTask } = require('../shared/emailTaskQueue');
 const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment-summary/summary');
@@ -80,15 +81,17 @@ async function checkCase(caseRecord) {
   if (!caseRecord.extractedFields) {
     throw new Error(`Case ${caseRecord.id} has no extractedFields (reached READY_FOR_DOCUMENT_CHECKING without extraction data)`);
   }
-  const fields = caseRecord.extractedFields;
   await getSettings(); // the AI confidence threshold decides which values read count as unsure (SYSTEM_4 E3b)
+  // "✓ Right" (ai-feedback/confirmations.js): a value or check result a person confirmed, still the same, counts as sure.
+  const confirmations = await AiFeedback.findAll({ where: { caseId: caseRecord.id, kind: 'confirm' } });
+  const fields = withConfirmedValues(caseRecord.extractedFields, confirmations);
 
   const stage1 = evaluateDocumentChecks(fields);
   const documentList = documentListCheck(fields);
   const judgments = await runJudgments(fields);
   const stage2 = evaluateJudgmentDependentChecks(fields, judgments);
   // A check's verdict a person corrected (SYSTEM_4 E4-12) replaces the AI's; corrected values are already in fields.
-  const result = applyVerdicts({
+  const result = withConfirmedChecks(applyVerdicts({
     issues: [...stage1.issues, ...stage2.issues],
     details: [...stage1.details, ...stage2.details],
     flags: [...stage1.flags, ...stage2.flags],
@@ -98,7 +101,7 @@ async function checkCase(caseRecord) {
     // are dated — information for STP and
     // the reviewer, never an issue.
     checklist: [...stage1.checklist, ...stage2.checklist, ...[vitaminCheck(fields), documentList, benefitTypeCheck(fields, documentList), documentDatesCheck(fields, documentList), formatCheck(fields), fieldsReadCheck(fields, stage1.checklist)].filter(Boolean)],
-  }, fields.corrections);
+  }, fields.corrections), confirmations);
 
   const outcome = result.passed ? 'DOCUMENT_CHECKED' : 'INCOMPLETE';
   return { caseId: caseRecord.id, outcome, result };

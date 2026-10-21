@@ -229,7 +229,7 @@ export function FindingsPanel({
             <span className="text-ulink-teal-dark">✓ Confirmed by you</span>
           ) : (
             onConfirm && toConfirm(f).length > 0 && (
-              <button disabled={confirming} onClick={() => onConfirm(toConfirm(f))} className="text-ulink-teal-dark hover:underline disabled:opacity-50">✓ Right</button>
+              <button disabled={confirming} onClick={() => onConfirm(toConfirm(f))} title="The AI read this right. The next check treats it as sure; it does not move the case by itself." className="text-ulink-teal-dark hover:underline disabled:opacity-50">✓ Right</button>
             )
           )}
           {canCorrect && optionOf(f.correct) && !hasDraft(optionOf(f.correct)!) && (() => {
