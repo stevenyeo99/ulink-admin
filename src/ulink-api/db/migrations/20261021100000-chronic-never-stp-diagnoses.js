@@ -9,7 +9,8 @@
 // also matches the CM codes themselves), L40.50 → L40.5, M45.9 → M45. B19.10 / B19.11 have no ICD-10 parent for
 // hepatitis B (B19 is any unspecified viral hepatitis), so they are listed as written.
 // Autoimmune conditions count as chronic only under immunomodulatory therapy; a code cannot tell, so they always go to
-// a person. A prefix already on the list is left as it is. down: removes these prefixes.
+// a person. A prefix already on the list is left as it is. down: removes only the rows this migration inserted (same
+// prefix and note), so a prefix ULINK had added by hand stays.
 
 const DIAGNOSES = [
   ['E11.9', 'Chronic: type 2 diabetes mellitus without complications'],
@@ -46,8 +47,10 @@ module.exports = {
     }
   },
   async down(queryInterface) {
-    await queryInterface.sequelize.query('DELETE FROM ulink_stp_blocked_diagnoses WHERE code_prefix IN (:codes)', {
-      replacements: { codes: DIAGNOSES.map(([code]) => code) },
-    });
+    for (const [code, note] of DIAGNOSES) {
+      await queryInterface.sequelize.query('DELETE FROM ulink_stp_blocked_diagnoses WHERE code_prefix = :code AND note = :note', {
+        replacements: { code, note },
+      });
+    }
   },
 };
