@@ -93,5 +93,7 @@ Where real data helps, a **read-only** run against the dev DB or console middlew
 - Dated row in the change log of `docs/imp/demo/API DAY1/PREV_FEEDBACK/20260917_enhancement_status.md`.
 - Update `docs/imp/CLAIM_FLOW_END_TO_END.md` where the described behaviour changed; `BACKLOG.md` if an item closed or
   a new one appeared.
+- API flow changed (a job, status, stop, switch or email) → update `docs/imp/API_CASE_FLOWCHART.md` (the Mermaid chart,
+  the stop table and its "Last checked" date), then republish its copy at the URL in that file.
 
 **Done when** someone reading only those docs would know the change exists and how it behaves.

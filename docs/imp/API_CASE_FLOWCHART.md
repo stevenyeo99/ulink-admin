@@ -1,0 +1,80 @@
+# API case flowchart
+
+This chart shows how an API case moves from the IAS claim list to the IAS revision. It shows the pipeline jobs in order, the stops where a person decides, and the emails that go out. The source is `src/ulink-api/modules/pipeline/service.js` (`API_STEPS`) and the input and output statuses of each `api-*` job.
+
+Last checked against the code: 2026-10-21. Published copy: https://claude.ai/artifact/6wQz6VycRj8e3TgdbvYWWg (private, republish it from this file after each change).
+
+When an API job, status, stop, switch or email changes, update this file in the same change. The checklist in `.claude/skills/ulink-pipeline-change/SKILL.md` (step 9) says the same.
+
+## Flow
+
+Blue boxes are pipeline jobs. Orange hexagons are stops that wait for a person. Green boxes are end or waiting states. Purple shapes are emails.
+
+```mermaid
+flowchart TD
+  classDef job fill:#e8eef7,stroke:#6b7c96,color:#1d2430
+  classDef stop fill:#fdecd9,stroke:#c2410c,color:#1d2430
+  classDef done fill:#e3f2ea,stroke:#3f8a5f,color:#1d2430
+  classDef mail fill:#efe9f8,stroke:#7a5ea8,color:#1d2430
+
+  A[1 · Claim intake<br/>IAS claim list → API_RECEIVED]:::job --> B[2 · Material download<br/>console images → PDF]:::job
+  W[Console watch<br/>new documents for waiting cases]:::job -.->|new console images| B
+  B -->|no images| ND{{API_NO_DOCUMENTS}}:::stop
+  ND -.-> E1[/Team: no images received/]:::mail
+  B --> C[3 · Claim recognition<br/>AI reads every page]:::job
+  C -.-> E2[/Customer: claim received/]:::mail
+  C -->|too long / unreadable| MR{{API_MANUAL_REVIEW}}:::stop
+  C --> D[4 · Member verification<br/>member, policy, bank vs IAS]:::job
+  D -->|mismatch| MV{{API_MEMBER_REVIEW_REQUIRED<br/>rechecked every run}}:::stop
+  MV -.-> E3[/Team: member verification hold/]:::mail
+  MV -->|override / IAS fixed| E
+  D -->|verified| E[5 · Document checking<br/>checklist + AI confidence]:::job
+  E -->|complete, AI unsure| DU{{API_DOCUMENTS_UNSURE}}:::stop
+  DU -->|person confirms| F
+  E -->|missing, AI unsure<br/>or a person corrected items| DR{{API_DOCUMENTS_REVIEW}}:::stop
+  DR -.-> E4[/Team: check before the customer is asked/]:::mail
+  DR -->|documents are missing| F
+  DR -->|override: documents fine| F
+  E -->|complete| F[6 · Console upload<br/>case-page uploads to IAS console]:::job
+  E -->|missing, AI sure| F
+  F -->|uploads sent| G[7 · Console barcode<br/>waits for barcodes]:::job
+  F -->|failed| CU{{API_CONSOLE_UPLOAD_FAILED}}:::stop
+  G -->|overdue| CB{{API_CONSOLE_BARCODE_MISSING}}:::stop
+  F -->|no uploads| H
+  G --> H[8 · Claim preparation<br/>ICD-10, benefit, rejections, STP, suspense]:::job
+  H -->|AI unsure of diagnosis,<br/>benefit or vitamins| PR{{API_PREPARATION_REVIEW}}:::stop
+  PR -->|person chooses| H
+  PR -->|choices + corrections, one save| E
+  H --> I[9 · Claim revision<br/>POST to IAS]:::job
+  I -->|documents missing<br/>isSuspense=Y| S([API_CLAIM_SUSPENDED<br/>waits for the customer]):::done
+  S -.-> E5[/Team: documents incomplete/]:::mail
+  S -.->|new documents| W
+  I -->|complete, not STP| R([API_CLAIM_REVISED<br/>JD3 approves in IAS]):::done
+  R -.-> E6[/Team: claim ready for review/]:::mail
+  I -->|IAS refused| RF{{API_CLAIM_REVISION_FAILED}}:::stop
+  RF -.-> E7[/Team: claim submit issue/]:::mail
+  I -->|complete, STP| J[10 · Claim STP<br/>downloads the settlement report]:::job
+  J --> CSR([API_CSR_SENT]):::done
+  J -.-> E8[/Customer: settlement report/]:::mail
+```
+
+## Where a person decides
+
+| Stop | Why the case waits | What the person can do | Switch |
+|---|---|---|---|
+| `API_NO_DOCUMENTS` | The IAS console has no images for the claim. | Upload on the case page, or wait. Console watch checks every run. | None |
+| `API_MANUAL_REVIEW` | The documents are too long for the AI, or its answer did not match the claim schema. | Handle the claim by hand. | None |
+| `API_MEMBER_REVIEW_REQUIRED` | Member, policy or bank details differ from IAS. | Fix IAS (rechecked every run), Mark OK, correct a value, or override. | None |
+| `API_DOCUMENTS_UNSURE` | The documents are complete, but the AI was unsure of an item. | Use the `Confirm and continue` button, or correct a value. | `holdUnsureDocumentPass` |
+| `API_DOCUMENTS_REVIEW` | Documents are missing and the AI was unsure, or a person corrected items. | Documents are missing: continue (suspended revision). Documents are fine: override. Or correct a value. | `holdUnsureMissingDocsEmail` |
+| `API_CONSOLE_UPLOAD_FAILED`, `API_CONSOLE_BARCODE_MISSING` | Case-page uploads did not reach the console, or got no barcode in time. | Retry from the case page. | None |
+| `API_PREPARATION_REVIEW` | The AI was unsure of the diagnosis code, a voucher's benefit, or its vitamins. | Choose. With corrections, one save sends both, and the case is checked again first. | `holdUnsureDiagnosis`, `holdUnsureBenefit`, `holdUnsureVitamin` |
+| `API_CLAIM_REVISION_FAILED` | IAS refused the revision. | Retry from the case page. | None |
+
+## Rules that are easy to miss
+
+- Claim preparation decides STP, and STP never stops the revision. A never-STP diagnosis (ULINK's chronic list, R69), vitamins, an amount over the limit or an open review point sends the claim as non-STP. JD3 then approves it in IAS.
+- Missing documents never stop the revision. The revision goes with `isSuspense=Y`, and a suspended claim is never STP. The next revision with complete documents sends `isSuspense=N`, and IAS lifts the suspense.
+- When `apiSendMissingDocumentsEmail` is off, the customer gets no missing-documents email. ULINK emails the customer from the draft on the case page, and the team gets an email instead.
+- A correction sends the case back to the document check. A correction of a value that the member check compares with IAS sends it back to the member check. The claim preparation choices of a person stay for the next run.
+- When a job fails because IAS, the console or LM Studio does not answer, the case keeps its status. The next pipeline run tries again.
