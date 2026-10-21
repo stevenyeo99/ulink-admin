@@ -47,4 +47,18 @@ async function findByCode(diagCode) {
   return row ? { diagOid: row.diag_oid, diagCode: row.diag_code, diagDesc: row.diag_desc } : null;
 }
 
-module.exports = { findCandidates, findByCode };
+// Autocomplete for a person typing a code or words: codes that start with the text first, then descriptions that
+// contain it. A plain text match (milliseconds), not findCandidates' search by meaning.
+async function findByText(text, { limit = 10 } = {}) {
+  const escaped = text.replace(/[\\%_]/g, (c) => `\\${c}`);
+  const rows = await sequelize.query(
+    `select diag_oid, diag_code, diag_desc from ulink_icd10_diagnoses
+     where diag_code ilike :prefix or diag_desc ilike :contains
+     order by (diag_code ilike :prefix) desc, diag_code
+     limit :limit`,
+    { replacements: { prefix: `${escaped}%`, contains: `%${escaped}%`, limit }, type: sequelize.QueryTypes.SELECT }
+  );
+  return rows.map((row) => ({ diagOid: row.diag_oid, diagCode: row.diag_code, diagDesc: row.diag_desc }));
+}
+
+module.exports = { findCandidates, findByCode, findByText };

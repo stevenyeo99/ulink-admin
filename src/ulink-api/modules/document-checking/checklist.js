@@ -1040,29 +1040,49 @@ function isRealDate(value) {
 function formatCheck(fields, today = todayInIasTimezone()) {
   const problems = [];
   const checked = [];
+  // The values the problems are about, as correction items (✎ Edit / ✓ Right on the review page), and the vouchers'
+  // evidence entries (its page link).
+  const editItems = new Set();
+  const usedFields = new Set();
+  const about = (item) => {
+    editItems.add(item);
+    const voucher = /^invoices\.items\.(\d+)\./.exec(item);
+    usedFields.add(voucher ? `voucher ${Number(voucher[1]) + 1}` : item);
+  };
 
   const nrc = fields.claimant?.claimant_nrc_passport;
   if (nrc != null) {
     checked.push('NRC / passport');
     const compact = String(nrc).replace(/\s+/g, '');
-    if (![NRC_LATIN, NRC_BURMESE, PASSPORT].some((re) => re.test(compact))) problems.push(`NRC / passport "${nrc}" doesn't look like an NRC or passport number`);
+    if (![NRC_LATIN, NRC_BURMESE, PASSPORT].some((re) => re.test(compact))) {
+      problems.push(`NRC / passport "${nrc}" doesn't look like an NRC or passport number`);
+      about('claimant.claimant_nrc_passport');
+    }
   }
 
   const dates = [
-    ['Date of birth', fields.claimant?.claimant_dob],
-    ['Accident date', fields.claim?.accident_date],
-    ['Appointment date', fields.claim?.appointment_date],
-    ['Medical record date', fields.medical_record?.date],
-    ...(fields.invoices?.items || []).map((item, i) => [`Voucher ${i + 1} date`, item.date]),
+    ['Date of birth', fields.claimant?.claimant_dob, 'claimant.claimant_dob'],
+    ['Accident date', fields.claim?.accident_date, 'claim.accident_date'],
+    ['Appointment date', fields.claim?.appointment_date, 'claim.appointment_date'],
+    ['Medical record date', fields.medical_record?.date, 'medical_record.date'],
+    ...(fields.invoices?.items || []).map((item, i) => [`Voucher ${i + 1} date`, item.date, `invoices.items.${i}.date`]),
   ].filter(([, value]) => value != null);
   if (dates.length) checked.push('dates');
-  for (const [label, value] of dates) {
-    if (!isRealDate(value)) problems.push(`${label} "${value}" is not a real date`);
-    else if (value > today) problems.push(`${label} ${value} is in the future`);
+  for (const [label, value, item] of dates) {
+    if (!isRealDate(value)) {
+      problems.push(`${label} "${value}" is not a real date`);
+      about(item);
+    } else if (value > today) {
+      problems.push(`${label} ${value} is in the future`);
+      about(item);
+    }
   }
   const dob = fields.claimant?.claimant_dob;
   const treatment = fields.claim?.accident_date || fields.claim?.appointment_date;
-  if (isRealDate(dob) && isRealDate(treatment) && dob > treatment) problems.push(`Date of birth ${dob} is after the treatment date ${treatment}`);
+  if (isRealDate(dob) && isRealDate(treatment) && dob > treatment) {
+    problems.push(`Date of birth ${dob} is after the treatment date ${treatment}`);
+    about('claimant.claimant_dob');
+  }
   // A voucher dated far from the visit is most likely misread — a 7 read as a 1 moves July to January (E3 check), on
   // the voucher or on the visit date. Compared with the visit (appointment) date, the accident date when there is none;
   // the limit (days, either way) is an STP setting, default 30. This only marks the values unsure: whether the customer
@@ -1076,6 +1096,7 @@ function formatCheck(fields, today = todayInIasTimezone()) {
       const days = Math.round((Date.parse(visit) - Date.parse(item.date)) / MS_PER_DAY);
       if (Math.abs(days) > limit) {
         problems.push(`Voucher ${i + 1} date ${item.date} is ${Math.abs(days)} days ${days > 0 ? 'before' : 'after'} ${visitLabel} ${visit}`);
+        about(`invoices.items.${i}.date`);
       }
     });
   }
@@ -1084,11 +1105,17 @@ function formatCheck(fields, today = todayInIasTimezone()) {
   const claimed = fields.claim?.total_claim_amount;
   if (claimed != null) {
     checked.push('amounts');
-    if (!isAmount(claimed) || claimed <= 0) problems.push(`Claimed amount "${claimed}" is not an amount above zero`);
+    if (!isAmount(claimed) || claimed <= 0) {
+      problems.push(`Claimed amount "${claimed}" is not an amount above zero`);
+      about('claim.total_claim_amount');
+    }
   }
   // A zero / negative subtotal is a refund slip (checkVoucherAmountMismatch) — fine; only a non-number is wrong.
   (fields.invoices?.items || []).forEach((item, i) => {
-    if (item.subtotal != null && !isAmount(item.subtotal)) problems.push(`Voucher ${i + 1} amount "${item.subtotal}" is not a number`);
+    if (item.subtotal != null && !isAmount(item.subtotal)) {
+      problems.push(`Voucher ${i + 1} amount "${item.subtotal}" is not a number`);
+      about(`invoices.items.${i}.subtotal`);
+    }
   });
   // The voucher's printed lines, added up by the AI (line_total, SYSTEM_4 E3b), against the total it read — not once a
   // person corrected the total (the person's amount stands; the AI's recount is of its own misreading).
@@ -1098,6 +1125,7 @@ function formatCheck(fields, today = todayInIasTimezone()) {
   for (const { item, n } of withLines) {
     if (Math.abs(item.line_total - item.subtotal) >= 1) {
       problems.push(`Voucher ${n} lines add up to ${item.line_total.toLocaleString('en-US')}, but its total reads ${item.subtotal.toLocaleString('en-US')}`);
+      about(`invoices.items.${n - 1}.subtotal`);
     }
   }
 
@@ -1108,6 +1136,7 @@ function formatCheck(fields, today = todayInIasTimezone()) {
     passed: true,
     confidence: problems.length ? 0 : null,
     problems,
+    ...(problems.length ? { editItems: [...editItems], usedFields: [...usedFields] } : {}),
     note: problems.length ? `${problems.join('; ')} — probably misread; check against the document.` : null,
     reason: problems.length ? `${problems.join('; ')}.` : `Checked: ${checked.join(', ')}.`,
   };
@@ -1197,7 +1226,15 @@ function withEditItems(documentCheckResult, extractedFields) {
   if (!documentCheckResult?.checklist || !extractedFields) return documentCheckResult;
   return {
     ...documentCheckResult,
-    checklist: documentCheckResult.checklist.map((item) => (CHECK_FIELDS[item.code] && !item.editItems ? { ...item, editItems: editItemsFor(item.code, extractedFields) } : item)),
+    checklist: documentCheckResult.checklist.map((item) => {
+      if (CHECK_FIELDS[item.code] && !item.editItems) return { ...item, editItems: editItemsFor(item.code, extractedFields) };
+      // A values check stored before it named its values: the same check on the same fields names them.
+      if (item.code === 'VALUE_FORMAT' && item.problems?.length && !item.editItems) {
+        const again = formatCheck(extractedFields);
+        return again?.editItems ? { ...item, editItems: again.editItems, usedFields: again.usedFields } : item;
+      }
+      return item;
+    }),
   };
 }
 

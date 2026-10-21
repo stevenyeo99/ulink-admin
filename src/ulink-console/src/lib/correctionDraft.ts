@@ -23,6 +23,20 @@ export function draftProblem(d: CorrectionDraft): string | null {
   return null;
 }
 
+/** The review page's corrections not saved yet: the items as the API takes them, and how many are not ready. */
+export interface PendingCorrections {
+  items: ReturnType<typeof draftItem>[];
+  notReady: number;
+  /** One line per change, for the reviewer: "Voucher 1 date: 2025-10-08 → 2026-10-08". */
+  lines: string[];
+}
+
+/** The change as a reviewer reads it. */
+export function draftLine(d: CorrectionDraft): string {
+  if (d.option.kind === 'verdict') return `${d.option.label}: ${d.passed ? 'OK' : 'wrong'}`;
+  return `${d.option.label}: ${d.option.current == null ? '(none)' : String(d.option.current)} → ${d.value.trim() || '…'}`;
+}
+
 /** The draft as the API takes it (POST /api/cases/:id/corrections/batch). */
 export function draftItem(d: CorrectionDraft) {
   return {

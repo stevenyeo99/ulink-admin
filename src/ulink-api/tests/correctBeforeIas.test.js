@@ -51,3 +51,16 @@ it('a failed amount check names the values it compared, so each can be edited on
   const stored = { checklist: [{ code: 'VOUCHER_AMOUNT_MISMATCH', passed: false }] };
   expect(withEditItems(stored, f).checklist[0].editItems).toEqual(['claim.total_claim_amount', 'invoices.items.0.subtotal']);
 });
+
+it('the values check names the value behind each problem, so the review page can offer ✎ Edit and ✓ Right on it', () => {
+  // AYA-CL-26043392: voucher 1 read as 2025-10-08 for a 2026-10-08 visit.
+  const yearOff = { ...fields(), invoices: { items: [{ ...fields().invoices.items[0], subtotal: 190000, line_total: 190000, date: '2025-10-08' }] } };
+  const check = formatCheck(yearOff, '2026-10-21');
+  expect(check).toMatchObject({ confidence: 0, editItems: ['invoices.items.0.date'], usedFields: ['voucher 1'] });
+  expect(correctionOptions(yearOff).some((o) => o.item === 'invoices.items.0.date')).toBe(true);
+  // A result stored before the check named its values gets them on load.
+  const { editItems: _e, usedFields: _u, ...stored } = check;
+  expect(withEditItems({ checklist: [stored] }, yearOff).checklist[0].editItems).toEqual(['invoices.items.0.date']);
+  // No problem: nothing to edit.
+  expect(formatCheck({ ...yearOff, invoices: { items: [{ ...yearOff.invoices.items[0], date: '2026-10-08' }] } }, '2026-10-21').editItems).toBeUndefined();
+});

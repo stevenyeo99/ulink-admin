@@ -22,7 +22,7 @@ const { uploadDocuments, UploadRefused } = require('../../modules/case-upload/up
 const { correctionsInfo } = require('./correctionsController');
 const { claimView, activeClaims, endClaim } = require('../../modules/case-claim/claim');
 const { workingDaysSince } = require('../../modules/shared/workingDays');
-const { lastReadSettings } = require('../../modules/settings/settings');
+const { getSettings, lastReadSettings } = require('../../modules/settings/settings');
 const { CaseClaim } = require('../../db/models');
 const { requestsInfo, closeRequests, refreshRequestLine } = require('../../modules/case-requests/requests');
 
@@ -694,6 +694,11 @@ async function releaseMissingDocuments(req, res) {
   }
 
   if (caseRecord.currentStatus !== 'API_DOCUMENTS_REVIEW') return notHeld();
+  // Switch "API cases: email the customer about missing documents" off: api-email-sender does not send it; ULINK does.
+  const { apiSendMissingDocumentsEmail } = await getSettings();
+  const released = apiSendMissingDocumentsEmail
+    ? `Missing-documents email sent to the customer by ${operator} after review`
+    : `Continued as documents missing by ${operator} after review; ULINK emails the customer (the customer email is off)`;
   const check = await ApiCaseStep.findOne({ where: { caseId: caseRecord.id, job: 'api-document-checking', status: 'DONE' }, order: [['createdAt', 'DESC']] });
   const heldEmail = check?.output?.heldEmail;
   if (!heldEmail) return res.status(409).json({ error: { message: 'No held email found for this case.', status: 409 } });
@@ -701,7 +706,7 @@ async function releaseMissingDocuments(req, res) {
   const moved = await sequelize.transaction(async (transaction) => {
     const [count] = await Case.update({ currentStatus: 'API_INCOMPLETE' }, { where: { id: caseRecord.id, currentStatus: 'API_DOCUMENTS_REVIEW' }, transaction });
     if (count !== 1) return false;
-    await CaseEvent.create({ caseId: caseRecord.id, blockName: BLOCK_NAME, prevStatus: 'API_DOCUMENTS_REVIEW', newStatus: 'API_INCOMPLETE', reasonCode: 'MISSING_DOCUMENTS_RELEASED', message: `Missing-documents email sent to the customer by ${operator} after review — comment: ${comment}` }, { transaction });
+    await CaseEvent.create({ caseId: caseRecord.id, blockName: BLOCK_NAME, prevStatus: 'API_DOCUMENTS_REVIEW', newStatus: 'API_INCOMPLETE', reasonCode: 'MISSING_DOCUMENTS_RELEASED', message: `${released} — comment: ${comment}` }, { transaction });
     await ApiCaseStep.create({ caseId: caseRecord.id, job: 'case-review', status: 'DONE', input: { username: req.user.username, action: 'release-missing-documents', comment }, output: { email: heldEmail }, startedAt: now, finishedAt: now }, { transaction });
     return true;
   });

@@ -8,13 +8,15 @@ jest.mock('../db/models', () => ({
   ApiCaseStep: { findAll: jest.fn(), create: jest.fn() },
 }));
 jest.mock('../modules/icd10/lookup', () => ({
-  findCandidates: jest.fn(),
+  findCandidates: jest.fn(async () => [{ diagCode: 'K05.1', diagDesc: 'Chronic gingivitis', similarity: 0.8 }]),
+  findByText: jest.fn(async () => [{ diagCode: 'K05.1', diagDesc: 'Chronic gingivitis' }]),
   findByCode: jest.fn(async (code) => (code === 'K05.1' ? { diagOid: '104612', diagCode: 'K05.1', diagDesc: 'Chronic gingivitis' } : null)),
 }));
 jest.mock('../modules/case-claim/claim', () => ({ endClaim: jest.fn() }));
 
 const { Case, CaseEvent, ApiCaseStep } = require('../db/models');
-const { choosePreparation } = require('../controllers/cases/preparationController');
+const { findCandidates, findByText } = require('../modules/icd10/lookup');
+const { choosePreparation, searchDiagnosis } = require('../controllers/cases/preparationController');
 
 const benefit = (type, head) => ({ benefit_type_code: type, benefit_type_desc: type, benefit_head_code: head, benefit_head_desc: head });
 const steps = (review) => [
@@ -79,4 +81,30 @@ it('manual rejections (vitamins / supplements): on any voucher, flagged ones dec
     { voucher: 1, key: { subtotal: 50000, date: '2026-10-02', voucherType: 'pharmacy' }, amount: 6000, remark: 'Superkids Z - 6,000 MMK is not covered due to supplement.' },
     { voucher: 0, key: { subtotal: 30000, date: '2026-10-02', voucherType: 'consultation' }, amount: null, remark: null },
   ]);
+});
+
+it('diagnosis search: match=text is the autocomplete (from 2 characters), else the search by meaning (from 3)', async () => {
+  const search = async (query) => {
+    const res = { status: jest.fn(() => res), json: jest.fn() };
+    await searchDiagnosis({ params: { id: 'c1' }, query }, res);
+    return { status: res.status.mock.calls[0]?.[0] ?? 200, body: res.json.mock.calls[0][0] };
+  };
+  expect((await search({ text: 'K0', match: 'text' })).body.candidates[0].diagCode).toBe('K05.1');
+  expect(findByText).toHaveBeenCalledWith('K0');
+  expect(findCandidates).not.toHaveBeenCalled();
+  expect((await search({ text: 'K', match: 'text' })).status).toBe(400);
+  expect((await search({ text: 'gu' })).status).toBe(400);
+  await search({ text: 'gum infection' });
+  expect(findCandidates).toHaveBeenCalledWith('gum infection', { topK: 10 });
+});
+
+it('recheck (one save with corrections): the choices are stored, the case stays at the stop and stays claimed', async () => {
+  ApiCaseStep.findAll.mockResolvedValue(steps({ diagnosis: true, vouchers: [] }));
+  const { endClaim } = require('../modules/case-claim/claim');
+  const res = await send({ diagCode: 'K05.1', recheck: true });
+  expect(res).toEqual({ status: 200, body: { caseId: 'c1', currentStatus: 'API_PREPARATION_REVIEW' } });
+  expect(Case.update).toHaveBeenCalledWith({ currentStatus: 'API_PREPARATION_REVIEW' }, expect.anything());
+  expect(ApiCaseStep.create).toHaveBeenCalledWith(expect.objectContaining({ job: 'preparation-review', output: expect.objectContaining({ diagnosis: expect.objectContaining({ diagCode: 'K05.1' }) }) }), expect.anything());
+  expect(CaseEvent.create.mock.calls[0][0].message).toMatch(/checked again first/);
+  expect(endClaim).not.toHaveBeenCalled();
 });

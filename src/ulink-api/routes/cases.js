@@ -483,7 +483,9 @@ router.post('/:id/retry', requireNotHeldByOther, retryCase);
  *       must be decided: the diagnosis code when it was unsure (a code in the ICD-10 table), and every flagged voucher
  *       (a benefit type + head on the member's own plan). All or nothing. Stores the choices (with the AI's own picks) as
  *       a preparation-review step and moves the case to API_READY_FOR_CLAIM_PREPARATION; claim preparation then uses
- *       them and does not ask the AI again. A comment is required and kept in the history.
+ *       them and does not ask the AI again. A comment is required and kept in the history. With recheck true (the
+ *       review page's one save with corrections), the choices are stored but the case stays at API_PREPARATION_REVIEW;
+ *       the corrections saved right after move it back to the document check.
  *     parameters:
  *       - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
  *     requestBody:
@@ -497,6 +499,7 @@ router.post('/:id/retry', requireNotHeldByOther, retryCase);
  *               diagCode: { type: string }
  *               benefits: { type: array, items: { type: object, properties: { voucher: { type: integer, description: 0-based }, benefitType: { type: string }, benefitHead: { type: string, nullable: true } } } }
  *               comment: { type: string, minLength: 3 }
+ *               recheck: { type: boolean, description: Store the choices without moving the case (saved with corrections) }
  *     responses:
  *       200: { description: "{ caseId, currentStatus }" }
  *       400: { description: No comment, a choice missing or not allowed, or the case is not at the claim preparation check }
@@ -510,9 +513,11 @@ router.post('/:id/preparation', requireRole('super_admin'), requireNotHeldByOthe
  *   get:
  *     tags: [cases]
  *     summary: ICD-10 codes nearest to a text, for choosing a diagnosis code (super admin; several seconds — an exact scan)
+ *     description: With match=text, codes that start with the text, then descriptions that contain it (autocomplete, fast, from 2 characters).
  *     parameters:
  *       - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
- *       - { name: text, in: query, required: true, schema: { type: string, minLength: 3 } }
+ *       - { name: text, in: query, required: true, schema: { type: string, minLength: 2 } }
+ *       - { name: match, in: query, required: false, schema: { type: string, enum: [text] } }
  *     responses:
  *       200: { description: "{ candidates: [{ diagOid, diagCode, diagDesc, similarity }] }" }
  *       400: { description: Text too short }

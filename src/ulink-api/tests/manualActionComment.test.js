@@ -13,6 +13,8 @@ jest.mock('../db/models', () => {
   };
 });
 jest.mock('../modules/document-checking/service', () => ({ releaseMissingDocumentsEmail: jest.fn().mockResolvedValue(true) }));
+const mockSettings = { apiSendMissingDocumentsEmail: true };
+jest.mock('../modules/settings/settings', () => ({ getSettings: jest.fn(async () => mockSettings), lastReadSettings: () => mockSettings }));
 
 const { events, Case, ApiCaseStep, CaseRequest } = require('../db/models');
 const { releaseMissingDocumentsEmail } = require('../modules/document-checking/service');
@@ -79,5 +81,15 @@ describe('send the request to the customer (held email)', () => {
     expect(res.body).toEqual({ caseId: 'case-1', currentStatus: 'API_INCOMPLETE' });
     expect(events[0].message).toBe('Missing-documents email sent to the customer by Ops (ops1) after review — comment: Checked page 3 — no medical report');
     expect(ApiCaseStep.create.mock.calls[0][0].input).toMatchObject({ action: 'release-missing-documents', comment: 'Checked page 3 — no medical report' });
+  });
+
+  it('API case with the customer email off: the history says ULINK emails the customer, not that it was sent', async () => {
+    mockSettings.apiSendMissingDocumentsEmail = false;
+    Case.findByPk.mockResolvedValue({ id: 'case-1', source: 'API', currentStatus: 'API_DOCUMENTS_REVIEW' });
+    ApiCaseStep.findOne.mockResolvedValue({ output: { heldEmail: { taskType: 'MISSING_DOCUMENTS' } } });
+    const res = await call(releaseMissingDocuments, { comment: 'Eye test slips have no date' });
+    expect(res.body).toEqual({ caseId: 'case-1', currentStatus: 'API_INCOMPLETE' });
+    expect(events[0].message).toBe('Continued as documents missing by Ops (ops1) after review; ULINK emails the customer (the customer email is off) — comment: Eye test slips have no date');
+    mockSettings.apiSendMissingDocumentsEmail = true;
   });
 });

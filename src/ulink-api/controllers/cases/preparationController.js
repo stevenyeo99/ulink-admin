@@ -1,5 +1,5 @@
 const { sequelize, Case, CaseEvent, ApiCaseStep } = require('../../db/models');
-const { findCandidates, findByCode } = require('../../modules/icd10/lookup');
+const { findCandidates, findByCode, findByText } = require('../../modules/icd10/lookup');
 const { uniqueBenefitCandidates } = require('../../modules/shared/iasBenefits');
 const { voucherKey, sameVoucher, sameDiagnosis, diagnosisSource } = require('../../modules/ias-claim-preparation/preparationReview');
 const { requiredComment } = require('./casesController');
@@ -24,6 +24,8 @@ const bad = (res, message) => res.status(400).json({ error: { message, status: 4
  * at most the voucher's amount, with a remark. Only at API_PREPARATION_REVIEW. Everything the stop asked for must be decided: the diagnosis when it was
  * unsure, every flagged voucher. A code must be in the ICD-10 table; a benefit type + head must be on the member's own
  * plan. All or nothing. Earlier choices on vouchers not sent stay. The AI's own picks are kept beside the person's.
+ * recheck: true — saved with corrections (the review page's one save): the choices are kept, the case does not move and
+ * stays claimed; the corrections that follow move it back to the document check, and claim preparation then uses them.
  */
 async function choosePreparation(req, res) {
   const comment = requiredComment(req, res, 'you chose these');
@@ -116,32 +118,39 @@ async function choosePreparation(req, res) {
     ...rejections.filter((r) => sentRejections.some((s) => s?.voucher === r.voucher))
       .map((r) => `voucher ${r.voucher + 1} manual rejection ${r.amount == null ? 'none' : `${r.amount.toLocaleString('en-US')} MMK`}`),
   ].filter(Boolean).join('; ');
+  const recheck = req.body?.recheck === true;
+  const next = recheck ? STATUS : NEXT;
   const now = new Date();
   const moved = await sequelize.transaction(async (transaction) => {
-    const [count] = await Case.update({ currentStatus: NEXT }, { where: { id: caseRecord.id, currentStatus: STATUS }, transaction });
+    const [count] = await Case.update({ currentStatus: next }, { where: { id: caseRecord.id, currentStatus: STATUS }, transaction });
     if (count !== 1) return false;
     await ApiCaseStep.create({
       caseId: caseRecord.id, job: BLOCK_NAME, status: 'DONE', input: null,
       output: { diagnosis, benefits, rejections, by, comment }, startedAt: now, finishedAt: now,
     }, { transaction });
     await CaseEvent.create({
-      caseId: caseRecord.id, blockName: BLOCK_NAME, prevStatus: STATUS, newStatus: NEXT, reasonCode: 'MANUAL_PREPARATION',
-      message: `Chosen by ${by}: ${what || 'earlier choices kept'} — comment: ${comment}`,
+      caseId: caseRecord.id, blockName: BLOCK_NAME, prevStatus: STATUS, newStatus: next, reasonCode: 'MANUAL_PREPARATION',
+      message: `Chosen by ${by}: ${what || 'earlier choices kept'}${recheck ? ' (saved with corrections: checked again first)' : ''} — comment: ${comment}`,
     }, { transaction });
     return true;
   });
   if (!moved) return res.status(409).json({ error: { message: 'The case changed while you were reviewing it. Reload the page and check again.', status: 409 } });
+  if (recheck) return res.json({ caseId: caseRecord.id, currentStatus: STATUS });
   await endClaim(caseRecord.id, req.user.username); // the holder decided the case — their own claim ends (SYSTEM_4 E4-22)
   logger.info('Claim preparation decided by a person', { caseId: caseRecord.id, diagnosis: diagnosis?.diagCode ?? null, vouchers: sent.length, rejections: sentRejections.length, username: req.user.username });
   return res.json({ caseId: caseRecord.id, currentStatus: NEXT });
 }
 
-/** GET /api/cases/:id/diagnosis-candidates?text= — ICD-10 codes nearest to the text (an exact scan: several seconds). */
+/**
+ * GET /api/cases/:id/diagnosis-candidates?text= — ICD-10 codes nearest to the text (an exact scan: several seconds).
+ * &match=text: codes or descriptions that contain the text (autocomplete, from 2 characters).
+ */
 async function searchDiagnosis(req, res) {
   const text = typeof req.query.text === 'string' ? req.query.text.trim() : '';
-  if (text.length < 3) return bad(res, 'Type at least 3 characters.');
+  const byText = req.query.match === 'text';
+  if (text.length < (byText ? 2 : 3)) return bad(res, `Type at least ${byText ? 2 : 3} characters.`);
   try {
-    return res.json({ candidates: await findCandidates(text, { topK: 10 }) });
+    return res.json({ candidates: byText ? await findByText(text) : await findCandidates(text, { topK: 10 }) });
   } catch (error) {
     logger.error('diagnosis search failed', { caseId: req.params.id, error: error.message });
     return res.status(502).json({ error: { message: 'The ICD-10 search is not available right now. Pick from the AI candidates, or try again.', status: 502 } });

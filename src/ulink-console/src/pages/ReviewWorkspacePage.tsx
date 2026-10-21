@@ -16,6 +16,7 @@ import { useConfidenceThreshold } from '../hooks/useConfidenceThreshold';
 import { DocumentViewer } from '../components/review/DocumentViewer';
 import { caseFiles, type PageRef } from '../lib/caseFiles';
 import { FindingsPanel } from '../components/review/FindingsPanel';
+import type { PendingCorrections } from '../lib/correctionDraft';
 
 /**
  * Review workspace (SYSTEM_4 E4-20, E5a): one screen per case — the document on the left, the AI's findings on the
@@ -34,6 +35,8 @@ export function ReviewWorkspacePage() {
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const claimTried = useRef<string | null>(null);
+  // Corrections not saved yet: at the claim preparation stop they are saved with its choices, in one save.
+  const [pendingCorrections, setPendingCorrections] = useState<PendingCorrections>({ items: [], notReady: 0, lines: [] });
 
   const { data, isLoading, isError } = useQuery({ queryKey: ['case', id], queryFn: () => getCase(id as string), enabled: !!id });
 
@@ -72,6 +75,7 @@ export function ReviewWorkspacePage() {
   const checklist = caseRecord.documentCheckResult?.checklist ?? [];
   const fields = (caseRecord.extractedFields ?? {}) as { claimant?: { claimant_name?: string | null }; claim?: { total_claim_amount?: number | null } };
   const unsureCount = assessmentSummary.reviewPoints.filter((p) => !p.overridden).length;
+  const atPreparationStop = caseRecord.currentStatus === 'API_PREPARATION_REVIEW' && isSuperAdmin();
 
   // "✓ Right" (E5b): recorded as learning data; the list refreshes to show it.
   const me = getSession()?.user.username;
@@ -156,9 +160,11 @@ export function ReviewWorkspacePage() {
             confirming={confirming}
             confirmed={confirmed}
             documentsOverridden={assessmentSummary.lines.some((l) => l.area === 'documents' && l.overridden)}
+            onPendingChange={setPendingCorrections}
+            saveBelow={atPreparationStop}
           />
           <CaseRetryPanel key={`retry-${id}`} caseId={id} retry={retry} />
-          {isSuperAdmin() && <PreparationReviewPanel key={`preparation-${id}`} caseRecord={caseRecord} />}
+          {isSuperAdmin() && <PreparationReviewPanel key={`preparation-${id}`} caseRecord={caseRecord} corrections={pendingCorrections} />}
           {/* Override and continue (same rules as the case page): a reviewer who checked the member or documents by hand,
               or fixed it in IAS, lets the case go on to the next job without leaving the review page. */}
           {isSuperAdmin() && <CaseOverridePanel key={`override-${id}`} caseRecord={caseRecord} override={override} summary={assessmentSummary} />}

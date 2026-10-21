@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as AlertDialog from '@radix-ui/react-alert-dialog';
 import { AlertTriangle } from 'lucide-react';
 import { overrideCase, releaseMissingDocuments } from '../../api/casesApi';
+import { getStpSettings } from '../../api/stpSettingsApi';
 import { Button } from '../common/Button';
 import type { AssessmentSummary, CaseDetail, CaseOverrideInfo } from '../../types/case';
 
@@ -54,10 +55,11 @@ export function CaseOverridePanel({
   const memberResult = caseRecord.memberVerifyResult;
   const paymentRisk = [memberResult?.reasonCode, ...(memberResult?.issues ?? []).map((i) => i.reasonCode)].includes('BANK_DETAILS_MISMATCH');
   const canSubmit = finding !== '' && reason.trim() !== '' && !mutation.isPending;
+  const missing = caseRecord.documentCheckResult?.issues ?? [];
 
   return (
     <section className="mb-6 rounded-xl2 border border-ulink-orange/25 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
-      {isHeld && <HeldEmailActions caseId={caseRecord.id} />}
+      {isHeld && <HeldEmailActions caseRecord={caseRecord} />}
       <h2 className="text-sm font-semibold text-slate-800">{action}</h2>
       <p className="mb-4 mt-1 text-sm text-slate-600">
         {isUnsurePass
@@ -114,6 +116,12 @@ export function CaseOverridePanel({
                     </ul>
                   </div>
                 )}
+                {isHeld && missing.length > 0 && (
+                  <p className="flex gap-2 rounded-lg bg-amber-50 p-2 text-amber-800">
+                    <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+                    The document check found missing: {missing.join('; ')}. Override only if they are not missing: the claim then goes to IAS as complete.
+                  </p>
+                )}
                 {paymentRisk && (
                   <p className="flex gap-2 rounded-lg bg-red-50 p-2 text-red-700">
                     <AlertTriangle size={16} className="mt-0.5 shrink-0" />
@@ -140,12 +148,18 @@ export function CaseOverridePanel({
 }
 
 /**
- * The customer has NOT been emailed yet: the AI was unsure a document is missing. If a person checks and
- * the documents really are missing, this sends the customer the request the check prepared. If the
- * documents are fine, the override below is the other choice.
+ * The customer has NOT been asked yet: the document check waits for a person — the AI was unsure a document is missing,
+ * or a person corrected items on the case (documentsHeldFor says which). If the documents really are missing, this
+ * continues with the request the check prepared: emailed to the customer, or, with the API customer email off, left to
+ * ULINK. If the documents are fine, the override below is the other choice.
  */
-function HeldEmailActions({ caseId }: { caseId: string }) {
+function HeldEmailActions({ caseRecord }: { caseRecord: CaseDetail }) {
+  const caseId = caseRecord.id;
   const queryClient = useQueryClient();
+  const { data: settings } = useQuery({ queryKey: ['stp-settings'], queryFn: getStpSettings, staleTime: 60_000 });
+  const ulinkEmails = caseRecord.source === 'API' && settings?.switches.apiSendMissingDocumentsEmail === false;
+  const heldFor = caseRecord.documentsHeldFor ?? [];
+  const missing = caseRecord.documentCheckResult?.issues ?? [];
   const [comment, setComment] = useState('');
   const release = useMutation({
     mutationFn: () => releaseMissingDocuments(caseId, comment.trim()),
@@ -155,10 +169,14 @@ function HeldEmailActions({ caseId }: { caseId: string }) {
   });
   return (
     <div className="mb-5 rounded-lg border border-ulink-orange/30 bg-ulink-orange/5 p-4">
-      <h2 className="text-sm font-semibold text-slate-800">Check before emailing the customer</h2>
+      <h2 className="text-sm font-semibold text-slate-800">Check before the customer is asked for documents</h2>
+      <p className="mt-1 text-sm text-slate-600">
+        The case waits for you: {heldFor.length ? heldFor.join('; ') : "the AI wasn't sure some documents are missing"}. The customer has not been asked yet.
+      </p>
+      {missing.length > 0 && <p className="mt-1 text-sm text-slate-700">Missing: {missing.join('; ')}.</p>}
       <p className="mb-3 mt-1 text-sm text-slate-600">
-        The AI wasn't sure some documents are missing, so the customer has not been emailed. Look at the documents: if they really are
-        missing, send the request; if they are fine, override the check below.
+        Look at the documents: if they really are missing, continue{ulinkEmails ? '' : ' and send the request'}; if they are fine, override the check below.
+        {ulinkEmails && ' The customer email is off: ULINK emails the customer (the draft is on the case page).'}
       </p>
       <label className="mb-3 block">
         <span className="mb-1 block text-sm font-medium text-slate-700">What did you check?</span>
@@ -171,7 +189,7 @@ function HeldEmailActions({ caseId }: { caseId: string }) {
         />
       </label>
       <Button onClick={() => release.mutate()} disabled={release.isPending || comment.trim().length < 3}>
-        {release.isPending ? 'Sending…' : 'Documents are missing — send the request to the customer'}
+        {release.isPending ? 'Saving…' : ulinkEmails ? 'Documents are missing — continue (ULINK emails the customer)' : 'Documents are missing — send the request to the customer'}
       </Button>
       {release.isError && <p className="mt-2 text-sm text-red-600">{(release.error as Error).message}</p>}
     </div>

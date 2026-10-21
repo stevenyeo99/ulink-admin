@@ -7,7 +7,7 @@ import { useConfidenceThreshold } from '../../hooks/useConfidenceThreshold';
 import type { AssessmentLine, ChecklistItem, CorrectionOption, FieldRead } from '../../types/case';
 import { pageRef, type PageRef, type ViewFile } from '../../lib/caseFiles';
 import { InlineCorrection } from './InlineCorrection';
-import { draftItem, draftProblem, newDraft, type CorrectionDraft } from '../../lib/correctionDraft';
+import { draftItem, draftLine, draftProblem, newDraft, type CorrectionDraft, type PendingCorrections } from '../../lib/correctionDraft';
 import { createCorrections } from '../../api/casesApi';
 import { Button } from '../common/Button';
 
@@ -78,12 +78,16 @@ function buildFindings(checklist: ChecklistItem[], options: CorrectionOption[]):
   }));
   const checks: Finding[] = checklist
     .filter((c) => !['FIELDS_READ', 'MISSING_MANDATORY_FIELD', 'DOCUMENT_LIST', 'BENEFIT_TYPE', 'DOCUMENT_DATES'].includes(c.code ?? ''))
-    .map((c) => ({
-      key: `check-${c.code}`, label: c.label, passed: c.passed, confidence: c.confidence ?? null,
-      why: c.note ?? c.reason ?? null, page: pageOf(c.usedFields), correct: canCorrect(`verdict:${c.code}`),
-      confirms: canCorrect(`verdict:${c.code}`) ? [`verdict:${c.code}`] : [],
-      edits: (c.editItems ?? []).map((item) => `value:${item}`).filter((item) => canCorrect(item)),
-    }));
+    .map((c) => {
+      const edits = (c.editItems ?? []).map((item) => `value:${item}`).filter((item) => canCorrect(item));
+      return {
+        key: `check-${c.code}`, label: c.label, passed: c.passed, confidence: c.confidence ?? null,
+        why: c.note ?? c.reason ?? null, page: pageOf(c.usedFields), correct: canCorrect(`verdict:${c.code}`),
+        // A check with no verdict of its own (the values check): "✓ Right" confirms the values it named, as read.
+        confirms: canCorrect(`verdict:${c.code}`) ? [`verdict:${c.code}`] : edits,
+        edits,
+      };
+    });
   if (mandatory.length) {
     checks.push({
       key: 'check-mandatory', label: 'Mandatory fields', passed: missing.length === 0, confidence: null,
@@ -110,7 +114,13 @@ export function FindingsPanel({
   confirming = false,
   confirmed,
   documentsOverridden = false,
+  onPendingChange,
+  saveBelow = false,
 }: {
+  /** The open changes, each time they change — for a save elsewhere on the page (the claim preparation stop). */
+  onPendingChange?: (pending: PendingCorrections) => void;
+  /** The changes are saved with the claim preparation below, in one save: no save button here. */
+  saveBelow?: boolean;
   /** "✓ Right": the reviewer checked it against the document (SYSTEM_4 E5b); null when they can't. */
   onConfirm: ((items: string[]) => void) | null;
   /** A confirmation is being saved — the buttons wait (no double count). */
@@ -154,6 +164,11 @@ export function FindingsPanel({
       for (const key of ['case', 'cases', 'review-queue', 'cases-overview', 'approvals']) queryClient.invalidateQueries({ queryKey: [key] });
     },
   });
+  useEffect(() => {
+    onPendingChange?.({ items: pending.map(draftItem), notReady, lines: pending.map(draftLine) });
+    // pending and notReady are derived from drafts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drafts, onPendingChange]);
   // Corrections no longer allowed (the case moved, someone else decided it): open changes can't be saved.
   useEffect(() => {
     if (!canCorrect) setDrafts({});
@@ -313,10 +328,15 @@ export function FindingsPanel({
         <div className="sticky bottom-0 mt-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-ulink-orange/30 bg-white px-3 py-2 shadow-glass">
           <p className="text-sm text-slate-700">
             {pending.length} change{pending.length === 1 ? '' : 's'} not saved{notReady ? ` — ${notReady} not ready yet` : ''}.
+            {saveBelow && ' Saved with the claim preparation below, in one save.'}
           </p>
           <div className="flex gap-2">
             <Button variant="ghost" disabled={saveAll.isPending} onClick={() => setDrafts({})}>Discard all</Button>
-            <Button disabled={notReady > 0 || saveAll.isPending} onClick={() => saveAll.mutate()}>{saveAll.isPending ? 'Saving…' : 'Save all and check again'}</Button>
+            {saveBelow ? (
+              <Button onClick={() => document.getElementById('preparation-save')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>Go to save</Button>
+            ) : (
+              <Button disabled={notReady > 0 || saveAll.isPending} onClick={() => saveAll.mutate()}>{saveAll.isPending ? 'Saving…' : 'Save all and check again'}</Button>
+            )}
           </div>
           {saveAll.isError && <p className="w-full text-sm text-red-600">{(saveAll.error as Error).message}</p>}
         </div>

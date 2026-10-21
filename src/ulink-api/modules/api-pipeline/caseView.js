@@ -11,6 +11,8 @@ const FIELDS = {
   memberVerifyResult: ['api-member-verification', (o) => o.memberVerifyResult],
   iasMemberInfoResponse: ['api-member-verification', (o) => o.iasMemberInfoResponse],
   documentCheckResult: ['api-document-checking', (o) => o.documentCheckResult],
+  // Why the document check waits for a person before the customer request (API_DOCUMENTS_REVIEW).
+  documentsHeldFor: ['api-document-checking', (o) => o.email?.payload?.held],
   iasClaimPayload: ['api-claim-preparation', (o) => o.payload],
   claimPrepMeta: ['api-claim-preparation', (o) => o.claimPrepMeta],
   isStp: ['api-claim-preparation', (o) => o.isStp],

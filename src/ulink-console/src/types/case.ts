@@ -204,6 +204,8 @@ export interface CaseDetail {
   recognizedType: string | null;
   extractedFields: unknown;
   documentCheckResult: DocumentCheckResult | null;
+  /** API cases at API_DOCUMENTS_REVIEW: why the document check waits for a person (the AI unsure, a person corrected items). */
+  documentsHeldFor?: string[];
   memberVerifyResult: MemberVerifyResult | null;
   iasMemberInfoResponse: unknown;
   iasClaimPayload: unknown;

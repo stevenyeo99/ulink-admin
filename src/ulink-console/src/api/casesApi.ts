@@ -56,6 +56,8 @@ export function choosePreparation(
     // A voucher's manual rejection (vitamins / supplements); amount null = none on that voucher.
     rejections: { voucher: number; amount: number | null; remark: string | null }[];
     comment: string;
+    // Saved with corrections: the choices are kept and the case does not move (the corrections move it).
+    recheck?: boolean;
   }
 ): Promise<{ caseId: string; currentStatus: string }> {
   return request(`/api/cases/${id}/preparation`, { method: 'POST', body: JSON.stringify(choice) });
@@ -64,6 +66,11 @@ export function choosePreparation(
 // ICD-10 codes nearest to a text — an exact scan, several seconds.
 export function searchDiagnosis(id: string, text: string): Promise<{ candidates: DiagnosisCandidate[] }> {
   return request(`/api/cases/${id}/diagnosis-candidates?text=${encodeURIComponent(text)}`);
+}
+
+// ICD-10 codes or descriptions that contain the text (autocomplete) — fast, a plain text match.
+export function suggestDiagnosis(id: string, text: string): Promise<{ candidates: DiagnosisCandidate[] }> {
+  return request(`/api/cases/${id}/diagnosis-candidates?match=text&text=${encodeURIComponent(text)}`);
 }
 
 // finding: why the check was wrong (an id from the case's override.findings). Who overrode is the

@@ -1,7 +1,8 @@
-import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Stethoscope } from 'lucide-react';
-import { choosePreparation, searchDiagnosis } from '../../api/casesApi';
+import { choosePreparation, createCorrections, searchDiagnosis, suggestDiagnosis } from '../../api/casesApi';
+import type { PendingCorrections } from '../../lib/correctionDraft';
 import { Button } from '../common/Button';
 import type { BenefitCandidate, CaseDetail, DiagnosisCandidate } from '../../types/case';
 
@@ -24,7 +25,10 @@ const money = (n: number | null | undefined) => (typeof n === 'number' ? n.toLoc
  * was unsure of must be set.
  * One comment, one save; claim preparation then runs again with these. Super admin.
  */
-export function PreparationReviewPanel({ caseRecord }: { caseRecord: CaseDetail }) {
+// corrections: the review page's corrections not saved yet (review workspace only). Saved with these choices in one save:
+// the choices first, kept without moving the case (recheck), then the corrections, which check the case again from the
+// document check; claim preparation then uses the choices and does not stop again unless a corrected voucher needs one.
+export function PreparationReviewPanel({ caseRecord, corrections }: { caseRecord: CaseDetail; corrections?: PendingCorrections }) {
   const queryClient = useQueryClient();
   const meta = caseRecord.claimPrepMeta;
   const review = meta?.review ?? { diagnosis: false, vouchers: [] };
@@ -49,14 +53,34 @@ export function PreparationReviewPanel({ caseRecord }: { caseRecord: CaseDetail 
     return [i, { amount: ai?.vitamin_exclude_amount != null ? String(ai.vitamin_exclude_amount) : '', remark: ai?.vitamin_remark ?? '', removed: false }];
   })));
   const search = useMutation({ mutationFn: () => searchDiagnosis(caseRecord.id, text.trim()) });
+  // Autocomplete: 300 ms after the person stops typing, codes or descriptions that contain the text.
+  const [typed, setTyped] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setTyped(text.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [text]);
+  const suggest = useQuery({
+    queryKey: ['icd10-suggest', caseRecord.id, typed],
+    queryFn: () => suggestDiagnosis(caseRecord.id, typed),
+    enabled: typed.length >= 2,
+    staleTime: 60_000,
+  });
+  // A code picked from the suggestions joins the list below, chosen.
+  const [picked, setPicked] = useState<DiagnosisCandidate | null>(null);
+  const fixes = corrections?.items ?? [];
   const save = useMutation({
-    mutationFn: () =>
-      choosePreparation(caseRecord.id, {
+    mutationFn: async () => {
+      const choice = {
         ...(code ? { diagCode: code } : {}),
         benefits: Object.entries(choices).map(([i, c]) => ({ voucher: Number(i), benefitType: c.type, benefitHead: c.head || null })),
         rejections: Object.entries(rejections).map(([i, r]) => ({ voucher: Number(i), amount: r.removed ? null : Number(r.amount), remark: r.removed ? null : r.remark.trim() })),
         comment: comment.trim(),
-      }),
+      };
+      if (!fixes.length) return choosePreparation(caseRecord.id, choice);
+      // Corrections only: the case is checked again and comes back to this stop.
+      if (changed) await choosePreparation(caseRecord.id, { ...choice, recheck: true });
+      return createCorrections(caseRecord.id, fixes);
+    },
     onSuccess: () => {
       for (const key of ['case', 'cases', 'review-queue', 'cases-overview']) queryClient.invalidateQueries({ queryKey: [key] });
     },
@@ -91,7 +115,7 @@ export function PreparationReviewPanel({ caseRecord }: { caseRecord: CaseDetail 
   const rejectionRows = lines.map((_, i) => i).filter((i) => rejections[i] || lines[i].vitamin?.rejection);
   const addable = lines.map((_, i) => i).filter((i) => !rejectionRows.includes(i));
 
-  const codes = [aiCode, ...((diagnosis?.candidates ?? []) as DiagnosisCandidate[]), ...(search.data?.candidates ?? [])]
+  const codes = [aiCode, picked, ...((diagnosis?.candidates ?? []) as DiagnosisCandidate[]), ...(search.data?.candidates ?? [])]
     .filter((c): c is DiagnosisCandidate => Boolean(c?.diagCode))
     .filter((c, i, all) => all.findIndex((o) => o.diagCode === c.diagCode) === i);
 
@@ -167,9 +191,25 @@ export function PreparationReviewPanel({ caseRecord }: { caseRecord: CaseDetail 
             ))}
           </fieldset>
           <form className="mt-2 flex gap-2" onSubmit={(e) => { e.preventDefault(); if (text.trim().length >= 3) search.mutate(); }}>
-            <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Search ICD-10, e.g. chronic gingivitis" className={`flex-1 ${selectClass}`} />
-            <Button type="submit" variant="ghost" disabled={text.trim().length < 3 || search.isPending}>{search.isPending ? 'Searching…' : 'Search'}</Button>
+            <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Type a code or words, e.g. K05 or gingivitis" aria-label="ICD-10 code or description" className={`flex-1 ${selectClass}`} />
+            <Button type="submit" variant="ghost" disabled={text.trim().length < 3 || search.isPending}>{search.isPending ? 'Searching…' : 'Search by meaning'}</Button>
           </form>
+          {typed.length >= 2 && typed === text.trim() && suggest.data && (
+            suggest.data.candidates.length ? (
+              <ul className="mt-1 max-h-60 overflow-y-auto rounded-lg border border-slate-900/10 bg-white text-sm shadow-sm">
+                {suggest.data.candidates.map((c) => (
+                  <li key={c.diagCode}>
+                    <button type="button" onClick={() => { setPicked(c); setCode(c.diagCode); setText(''); }} className="w-full px-2.5 py-1.5 text-left text-slate-700 hover:bg-slate-50">
+                      <span className="font-mono">{c.diagCode}</span> {c.diagDesc}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-1 text-xs text-slate-500">No code or description contains “{typed}”. Try Search by meaning.</p>
+            )
+          )}
+          {suggest.isError && <p className="mt-1 text-sm text-red-600">{(suggest.error as Error).message}</p>}
           {search.isError && <p className="mt-2 text-sm text-red-600">{(search.error as Error).message}</p>}
           {!review.diagnosis && (
             <button onClick={() => { setCode(''); setChangeDiagnosis(false); }} className="mt-1 text-xs text-slate-500 hover:underline">Keep the AI's code</button>
@@ -282,10 +322,30 @@ export function PreparationReviewPanel({ caseRecord }: { caseRecord: CaseDetail 
       <p className="mt-2 text-xs text-slate-500">STP is worked out again with these choices: a benefit change can move the claim in or out of STP.</p>
       {missing.length > 0 && <p className="mt-1 text-xs text-amber-700">Still to choose: {missing.join(', ')}.</p>}
       {save.isError && <p className="mt-2 text-sm text-red-600">{(save.error as Error).message}</p>}
-      <div className="mt-3">
-        <Button disabled={missing.length > 0 || !changed || comment.trim().length < 3 || save.isPending} onClick={() => save.mutate()}>
-          {save.isPending ? 'Saving…' : 'Save and prepare the revision'}
-        </Button>
+      <div id="preparation-save" className="mt-3">
+        {fixes.length > 0 ? (
+          <>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Corrections saved with this</p>
+            <ul className="mb-2 mt-1 list-disc pl-5 text-sm text-slate-700">
+              {(corrections?.lines ?? []).map((line, i) => <li key={i}>{line}</li>)}
+            </ul>
+            {(corrections?.notReady ?? 0) > 0 && <p className="mb-2 text-xs text-amber-700">Finish the corrections above first: each needs the new value and a reason.</p>}
+            <p className="mb-2 text-xs text-slate-600">
+              One save: {changed ? 'these choices and ' : ''}the correction{fixes.length === 1 ? '' : 's'}. The case is checked again from the document
+              check{changed ? ', then the revision is prepared with these choices' : ' and comes back here'}.
+            </p>
+            <Button
+              disabled={(corrections?.notReady ?? 0) > 0 || (changed && (missing.length > 0 || comment.trim().length < 3)) || save.isPending}
+              onClick={() => save.mutate()}
+            >
+              {save.isPending ? 'Saving…' : 'Save all and check again'}
+            </Button>
+          </>
+        ) : (
+          <Button disabled={missing.length > 0 || !changed || comment.trim().length < 3 || save.isPending} onClick={() => save.mutate()}>
+            {save.isPending ? 'Saving…' : 'Save and prepare the revision'}
+          </Button>
+        )}
       </div>
     </section>
   );
