@@ -6,6 +6,8 @@ import { pickView, sourceOf, viewParam, useEnabledSources } from '../hooks/useSo
 import { DataTable, type Column } from '../components/common/DataTable';
 import { WaitingCell } from '../components/common/WaitingCell';
 import type { ApprovalItem } from '../types/case';
+import { ClaimSearch } from '../components/common/ClaimSearch';
+import { matchesClaim } from '../lib/claimSearch';
 
 const PAGE_SIZE = 25;
 const EMPTY: ApprovalItem[] = [];
@@ -21,7 +23,16 @@ export function ApprovalsPage() {
   const source = pickView(params.get('source'), useEnabledSources());
   const page = Math.max(0, Number(params.get('page')) || 0);
   const { data, isLoading, isFetching, isError } = useApprovals(sourceOf(source));
-  const items = data?.items ?? EMPTY;
+  const q = params.get('q') ?? '';
+  const items = (data?.items ?? EMPTY).filter((i) => matchesClaim(i, q));
+  // A new search starts on the first page.
+  const search = (text: string) => {
+    const nextParams = new URLSearchParams(params);
+    if (text) nextParams.set('q', text);
+    else nextParams.delete('q');
+    nextParams.delete('page');
+    setParams(nextParams, { replace: true });
+  };
 
   const columns: Column<ApprovalItem>[] = [
     {
@@ -65,6 +76,9 @@ export function ApprovalsPage() {
         Claims that passed every check and are in IAS, waiting for approval. Open one to see the full AI assessment, then approve
         it in IAS.
       </p>
+      <div className="mb-3">
+        <ClaimSearch value={q} onChange={search} />
+      </div>
       <DataTable
         columns={columns}
         rows={items.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)}
@@ -81,7 +95,7 @@ export function ApprovalsPage() {
         }}
         isLoading={isLoading || isFetching}
         isError={isError}
-        emptyText="No claims are waiting for approval."
+        emptyText={q ? `No claim here matches "${q}".` : 'No claims are waiting for approval.'}
       />
     </div>
   );

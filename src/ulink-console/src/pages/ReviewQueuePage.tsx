@@ -7,6 +7,8 @@ import { pickView, sourceOf, viewParam, useEnabledSources } from '../hooks/useSo
 import { DataTable } from '../components/common/DataTable';
 import type { ReviewQueueItem } from '../types/case';
 import { getSession } from '../lib/session';
+import { ClaimSearch } from '../components/common/ClaimSearch';
+import { matchesClaim } from '../lib/claimSearch';
 
 const PAGE_SIZE = 25;
 const EMPTY: ReviewQueueItem[] = [];
@@ -21,6 +23,7 @@ export function ReviewQueuePage() {
   const [params, setParams] = useSearchParams();
   const source = pickView(params.get('source'), useEnabledSources());
   const reason = params.get('reason') ?? '';
+  const q = params.get('q') ?? '';
   const page = Math.max(0, Number(params.get('page')) || 0);
   const { data, isLoading, isFetching, isError } = useReviewQueue(sourceOf(source));
 
@@ -38,7 +41,7 @@ export function ReviewQueuePage() {
   // "My cases" (?reason=mine): the cases I am reviewing (SYSTEM_4 E4-22).
   const me = getSession()?.user.username;
   const mine = all.filter((i) => i.claim?.username === me);
-  const items = reason === 'mine' ? mine : reason ? all.filter((i) => i.reason === reason) : all;
+  const items = (reason === 'mine' ? mine : reason ? all.filter((i) => i.reason === reason) : all).filter((i) => matchesClaim(i, q));
   const reasons = Object.entries(data?.counts ?? {}).filter(([, n]) => n > 0);
 
   const columns = reviewColumns(source);
@@ -67,6 +70,10 @@ export function ReviewQueuePage() {
         </div>
       )}
 
+      <div className="mb-3">
+        <ClaimSearch value={q} onChange={(text) => update({ q: text })} />
+      </div>
+
       <DataTable
         columns={columns}
         rows={items.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)}
@@ -78,7 +85,7 @@ export function ReviewQueuePage() {
         onPageChange={(next) => update({ page: next > 0 ? String(next) : '' })}
         isLoading={isLoading || isFetching}
         isError={isError}
-        emptyText="Nothing to review. Cases appear here when a person needs to check the AI's work or fix an IAS rejection."
+        emptyText={q ? `No case here matches "${q}".` : "Nothing to review. Cases appear here when a person needs to check the AI's work or fix an IAS rejection."}
       />
     </div>
   );
