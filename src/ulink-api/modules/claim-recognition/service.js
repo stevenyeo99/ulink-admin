@@ -229,6 +229,35 @@ function withoutBadDocumentList(parsed, schema) {
 
 // field_evidence (SYSTEM_4 E3b) must describe the value actually kept: when code replaces a key field, its entry is
 // replaced too (evidence) or dropped (null — "not recorded" beats a wrong reason). Fields without the list: unchanged.
+// "Account Number" (or "Account No") followed by a number of 6 to 20 digits, on the same line or the next one.
+const ACCOUNT_NUMBER_LABEL = /account\s*(?:number|no\.?)\s*[:\-]?[ \t]*\n?[ \t]*([0-9][0-9 \-]{4,28}[0-9])/gi;
+
+/**
+ * Deterministic backstop for the bank account number (AYA-CL-26043766): the AI read it as "unclear" on the typed
+ * e-claim page while page 12 printed it clearly, so the case asked the customer for a number they had given. When the
+ * AI read no number, the page transcripts are searched for the "Account Number" label. One distinct number fills the
+ * field, with evidence below the AI confidence threshold, so a person still sees it as unsure and checks it against
+ * the page. Several different numbers, or none: the field stays empty, as the AI left it.
+ */
+function fillAccountNumberFromText(fields, transcriptChunks = []) {
+  if (!fields?.bank || fields.bank.bank_account_number) return fields;
+  const found = new Map(); // number → page
+  for (const chunk of transcriptChunks) {
+    const page = /^\[([^\]]+)\]/.exec(chunk)?.[1] ?? null;
+    for (const match of chunk.matchAll(ACCOUNT_NUMBER_LABEL)) {
+      const number = match[1].replace(/[ \-]/g, '');
+      if (number.length >= 6 && number.length <= 20 && !found.has(number)) found.set(number, page);
+    }
+  }
+  if (found.size !== 1) return fields;
+  const [[number, page]] = [...found];
+  return replaceEvidence({ ...fields, bank: { ...fields.bank, bank_account_number: number } }, 'bank.bank_account_number', {
+    page,
+    confidence: 0.6,
+    reason: `Found by text search: "Account Number" on ${page ?? 'a page'}; the AI did not read it. Check it against the page.`,
+  });
+}
+
 function replaceEvidence(fields, field, evidence) {
   if (!Array.isArray(fields.field_evidence)) return fields;
   const others = fields.field_evidence.filter((e) => e.field !== field);
@@ -663,9 +692,10 @@ async function extractFields(transcriptChunks, matchedRoute) {
   const normalizedFields = normalizeClaimantDob(normalizeDelegationLetter(dedupeInvoiceItems(fieldEvidenceList(checked))), transcriptChunks);
   const withFallback = await applyMedicalRecordFallback(normalizedFields, transcriptChunks);
   // The fallback may have re-read the medical record from another page: the first read's evidence for its date no longer applies.
-  const extractedFields = withFallback.medical_record?.date !== normalizedFields.medical_record?.date
+  const withRecordDate = withFallback.medical_record?.date !== normalizedFields.medical_record?.date
     ? replaceEvidence(withFallback, 'medical_record.date', null)
     : withFallback;
+  const extractedFields = fillAccountNumberFromText(withRecordDate, transcriptChunks);
   return { extractedFields: learnedFrom.length ? { ...extractedFields, learnedFrom } : extractedFields, schemaValidationError: null };
 }
 
@@ -871,6 +901,7 @@ module.exports = {
   transcribePages,
   dedupeInvoiceItems,
   normalizeClaimantDob,
+  fillAccountNumberFromText,
   dropOutOfRangeEvidence,
   withoutBadDocumentList,
   fieldEvidenceList,

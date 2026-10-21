@@ -45,3 +45,17 @@ describe('document-checking regression fixtures (judgment-dependent)', () => {
     expect(result.flags.map((f) => f.code)).toEqual(fixture.expected.flagCodes);
   });
 });
+
+// AYA-CL-26043766 (owner, 2026-10-21): a claim for a child is paid to the parent's account — no delegation letter.
+it('delegation letter: a claim for a child paid to another name needs no letter; an adult claim still does', () => {
+  const holder = { consistent: false, confidence: 0.95, reason: 'Different people' };
+  const fields = (isChild) => ({ claimant: { claimant_name: 'Naw Grace Shee Htar Mu', is_claim_for_child: isChild }, bank: { bank_account_name: 'Saw Wai Yan' }, delegation_letter: { present: false } });
+
+  const child = evaluateJudgmentDependentChecks(fields(true), { bankAccountHolder: holder });
+  expect(child.issues).not.toContain('Please fill in the attached delegation letter to proceed with the payment process');
+  expect(child.checklist.find((l) => l.code === 'DELEGATION_LETTER_REQUIRED')).toMatchObject({ passed: true, confidence: null, note: expect.stringContaining('Claim for a child') });
+
+  const adult = evaluateJudgmentDependentChecks(fields(false), { bankAccountHolder: holder });
+  expect(adult.issues).toContain('Please fill in the attached delegation letter to proceed with the payment process');
+  expect(adult.checklist.find((l) => l.code === 'DELEGATION_LETTER_REQUIRED')).toMatchObject({ passed: false, confidence: 0.95 });
+});

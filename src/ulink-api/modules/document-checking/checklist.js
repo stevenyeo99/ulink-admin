@@ -300,7 +300,12 @@ function evaluateJudgmentDependentChecks(extractedFields, judgments = {}) {
   const details = [];
   const flags = [];
 
-  if (judgments.bankAccountHolder?.consistent === false) {
+  // A claim for a child (claim form "Is Claim for Child": yes) is paid to the parent's account: the account holder is
+  // not the claimant, and no delegation letter is asked for (AYA-CL-26043766, owner 2026-10-21). The member check
+  // still compares the bank details with the member's IAS record.
+  const childClaim = extractedFields.claimant?.is_claim_for_child === true;
+  const childPayee = childClaim && judgments.bankAccountHolder?.consistent === false;
+  if (judgments.bankAccountHolder?.consistent === false && !childClaim) {
     const authorized = extractedFields.delegation_letter?.present === true;
     if (!authorized) {
       issues.push(ISSUES.DELEGATION_LETTER_REQUIRED);
@@ -337,8 +342,11 @@ function evaluateJudgmentDependentChecks(extractedFields, judgments = {}) {
       code: 'DELEGATION_LETTER_REQUIRED',
       label: JUDGMENT_CHECKLIST_LABELS.DELEGATION_LETTER_REQUIRED,
       passed: judgments.bankAccountHolder?.consistent == null ? null : !issues.includes(ISSUES.DELEGATION_LETTER_REQUIRED),
-      confidence: judgments.bankAccountHolder?.confidence ?? null,
-      note: judgments.bankAccountHolder?.reason ?? null,
+      // The child rule decides it, not the name comparison: no AI confidence on the line.
+      confidence: childPayee ? null : judgments.bankAccountHolder?.confidence ?? null,
+      note: childPayee
+        ? `Claim for a child: the account holder (${extractedFields.bank?.bank_account_name ?? 'not read'}) can be the parent, so no delegation letter is needed. The member check compares the bank details with IAS.`
+        : judgments.bankAccountHolder?.reason ?? null,
     },
     {
       code: 'DELEGATION_PAYEE_INCONSISTENT',
@@ -524,24 +532,27 @@ function reasonForIssue(issue, fields) {
 // exists; no "declaration present" boolean anywhere). Needs a schema decision (a new
 // extraction field) before this can be checked, not just a flip-on — see
 // docs/imp/demo/20260914/JD1_Checklist_SOP_vs_Current_System.md item 1.
+// path: the correction item for a field a person can correct on the review page (ai-feedback FIELD_LABELS), so a
+// missing one offers ✎ Edit on its line — e.g. an account number the AI read as "unclear" on one page while another
+// page shows it (AYA-CL-26043766).
 const MANDATORY_FIELDS = [
   { section: 'Submission Information', field: 'Case Number', get: (f) => f.claim?.insurer_case_number },
   { section: 'Policy & Member Information', field: 'Product Type', get: (f) => f.policy?.product_name },
-  { section: 'Policy & Member Information', field: 'Policy Number / Risk Name', get: (f) => f.policy?.policy_no },
+  { section: 'Policy & Member Information', field: 'Policy Number / Risk Name', get: (f) => f.policy?.policy_no, path: 'policy.policy_no' },
   { section: 'Policy & Member Information', field: 'Company Name', get: (f) => f.policy?.company_name },
-  { section: 'Policy & Member Information', field: 'Claimant Name', get: (f) => f.claimant?.claimant_name },
+  { section: 'Policy & Member Information', field: 'Claimant Name', get: (f) => f.claimant?.claimant_name, path: 'claimant.claimant_name' },
   { section: 'Policy & Member Information', field: 'Is Claim for Child', get: (f) => f.claimant?.is_claim_for_child },
-  { section: 'Policy & Member Information', field: 'Claimant Date of Birth', get: (f) => f.claimant?.claimant_dob },
-  { section: 'Policy & Member Information', field: 'NRC / Passport Number', get: (f) => f.claimant?.claimant_nrc_passport },
+  { section: 'Policy & Member Information', field: 'Claimant Date of Birth', get: (f) => f.claimant?.claimant_dob, path: 'claimant.claimant_dob' },
+  { section: 'Policy & Member Information', field: 'NRC / Passport Number', get: (f) => f.claimant?.claimant_nrc_passport, path: 'claimant.claimant_nrc_passport' },
   { section: 'Policy & Member Information', field: 'Phone Number', get: (f) => f.claimant?.phone_number },
   { section: 'Policy & Member Information', field: 'Email', get: (f) => f.claimant?.email_address },
   { section: 'Claim & Treatment Information', field: 'Claim Benefit Type', get: (f) => f.claim?.claim_benefit_type },
   { section: 'Claim & Treatment Information', field: 'Type of Patient', get: (f) => f.claim?.type_of_patient },
-  { section: 'Claim & Treatment Information', field: 'Appointment / Visited Date', get: (f) => f.claim?.appointment_date },
+  { section: 'Claim & Treatment Information', field: 'Appointment / Visited Date', get: (f) => f.claim?.appointment_date, path: 'claim.appointment_date' },
   // SOP §4's row is "Appointment/Visited Date & Time". The time was mandatory from 2026-09-14 until 2026-10-19, when
   // the owner removed it: the staff accept "N/A" and never ask the customer for it (AYA-CL-26043392).
-  { section: 'Claim & Treatment Information', field: 'Hospital / Clinic Name', get: (f) => f.medical?.hospital_or_clinic_name },
-  { section: 'Claim & Treatment Information', field: 'Claim Amount', get: (f) => f.claim?.total_claim_amount },
+  { section: 'Claim & Treatment Information', field: 'Hospital / Clinic Name', get: (f) => f.medical?.hospital_or_clinic_name, path: 'medical.hospital_or_clinic_name' },
+  { section: 'Claim & Treatment Information', field: 'Claim Amount', get: (f) => f.claim?.total_claim_amount, path: 'claim.total_claim_amount' },
   // SOP §9 treats Bank Name/Address/Account Holder Name/Account Number as four separate
   // mandatory confirmations. The existing checkMissingBankInfo (below, blocking) only
   // fires when all three of bank_name/bank_account_name/bank_account_number are missing
@@ -549,10 +560,10 @@ const MANDATORY_FIELDS = [
   // four passes that check silently. These four flags close that gap the same
   // non-blocking way as everything else in this list; checkMissingBankInfo is untouched,
   // still the blocking "all three missing" gate it always was.
-  { section: 'Bank Information', field: 'Bank Name', get: (f) => f.bank?.bank_name },
+  { section: 'Bank Information', field: 'Bank Name', get: (f) => f.bank?.bank_name, path: 'bank.bank_name' },
   { section: 'Bank Information', field: 'Bank Address / Branch', get: (f) => f.bank?.bank_address },
-  { section: 'Bank Information', field: 'Account Holder Name', get: (f) => f.bank?.bank_account_name },
-  { section: 'Bank Information', field: 'Account Number', get: (f) => f.bank?.bank_account_number },
+  { section: 'Bank Information', field: 'Account Holder Name', get: (f) => f.bank?.bank_account_name, path: 'bank.bank_account_name' },
+  { section: 'Bank Information', field: 'Account Number', get: (f) => f.bank?.bank_account_number, path: 'bank.bank_account_number' },
   // Unlike every field above (where only `null` means missing — `false` is a legitimate,
   // complete answer for a boolean like is_claim_for_child), a signature is only confirmed
   // present when this is exactly `true`; both `null` and `false` mean "not confirmed."
@@ -717,11 +728,10 @@ function buildEvaluatorChecklist(extractedFields) {
 
 // Found / not found is the whole reason here — no separate text.
 function buildMandatoryFieldChecklist(extractedFields) {
-  return MANDATORY_FIELDS.map(({ section, field, get, isMissing = (value) => value == null }) => ({
-    code: 'MISSING_MANDATORY_FIELD',
-    label: `${section}: ${field}`,
-    passed: !isMissing(get(extractedFields)),
-  }));
+  return MANDATORY_FIELDS.map(({ section, field, get, path, isMissing = (value) => value == null }) => {
+    const passed = !isMissing(get(extractedFields));
+    return { code: 'MISSING_MANDATORY_FIELD', label: `${section}: ${field}`, passed, ...(path && !passed ? { editItems: [path] } : {}) };
+  });
 }
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -1228,6 +1238,11 @@ function withEditItems(documentCheckResult, extractedFields) {
     ...documentCheckResult,
     checklist: documentCheckResult.checklist.map((item) => {
       if (CHECK_FIELDS[item.code] && !item.editItems) return { ...item, editItems: editItemsFor(item.code, extractedFields) };
+      // A missing mandatory field stored before its line named its value.
+      if (item.code === 'MISSING_MANDATORY_FIELD' && item.passed === false && !item.editItems) {
+        const path = MANDATORY_FIELDS.find(({ section, field }) => `${section}: ${field}` === item.label)?.path;
+        return path ? { ...item, editItems: [path] } : item;
+      }
       // A values check stored before it named its values: the same check on the same fields names them.
       if (item.code === 'VALUE_FORMAT' && item.problems?.length && !item.editItems) {
         const again = formatCheck(extractedFields);

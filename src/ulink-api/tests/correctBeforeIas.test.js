@@ -64,3 +64,22 @@ it('the values check names the value behind each problem, so the review page can
   // No problem: nothing to edit.
   expect(formatCheck({ ...yearOff, invoices: { items: [{ ...yearOff.invoices.items[0], date: '2026-10-08' }] } }, '2026-10-21').editItems).toBeUndefined();
 });
+
+it('a missing mandatory field a person can correct names its value, so the review page offers ✎ Edit (AYA-CL-26043766)', () => {
+  // The AI read the account number as "unclear" on page 2; page 12 shows it.
+  const noAccount = {
+    claimant: { claimant_name: 'Saw Wai Yan' },
+    claim: { appointment_date: '2026-10-02', total_claim_amount: 110000 },
+    medical: { detail_of_illness_injury: 'Toothache', hospital_or_clinic_name: 'LiSac Dental Clinic' },
+    medical_record: { present: true, legible: true, date: '2026-10-02' },
+    invoices: { present: true, items: [{ date: '2026-10-02', subtotal: 110000, legible: true, has_clinic_stamp_or_doctor_signature: true, voucher_type: 'consultation' }] },
+    bank: { bank_name: 'AYA', bank_account_name: 'Saw Wai Yan', bank_account_number: null },
+  };
+  const lines = evaluateDocumentChecks(noAccount).checklist.filter((l) => l.code === 'MISSING_MANDATORY_FIELD');
+  expect(lines.find((l) => l.label === 'Bank Information: Account Number')).toMatchObject({ passed: false, editItems: ['bank.bank_account_number'] });
+  expect(lines.find((l) => l.label === 'Bank Information: Bank Name').editItems).toBeUndefined(); // found: nothing to edit
+  expect(correctionOptions(noAccount).some((o) => o.item === 'bank.bank_account_number')).toBe(true);
+  // A result stored before the line named its value gets it on load.
+  const stored = { checklist: [{ code: 'MISSING_MANDATORY_FIELD', label: 'Bank Information: Account Number', passed: false }] };
+  expect(withEditItems(stored, noAccount).checklist[0].editItems).toEqual(['bank.bank_account_number']);
+});

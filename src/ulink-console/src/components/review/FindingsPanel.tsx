@@ -92,6 +92,8 @@ function buildFindings(checklist: ChecklistItem[], options: CorrectionOption[]):
     checks.push({
       key: 'check-mandatory', label: 'Mandatory fields', passed: missing.length === 0, confidence: null,
       why: missing.length ? `Not found: ${missing.join('; ')}` : `All ${mandatory.length} found.`, page: null, correct: null, confirms: [],
+      // A missing field a person can correct (an "unclear" reading the document shows elsewhere): ✎ Edit on this row.
+      edits: mandatory.filter((c) => c.passed === false).flatMap((c) => c.editItems ?? []).map((item) => `value:${item}`).filter((item) => canCorrect(item)),
     });
   }
   return [...values, ...checks, ...datesRow, ...info, ...documents];
