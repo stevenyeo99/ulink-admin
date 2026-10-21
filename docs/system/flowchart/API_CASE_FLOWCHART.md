@@ -25,7 +25,6 @@ flowchart TD
   ND -.-> E1[/Customer: missing documents<br/>team instead while the switch is off/]:::mail
   ND -->|case-page upload| UP
   B --> C[3 · Claim recognition<br/>AI reads every page]:::job
-  C -.-> E2[/Customer: claim received/]:::mail
   UP[Case-page upload<br/>API_UPLOAD_RECEIVED]:::job -->|read again at once| C
   C -->|too long / unreadable| MR{{API_MANUAL_REVIEW}}:::stop
   C --> D[4 · Member verification<br/>member, policy, bank vs IAS]:::job

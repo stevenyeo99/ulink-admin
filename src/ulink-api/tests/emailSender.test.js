@@ -173,3 +173,10 @@ describe('renderDocumentsIncomplete (internal)', () => {
       .toBe('(ULINK AI) Documents incomplete — Claim 2609170003 — 1 missing');
   });
 });
+
+it('member verification hold: the subject names the claim when the case has one (API), else the case', () => {
+  const { render } = require('../modules/email-sender/templates');
+  const payload = { caseId: 'c1', reasonCode: 'BANK_DETAILS_MISMATCH', reason: 'x', issues: [] };
+  expect(render('MEMBER_VERIFY_ISSUE', { ...payload, claimNo: '2610080002' }).subject).toBe('(ULINK AI) Member verification hold — Claim 2610080002 — BANK_DETAILS_MISMATCH');
+  expect(render('MEMBER_VERIFY_ISSUE', payload).subject).toBe('(ULINK AI) Member verification hold — Case c1 — BANK_DETAILS_MISMATCH');
+});

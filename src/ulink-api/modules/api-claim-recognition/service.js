@@ -89,10 +89,8 @@ async function processCase({ caseRecord, input }) {
       extractedFields,
       pageCount: transcripts.length,
       transcripts,
-      // Claim-received acknowledgement once the claim is read (17/09 meeting, action 6), same
-      // email as the email flow's. api-email-sender sends it once per case: re-reading after a
-      // reply asks again, and the repeat is skipped (same type, same dedupe key).
-      email: { taskType: 'DOCUMENT_COMPLETE_ACK', audience: 'customer', payload: {}, dedupeKey: null },
+      // No claim-received acknowledgement for API cases (owner, 2026-10-21): the customer submitted through the
+      // e-claim form, so only the email flow sends one.
     },
     nextStatus: 'API_RECOGNIZED',
     message: `${transcripts.length} page(s) read as ${API_ROUTE_KEY}`,

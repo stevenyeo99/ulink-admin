@@ -90,7 +90,6 @@ it("reads every document with the email flow's OCR and extracts with the ayas_me
     message: expect.any(String),
     output: {
       recognizedType: 'ayas_member_claim', extractedFields: { claimant_name: 'X' }, pageCount: 2, transcripts,
-      email: { taskType: 'DOCUMENT_COMPLETE_ACK', audience: 'customer', payload: {}, dedupeKey: null },
     },
   });
 });

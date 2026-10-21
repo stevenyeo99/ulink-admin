@@ -193,7 +193,8 @@ function applyVerdicts(result, corrections = []) {
       passed: verdict.corrected,
       confidence: 1,
       corrected: { by: verdict.by, at: verdict.at, reason: verdict.reason, aiPassed: verdict.aiValue },
-      note: `${verdict.corrected ? 'Passed' : 'Failed'} — corrected by ${verdict.by}: ${verdict.reason} (the AI said ${verdict.aiValue ? 'passed' : 'failed'}).`,
+      // The AI was right and a person let it pass anyway (ias_outdated / exception): say so, not "corrected".
+      note: `${verdict.corrected ? 'Passed' : 'Failed'} — ${EXCEPTION_STEPS.includes(verdict.wrongStep) ? `accepted by ${verdict.by} (${WRONG_STEP_LABELS[verdict.wrongStep]})` : `corrected by ${verdict.by}`}: ${verdict.reason} (the AI said ${verdict.aiValue ? 'passed' : 'failed'}).`,
     };
   });
   return { ...result, issues, details, flags, checklist, passed: issues.length === 0 };

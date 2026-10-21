@@ -39,7 +39,7 @@ const CASE_STATUSES = {
   READY_FOR_DOCUMENT_CHECKING: status('documents', 'in_progress', 'Checking documents', 'The member check passed; the document checklist runs next.'),
   INCOMPLETE: status('documents', 'waiting_customer', 'Documents incomplete', "Documents are missing or unclear; the customer was emailed the list and the case waits for their reply."),
   // Switch "hold the missing-documents email when the AI is unsure" on: a person checks before the customer is emailed.
-  DOCUMENTS_REVIEW: status('documents', 'needs_review', 'Check before emailing customer', "Documents look incomplete, but the AI wasn't sure. The customer has NOT been emailed: check the documents, then send the request or override the check."),
+  DOCUMENTS_REVIEW: status('documents', 'needs_review', 'Check before asking customer', "Documents look incomplete, and a person checks first: the AI was unsure, or a person corrected items. The customer has NOT been emailed: check the documents, then send the request or override the check."),
   // Switch "documents the AI passed but wasn't sure about: a person confirms first" on (SYSTEM_4 E4-09).
   DOCUMENTS_UNSURE: status('documents', 'needs_review', "Check the AI's documents finding", "All documents passed, but the AI wasn't sure about some of them, or a person asked for something the AI can't check (see the review points). Check them against the documents, then confirm to continue — or request more information; nothing has been prepared for IAS yet."),
   MEMBER_VERIFIED: status('documents', 'in_progress', 'Checks passed', 'Member and documents are checked; documents go to the console next.'),
@@ -65,7 +65,7 @@ const CASE_STATUSES = {
   API_MEMBER_REVIEW_REQUIRED: status('member', 'needs_review', 'Member check issue', "Member, coverage or bank details don't match IAS; held for internal review."),
   API_READY_FOR_DOCUMENT_CHECKING: status('documents', 'in_progress', 'Checking documents', 'The member check passed; the document checklist runs next.'),
   API_INCOMPLETE: status('documents', 'in_progress', 'Documents missing', 'Documents are missing; the claim will be revised with suspense and the customer asked.'),
-  API_DOCUMENTS_REVIEW: status('documents', 'needs_review', 'Check before emailing customer', "Documents look incomplete, but the AI wasn't sure. The customer has NOT been emailed and IAS is unchanged: check the documents, then send the request or override the check."),
+  API_DOCUMENTS_REVIEW: status('documents', 'needs_review', 'Check before asking customer', "Documents look incomplete, and a person checks first: the AI was unsure, or a person corrected items. The customer has NOT been asked and IAS is unchanged: check the documents, then continue or override the check."),
   // Uploaded on the case page (SYSTEM_4 E4-04): read and checked at once, then sent to the IAS console before the revision.
   API_UPLOAD_RECEIVED: status('recognition', 'in_progress', 'Uploaded — being read', 'Documents were uploaded on the case page; they are read and checked again on the next run, then sent to the IAS console.'),
   // New documents for a case waiting on them, put in the console by anyone — api-console-watch notices them,

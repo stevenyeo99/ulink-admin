@@ -144,6 +144,8 @@ export function FindingsPanel({
   const toConfirm = (f: Finding) => f.confirms.filter((item) => currentOf(item) != null);
   const isConfirmed = (f: Finding) => toConfirm(f).length > 0 && toConfirm(f).every((item) => confirmed.has(item) && confirmed.get(item) === currentOf(item));
   const [showPassed, setShowPassed] = useState(false);
+  // Checks that had nothing to compare: nothing to do, so folded like the passed ones.
+  const [showNotChecked, setShowNotChecked] = useState(false);
   // Changes not saved yet, by where they were opened ("finding key", "finding key|item" or the option item): several at
   // once, saved together with "Save all and check again" (owner, 2026-10-20 — not one finding per pipeline run).
   const [drafts, setDrafts] = useState<Record<string, CorrectionDraft>>({});
@@ -267,7 +269,14 @@ export function FindingsPanel({
       {section('Unsure', unsure, 'text-amber-700')}
       {section('Failed', failed, 'text-red-700')}
       {section('Handled by a person (override)', handled, 'text-slate-500')}
-      {section('Not checked (nothing to compare)', notChecked, 'text-slate-500')}
+      {notChecked.length > 0 && (
+        <section className="mb-4">
+          <button onClick={() => setShowNotChecked((s) => !s)} aria-expanded={showNotChecked} className="mb-1 inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <ChevronDown size={14} className={clsx(showNotChecked && 'rotate-180')} /> Not checked (nothing to compare) · {notChecked.length}
+          </button>
+          {showNotChecked && <ul className="divide-y divide-slate-900/5">{notChecked.map(row)}</ul>}
+        </section>
+      )}
       {passed.length > 0 && (
         <section className="mb-4">
           <button onClick={() => setShowPassed((s) => !s)} aria-expanded={showPassed} className="mb-1 inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-ulink-teal-dark">

@@ -60,7 +60,7 @@ async function processCase({ caseRecord, input }) {
         documentCheckResult: result,
         checkedAt: new Date().toISOString(),
         heldEmail: emailFor(result),
-        email: { taskType: 'DOCUMENTS_INCOMPLETE', audience: 'internal', payload: { caseId: caseRecord.id, claimNo: caseRecord.claimNo, issues: result.issues, held: unsure, assessment }, dedupeKey: `held|${issuesKey}` },
+        email: { taskType: 'DOCUMENTS_INCOMPLETE', audience: 'internal', payload: { caseId: caseRecord.id, claimNo: caseRecord.claimNo, issues: result.issues, held: unsure, contactCustomer: !(await getSettings()).apiSendMissingDocumentsEmail, assessment }, dedupeKey: `held|${issuesKey}` },
       },
       nextStatus: 'API_DOCUMENTS_REVIEW',
       message: `Documents incomplete: ${result.issues.join('; ')} — customer email held for a person: ${unsure.join('; ')}`,

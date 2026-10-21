@@ -113,8 +113,13 @@ describe('#2 email case: holding the customer email', () => {
 
 it('the team email says the customer has not been emailed and what to check', () => {
   const email = render('DOCUMENTS_INCOMPLETE', { caseId: 'c1', issues: ['No medical report'], held: ['Medical report present (AI confidence 0.3)'] });
-  expect(email.subject).toBe('(ULINK AI) Check before emailing the customer — Case c1 — 1 missing');
-  expect(email.bodyText).toContain('ACTION NEEDED — the customer has NOT been emailed yet. The AI was unsure about: Medical report present (AI confidence 0.3).');
+  expect(email.subject).toBe('(ULINK AI) Check before the customer is asked — Case c1 — 1 missing');
+  expect(email.bodyText).toContain('ACTION NEEDED — the customer has NOT been asked yet. The case waits for you: Medical report present (AI confidence 0.3).');
+  expect(email.bodyText).toContain('If they are missing, send the customer the request below.');
+  // API customer email off: ULINK emails the customer.
+  const off = render('DOCUMENTS_INCOMPLETE', { caseId: 'c1', claimNo: '2610080002', issues: ['No medical report'], held: ['a person corrected items on this case and sends the request'], contactCustomer: true });
+  expect(off.subject).toBe('(ULINK AI) Check before the customer is asked — Claim 2610080002 — 1 missing');
+  expect(off.bodyText).toContain('If they are missing, continue on the case page; ULINK emails the customer (the customer email is off).');
 });
 
 it('switches accept only known keys and true/false, saved with the rest of the form', async () => {

@@ -105,6 +105,11 @@ describe('a correction in force', () => {
     const failed = applyVerdicts(result, [correction({ kind: 'verdict', item: 'MISSING_BANK_INFO', label: 'x', aiValue: true, corrected: false })]);
     expect(failed.issues).toContain('Missing bank information');
     expect(failed.passed).toBe(false);
+
+    // The AI was right and a person let it pass anyway: the note says "accepted", not "corrected".
+    const accepted = applyVerdicts(result, [correction({ kind: 'verdict', item: 'INCORRECT_VOUCHER', label: 'x', aiValue: false, corrected: true, wrongStep: 'exception', reason: 'AI was right' })]);
+    expect(accepted.checklist.find((l) => l.code === 'INCORRECT_VOUCHER').note)
+      .toBe('Passed — accepted by Ulink (ulink) (the AI was right, accepted as an exception): AI was right (the AI said failed).');
   });
 
   it('the summary (case page, team emails, IAS remark) shows AI value → corrected value, who and why', () => {

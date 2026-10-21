@@ -111,7 +111,7 @@ const REASON_CODE_TO_SOP_ACTION = {
 };
 
 function renderMemberVerifyIssue(payload) {
-  const { caseId, reasonCode, reason } = payload;
+  const { caseId, claimNo, reasonCode, reason } = payload;
   // Every problem found (issues, A2 2026-09-29); tasks queued before that carry reasonCode only.
   const codes = [...new Set((payload.issues || []).map((issue) => issue.reasonCode))];
   if (codes.length === 0) codes.push(reasonCode);
@@ -123,7 +123,7 @@ function renderMemberVerifyIssue(payload) {
   // subject is what a reviewer scans in an ops inbox handling many cases; the body reads
   // as a friendly heads-up rather than a data dump (2026-09-16, at user's request).
   return {
-    subject: `${INTERNAL_SUBJECT_PREFIX}Member verification hold — Case ${caseId} — ${reasonCode}${more}`,
+    subject: `${INTERNAL_SUBJECT_PREFIX}Member verification hold — ${claimNo ? `Claim ${claimNo}` : `Case ${caseId}`} — ${reasonCode}${more}`,
     bodyText: `Hi team,
 
 We weren't able to confirm this case's member/bank details against IAS yet, so please hold off replying to the customer until it's sorted out — member and bank findings need internal verification first.
@@ -232,15 +232,17 @@ ${SIGN_OFF}`,
   }
   const ref = claimNo ? `Claim ${claimNo}` : `Case ${caseId}`;
   const list = issues.map((issue, i) => `${i + 1}. ${issue}`).join('\n');
+  // held: why the check waits for a person (the AI unsure, or a person corrected items). With contactCustomer as well
+  // (API customer email off), continuing does not email the customer: ULINK does.
   const intro = held?.length
-    ? `ACTION NEEDED — the customer has NOT been emailed yet. The AI was unsure about: ${held.join('; ')}.
-Open the case and check the documents, then either send the customer the request below, or override the document check if the documents are fine.`
+    ? `ACTION NEEDED — the customer has NOT been asked yet. The case waits for you: ${held.join('; ')}.
+Open the case and check the documents. If they are missing, ${contactCustomer ? 'continue on the case page; ULINK emails the customer (the customer email is off)' : 'send the customer the request below'}. If they are fine, override the document check.`
     : contactCustomer
       // API cases with the customer email switched off (SYSTEM_4 E4-03): ULINK contacts the customer.
       ? 'ACTION NEEDED — the customer has NOT been emailed. Please contact them about the missing documents below.'
       : "The customer has been asked for the missing documents below. No action is needed unless they don't reply.";
   return {
-    subject: `${INTERNAL_SUBJECT_PREFIX}${held?.length ? 'Check before emailing the customer' : contactCustomer ? 'Contact the customer — documents incomplete' : 'Documents incomplete'} — ${ref} — ${issues.length} missing`,
+    subject: `${INTERNAL_SUBJECT_PREFIX}${held?.length ? 'Check before the customer is asked' : contactCustomer ? 'Contact the customer — documents incomplete' : 'Documents incomplete'} — ${ref} — ${issues.length} missing`,
     bodyText: `Hi team,
 
 ${intro}

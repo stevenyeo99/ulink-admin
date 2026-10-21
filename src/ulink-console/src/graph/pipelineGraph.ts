@@ -220,8 +220,6 @@ export const API_EDGES: StaticEdge[] = API_BLOCKS.slice(1).map((block, i) => api
 export const API_EMAIL_BADGES: EmailBadgeMeta[] = [
   { id: 'api-email-badge-material-download', producer: 'api-material-download', blockName: 'api-email-sender', label: 'Missing documents (no images received)', audience: 'customer',
     whenNoCustomerEmail: { label: 'No images received: the team contacts the customer', audience: 'internal' }, x: 300, y: 380 },
-  // "Claim received" goes out right after recognition, as on the email tab (api-claim-recognition queues it).
-  { id: 'api-email-badge-claim-recognition', producer: 'api-claim-recognition', blockName: 'api-email-sender', label: 'Claim received', audience: 'customer', x: 300, y: 570 },
   { id: 'api-email-badge-member-verification', producer: 'api-member-verification', blockName: 'api-email-sender', label: 'Member verification hold', audience: 'internal', x: 300, y: 760 },
   { id: 'api-email-badge-document-checking', producer: 'api-document-checking', blockName: 'api-email-sender', label: 'Missing documents list + copy to the team', audience: 'customer',
     whenNoCustomerEmail: { label: 'Missing documents: ULINK emails the customer', audience: 'internal' }, x: 300, y: 950 },

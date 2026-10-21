@@ -38,6 +38,7 @@ async function processCase({ caseRecord, input }) {
         audience: 'internal',
         payload: {
           caseId: caseRecord.id,
+          claimNo: caseRecord.claimNo,
           reasonCode: result.reasonCode,
           reason: result.reason,
           issues: result.issues,
