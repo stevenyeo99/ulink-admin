@@ -1,6 +1,6 @@
 # SYSTEM_5 PRD: member balance check in the member check
 
-Owner: Steven Yeo. Written: 2026-10-26. Status: draft, for the owner's review.
+Owner: Steven Yeo. Written: 2026-10-26. Status: draft, for the owner's review. IAS and owner questions answered 2026-10-26.
 Source: `Internal_Note_Feedback.md`, the note on checks before a document request, point 2. IAS interface: `../INTEGRATION/IAS_MEMBER_BALANCE_SPEC.md`.
 
 ## 1. Background
@@ -70,6 +70,8 @@ The three request fields come from the IAS member information answer of step 1. 
 
 The call follows the same rules as `getMemberInfo` in `member-verification/iasClient.js`: a time-out, and a thrown error on a network failure or a non-2xx answer. A thrown error makes the member check step fail, and the job runs it again on the next run. A new configuration value `GET_MEMBER_LIMIT_BALANCE_API` holds the endpoint path, next to `GET_MEMBER_INFO_API`.
 
+If the balance call fails, the member check decides nothing on a missing balance. The case stays at its current status until a later run gets an answer (owner, 2026-10-26). During a long IAS outage, new cases wait at the member check. The Overview's pipeline health line shows the failing runs.
+
 ### 4.3 Picking the benefit head
 
 1. The system calls the existing `pickBenefit` (`ias-claim-preparation/benefitPicker.js`) once for each voucher. The inputs are the voucher type (read at recognition) and the member's plans (from step 1). They are the same inputs that claim preparation uses today.
@@ -86,7 +88,20 @@ The balance is checked only after every voucher has a head, from the AI or from 
 3. every *Combine Head* limit (`CH`) that lists the head
 4. every *Combine Type* limit (`CT`) that lists its benefit type
 
-All four limit types count. The voucher's *available balance* is the lowest balance among those limits. The rules:
+All four limit types count. The balance entry used is the one in `results[]` whose `plan_id` and `rev_no` match the member's plan (`memberPlans[0].plan.PLAN_ID` and `.REV_NO`).
+
+Each limit has several amount fields. They are treated as follows (owner, 2026-10-26):
+
+| Field | Meaning | Use |
+|---|---|---|
+| `amt_yr`, `amt_dis_yr`, `amt_life`, `amt_dis_life`, `amt_pocy` | Remaining balance (year, year per disability, lifetime, lifetime per disability, policy period) | Compared. Vouchers that share the limit are added up |
+| `amt_vis` | Limit for one visit | Compared with each voucher on its own, not added up |
+| `amt_day`, `amt_sur`, `chronic_ongoing_amt`, `chronic_ongoing_amt_renew` | Per day, surgery, chronic conditions | Not compared. Shown on the case only (Q3a) |
+| `deduct_amt`, `deduct_amt_vis`, `deduct_amt_day`, `copay_amt_yr` | Amounts that the member pays | Not compared |
+
+A field with the value `null` has no limit and is skipped. A value of 0 means used up. The balance is the remaining balance at the member plan level, after other claims. It does not include the claim being checked, also for an API case that already exists in IAS.
+
+The voucher's *available balance* is the lowest compared amount among those limits. The rules:
 
 1. Vouchers are checked one by one, in the order that the AI read them. Vouchers that share a limit are added up against it: each voucher sees the *balance left* after the vouchers before it.
 2. If the balance left is below the voucher amount, the balance is **not enough** for that voucher. This includes a balance of 0.
@@ -102,7 +117,7 @@ Voucher 2 (OP Outpatient / RX Prescribed Medicine): voucher 100,000, balance lef
 
 Only the lines that are *not enough* go into the `member:balance` finding. All lines are shown on the case (4.9).
 
-These rules depend on the meaning of the IAS fields (7, Q1 to Q3). They are built only after IAS answers.
+The owner gave the meaning of the IAS fields on 2026-10-26 (7, Q1 to Q5).
 
 ### 4.5 The outcome
 
@@ -123,14 +138,15 @@ A rare case with all three can visit member review, then *Choose the benefit*, t
 
 ### 4.5a The balance finding on the member review panel
 
-The balance finding works like the other member findings (date of birth, bank details, policy number):
+If the balance is not enough, the case holds at member review for a person (owner, 2026-10-26):
 
-1. It is listed on the member review panel of the case page and the review workspace, with its text.
-2. A person can *Mark OK* with a reason, for example "Partial payment agreed, IAS pays up to the balance". The case then goes on to the document check. The voucher amount sent to IAS does not change.
-3. A mark OK covers only the finding that the person saw. If the balance or the voucher amount changes, the finding text changes, and the finding is raised again. This is the existing rule for member findings (`covers` in `member-verification/checks.js`).
-4. The person can also fix the cause instead: correct a misread voucher amount, or choose another head on the *Choose the benefit* screen. The member check then runs again.
+1. The finding is listed on the member review panel of the case page and the review workspace, with one line per short voucher (4.4).
+2. The only action on this finding is *Bypass*. A reason is required, for example "Partial payment agreed, IAS pays up to the balance". The finding cannot be marked failed, and the panel offers no amount or head change for it.
+3. After a bypass, the case goes on to the document check. The voucher amount sent to IAS does not change.
+4. A bypass covers only the finding that the person saw. If the balance or a voucher amount changes, the finding text changes, and the finding is raised again. This is the existing rule for member findings (`covers` in `member-verification/checks.js`).
 5. A case at member review is checked again on every run. If another claim is reversed and the balance becomes enough, the finding clears and the case moves on by itself.
-6. `member:balance` joins the member findings that a person can mark OK (`ACCEPTABLE_MEMBER_ITEMS` in `checks.js`).
+6. `member:balance` joins the member findings that a person can set aside (`ACCEPTABLE_MEMBER_ITEMS` in `checks.js`). The reviewer roles can bypass it (Q6). The bypass, its reason, the person and the date are kept in the case history and the assessment summary.
+7. A claim whose balance was bypassed never goes STP. A person (JD3) always approves it.
 
 ### 4.6 The "Choose the benefit" review
 
@@ -166,7 +182,7 @@ When the person saves, the system records the choice with the person, the date a
 
 1. The case page and the review workspace show the balance lines of 4.4, one per voucher, with the benefit type and head codes and descriptions.
 2. The assessment summary (case page, team emails, IAS remark) has one balance line.
-3. The AI checklist page gets one new member check entry: *Is there enough balance for each voucher?* (`member:balance`, can stop the case, reviewer can mark passed). The catalog test forces the entry.
+3. The AI checklist page gets one new member check entry: *Is there enough balance for each voucher?* (`member:balance`, can stop the case, reviewer can bypass with a reason). The catalog test forces the entry.
 4. The existing *Plan limits* information line (`benefitLimits`, the plan's filed limits) is replaced by the balance line.
 
 ## 5. New statuses, settings and data
@@ -178,31 +194,35 @@ When the person saves, the system records the choice with the person, the date a
 
 ## 6. Risks
 
-1. A wrong reading of the IAS fields stops good claims. Example: 0 means "no limit at this level", but the system reads it as "used up". Then every claim of that type stops. The rules in 4.4 wait for the IAS answers.
+1. A used-up limit stops every claim that it covers. In the IAS sample, Outpatient (`T OP`) shows `amt_yr` 0, so every Outpatient claim of that member stops at member review. Before go-live, the rules are tested against one real member whose balance ULINK knows.
 2. More cases stop for a person. Unsure heads now stop the case before the document check, in both flows. The `holdUnsureBenefit` switch controls this.
 3. The balance can change between the member check and the IAS revision. The member check result is a snapshot. IAS assesses against the real balance at revision time.
 
 ## 7. Open questions
 
-| No. | Question | For | Proposed default |
+| No. | Question | For | Answer or proposed default |
 |---|---|---|---|
-| Q1 | Is `amt_yr` the remaining balance for the year, or the yearly limit? | IAS | Remaining balance (the sample has values such as 9,434,070) |
-| Q2 | Does `0` mean "used up" or "no limit at this level"? The sample shows Outpatient at 0 while its heads show 660,000 | IAS | No default: needed before build |
-| Q3 | Does `null` mean "no limit"? Do `amt_life`, `vis_yr` and `amt_vis` also need checking? | IAS | `null` = no limit. First version checks `amt_yr` and `amt_life` only |
-| Q4 | If there are several plans, which entry of `results[]` applies? | IAS | The plan with the same `plan_id` as `memberPlans[0].PLAN_ID` |
-| Q5 | Does the balance include claims still being processed, or only paid claims? | IAS | Paid only. If a pending claim explains the finding, a person can mark it OK |
-| Q6 | Which roles can choose the head and correct the amount on the new screen? | Owner | The reviewer roles that can use preparation review today |
-| Q7 | Does a balance finding ever email the customer? | Owner | No. The team decides and contacts the customer |
-| Q8 | Is `holdUnsureBenefit` on for the email flow too? | Owner | Yes, the same switch for both flows |
-| Q9 | Does a possible exclusion (point 3) also stop the case before the document check? | Owner | Separate decision, not in this PRD |
+| Q1 | Is `amt_yr` the remaining balance for the year, or the yearly limit? | IAS | Decided 2026-10-26: remaining balance. Every non-null balance field is compared (4.4) |
+| Q2 | Does `0` mean "used up" or "no limit at this level"? | IAS | Decided 2026-10-26: used up |
+| Q3 | Does `null` mean "no limit"? | IAS | Decided 2026-10-26: yes. If a field has no value, it is skipped |
+| Q3a | Do the per-day, surgery and chronic amounts (`amt_day`, `amt_sur`, `chronic_ongoing_amt*`) need comparing, and how? | Owner | Decided 2026-10-26: not compared, shown on the case only. Deductible and co-pay amounts are ignored |
+| Q4 | If there are several plans, which entry of `results[]` applies? | IAS | Decided 2026-10-26: the entry with the same `plan_id` and `rev_no` as the member's plan |
+| Q5 | Does the balance include the claim being checked? | IAS | Decided 2026-10-26: no. It is the remaining balance per member plan, so each voucher is compared with it |
+| Q6 | Which roles can choose the head, correct the amount and bypass the balance finding? | Owner | Decided 2026-10-26: the reviewer roles that use preparation review today, with a reason each time |
+| Q7 | Does a balance finding ever email the customer? | Owner | Decided 2026-10-26: no. The team is emailed, and a person decides |
+| Q8 | Is `holdUnsureBenefit` on for the email flow too? | Owner | Decided 2026-10-26: yes, one switch for both flows |
+| Q9 | Does a possible exclusion (point 3) also stop the case before the document check? | Owner | Decided 2026-10-26: a separate PRD later. It stays a warning for now |
+| Q10 | After a balance finding is bypassed, can the claim go STP? | Owner | Decided 2026-10-26: no, a person (JD3) approves it (4.5a, item 7) |
 
 ## 8. Implementation plan
 
 The owner approves one phase at a time. Each phase ends with the `ulink-api` tests passing, `ulink-console` building, a code review, and a suggested commit message and file list.
 
+Each phase can be released alone. No phase leaves a case at a status that no screen handles.
+
 | Phase | Content | Needs first | Status |
 |---|---|---|---|
-| A. IAS client and rules | `getMemberLimitBalance` client and configuration value. The balance rules of 4.4 as a pure function, with tests on the spec sample | Q1 to Q5 answered | Not started |
-| B. Member check | Head pick and balance inside `checkCase` (both flows). Saved picks reused. The `member:balance` finding with mark OK. New statuses and migration. AI checklist entries | A done | Not started |
-| C. Review screen | *Choose the benefit* screen, `POST /api/cases/:id/benefit`, amount correction with a reason, `recheckFrom` change, review queue reason | B done, Q6 | Not started |
-| D. Claim preparation and display | Preparation reuses the saved heads. Balance line on the case page, the review workspace and the assessment summary. `OPERATIONS.md` and the flowcharts | C done | Not started |
+| A. IAS client and rules | `getMemberLimitBalance` client in `member-verification/iasClient.js` and the `GET_MEMBER_LIMIT_BALANCE_API` configuration value. The balance rules of 4.4 as a pure function in a new `member-verification/balance.js`. It picks the entry by `plan_id` and `rev_no` and finds the limits that cover a head. It applies the field rules: `null` skipped, 0 used up, vouchers added up, `amt_vis` per voucher. It returns one line per voucher. Tests on the spec sample, including its Outpatient 0. No change to any case | Owner approves this PRD | Not started |
+| B. Balance in the member check | In `checkCase` (both flows): the AI head pick per voucher, saved and reused while the voucher is unchanged, then the balance call and the rules of A. The `member:balance` finding (`BALANCE_NOT_ENOUGH`) at the existing member review status, with the team email. *Bypass* with a required reason, open to the reviewer roles for this finding. No STP after a bypass. AI checklist entry. An unsure head does not stop the case yet: that voucher is checked at benefit type level only (4.4, rule 4) | A done | Not started |
+| C. Choose the benefit | New statuses `BENEFIT_REVIEW` / `API_BENEFIT_REVIEW` and their migration. `holdUnsureBenefit` stops an unsure head at the member check, in both flows. The *Choose the benefit* screen and `POST /api/cases/:id/benefit`. Voucher amount correction by the reviewer roles, with a reason. `recheckFrom` sends voucher amount and type corrections back to the member check. Review queue reason *Choose the benefit* | B done | Not started |
+| D. Claim preparation and display | Claim preparation reuses the heads saved by the member check. The balance lines on the case page, the review workspace and the assessment summary. The *Plan limits* line is replaced. `OPERATIONS.md`, `CLAIM_FLOW_END_TO_END.md` and the API flowchart (and its published page) updated | C done | Not started |
