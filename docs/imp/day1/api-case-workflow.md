@@ -384,7 +384,7 @@ they come from the earlier outputs:
 | `iasMemberInfoResponse` | member check output |
 | `createdAt` → `ReceivedDate` | the API case's creation time |
 | `consoleBarcode` → `barcode` | the earliest console submission's barcode |
-| `consoleUploadResult.completedAt` → `docCompleteDate` | when the document check passed; `null` while documents are missing |
+| `consoleUploadResult.completedAt` → `docCompleteDate` | the day claim preparation runs, after the console upload and barcode wait; the received date (`createdAt`) while documents are missing (suspense) |
 
 Then the payload becomes the **IAS claim revision body** (`docs/imp/demo/API DAY1/IAS_CLAIM_REVISION.md`; a test
 compares the fields):

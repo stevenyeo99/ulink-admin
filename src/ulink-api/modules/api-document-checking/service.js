@@ -85,7 +85,7 @@ async function processCase({ caseRecord, input }) {
     output: {
       outcome,
       documentCheckResult: result,
-      // When documents were found complete — claim preparation's docCompleteDate.
+      // When the documents were checked (kept for the record; claim preparation sends its own date to IAS).
       checkedAt: new Date().toISOString(),
       email: emailFor(result),
     },

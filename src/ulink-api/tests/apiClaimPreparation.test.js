@@ -61,7 +61,7 @@ it("builds the email flow's payload from the earlier outputs, then the revision 
     iasMemberInfoResponse: { success: true, payload: { member: {} } },
     createdAt,
     consoleBarcode: 'FIRST',
-    consoleUploadResult: { completedAt: '2026-09-24T06:00:00.000Z' },
+    consoleUploadResult: { completedAt: expect.any(Date) },
     preparationChoice: null,
   });
   expect(result).toMatchObject({
@@ -85,12 +85,12 @@ it("builds the email flow's payload from the earlier outputs, then the revision 
   });
 });
 
-it('prepares a suspended revision when documents are missing, without a completion date', async () => {
+it('prepares a suspended revision when documents are missing, with the received date as the completion date', async () => {
   checkCase.mockResolvedValue(prepared(true)); // even an STP amount
 
   const result = await job.process({ caseRecord, input: inputWith(failed) });
 
-  expect(checkCase.mock.calls[0][0].consoleUploadResult).toEqual({ completedAt: null });
+  expect(checkCase.mock.calls[0][0].consoleUploadResult).toEqual({ completedAt: createdAt });
   expect(result.output).toMatchObject({ documentsComplete: false, payload: { isValidation: 'Y', isCSR: 'N', isSuspense: 'Y' } });
 });
 

@@ -11,7 +11,7 @@ const { reviewNeeded } = require('../ias-claim-preparation/preparationReview');
 //   input:  { 'api-claim-intake': { clNo, tpaCaseNumber }, 'api-material-download': { documents },
 //             'api-claim-recognition': { extractedFields, recognizedType },
 //             'api-member-verification': { iasMemberInfoResponse },
-//             'api-document-checking': { outcome, checkedAt },
+//             'api-document-checking': { outcome },
 //             'api-console-barcode'?: { barcodes } }   (case-page uploads sent to the console)
 //   output: { payload, documentsComplete, diagnosis, lines, isStp, claimPrepMeta }
 //
@@ -57,8 +57,9 @@ async function processCase({ caseRecord, input }) {
     iasMemberInfoResponse: input['api-member-verification'].iasMemberInfoResponse,
     createdAt: caseRecord.createdAt,
     consoleBarcode: barcode,
-    // Documents aren't complete yet on a suspended claim, so no completion date.
-    consoleUploadResult: { completedAt: documentsComplete ? documentCheck.checkedAt : null },
+    // A suspended claim goes to IAS with the received date as its completion date (user request 2026-10-26);
+    // complete documents send today: this job runs only after the console upload and barcode wait finish.
+    consoleUploadResult: { completedAt: documentsComplete ? new Date() : caseRecord.createdAt },
     // What a person chose (POST /api/cases/:id/preparation): used as is, on every later preparation too.
     preparationChoice: input['preparation-review'] || null,
   });
