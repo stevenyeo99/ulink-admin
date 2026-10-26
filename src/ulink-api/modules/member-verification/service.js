@@ -5,6 +5,7 @@ const { evaluate } = require('./checks');
 const { checkExclusions } = require('./exclusionFlags');
 const { checkBenefitEligibility } = require('./benefitEligibility');
 const { summarizeBenefitLimits } = require('./benefitLimits');
+const { checkMemberBalance } = require('./memberBalance');
 const { queueDedupedTask } = require('../shared/emailTaskQueue');
 const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment-summary/summary');
 const { caseBasics } = require('../assessment-summary/journey');
@@ -43,7 +44,16 @@ async function checkCase(caseRecord) {
   }
 
   const iasResponse = await getMemberInfo({ memberNrc, meplEffDate });
-  const result = evaluate(extractedFields, iasResponse);
+  // The member's balance for each voucher (SYSTEM_5 member balance): only once IAS knows the member. A short voucher is
+  // one more member finding (member:balance), listed after the member's own. The last check's head picks come back
+  // with the case (caseRecord.memberVerifyResult), so a case re-checked every run is not picked again.
+  const balance = iasResponse?.success === true
+    ? await checkMemberBalance(extractedFields, iasResponse, caseRecord.memberVerifyResult?.balance?.picks)
+    : null;
+  const result = evaluate(extractedFields, iasResponse, balance?.issue ? [balance.issue] : []);
+  const previousPicks = caseRecord.memberVerifyResult?.balance?.picks;
+  if (balance) result.balance = { checked: balance.checked, note: balance.note, picks: balance.picks, lines: balance.lines };
+  else if (previousPicks) result.balance = { checked: false, note: 'IAS did not find the member.', picks: previousPicks, lines: [] };
 
   // Only run the exclusion-possibility check (SOP §6.3) and benefit-eligibility check (SOP
   // §6.4) once the hard member/policy checks already pass — a case still failing on e.g. a

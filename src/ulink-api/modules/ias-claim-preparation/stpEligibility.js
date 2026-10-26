@@ -20,7 +20,7 @@ const amount = (n) => Number(n).toLocaleString('en-US');
  *
  * Returns { isStp, source, currency, diagCode, benefits: [{ benefitType, total, allowed, limit }], reasons }.
  */
-function evaluateStp({ rules, blockedDiagnoses, blockOnReviewPoints = false, blockVitamins = false }, { source, currency, lines, diagCode, openReviewPoints = [], vitaminVouchers = [] }) {
+function evaluateStp({ rules, blockedDiagnoses, blockOnReviewPoints = false, blockVitamins = false }, { source, currency, lines, diagCode, openReviewPoints = [], vitaminVouchers = [], balanceBypassed = false }) {
   const reasons = [];
   const totals = new Map();
   for (const { benefitType, subtotal } of lines) {
@@ -50,6 +50,10 @@ function evaluateStp({ rules, blockedDiagnoses, blockOnReviewPoints = false, blo
   if (blockVitamins && vitaminVouchers.length) {
     reasons.push(`Vitamins / supplements on voucher${vitaminVouchers.length > 1 ? 's' : ''} ${vitaminVouchers.join(', ')} — a person approves.`);
   }
+
+  // A short balance a person bypassed at member review (SYSTEM_5 member balance, owner 2026-10-26): never STP, whatever
+  // the switches.
+  if (balanceBypassed) reasons.push('The balance was not enough and a person let the case go on — a person approves.');
 
   if (blockOnReviewPoints && openReviewPoints.length) {
     reasons.push(`Open review point${openReviewPoints.length > 1 ? 's' : ''}: ${openReviewPoints.map((p) => `${p.decision} (${p.reason})`).join('; ')} — a person checks first.`);

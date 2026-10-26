@@ -2,7 +2,7 @@
 
 This chart shows how an API case moves from the IAS claim list to the IAS revision. It shows the pipeline jobs in order, the stops where a person decides, and the emails that go out. The source is `src/ulink-api/modules/pipeline/service.js` (`API_STEPS`) and the input and output statuses of each `api-*` job.
 
-Last checked against the code: 2026-10-21. Published copy: https://claude.ai/artifact/6wQz6VycRj8e3TgdbvYWWg (private, republish it from this file after each change).
+Last checked against the code: 2026-10-26. Published copy: https://claude.ai/artifact/6wQz6VycRj8e3TgdbvYWWg (private, republish it from this file after each change).
 
 Image: [API_CASE_FLOWCHART.svg](API_CASE_FLOWCHART.svg). A Claude Code hook renders it from the chart below after each save of this file (`.claude/hooks/render-api-flowchart.sh`). If you edit the file outside Claude Code, run `.claude/hooks/render-api-flowchart.sh --all`.
 
@@ -27,10 +27,10 @@ flowchart TD
   B --> C[3 · Claim recognition<br/>AI reads every page]:::job
   UP[Case-page upload<br/>API_UPLOAD_RECEIVED]:::job -->|read again at once| C
   C -->|too long / unreadable| MR{{API_MANUAL_REVIEW}}:::stop
-  C --> D[4 · Member verification<br/>member, policy, bank vs IAS]:::job
-  D -->|mismatch| MV{{API_MEMBER_REVIEW_REQUIRED<br/>rechecked every run}}:::stop
+  C --> D[4 · Member verification<br/>member, policy, bank vs IAS<br/>AI head per voucher + IAS balance]:::job
+  D -->|mismatch / balance not enough| MV{{API_MEMBER_REVIEW_REQUIRED<br/>rechecked every run}}:::stop
   MV -.-> E3[/Team: member verification hold/]:::mail
-  MV -->|override / IAS fixed| E
+  MV -->|override / IAS fixed / Mark OK or Bypass| E
   D -->|verified| E[5 · Document checking<br/>checklist + AI confidence]:::job
   E -->|complete, AI unsure| DU{{API_DOCUMENTS_UNSURE}}:::stop
   DU -->|person confirms| F
@@ -74,7 +74,7 @@ flowchart TD
 |---|---|---|---|
 | `API_NO_DOCUMENTS` | The IAS console has no images for the claim. | Upload on the case page, or wait. Console watch checks every run. | None |
 | `API_MANUAL_REVIEW` | The documents are too long for the AI, or its answer did not match the claim schema. | Handle the claim by hand. | None |
-| `API_MEMBER_REVIEW_REQUIRED` | Member, policy or bank details differ from IAS. | Fix IAS (rechecked every run), Mark OK, correct a value, or override. | None |
+| `API_MEMBER_REVIEW_REQUIRED` | Member, policy or bank details differ from IAS, or the IAS balance is not enough for a voucher (`member:balance`). | Fix IAS (rechecked every run), Mark OK, correct a value, or override. A short balance: Bypass with a reason only, and the claim then never goes STP. | None |
 | `API_DOCUMENTS_UNSURE` | The documents are complete, but the AI was unsure of an item. A reviewer's open request line also holds the case here, even when the switch is off. | Use the `Confirm and continue` button, or correct a value. | `holdUnsureDocumentPass` |
 | `API_DOCUMENTS_REVIEW` | Documents are missing and the AI was unsure, or a person corrected items. | Documents are missing: continue (suspended revision). Documents are fine: override. Or correct a value. | `holdUnsureMissingDocsEmail` |
 | `API_CONSOLE_UPLOAD_FAILED` | Case-page uploads did not reach the IAS console. | Retry from the case page. | None |

@@ -89,6 +89,8 @@ function validateCorrection(body, options) {
   if (!option) return { error: 'Pick a value or check that can be corrected on this case.' };
   if (!WRONG_STEP_LABELS[body.wrongStep]) return { error: `Say what went wrong: ${Object.keys(WRONG_STEP_LABELS).join(', ')}.` };
   if (EXCEPTION_STEPS.includes(body.wrongStep) && option.kind !== 'verdict') return { error: 'A changed value is a misread or a wrong field, not an exception.' };
+  // A short IAS balance is a business decision, not an AI mistake (SYSTEM_5 member balance).
+  if (option.item === 'member:balance' && body.wrongStep !== 'exception') return { error: 'A short balance is bypassed as an exception.' };
   if (typeof body.reason !== 'string' || body.reason.trim().length < 3) return { error: 'Add a comment: why the AI was wrong.' };
 
   if (option.kind === 'verdict') {

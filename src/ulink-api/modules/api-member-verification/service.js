@@ -1,5 +1,6 @@
 const config = require('../../config');
 const { runApiJob } = require('../api-pipeline/runApiJob');
+const { ApiCaseStep } = require('../../db/models');
 const { checkCase } = require('../member-verification/service');
 const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment-summary/summary');
 const { caseBasics } = require('../assessment-summary/journey');
@@ -22,7 +23,9 @@ const OUTCOME_TO_STATUS = {
 
 async function processCase({ caseRecord, input }) {
   const { extractedFields, recognizedType } = input['api-claim-recognition'];
-  const { outcome, result, iasResponse } = await checkCase({ id: caseRecord.id, extractedFields, recognizedType });
+  // The last member check's result (a waiting run keeps its output too): its head picks are reused (SYSTEM_5 member balance).
+  const last = await ApiCaseStep.findOne({ where: { caseId: caseRecord.id, job: 'api-member-verification', status: ['DONE', 'WAITING'] }, order: [['createdAt', 'DESC']] });
+  const { outcome, result, iasResponse } = await checkCase({ id: caseRecord.id, extractedFields, recognizedType, memberVerifyResult: last?.output?.memberVerifyResult });
   const nextStatus = OUTCOME_TO_STATUS[outcome];
   if (!nextStatus) throw new Error(`Unexpected member check outcome: ${outcome}`);
 

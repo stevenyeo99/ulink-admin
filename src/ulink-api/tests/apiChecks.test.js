@@ -5,9 +5,12 @@
 // A reviewer's own lines (SYSTEM_4 E4-28): none open — no database here.
 jest.mock('../modules/case-requests/requests', () => ({ ...jest.requireActual('../modules/case-requests/requests'), openRequests: jest.fn(async () => []) }));
 jest.mock('../modules/member-verification/service', () => ({ checkCase: jest.fn() }));
+// The last member check's step (its head picks are reused, SYSTEM_5 member balance) — no database here.
+jest.mock('../db/models', () => ({ ...jest.requireActual('../db/models'), ApiCaseStep: { findOne: jest.fn(async () => null) } }));
 jest.mock('../modules/document-checking/service', () => ({ ...jest.requireActual('../modules/document-checking/service'), checkCase: jest.fn() }));
 
 const memberEmail = require('../modules/member-verification/service');
+const { ApiCaseStep } = require('../db/models');
 const documentEmail = require('../modules/document-checking/service');
 const { job: memberJob } = require('../modules/api-member-verification/service');
 const { job: documentJob } = require('../modules/api-document-checking/service');
@@ -33,6 +36,13 @@ describe('api-member-verification', () => {
       nextStatus: 'API_READY_FOR_DOCUMENT_CHECKING',
       output: { outcome: 'MEMBER_VERIFIED', memberVerifyResult: { reasonCode: null }, iasMemberInfoResponse: { success: true }, email: null },
     });
+  });
+
+  it("hands the last member check's result on, so its head picks are reused", async () => {
+    ApiCaseStep.findOne.mockResolvedValueOnce({ output: { memberVerifyResult: { balance: { picks: [{ voucher: 0 }] } } } });
+    memberEmail.checkCase.mockResolvedValue({ outcome: 'MEMBER_VERIFIED', result: {}, iasResponse: { success: true } });
+    await memberJob.process({ caseRecord: recognized, input });
+    expect(memberEmail.checkCase).toHaveBeenCalledWith(expect.objectContaining({ memberVerifyResult: { balance: { picks: [{ voucher: 0 }] } } }));
   });
 
   it('sends a member issue to review, with the internal email the email flow would send', async () => {

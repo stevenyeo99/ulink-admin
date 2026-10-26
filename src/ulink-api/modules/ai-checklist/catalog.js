@@ -45,6 +45,8 @@ const CHECKS = [
     does: 'The policy number on the claim form must match the IAS record.', fields: ['policy.policy_no'] },
   { code: 'member:bank', section: 'member', question: 'Do the bank details match IAS?', label: MEMBER_ITEM_LABELS['member:bank'], effect: 'stops', locked: true,
     does: 'The bank name, account holder and account number must match the IAS record. A title such as U or Daw is ignored in the name.', fields: BANK },
+  { code: 'member:balance', section: 'member', question: 'Is there enough balance for each voucher?', label: MEMBER_ITEM_LABELS['member:balance'], effect: 'stops', usesAi: true,
+    does: "Picks each voucher's benefit head, then compares each voucher amount with the member's remaining balance in IAS: the head, its benefit type and any combined limit, whichever is lowest. Vouchers that share a limit are added up." },
   { code: 'POSSIBLE_EXCLUSION', section: 'member', question: 'Could the diagnosis be a policy exclusion?', label: 'Possible policy exclusion', effect: 'warning', usesAi: true,
     does: 'Compares the diagnosis with the policy exclusion clauses. A possible match is flagged for the approver (JD3), never rejected.',
     onFail: 'The case goes on, and the approver (JD3) sees the warning. If the System settings switch for review points is on, the claim does not go STP.' },
@@ -145,7 +147,8 @@ function reviewerActions(check) {
   const isVerdict = check.section === 'member'
     ? ACCEPTABLE_MEMBER_ITEMS.has(check.code)
     : check.effect !== 'off' && !NOT_VERDICT_ITEMS.has(check.code);
-  if (isVerdict) actions.push('Mark passed');
+  // The balance finding's only action is a bypass with a reason (SYSTEM_5 member balance) — the same mark OK.
+  if (isVerdict) actions.push(check.code === 'member:balance' ? 'Bypass (with a reason)' : 'Mark passed');
   if (isVerdict && check.section !== 'member' && ISSUES[check.code]) actions.push('Mark failed');
   const fields = (check.fields || []).map((key) => FIELD_LABELS[key] || VOUCHER_FIELDS[key]).filter(Boolean);
   if (fields.length) actions.push(`Correct: ${fields.join(', ')}`);

@@ -32,16 +32,25 @@ const PATIENT_TYPE_ALIASES = { 'dental care': 'dental', 'optical care': 'vision'
  * itself has no type_of_patient) or when a match is found — a flag object only when
  * type_of_patient matches none of the member's own candidates.
  */
-function checkBenefitEligibility(extractedFields, memberPlansRaw) {
-  const candidates = uniqueBenefitCandidates(memberPlansRaw);
-  if (candidates.length === 0) return null;
-
+// The member's benefit candidate that the claim form's type of patient names, or null (none named, or no match).
+function patientTypeCandidate(extractedFields, candidates) {
   const written = norm(extractedFields.claim?.type_of_patient);
   if (!written) return null;
   const typeOfPatient = PATIENT_TYPE_ALIASES[written] || written;
+  return candidates.find((c) => typeOfPatient === norm(c.type) || typeOfPatient === norm(c.typeDesc)) || null;
+}
 
-  const matches = candidates.some((c) => typeOfPatient === norm(c.type) || typeOfPatient === norm(c.typeDesc));
-  if (matches) return null;
+// The IAS benefit type code (e.g. "OP") the claim form's type of patient names — the member balance check uses it for a
+// voucher with no head (member-verification/memberBalance.js). Null when it names none of the member's types.
+function claimBenefitType(extractedFields, memberPlansRaw) {
+  return patientTypeCandidate(extractedFields, uniqueBenefitCandidates(memberPlansRaw))?.type ?? null;
+}
+
+function checkBenefitEligibility(extractedFields, memberPlansRaw) {
+  const candidates = uniqueBenefitCandidates(memberPlansRaw);
+  if (candidates.length === 0) return null;
+  if (!norm(extractedFields.claim?.type_of_patient)) return null;
+  if (patientTypeCandidate(extractedFields, candidates)) return null;
 
   return {
     code: 'BENEFIT_NOT_ELIGIBLE',
@@ -50,4 +59,4 @@ function checkBenefitEligibility(extractedFields, memberPlansRaw) {
   };
 }
 
-module.exports = { checkBenefitEligibility };
+module.exports = { checkBenefitEligibility, claimBenefitType };

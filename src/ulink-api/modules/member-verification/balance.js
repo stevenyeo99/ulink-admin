@@ -73,7 +73,9 @@ function checkBalance(balanceResponse, planKey, vouchers) {
   const lines = vouchers.map((voucher) => {
     const base = { ...voucher, ...descriptions(limits, voucher) };
     // An amount that is not a number (none read) is not checked — never a false shortage, never NaN on a shared limit.
-    if (voucher.amount == null || !Number.isFinite(Number(voucher.amount)) || !voucher.benefitType) {
+    // A refund / cash-return slip (0 or below, as document-checking treats it) is not checked either: it would lower a
+    // shared limit's total and hide a real shortage.
+    if (voucher.amount == null || !Number.isFinite(Number(voucher.amount)) || Number(voucher.amount) <= 0 || !voucher.benefitType) {
       return { ...base, balanceLeft: null, limit: null, earlier: false, enough: null };
     }
 
@@ -103,10 +105,12 @@ function checkBalance(balanceResponse, planKey, vouchers) {
 function balanceLineText(line) {
   const type = [line.benefitType, line.benefitTypeDesc].filter(Boolean).join(' ');
   const head = line.benefitHead == null ? null : [line.benefitHead, line.benefitHeadDesc].filter(Boolean).join(' ');
-  const what = `Voucher ${line.voucher} (${[type || 'benefit not known', head].filter(Boolean).join(' / ')})`;
-  if (line.enough == null) return `${what}: ${line.amount == null ? 'no amount read' : `voucher ${amount(line.amount)}`}, balance not checked`;
-  if (line.balanceLeft == null) return `${what}: voucher ${amount(line.amount)}, no limit, enough`;
-  return `${what}: voucher ${amount(line.amount)}, ${line.earlier ? 'balance left' : 'balance'} ${amount(line.balanceLeft)} (${line.limit}), ${line.enough ? 'enough' : 'not enough'}`;
+  // voucher null: the claim total, checked while the case has no voucher yet.
+  const what = `${line.voucher == null ? 'Claim total' : `Voucher ${line.voucher}`} (${[type || 'benefit not known', head].filter(Boolean).join(' / ')})`;
+  const claimed = `${line.voucher == null ? 'claimed' : 'voucher'} ${amount(line.amount)}`;
+  if (line.enough == null) return `${what}: ${line.amount == null || !Number.isFinite(Number(line.amount)) ? 'no amount read' : claimed}, balance not checked`;
+  if (line.balanceLeft == null) return `${what}: ${claimed}, no limit, enough`;
+  return `${what}: ${claimed}, ${line.earlier ? 'balance left' : 'balance'} ${amount(line.balanceLeft)} (${line.limit}), ${line.enough ? 'enough' : 'not enough'}`;
 }
 
 module.exports = { balanceRequest, memberPlanKey, checkBalance, balanceLineText };

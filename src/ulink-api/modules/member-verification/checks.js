@@ -93,10 +93,13 @@ function checkCoverageActive(plan, treatmentDateYYYYMMDD) {
 }
 
 // The member findings a person may mark OK one by one (not coverage — see evaluate).
-const MEMBER_ITEM_LABELS = { 'member:dob': 'Member check: date of birth', 'member:bank': 'Member check: bank details', 'member:policy': 'Member check: policy number' };
+// member:balance (SYSTEM_5 member balance): the only action on it is this mark OK — the review page's "Bypass", with a reason.
+const MEMBER_ITEM_LABELS = { 'member:dob': 'Member check: date of birth', 'member:bank': 'Member check: bank details', 'member:policy': 'Member check: policy number', 'member:balance': 'Member check: balance' };
 const ACCEPTABLE_MEMBER_ITEMS = new Set(Object.keys(MEMBER_ITEM_LABELS));
 
-function evaluate(extractedFields, iasResponse) {
+// extraIssues: findings from outside this record's fields, listed after its own (member-verification/memberBalance.js's
+// member:balance) — set aside by a person's mark OK the same way.
+function evaluate(extractedFields, iasResponse, extraIssues = []) {
   if (!iasResponse || iasResponse.success !== true) {
     return {
       outcome: 'MEMBER_REVIEW_REQUIRED',
@@ -183,6 +186,8 @@ function evaluate(extractedFields, iasResponse) {
       reason: `Policy number "${extractedFields.policy?.policy_no}" does not match IAS record "${policy?.POCY_REF_NO}".`,
     });
   }
+
+  issues.push(...extraIssues);
 
   // Findings a person marked OK one by one (review page, a "member:…" verdict correction): set aside with who and why,
   // only while the finding is the one they saw (covers: its text, with both values) — a changed bank account or a new
