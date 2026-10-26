@@ -59,3 +59,17 @@ it('delegation letter: a claim for a child paid to another name needs no letter;
   expect(adult.issues).toContain('Please fill in the attached delegation letter to proceed with the payment process');
   expect(adult.checklist.find((l) => l.code === 'DELEGATION_LETTER_REQUIRED')).toMatchObject({ passed: false, confidence: 0.95 });
 });
+
+// Owner, 2026-10-26: the voucher can name the child and the claim form the parent — no invoice name issue on a child claim.
+it('invoice name: a claim for a child is not compared; an adult claim with a different name asks the customer', () => {
+  const mismatch = { consistent: false, confidence: 0.9, reason: 'Voucher 1: different people' };
+  const fields = (isChild) => ({ claimant: { claimant_name: 'Daw Hla', is_claim_for_child: isChild }, invoices: { items: [{ patient_name: 'Mg Mg' }] } });
+
+  const child = evaluateJudgmentDependentChecks(fields(true), { invoiceName: mismatch });
+  expect(child.flags.map((f) => f.code)).not.toContain('INVOICE_NAME_INCONSISTENT');
+  expect(child.checklist.find((l) => l.code === 'INVOICE_NAME_INCONSISTENT')).toMatchObject({ passed: null, note: expect.stringContaining('Claim for a child') });
+
+  const adult = evaluateJudgmentDependentChecks(fields(false), { invoiceName: mismatch });
+  expect(adult.flags.map((f) => f.code)).toContain('INVOICE_NAME_INCONSISTENT');
+  expect(adult.checklist.find((l) => l.code === 'INVOICE_NAME_INCONSISTENT')).toMatchObject({ passed: false, confidence: 0.9 });
+});

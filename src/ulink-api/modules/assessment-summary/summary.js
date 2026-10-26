@@ -104,6 +104,7 @@ const DOCUMENT_DECISIONS = {
   PROVIDER_NAME_INCONSISTENT: 'Doctor name matches medical record',
   HOSPITAL_NAME_INCONSISTENT: 'Hospital/clinic name matches medical record',
   DIAGNOSIS_TREATMENT_INCONSISTENT: 'Medical record supports diagnosis/treatment',
+  INVOICE_NAME_INCONSISTENT: 'Claimant name matches invoice',
 };
 
 const NOT_RECORDED = 'Reason not recorded';

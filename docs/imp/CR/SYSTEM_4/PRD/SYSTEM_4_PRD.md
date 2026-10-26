@@ -827,5 +827,8 @@ Ticked when the item is done; the phase status above changes when all are done a
 - [x] H3 · `POST /api/cases/:id/email-draft` (read-only: approved template, open system items + reviewer lines)
 - [x] H4 · Console: *Reviewer checklist* row editor and *Email draft* with *Copy* on the case page and the review workspace; tests, docs, log, tracker
 
+**Phase I: claim form claimant name vs invoice name** (owner, 2026-10-26)
+- [x] I1 · The AI reads `patient_name` on each voucher (migration `20261026100000-invoice-patient-name`, run on dev, and a prompt rule). Document check `INVOICE_NAME_INCONSISTENT` makes one name match for each different voucher name. A mismatch asks the customer (email and API). A claim for a child is not compared. **Done, awaiting review**
+
 **Recommended go-live:** not before phase B, and with E1 (upload) — without the inbox an incomplete API case has
 no other way to recover (Q10).

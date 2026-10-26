@@ -57,7 +57,33 @@ async function runJudgments(fields) {
   ]);
   const providerName = null;
   const diagnosisTreatment = null;
-  return { bankAccountHolder, delegationPayee, patientName, providerName, hospitalName, diagnosisTreatment };
+  const invoiceName = await judgeInvoiceNames(fields);
+  return { bankAccountHolder, delegationPayee, patientName, providerName, hospitalName, diagnosisTreatment, invoiceName };
+}
+
+/**
+ * Claim form claimant name vs the patient name on each voucher (owner, 2026-10-26): one entityMatch per different name,
+ * vouchers with no name left out. Any mismatch fails, naming its voucher(s). Null — no AI call — on a claim for a child
+ * (the voucher can name the child, the form the parent: checklist.js shows why) or when there is nothing to compare.
+ */
+async function judgeInvoiceNames(fields, match = entityMatch) {
+  const claimant = fields.claimant?.claimant_name;
+  if (!claimant || fields.claimant?.is_claim_for_child === true) return null;
+  const vouchersByName = new Map();
+  (fields.invoices?.items || []).forEach((item, i) => {
+    const name = item?.patient_name?.trim();
+    if (name) vouchersByName.set(name, [...(vouchersByName.get(name) || []), i + 1]);
+  });
+  const results = (await Promise.all([...vouchersByName].map(async ([name, vouchers]) => ({ vouchers, judgment: await match(claimant, name) }))))
+    .filter((r) => r.judgment);
+  if (!results.length) return null;
+  const failed = results.filter((r) => r.judgment.consistent === false);
+  const shown = failed.length ? failed : results;
+  return {
+    consistent: !failed.length,
+    confidence: Math.min(...shown.map((r) => r.judgment.confidence ?? 1)),
+    reason: shown.map((r) => `Voucher ${r.vouchers.join(', ')}: ${r.judgment.reason}`).join(' '),
+  };
 }
 
 /**
@@ -246,4 +272,4 @@ async function releaseMissingDocumentsEmail(caseRecord, operator, comment = null
   });
 }
 
-module.exports = { run, checkCase, persistOutcome, releaseMissingDocumentsEmail, issuesDedupeKey, missingDocumentItems, queueMissingDocumentsEmail, queueDocumentsIncompleteEmail };
+module.exports = { run, checkCase, judgeInvoiceNames, persistOutcome, releaseMissingDocumentsEmail, issuesDedupeKey, missingDocumentItems, queueMissingDocumentsEmail, queueDocumentsIncompleteEmail };

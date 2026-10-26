@@ -266,6 +266,7 @@ const IDENTITY_FLAG_DESCRIPTIONS = {
   PROVIDER_NAME_INCONSISTENT: 'The doctor name on the claim form does not appear to match the doctor name on the medical record.',
   HOSPITAL_NAME_INCONSISTENT: 'The hospital/clinic name on the claim form does not appear to match the hospital/clinic name on the medical record.',
   DIAGNOSIS_TREATMENT_INCONSISTENT: "The medical record does not appear to support the claim form's stated diagnosis/treatment.",
+  INVOICE_NAME_INCONSISTENT: 'The claimant name on the claim form does not appear to match the patient name on the invoice.',
 };
 
 // Single source of {code, label} for every judgment-dependent checklist item — used both by
@@ -286,7 +287,7 @@ const JUDGMENT_CHECKLIST_LABELS = {
  * no LLM call needed to test this function's logic, only to test entityMatch itself.
  *
  * `judgments` shape: { bankAccountHolder, delegationPayee, patientName, providerName,
- * hospitalName, diagnosisTreatment }, each either null (judgment didn't run / couldn't
+ * hospitalName, diagnosisTreatment, invoiceName }, each either null (judgment didn't run / couldn't
  * determine) or { consistent, confidence, reason } from entityMatch/meaningMatch.
  *
  * Doctor name and hospital/clinic name are judged as two SEPARATE comparisons
@@ -329,6 +330,8 @@ function evaluateJudgmentDependentChecks(extractedFields, judgments = {}) {
   addFlagIfInconsistent('PROVIDER_NAME_INCONSISTENT', judgments.providerName);
   addFlagIfInconsistent('HOSPITAL_NAME_INCONSISTENT', judgments.hospitalName);
   addFlagIfInconsistent('DIAGNOSIS_TREATMENT_INCONSISTENT', judgments.diagnosisTreatment);
+  // Not judged on a claim for a child (document-checking/service.js judgeInvoiceNames): null, never a flag.
+  addFlagIfInconsistent('INVOICE_NAME_INCONSISTENT', childClaim ? null : judgments.invoiceName);
 
   // Same internal-only checklist contract as buildEvaluatorChecklist above — `passed` is
   // `null` (not true/false) when the judgment didn't run at all (fields missing on one
@@ -383,6 +386,16 @@ function evaluateJudgmentDependentChecks(extractedFields, judgments = {}) {
       confidence: judgments.diagnosisTreatment?.confidence ?? null,
       note: judgments.diagnosisTreatment?.reason ?? null,
     },
+    // A claim for a child: the voucher can name the child and the claim form the parent (owner, 2026-10-26).
+    childClaim
+      ? { code: 'INVOICE_NAME_INCONSISTENT', label: JUDGMENT_CHECKLIST_LABELS.INVOICE_NAME_INCONSISTENT, passed: null, confidence: null, note: 'Claim for a child: invoice name not compared.' }
+      : {
+        code: 'INVOICE_NAME_INCONSISTENT',
+        label: JUDGMENT_CHECKLIST_LABELS.INVOICE_NAME_INCONSISTENT,
+        passed: judgments.invoiceName == null ? null : judgments.invoiceName.consistent !== false,
+        confidence: judgments.invoiceName?.confidence ?? null,
+        note: judgments.invoiceName?.reason ?? null,
+      },
   ];
 
   return { issues: [...new Set([...issues, ...flags.map(issueForFlag).filter(Boolean)])], details, flags, checklist };
@@ -394,6 +407,7 @@ const IDENTITY_FLAG_ISSUES = {
   PROVIDER_NAME_INCONSISTENT: 'The doctor name is not consistent between the claim form and medical record. Please provide clarification or supporting documentation.',
   HOSPITAL_NAME_INCONSISTENT: 'The hospital or clinic name is not consistent between the claim form and medical record. Please provide clarification or supporting documentation.',
   DIAGNOSIS_TREATMENT_INCONSISTENT: 'The medical record does not clearly support the diagnosis or treatment stated on the claim form. Please provide clarification or supporting documentation.',
+  INVOICE_NAME_INCONSISTENT: 'The patient name on the invoice is not consistent with the claimant name on the claim form. Please provide clarification or supporting documentation.',
 };
 
 function issueForFlag(flag) {

@@ -331,6 +331,8 @@ function mergeInvoiceItemPair(a, b) {
     // lost the date on every merge, duplicate or not, breaking document-checking's own
     // INVOICE_DATE_INCONSISTENT check for any case that ever went through this merge.
     date: a.date ?? b.date,
+    // Owner 2026-10-26: read by document-checking's INVOICE_NAME_INCONSISTENT; a name either read found is kept.
+    ...('patient_name' in a || 'patient_name' in b ? { patient_name: a.patient_name ?? b.patient_name ?? null } : {}),
     legible: preferAffirmative(a.legible, b.legible),
     has_itemized_breakdown: preferAffirmative(a.has_itemized_breakdown, b.has_itemized_breakdown),
     has_vitamin_or_supplement: hasVitamin,
