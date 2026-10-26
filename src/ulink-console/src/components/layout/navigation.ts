@@ -1,4 +1,4 @@
-import { ClipboardCheck, FolderOpen, LayoutDashboard, Settings, SlidersHorizontal, Stamp, Workflow, type LucideIcon } from 'lucide-react';
+import { ClipboardCheck, ClipboardList, FolderOpen, LayoutDashboard, Settings, SlidersHorizontal, Stamp, Workflow, type LucideIcon } from 'lucide-react';
 
 export interface NavItem {
   to: string;
@@ -29,6 +29,7 @@ export const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { to: '/pipeline', label: 'Pipeline', icon: Workflow },
       { to: '/stp-settings', label: 'STP settings', icon: SlidersHorizontal },
       { to: '/system-settings', label: 'System settings', icon: Settings },
+      { to: '/ai-checklist', label: 'AI checklist', icon: ClipboardList, superAdminOnly: true },
       // AI performance (/ai-performance, super admin) is hidden from the sidebar for now (2026-10-19); the page still
       // opens by its address.
     ],

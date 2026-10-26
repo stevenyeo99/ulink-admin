@@ -13,6 +13,7 @@ import { ApprovalsPage } from './pages/ApprovalsPage';
 import { StpSettingsPage } from './pages/StpSettingsPage';
 import { LoginPage } from './pages/LoginPage';
 import { AiPerformancePage } from './pages/AiPerformancePage';
+import { AiChecklistPage } from './pages/AiChecklistPage';
 import { useReviewQueue } from './hooks/useCases';
 import { getSession } from './lib/session';
 
@@ -70,6 +71,7 @@ function Shell() {
             <Route path="/stp-settings" element={<StpSettingsPage />} />
             <Route path="/system-settings" element={<StpSettingsPage view="system" />} />
             <Route path="/ai-performance" element={<AiPerformancePage />} />
+            <Route path="/ai-checklist" element={<AiChecklistPage />} />
           </Routes>
         </div>
       </div>

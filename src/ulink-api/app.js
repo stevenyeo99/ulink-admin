@@ -21,6 +21,7 @@ const apiPipelineRouter = require('./routes/jobs/apiPipeline');
 const casesRouter = require('./routes/cases');
 const stpSettingsRouter = require('./routes/stpSettings');
 const llmCallsRouter = require('./routes/llmCalls');
+const aiChecklistRouter = require('./routes/aiChecklist');
 const devClaimRecognitionRouter = require('./routes/dev/claimRecognition');
 const devDocumentCheckingRouter = require('./routes/dev/documentChecking');
 const devCasesRouter = require('./routes/dev/cases');
@@ -77,6 +78,8 @@ app.use('/api/cases', requireAuth, casesRouter);
 app.use('/api/stp-settings', requireAuth, stpSettingsRouter);
 // AI performance per prompt version (SYSTEM_4 D2) — supervisors.
 app.use('/api/llm-calls', requireAuth, requireRole('super_admin'), llmCallsRouter);
+// Every member and document check, in plain words (SYSTEM_5 A) — super admin.
+app.use('/api/ai-checklist', requireAuth, requireRole('super_admin'), aiChecklistRouter);
 app.use('/api/dev', requireAuth, requireRole('super_admin'));
 app.use('/api/dev/claim-recognition', devClaimRecognitionRouter);
 app.use('/api/dev/document-checking', devDocumentCheckingRouter);

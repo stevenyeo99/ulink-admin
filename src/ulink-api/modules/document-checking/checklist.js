@@ -1307,4 +1307,4 @@ function fieldsReadCheck(fields, checklist = []) {
   };
 }
 
-module.exports = { ISSUES, FIELD_LABELS, evaluateDocumentChecks, evaluateJudgmentDependentChecks, vitaminCheck, vitaminRejection, documentListCheck, benefitTypeCheck, documentDatesCheck, withEditItems, formatCheck, fieldsReadCheck, isRealDate, valueAt };
+module.exports = { ISSUES, FIELD_LABELS, JUDGMENT_CHECKLIST_LABELS, issueForFlag, evaluateDocumentChecks, evaluateJudgmentDependentChecks, vitaminCheck, vitaminRejection, documentListCheck, benefitTypeCheck, documentDatesCheck, withEditItems, formatCheck, fieldsReadCheck, isRealDate, valueAt };

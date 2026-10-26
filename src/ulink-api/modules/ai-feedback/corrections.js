@@ -224,4 +224,4 @@ function correctionHold(result, fields) {
   return !result.passed && (fields?.corrections || []).length ? ['a person corrected items on this case and sends the request'] : [];
 }
 
-module.exports = { WRONG_STEP_LABELS, EXCEPTION_STEPS, recheckFrom, correctionHold, correctionOptions, validateCorrection, aiOriginal, applyCorrection, applyVerdicts, correctionText };
+module.exports = { NOT_VERDICT_ITEMS, WRONG_STEP_LABELS, EXCEPTION_STEPS, recheckFrom, correctionHold, correctionOptions, validateCorrection, aiOriginal, applyCorrection, applyVerdicts, correctionText };
