@@ -71,12 +71,15 @@ async function judgeInvoiceNames(fields, match = entityMatch) {
   if (!claimant || fields.claimant?.is_claim_for_child === true) return null;
   // Grouped with capitals and spaces ignored: "ZAYAR TUN" and "Zayar  Tun" are one name, one call. The first spelling read is the one compared.
   const byName = new Map();
+  // patient_names_read: every name two reads of one voucher gave (claim-recognition mergeInvoiceItemPair).
   (fields.invoices?.items || []).forEach((item, i) => {
-    const name = item?.patient_name?.trim();
-    if (!name) return;
-    const key = name.toLowerCase().replace(/\s+/g, ' ');
-    const group = byName.get(key) || { name, vouchers: [] };
-    byName.set(key, { ...group, vouchers: [...group.vouchers, i + 1] });
+    for (const read of item?.patient_names_read || [item?.patient_name]) {
+      const name = typeof read === 'string' ? read.trim() : '';
+      if (!name) continue;
+      const key = name.toLowerCase().replace(/\s+/g, ' ');
+      const group = byName.get(key) || { name, vouchers: [] };
+      if (!group.vouchers.includes(i + 1)) byName.set(key, { ...group, vouchers: [...group.vouchers, i + 1] });
+    }
   });
   const results = (await Promise.all([...byName.values()].map(async ({ name, vouchers }) => ({ vouchers, judgment: await match(claimant, name) }))))
     .filter((r) => r.judgment);

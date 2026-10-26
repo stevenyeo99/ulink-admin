@@ -34,3 +34,10 @@ it('names that differ only in capitals or spaces are one name, one call', async 
   expect(match).toHaveBeenCalledWith('Zay Yar Tun', 'ZAYAR TUN');
   expect(result.reason).toBe('Voucher 1, 2, 3: Zay Yar Tun vs ZAYAR TUN');
 });
+
+it('a voucher read with two names (patient_names_read): each name is compared', async () => {
+  const merged = { claimant: { claimant_name: 'Zay Yar Tun' }, invoices: { items: [{ patient_name: 'ZAYAR TUN', patient_names_read: ['ZAYAR TUN', 'Khin Maung'] }, { patient_name: 42 }] } };
+  const result = await judgeInvoiceNames(merged, match);
+  expect(match).toHaveBeenCalledTimes(2);
+  expect(result).toMatchObject({ consistent: false, reason: 'Voucher 1: Zay Yar Tun vs Khin Maung' });
+});
