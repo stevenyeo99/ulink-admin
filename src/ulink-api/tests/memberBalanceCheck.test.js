@@ -105,7 +105,7 @@ it('a bypassed balance never goes STP', () => {
   const config = { rules: [{ caseSource: 'EMAIL', benefitType: 'IP', currency: 'MMK', stpAllowed: true, amountLimit: 1000000 }], blockedDiagnoses: [] };
   const input = { source: 'EMAIL', currency: 'MMK', lines: [{ benefitType: 'IP', subtotal: 1000 }], diagCode: 'J06.9' };
   expect(evaluateStp(config, input).isStp).toBe(true);
-  expect(evaluateStp(config, { ...input, balanceBypassed: true })).toMatchObject({ isStp: false, reasons: ['The balance was not enough and a person let the case go on — a person approves.'] });
+  expect(evaluateStp(config, { ...input, balanceBypassed: true })).toMatchObject({ isStp: false, reasons: ['The member balance was not enough (a person let the case go on) or could not be checked before the claim — a person approves.'] });
 });
 
 it('a refund slip is not checked and never lowers a shared limit; it costs no AI call', async () => {
@@ -179,5 +179,55 @@ describe('Choose the benefit (phase C)', () => {
     expect(savedHead(merged, 0, item, info, f)).toMatchObject({ benefitHead: 'SUR', chosen: true });
     expect(savedHead({ balance: { picks: [ai] } }, 0, item, info, f)).toBeNull(); // unsure: preparation picks itself
     expect(savedHead(merged, 0, item, info, fields([item], { claim: { type_of_patient: 'Outpatient' } }))).toBeNull(); // basis changed
+  });
+});
+
+// Phase D: the second balance check at claim preparation (option B1).
+describe('second balance check (phase D)', () => {
+  const { recheckBalance } = require('../modules/member-verification/memberBalance');
+  const items = [surgeon(5000000), surgeon(5000000)];
+  const heads = [{ benefitType: 'IP', benefitHead: 'SUR' }, { benefitType: 'IP', benefitHead: 'SUR' }];
+  const basis = { typeOfPatient: 'Inpatient', plan: { planId: '2311', revNo: '01' } };
+  const memberResult = { balance: { picks: items.map((item, i) => ({ voucher: i, key: { subtotal: item.subtotal, date: item.date, voucherType: item.voucher_type }, basis, benefitType: 'IP', benefitHead: 'SUR', confidence: 0.9 })) } };
+
+  it('a new shortage on the member check\'s own head goes back to member review', async () => {
+    const check = await recheckBalance(fields(items), info, memberResult, heads);
+    expect(getMemberLimitBalance).toHaveBeenCalledTimes(1);
+    expect(pickBenefit).not.toHaveBeenCalled(); // no AI call
+    expect(check).toMatchObject({ checked: true, uncovered: ['2|IP|SUR|5000000'], sendBack: true });
+  });
+
+  it('a shortage a bypass covers goes on (the claim never goes STP)', async () => {
+    const bypass = { kind: 'verdict', item: 'member:balance', corrected: true, coverKeys: ['2|IP|SUR|5000000'] };
+    const check = await recheckBalance(fields(items, { corrections: [bypass] }), info, memberResult, heads);
+    expect(check).toMatchObject({ uncovered: [], sendBack: false });
+    expect(check.issue).not.toBeNull();
+  });
+
+  it('a shortage on a head chosen later at claim preparation stays with the approver: never back and forth', async () => {
+    const later = [heads[0], { benefitType: 'IP', benefitHead: 'ICU' }];
+    const check = await recheckBalance(fields(items), info, memberResult, later);
+    expect(check.uncovered.length).toBeGreaterThan(0);
+    expect(check.sendBack).toBe(false);
+  });
+});
+
+describe('second balance check: review fixes', () => {
+  const { recheckBalance } = require('../modules/member-verification/memberBalance');
+  const items = [surgeon(5000000), surgeon(5000000)];
+  const heads = [{ benefitType: 'IP', benefitHead: 'SUR' }, { benefitType: 'IP', benefitHead: 'SUR' }];
+  const basis = { typeOfPatient: 'Inpatient', plan: { planId: '2311', revNo: '01' } };
+  const picks = items.map((item, i) => ({ voucher: i, key: { subtotal: item.subtotal, date: item.date, voucherType: item.voucher_type }, basis, benefitType: 'IP', benefitHead: 'SUR', confidence: 0.9 }));
+
+  it('a whole-check override counts as letting the shortfall through: never sent back', async () => {
+    const overridden = { balance: { picks }, issues: [{ item: 'member:balance', coverKeys: ['2|IP|SUR|5000000'] }] };
+    expect(await recheckBalance(fields(items), info, overridden, heads)).toMatchObject({ uncovered: [], sendBack: false });
+  });
+
+  it('only the latest bypass counts, as in the member check', async () => {
+    const old = { kind: 'verdict', item: 'member:balance', corrected: true, coverKeys: ['2|IP|SUR|5000000'] };
+    const latest = { kind: 'verdict', item: 'member:balance', corrected: true, coverKeys: ['9|IP|SUR|1'] };
+    const check = await recheckBalance(fields(items, { corrections: [old, latest] }), info, { balance: { picks } }, heads);
+    expect(check.uncovered).toEqual(['2|IP|SUR|5000000']);
   });
 });

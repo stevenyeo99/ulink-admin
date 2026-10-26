@@ -1,7 +1,6 @@
 const fs = require('fs');
 const path = require('path');
 const { checkBenefitEligibility } = require('../modules/member-verification/benefitEligibility');
-const { summarizeBenefitLimits } = require('../modules/member-verification/benefitLimits');
 
 // Fixture-based regression harness for member-verification's SOP §6.4/§6.5 checks — same
 // pattern as tests/documentChecking.test.js: pure/deterministic functions, no IAS/LLM calls,
@@ -25,11 +24,3 @@ describe('checkBenefitEligibility (SOP §6.4)', () => {
   });
 });
 
-describe('summarizeBenefitLimits (SOP §6.5)', () => {
-  const limitsFixtures = allFixtureFiles.filter((f) => f.startsWith('limits-'));
-  it.each(limitsFixtures)('%s', (filename) => {
-    const fixture = loadFixture(filename);
-    const limits = summarizeBenefitLimits(fixture.memberPlansRaw);
-    expect(limits).toEqual(fixture.expected.limits);
-  });
-});

@@ -4,7 +4,6 @@ const { getMemberInfo } = require('./iasClient');
 const { evaluate } = require('./checks');
 const { checkExclusions } = require('./exclusionFlags');
 const { checkBenefitEligibility } = require('./benefitEligibility');
-const { summarizeBenefitLimits } = require('./benefitLimits');
 const { checkMemberBalance, balanceIssue } = require('./memberBalance');
 const { lastReadSettings } = require('../settings/settings');
 const { queueDedupedTask } = require('../shared/emailTaskQueue');
@@ -85,10 +84,8 @@ async function checkCase(caseRecord) {
     result.flags = [];
   }
 
-  // Benefit-limit info (SOP §6.5) is informational for JD3, not a gate — populate it
-  // whenever IAS actually returned plan data, regardless of hard-check pass/fail, since
-  // it's useful context either way (e.g. explaining why a claim looks out of scope).
-  result.benefitLimits = iasResponse.success ? summarizeBenefitLimits(iasResponse.payload?.memberPlans) : [];
+  // SOP §6.5 (available benefit balance): the IAS remaining balance per voucher, result.balance above (SYSTEM_5 member
+  // balance) — it replaced the plan's filed limits (benefitLimits), which were never a remaining balance.
 
   return { caseId: caseRecord.id, outcome: result.outcome, result, iasResponse };
 }

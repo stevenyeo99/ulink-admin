@@ -53,7 +53,7 @@ function evaluateStp({ rules, blockedDiagnoses, blockOnReviewPoints = false, blo
 
   // A short balance a person bypassed at member review (SYSTEM_5 member balance, owner 2026-10-26): never STP, whatever
   // the switches.
-  if (balanceBypassed) reasons.push('The balance was not enough and a person let the case go on — a person approves.');
+  if (balanceBypassed) reasons.push('The member balance was not enough (a person let the case go on) or could not be checked before the claim — a person approves.');
 
   if (blockOnReviewPoints && openReviewPoints.length) {
     reasons.push(`Open review point${openReviewPoints.length > 1 ? 's' : ''}: ${openReviewPoints.map((p) => `${p.decision} (${p.reason})`).join('; ')} — a person checks first.`);

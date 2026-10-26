@@ -81,6 +81,15 @@ async function processCase({ caseRecord, input }) {
     claimPrepMeta: prepared.claimPrepMeta,
   };
 
+  // The second balance check found a new shortage (SYSTEM_5 member balance phase D): back to the member check.
+  if (prepared.sendBack) {
+    return {
+      output: { claimPrepMeta: prepared.claimPrepMeta, sendBack: true },
+      nextStatus: 'API_RECOGNIZED',
+      message: `Member balance changed before the revision: ${prepared.reason} Checked again from the member check.`,
+    };
+  }
+
   // The AI wasn't sure of the diagnosis code, a voucher's benefit or its vitamins / supplements (switches
   // holdUnsureDiagnosis / holdUnsureBenefit / holdUnsureVitamin, owner 2026-10-20): a person decides before anything goes to IAS (preparationReview.js).
   const review = prepared.claimPrepMeta ? reviewNeeded(prepared.claimPrepMeta, await getSettings()) : null;

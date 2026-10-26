@@ -52,6 +52,7 @@ flowchart TD
   F -->|no uploads| H
   G --> H[8 · Claim preparation<br/>ICD-10, benefit, rejections, STP, suspense]:::job
   H -->|AI unsure of diagnosis,<br/>benefit or vitamins| PR{{API_PREPARATION_REVIEW}}:::stop
+  H -->|balance dropped while waiting<br/>new shortage| D
   PR -->|person chooses| H
   PR -->|choices + corrections, one save| E
   H --> I[9 · Claim revision<br/>POST to IAS]:::job

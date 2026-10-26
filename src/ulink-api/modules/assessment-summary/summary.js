@@ -128,6 +128,24 @@ function lowConfidenceReview(confidence) {
   return isLowConfidence(confidence) ? REVIEW.AI_UNSURE : null;
 }
 
+// The balance lines of one check (the member check's, or claim preparation's second check): a summary line, or a
+// "not checked" line with the reason. Nothing when the check never ran.
+function balanceLines(decision, balance) {
+  if (!balance) return [];
+  if (!balance.checked) {
+    return balance.note ? [line({ decision, result: 'Not checked', status: 'ok', why: balance.note, verified: VERIFIED.RULE })] : [];
+  }
+  // Vouchers still waiting for a person's head (Choose the benefit) are not judged yet.
+  const waiting = (l) => (balance.unsure || []).includes((l.voucher ?? 0) - 1);
+  const short = (balance.lines || []).filter((l) => l.enough === false && !waiting(l));
+  const why = [
+    (balance.lines || []).map((l) => (waiting(l) ? `Voucher ${l.voucher}: waiting for a person to choose the benefit` : l.text)).join('; '),
+    // Claim preparation's check: a shortfall none left uncovered is one a person bypassed at member review.
+    short.length && Array.isArray(balance.uncovered) && !balance.uncovered.length ? 'A person bypassed the shortfall at member review.' : null,
+  ].filter(Boolean).join(' ');
+  return [line({ decision, result: short.length ? 'Not enough' : 'Enough', status: short.length ? 'issue' : 'ok', why: why ? `${why.replace(/\.$/, '')}.` : null, verified: VERIFIED.CROSS_CHECK })];
+}
+
 function memberLines(memberVerifyResult) {
   if (!memberVerifyResult) return [];
   const { outcome, reasonCode, reason, checks, flags, accepted = [] } = memberVerifyResult;
@@ -167,6 +185,10 @@ function memberLines(memberVerifyResult) {
       review: MEMBER_REVIEW[reasonCode] || REVIEW.DATA_MISMATCH,
     }));
   }
+
+  // The member balance (SYSTEM_5 member balance): one line per voucher, with the benefit type and head codes. A short
+  // voucher is also a member finding (member:balance) — the review point sits on the member line above, not here.
+  lines.push(...balanceLines('Member balance', memberVerifyResult.balance));
 
   // Advisory flags on a verified member: benefit eligibility (rule) and possible policy exclusion (AI).
   for (const flag of flags || []) {
@@ -455,6 +477,9 @@ function preparationLines(claimPrepMeta, isStp) {
       }));
     }
   });
+
+  // The second balance check, just before the claim (SYSTEM_5 member balance phase D).
+  lines.push(...balanceLines('Balance before the claim', claimPrepMeta?.balance));
 
   if (isStp === true || isStp === false) {
     const stp = claimPrepMeta?.stp;

@@ -72,7 +72,9 @@ switch is the quick way to stop one environment reading a mailbox it shares with
 |---|---|---|
 | Stuck at *Waiting to be read* / any system status | Pipeline not running, step failing, or lock left by a crash | Check the latest run; fix the error; release the lock |
 | *Needs manual reading* | AI not confident about the claim type, its reading didn't fit the form, or "Documents too long for the AI" (the claim's text exceeds the model's context) | Look at the documents; reset once fixed, or handle manually |
-| *Member check issue* | Mismatch with IAS (every problem listed) | Fix IAS (the case re-checks every run) or *Override and continue* |
+| *Member check issue* | Mismatch with IAS (every problem listed), or *Balance not enough* for a voucher (`member:balance`) | Fix IAS (the case re-checks every run) or *Override and continue*. A short balance: *Bypass* with a reason (the claim then needs approval, never STP). It is also raised when the balance dropped while the case waited for documents (checked again just before the claim) |
+| *Choose the benefit* | The AI was not sure of a voucher's benefit head (switch *Voucher benefit the AI wasn't sure of*) | Choose the head from the member's plan on the case page; correct a misread voucher amount in the same save. Turning the switch off lets waiting cases go on |
+| Every case stops at the member check | The UAT `.env` has no `GET_MEMBER_LIMIT_BALANCE_API`, or the IAS balance call fails | Add the value (`DEPLOY_API.md`, "Change a setting"); the cases go on at the next run |
 | *Documents incomplete* | Missing items; customer emailed | Wait for the reply (it restarts the case), or override if the AI was wrong |
 | *Check before emailing customer* | AI unsure a document is missing (switch #2) | *Send the request to the customer*, or override |
 | *Waiting for console barcode* > 30 min | Console barcode job slow | Wait; after 2 h the case goes to *Console barcode not received* and the team is emailed; still checked every run |

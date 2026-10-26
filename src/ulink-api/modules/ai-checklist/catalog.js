@@ -52,9 +52,6 @@ const CHECKS = [
     onFail: 'The case goes on, and the approver (JD3) sees the warning. If the System settings switch for review points is on, the claim does not go STP.' },
   { code: 'BENEFIT_NOT_ELIGIBLE', section: 'member', question: "Is the benefit type in the member's plan?", label: 'Benefit not eligible', effect: 'warning',
     does: "The claim's benefit type must be one of the benefit types in the member's IAS plan." },
-  // Not a check code: the member check result's benefitLimits field (member-verification/service.js).
-  { code: 'benefitLimits', section: 'member', question: 'What are the plan limits?', label: 'Plan limits', effect: 'info',
-    does: "Shows the plan's filed limits from IAS for the assessment. Not a remaining balance." },
 
   // Claim form.
   { code: 'MISSING_MANDATORY_FIELD', section: 'claimForm', question: 'Are all the required fields filled in?', label: 'One line per field, for example "Bank Information: Account Number"', effect: 'stops',

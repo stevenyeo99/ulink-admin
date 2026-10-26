@@ -143,4 +143,47 @@ function withChosenPicks(memberVerifyResult, chosenPicks) {
   return { ...memberVerifyResult, balance: { ...memberVerifyResult?.balance, picks: merged } };
 }
 
-module.exports = { checkMemberBalance, pickHeads, pickBasis, savedHead, withChosenPicks, balanceIssue };
+/**
+ * The second balance check (SYSTEM_5 member balance phase D, PRD 4.8 rules 4–7, owner option B1): claim preparation asks
+ * IAS again just before the claim is built — a case can wait days at the document check while other claims of the member
+ * are paid. heads: the final head of each voucher, as claim preparation will send it ([{ benefitType, benefitHead }] by
+ * voucher index). No AI call.
+ *
+ * Returns { checked, note, lines, issue, uncovered, sendBack }. issue: the vouchers short now. uncovered: their keys a
+ * person's bypass does not cover (A1: voucher, head, amount). sendBack: true when the member check would raise the same
+ * shortage — every uncovered voucher has the head the member check saved — so the case goes back to member review;
+ * a shortage on a head chosen later (claim preparation's own review) is left to the approver (no STP) instead, so the
+ * case can never go back and forth.
+ */
+async function recheckBalance(extractedFields, iasMemberInfoResponse, memberVerifyResult, heads) {
+  const notChecked = (note) => ({ checked: false, note, lines: [], issue: null, uncovered: [], sendBack: false });
+  const request = balanceRequest(iasMemberInfoResponse);
+  if (!request) return notChecked('The IAS member record has no member ref, policy number or policy start date.');
+  const balanceResponse = await getMemberLimitBalance(request);
+  if (balanceResponse?.success !== true) return notChecked(`IAS did not return the balance${balanceResponse?.error ? ` (${balanceResponse.error})` : ''}.`);
+
+  const items = extractedFields.invoices?.items || [];
+  const fallbackType = claimBenefitType(extractedFields, iasMemberInfoResponse?.payload?.memberPlans);
+  const vouchers = items.length
+    ? items.map((item, i) => ({ voucher: i + 1, amount: item.subtotal, benefitType: heads[i]?.benefitType ?? fallbackType, benefitHead: heads[i]?.benefitHead ?? null }))
+    : [{ voucher: null, amount: extractedFields.claim?.total_claim_amount ?? null, benefitType: heads[0]?.benefitType ?? fallbackType, benefitHead: heads[0]?.benefitHead ?? null }];
+  const result = checkBalance(balanceResponse, memberPlanKey(iasMemberInfoResponse), vouchers);
+  if (!result.planFound) return notChecked("IAS returned no balance for the member's plan.");
+  const lines = result.lines.map((line) => ({ ...line, text: balanceLineText(line) }));
+  const issue = balanceIssue(lines);
+
+  // What a person let through at member review: the latest bypass (the one checks.js applies), or a whole-check
+  // override — the case passed with member:balance still among the member check's findings.
+  const bypass = (extractedFields.corrections || []).filter((c) => c.kind === 'verdict' && c.item === 'member:balance' && c.corrected === true).at(-1);
+  const overridden = (memberVerifyResult?.issues || []).find((i) => i.item === 'member:balance');
+  const bypassed = [...(bypass?.coverKeys || []), ...(overridden?.coverKeys || [])];
+  const uncovered = (issue?.coverKeys || []).filter((key) => !bypassed.includes(key));
+  const sameHeadAsMemberCheck = (key) => {
+    const i = Number(key.split('|')[0]) - 1;
+    const saved = savedHead(memberVerifyResult, i, items[i], iasMemberInfoResponse, extractedFields);
+    return Boolean(saved) && saved.benefitType === heads[i]?.benefitType && (saved.benefitHead ?? null) === (heads[i]?.benefitHead ?? null);
+  };
+  return { checked: true, note: null, lines, issue, uncovered, sendBack: uncovered.length > 0 && uncovered.every(sameHeadAsMemberCheck) };
+}
+
+module.exports = { checkMemberBalance, pickHeads, pickBasis, savedHead, withChosenPicks, balanceIssue, recheckBalance };

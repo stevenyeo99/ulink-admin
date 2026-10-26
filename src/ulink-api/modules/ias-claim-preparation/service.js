@@ -3,7 +3,7 @@ const config = require('../../config');
 const { pickDiagnosis } = require('./diagnosisPicker');
 const { pickBenefit } = require('./benefitPicker');
 const { voucherKey, sameVoucher, diagnosisSource, sameDiagnosis } = require('./preparationReview');
-const { savedHead } = require('../member-verification/memberBalance');
+const { savedHead, recheckBalance } = require('../member-verification/memberBalance');
 const { uniqueBenefitCandidates } = require('../shared/iasBenefits');
 const { buildPayload } = require('./payloadBuilder');
 const { vitaminRejection } = require('../document-checking/checklist');
@@ -17,8 +17,8 @@ const { forCase } = require('../llm-calls/log');
 
 const BLOCK_NAME = 'ias-claim-preparation';
 
-async function logEvent(transaction, { caseId, prevStatus = null, newStatus, message = null }) {
-  await CaseEvent.create({ caseId, blockName: BLOCK_NAME, prevStatus, newStatus, message }, { transaction });
+async function logEvent(transaction, { caseId, prevStatus = null, newStatus, reasonCode = null, message = null }) {
+  await CaseEvent.create({ caseId, blockName: BLOCK_NAME, prevStatus, newStatus, reasonCode, message }, { transaction });
 }
 
 /**
@@ -128,6 +128,15 @@ async function checkCase(caseRecord) {
     lines: lineMeta,
   };
 
+  // The second balance check (SYSTEM_5 member balance phase D): with the final heads, just before the claim is built. A
+  // new shortage the member check would raise sends the case back to it (sendBack: the caller moves the case); any
+  // shortage at all keeps the claim from STP.
+  const balanceCheck = await recheckBalance(extractedFields, iasMemberInfoResponse, caseRecord.memberVerifyResult, lines.map((line) => line.benefit));
+  claimPrepMeta.balance = { checked: balanceCheck.checked, note: balanceCheck.note, lines: balanceCheck.lines, uncovered: balanceCheck.uncovered };
+  if (balanceCheck.sendBack) {
+    return { caseId: caseRecord.id, sendBack: true, claimPrepMeta, reason: balanceCheck.issue.reason };
+  }
+
   // Open review points so far — member, documents and the picks just made — for the STP switch "open
   // review point blocks STP". A check a person overrode no longer counts.
   const overrides = overridesFromEvents(await CaseEvent.findAll({ where: { caseId: caseRecord.id, reasonCode: 'MANUAL_OVERRIDE' } }));
@@ -148,7 +157,8 @@ async function checkCase(caseRecord) {
     // document check's line.
     vitaminVouchers: invoiceItems.map((item, i) => (item.has_vitamin_or_supplement === true || lines[i]?.vitamin ? i + 1 : null)).filter(Boolean),
     // Bypassed (accepted) or let through by a whole-check override (still in issues): never STP either way.
-    balanceBypassed: [...(caseFields.memberVerifyResult?.accepted || []), ...(caseFields.memberVerifyResult?.issues || [])].some((finding) => finding.item === 'member:balance'),
+    balanceBypassed: Boolean(balanceCheck.issue) || !balanceCheck.checked
+      || [...(caseFields.memberVerifyResult?.accepted || []), ...(caseFields.memberVerifyResult?.issues || [])].some((finding) => finding.item === 'member:balance'),
   });
   const stp = stpResult.isStp;
   claimPrepMeta.stp = stpResult;
@@ -187,6 +197,13 @@ async function checkCase(caseRecord) {
 async function persistOutcome(caseRecord, outcome) {
   return sequelize.transaction(async (transaction) => {
     const prevStatus = caseRecord.currentStatus;
+    // The second balance check found a new shortage (SYSTEM_5 member balance phase D): back to the member check, which
+    // holds the case at member review with the member:balance finding.
+    if (outcome.sendBack) {
+      await Case.update({ currentStatus: 'RECOGNIZED', claimPrepMeta: outcome.claimPrepMeta }, { where: { id: caseRecord.id }, transaction });
+      await logEvent(transaction, { caseId: caseRecord.id, prevStatus, newStatus: 'RECOGNIZED', reasonCode: 'BALANCE_RECHECK', message: `Member balance changed before the claim: ${outcome.reason} Checked again from the member check.` });
+      return;
+    }
     await Case.update(
       {
         currentStatus: 'CLAIM_PAYLOAD_PREPARED',
