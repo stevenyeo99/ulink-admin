@@ -19,7 +19,7 @@ async function logEvent(transaction, { caseId, prevStatus = null, newStatus, rea
 }
 
 /**
- * The 6 SOP §7/§8/§9/§10 judgment comparisons (items 13-18) — independent of each other,
+ * The 7 judgment comparisons (SOP §7/§8/§9/§10 items 13-18, plus the invoice name, 2026-10-26) — independent of each other,
  * so run concurrently rather than one at a time. Each call is null-safe (entityMatch and
  * meaningMatch both return null when either input is null) — a case missing one of these
  * fields just means that one comparison can't be judged, not a failure.
@@ -49,15 +49,15 @@ async function runJudgments(fields) {
     .filter(Boolean)
     .join(' — ') || null;
 
-  const [bankAccountHolder, delegationPayee, patientName, hospitalName] = await Promise.all([
+  const [bankAccountHolder, delegationPayee, patientName, hospitalName, invoiceName] = await Promise.all([
     entityMatch(fields.claimant?.claimant_name, fields.bank?.bank_account_name),
     entityMatch(fields.delegation_letter?.authorized_payee_name, fields.bank?.bank_account_name),
     entityMatch(fields.claimant?.claimant_name, fields.medical_record?.patient_name),
     entityMatch(fields.medical?.hospital_or_clinic_name, fields.medical_record?.hospital_or_clinic_name),
+    judgeInvoiceNames(fields),
   ]);
   const providerName = null;
   const diagnosisTreatment = null;
-  const invoiceName = await judgeInvoiceNames(fields);
   return { bankAccountHolder, delegationPayee, patientName, providerName, hospitalName, diagnosisTreatment, invoiceName };
 }
 
@@ -69,12 +69,16 @@ async function runJudgments(fields) {
 async function judgeInvoiceNames(fields, match = entityMatch) {
   const claimant = fields.claimant?.claimant_name;
   if (!claimant || fields.claimant?.is_claim_for_child === true) return null;
-  const vouchersByName = new Map();
+  // Grouped with capitals and spaces ignored: "ZAYAR TUN" and "Zayar  Tun" are one name, one call. The first spelling read is the one compared.
+  const byName = new Map();
   (fields.invoices?.items || []).forEach((item, i) => {
     const name = item?.patient_name?.trim();
-    if (name) vouchersByName.set(name, [...(vouchersByName.get(name) || []), i + 1]);
+    if (!name) return;
+    const key = name.toLowerCase().replace(/\s+/g, ' ');
+    const group = byName.get(key) || { name, vouchers: [] };
+    byName.set(key, { ...group, vouchers: [...group.vouchers, i + 1] });
   });
-  const results = (await Promise.all([...vouchersByName].map(async ([name, vouchers]) => ({ vouchers, judgment: await match(claimant, name) }))))
+  const results = (await Promise.all([...byName.values()].map(async ({ name, vouchers }) => ({ vouchers, judgment: await match(claimant, name) }))))
     .filter((r) => r.judgment);
   if (!results.length) return null;
   const failed = results.filter((r) => r.judgment.consistent === false);
@@ -87,7 +91,7 @@ async function judgeInvoiceNames(fields, match = entityMatch) {
 }
 
 /**
- * Not pure — makes real LLM calls (the 6 judgments) — always, regardless of whether stage 1
+ * Not pure — makes real LLM calls (the 7 judgments) — always, regardless of whether stage 1
  * (the deterministic EVALUATORS) already found an issue. Previously gated on stage1.issues
  * being empty, on the assumption that a case already going to be marked INCOMPLETE didn't
  * need judgment run yet — reverted 2026-09-16 (case e5498fa0-28d3-46da-9d61-a4adb16b92f2 /
@@ -100,7 +104,8 @@ async function judgeInvoiceNames(fields, match = entityMatch) {
  * that function's own comment) and those two short-circuit to null for free whenever
  * medical_record isn't present, since their inputs are null too; only bankAccountHolder
  * (medical_record-independent) reliably costs a real call on an otherwise-incomplete case,
- * which is exactly the one this fix needs to run. Still reusable identically by the real job
+ * which is exactly the one this fix needs to run. Since 2026-10-26 the invoice name (judgeInvoiceNames) also costs one
+ * call per different voucher patient name on every check, vouchers or not complete. Still reusable identically by the real job
  * and the dev preview endpoint.
  */
 async function checkCase(caseRecord) {

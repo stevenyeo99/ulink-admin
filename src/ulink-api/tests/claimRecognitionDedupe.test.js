@@ -66,4 +66,16 @@ describe('dedupeInvoiceItems', () => {
     const result = dedupeInvoiceItems(fields);
     expect(result.invoices.items).toHaveLength(1);
   });
+
+  // Owner 2026-10-26: a merge would drop the second name, hiding a mismatch from INVOICE_NAME_INCONSISTENT.
+  it('keeps two same-amount, same-type vouchers separate when their patient names differ', () => {
+    const item = (patient_name) => ({ subtotal: 30000, voucher_type: 'consultation', date: '2026-10-01', patient_name });
+    const differ = dedupeInvoiceItems({ invoices: { present: true, items: [item('Zay Yar Tun'), item('Khin Maung')] } });
+    expect(differ.invoices.items.map((i) => i.patient_name)).toEqual(['Zay Yar Tun', 'Khin Maung']);
+
+    // The same name in other capitals or spacing, or one read with no name: still one voucher read twice.
+    expect(dedupeInvoiceItems({ invoices: { present: true, items: [item('ZAY YAR TUN'), item('Zay  Yar Tun')] } }).invoices.items).toHaveLength(1);
+    const oneName = dedupeInvoiceItems({ invoices: { present: true, items: [item(null), item('Khin Maung')] } });
+    expect(oneName.invoices.items).toEqual([expect.objectContaining({ patient_name: 'Khin Maung' })]);
+  });
 });

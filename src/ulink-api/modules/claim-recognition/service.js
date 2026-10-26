@@ -331,7 +331,8 @@ function mergeInvoiceItemPair(a, b) {
     // lost the date on every merge, duplicate or not, breaking document-checking's own
     // INVOICE_DATE_INCONSISTENT check for any case that ever went through this merge.
     date: a.date ?? b.date,
-    // Owner 2026-10-26: read by document-checking's INVOICE_NAME_INCONSISTENT; a name either read found is kept.
+    // Owner 2026-10-26: read by document-checking's INVOICE_NAME_INCONSISTENT; a name either read found is kept (two
+    // different names are never merged: invoiceItemNamesConflict).
     ...('patient_name' in a || 'patient_name' in b ? { patient_name: a.patient_name ?? b.patient_name ?? null } : {}),
     legible: preferAffirmative(a.legible, b.legible),
     has_itemized_breakdown: preferAffirmative(a.has_itemized_breakdown, b.has_itemized_breakdown),
@@ -361,6 +362,13 @@ function invoiceItemDatesConflict(a, b) {
   if (a.date == null || b.date == null || a.date === b.date) return false;
   const sameDayAndMonth = a.date.length === 10 && b.date.length === 10 && a.date.slice(5) === b.date.slice(5);
   return !sameDayAndMonth;
+}
+
+// Two different patient names are two vouchers, never one read twice (owner, 2026-10-26): merging them would drop a
+// name, and document-checking's INVOICE_NAME_INCONSISTENT would never see it. Capitals and spaces do not count.
+function invoiceItemNamesConflict(a, b) {
+  const norm = (name) => (name == null ? '' : String(name).trim().toLowerCase().replace(/\s+/g, ' '));
+  return Boolean(norm(a.patient_name) && norm(b.patient_name) && norm(a.patient_name) !== norm(b.patient_name));
 }
 
 /**
@@ -404,7 +412,8 @@ function dedupeInvoiceItems(fields) {
       (existing) =>
         existing.subtotal === item.subtotal &&
         existing.voucher_type === item.voucher_type &&
-        !invoiceItemDatesConflict(existing, item)
+        !invoiceItemDatesConflict(existing, item) &&
+        !invoiceItemNamesConflict(existing, item)
     );
     if (matchIndex === -1) {
       deduped.push(item);

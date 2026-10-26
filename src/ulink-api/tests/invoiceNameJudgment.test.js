@@ -27,3 +27,10 @@ it('no AI call on a claim for a child, or with no name on any voucher', async ()
   expect(await judgeInvoiceNames(fields([null, '  ']), match)).toBeNull();
   expect(match).not.toHaveBeenCalled();
 });
+
+it('names that differ only in capitals or spaces are one name, one call', async () => {
+  const result = await judgeInvoiceNames(fields(['ZAYAR TUN', 'Zayar  Tun', 'zayar tun']), match);
+  expect(match).toHaveBeenCalledTimes(1);
+  expect(match).toHaveBeenCalledWith('Zay Yar Tun', 'ZAYAR TUN');
+  expect(result.reason).toBe('Voucher 1, 2, 3: Zay Yar Tun vs ZAYAR TUN');
+});
