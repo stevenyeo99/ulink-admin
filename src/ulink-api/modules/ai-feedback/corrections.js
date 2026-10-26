@@ -76,7 +76,7 @@ function correctionOptions(fields = {}, documentCheckResult = null, memberVerify
   // A member finding marked OK is no longer an issue (checks.js sets it aside): only the open ones are offered.
   const member = (memberVerifyResult?.issues || [])
     .filter((issue) => ACCEPTABLE_MEMBER_ITEMS.has(issue.item))
-    .map((issue) => ({ kind: 'verdict', item: issue.item, label: MEMBER_ITEM_LABELS[issue.item], type: 'verdict', current: false, canFail: false, note: issue.reason }));
+    .map((issue) => ({ kind: 'verdict', item: issue.item, label: MEMBER_ITEM_LABELS[issue.item], type: 'verdict', current: false, canFail: false, note: issue.reason, ...(issue.coverKeys ? { coverKeys: issue.coverKeys } : {}) }));
   return [...values, ...choices, ...vouchers, ...verdicts, ...member];
 }
 

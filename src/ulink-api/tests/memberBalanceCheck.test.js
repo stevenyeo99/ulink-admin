@@ -42,6 +42,7 @@ it('picks a head per voucher, asks IAS with the member values, and raises member
   expect(balance.issue).toEqual({
     item: 'member:balance', reasonCode: 'BALANCE_NOT_ENOUGH',
     reason: 'Balance not enough: Voucher 2 (IP Inpatient / SUR Surgeon’s Fee): voucher 5,000,000, balance left 3,587,070 (CT combined), not enough.',
+    coverKeys: ['2|IP|SUR|5000000'],
   });
 });
 
@@ -86,13 +87,17 @@ it('member:balance holds the case; a bypass with a reason (mark OK) on the same 
   const option = correctionOptions(fields([]), null, held).find((o) => o.item === 'member:balance');
   expect(option).toMatchObject({ kind: 'verdict', canFail: false, note: issue.reason });
 
-  const bypass = { kind: 'verdict', item: 'member:balance', corrected: true, covers: issue.reason, reason: 'Partial payment agreed', by: 'Ops' };
+  expect(option.coverKeys).toEqual(['2|IP|SUR|5000000']);
+  const bypass = { kind: 'verdict', item: 'member:balance', corrected: true, covers: issue.reason, coverKeys: option.coverKeys, reason: 'Partial payment agreed', by: 'Ops' };
   const passed = evaluate(fields([], { corrections: [bypass] }), info, [issue]);
   expect(passed).toMatchObject({ outcome: 'MEMBER_VERIFIED', accepted: [{ item: 'member:balance', acceptedReason: 'Partial payment agreed' }] });
 
-  // A changed balance is a new finding: held again.
-  const changed = { ...issue, reason: issue.reason.replace('3,587,070', '1,000,000') };
-  expect(evaluate(fields([], { corrections: [bypass] }), info, [changed]).outcome).toBe('MEMBER_REVIEW_REQUIRED');
+  // Option A1: the balance moved in IAS, the same voucher is short — still bypassed.
+  const moved = { ...issue, reason: issue.reason.replace('3,587,070', '1,000,000') };
+  expect(evaluate(fields([], { corrections: [bypass] }), info, [moved]).outcome).toBe('MEMBER_VERIFIED');
+  // A new short voucher (or a changed amount or head) is a new decision: held again.
+  const another = { ...issue, coverKeys: [...issue.coverKeys, '1|IP|SUR|5000000'] };
+  expect(evaluate(fields([], { corrections: [bypass] }), info, [another]).outcome).toBe('MEMBER_REVIEW_REQUIRED');
 });
 
 it('a bypassed balance never goes STP', () => {

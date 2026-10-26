@@ -79,8 +79,14 @@ async function checkMemberBalance(extractedFields, iasMemberInfoResponse, previo
   const short = lines.filter((line) => line.enough === false);
   return {
     checked: true, note: null, picks, lines,
+    // coverKeys: what a bypass covers (owner, 2026-10-26, option A1) — the short vouchers (number, head, amount), not the
+    // balance figure, so a balance that moves in IAS does not hold the case again; a new short voucher does.
     issue: short.length
-      ? { item: 'member:balance', reasonCode: 'BALANCE_NOT_ENOUGH', reason: `Balance not enough: ${short.map((line) => line.text).join('; ')}.` }
+      ? {
+        item: 'member:balance', reasonCode: 'BALANCE_NOT_ENOUGH',
+        reason: `Balance not enough: ${short.map((line) => line.text).join('; ')}.`,
+        coverKeys: short.map((line) => `${line.voucher ?? 'claim'}|${line.benefitType ?? ''}|${line.benefitHead ?? ''}|${line.amount}`),
+      }
       : null,
   };
 }

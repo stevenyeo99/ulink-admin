@@ -1,6 +1,6 @@
 # SYSTEM_5 PRD: member balance check in the member check
 
-Owner: Steven Yeo. Written: 2026-10-26. Status: draft, for the owner's review. IAS and owner questions answered 2026-10-26.
+Owner: Steven Yeo. Written: 2026-10-26. Status: draft, for the owner's review. IAS and owner questions answered 2026-10-26 (bypass scope A1, second check B1).
 Source: `Internal_Note_Feedback.md`, the note on checks before a document request, point 2. IAS interface: `../INTEGRATION/IAS_MEMBER_BALANCE_SPEC.md`.
 
 ## 1. Background
@@ -143,7 +143,7 @@ If the balance is not enough, the case holds at member review for a person (owne
 1. The finding is listed on the member review panel of the case page and the review workspace, with one line per short voucher (4.4).
 2. The only action on this finding is *Bypass*. A reason is required, for example "Partial payment agreed, IAS pays up to the balance". The finding cannot be marked failed, and the panel offers no amount or head change for it.
 3. After a bypass, the case goes on to the document check. The voucher amount sent to IAS does not change.
-4. A bypass covers only the finding that the person saw. If the balance or a voucher amount changes, the finding text changes, and the finding is raised again. This is the existing rule for member findings (`covers` in `member-verification/checks.js`).
+4. A bypass covers the short vouchers that the person saw: each voucher's number, head and amount (owner, 2026-10-26, option A1). If the balance in IAS moves and the same vouchers are still short, the bypass stays. If a voucher's amount or head changes, or another voucher becomes short, the finding is raised again. The finding stores these as `coverKeys`, and `member-verification/checks.js` compares them.
 5. A case at member review is checked again on every run. If another claim is reversed and the balance becomes enough, the finding clears and the case moves on by itself.
 6. `member:balance` joins the member findings that a person can set aside (`ACCEPTABLE_MEMBER_ITEMS` in `checks.js`). The reviewer roles can bypass it (Q6). The bypass, its reason, the person and the date are kept in the case history and the assessment summary.
 7. A claim whose balance was bypassed never goes STP. A person (JD3) always approves it.
@@ -174,9 +174,13 @@ When the person saves, the system records the choice with the person, the date a
 
 ### 4.8 Claim preparation
 
-1. Claim preparation reuses the heads saved by the member check, whether the AI's or a person's, for each voucher whose key is unchanged.
+1. Claim preparation reuses the heads saved by the member check, whether the AI's or a person's, for each voucher whose key is unchanged. This comes in phase C, together with the *Choose the benefit* screen, so a person is never asked for the same head twice.
 2. If a voucher changed after the member check, preparation picks its head again as today. If that pick is not sure, preparation review asks for it as today.
 3. Preparation review keeps the diagnosis code and the vitamin rejection. In the normal case it no longer asks for the head.
+4. Just before the claim is built, claim preparation asks IAS for the balance again, with the final heads and voucher amounts (owner, 2026-10-26, option B1). A case can wait at the document check for days, and other claims of the member can be paid in that time. This costs one IAS call and no AI call.
+5. If a voucher is short and a bypass already covers it, the case goes on. It never goes STP.
+6. If a shortage is new, the case goes back to the member check. The member check raises the same `member:balance` finding at member review, where a person bypasses it on the usual screen. This works the same in both flows.
+7. The second check needs the heads of rule 1. Without them, claim preparation and the member check can pick different heads for one voucher and send the case back and forth.
 
 ### 4.9 What people see
 
@@ -224,5 +228,5 @@ Each phase can be released alone. No phase leaves a case at a status that no scr
 |---|---|---|---|
 | A. IAS client and rules | `getMemberLimitBalance` client in `member-verification/iasClient.js` and the `GET_MEMBER_LIMIT_BALANCE_API` configuration value. The balance rules of 4.4 as a pure function in a new `member-verification/balance.js`. It picks the entry by `plan_id` and `rev_no` and finds the limits that cover a head. It applies the field rules: `null` skipped, 0 used up, vouchers added up, `amt_vis` per voucher. It returns one line per voucher. Tests on the spec sample, including its Outpatient 0. No change to any case | Owner approves this PRD | Done, awaiting review (2026-10-26) |
 | B. Balance in the member check | In `checkCase` (both flows): the AI head pick per voucher, saved and reused while the voucher is unchanged, then the balance call and the rules of A. The `member:balance` finding (`BALANCE_NOT_ENOUGH`) at the existing member review status, with the team email. *Bypass* with a required reason, open to the reviewer roles for this finding. No STP after a bypass. AI checklist entry. An unsure head does not stop the case yet: that voucher is checked at benefit type level only (4.4, rule 4) | A done | Done, awaiting review (2026-10-26) |
-| C. Choose the benefit | New statuses `BENEFIT_REVIEW` / `API_BENEFIT_REVIEW` and their migration. `holdUnsureBenefit` stops an unsure head at the member check, in both flows. The *Choose the benefit* screen and `POST /api/cases/:id/benefit`. Voucher amount correction by the reviewer roles, with a reason. `recheckFrom` sends voucher amount and type corrections back to the member check. Review queue reason *Choose the benefit* | B done | Not started |
-| D. Claim preparation and display | Claim preparation reuses the heads saved by the member check. The balance lines on the case page, the review workspace and the assessment summary. The *Plan limits* line is replaced. `OPERATIONS.md`, `CLAIM_FLOW_END_TO_END.md` and the API flowchart (and its published page) updated | C done | Not started |
+| C. Choose the benefit | New statuses `BENEFIT_REVIEW` / `API_BENEFIT_REVIEW` and their migration. `holdUnsureBenefit` stops an unsure head at the member check, in both flows. The *Choose the benefit* screen and `POST /api/cases/:id/benefit`. Voucher amount correction by the reviewer roles, with a reason. `recheckFrom` sends voucher amount and type corrections back to the member check. Review queue reason *Choose the benefit*. Claim preparation reuses the heads saved by the member check (4.8, rule 1) | B done | Not started |
+| D. Second balance check and display | The second balance check at claim preparation, with a new shortage sent back to member review (4.8, rules 4 to 7). The balance lines on the case page, the review workspace and the assessment summary. The *Plan limits* line is replaced. `OPERATIONS.md`, `CLAIM_FLOW_END_TO_END.md` and the API flowchart (and its published page) updated | C done | Not started |

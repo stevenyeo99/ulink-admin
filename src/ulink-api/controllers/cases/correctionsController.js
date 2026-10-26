@@ -99,7 +99,8 @@ async function saveCorrections(req, res, items) {
         aiConfidence: original.aiConfidence, corrected, reason: row.reason, wrongStep: row.wrongStep, page: original.page,
         by: operator, at: row.createdAt,
         // A member Mark OK covers exactly the finding the person saw (member-verification/checks.js).
-        ...(option.item.startsWith('member:') ? { covers: option.note } : {}),
+        // member:balance: the short vouchers it saw (coverKeys), not the balance figure.
+        ...(option.item.startsWith('member:') ? { covers: option.note, ...(option.coverKeys ? { coverKeys: option.coverKeys } : {}) } : {}),
       };
       extractedFields = applyCorrection(extractedFields, correction);
       saved.push({ row, correction });

@@ -196,7 +196,10 @@ function evaluate(extractedFields, iasResponse, extraIssues = []) {
   const marked = new Map((extractedFields.corrections || [])
     .filter((c) => c.kind === 'verdict' && ACCEPTABLE_MEMBER_ITEMS.has(c.item) && c.corrected === true)
     .map((c) => [c.item, c]));
-  const isMarked = (issue) => marked.has(issue.item) && marked.get(issue.item).covers === issue.reason;
+  // A finding with coverKeys (member:balance) is covered while each of its keys was in the one the person bypassed.
+  const isMarked = (issue) => marked.has(issue.item) && (issue.coverKeys
+    ? issue.coverKeys.every((key) => (marked.get(issue.item).coverKeys || []).includes(key))
+    : marked.get(issue.item).covers === issue.reason);
   const accepted = issues.filter(isMarked)
     .map((issue) => ({ ...issue, by: marked.get(issue.item).by ?? 'a person', acceptedReason: marked.get(issue.item).reason ?? '' }));
   const open = issues.filter((issue) => !isMarked(issue));
