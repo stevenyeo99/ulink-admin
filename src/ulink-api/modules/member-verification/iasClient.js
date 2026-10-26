@@ -58,4 +58,20 @@ async function getMemberLimitBalance({ memberRefNo, policyRefNo, policyEffDate }
   return postIas(config.ias.getMemberLimitBalanceApi, { memberRefNo, policyRefNo, policyEffDate }, 'member limit balance');
 }
 
-module.exports = { getMemberInfo, getMemberLimitBalance };
+/**
+ * POST {IAS_URL}{GET_MEMBER_POLICY_EVENTS_API} with { policyNo | policyRefNo, memberNo | memberRefNo, policyEffDate
+ * (YYYY-MM-DD, exact) } — the member's and the policy period's exclusion events
+ * (docs/imp/CR/SYSTEM_5/INTEGRATION/IAS_MEMBER_EXCLUSION_SPEC.md).
+ *
+ * Returns { success: true, payload: { memberEvents: [...], policyEvents: [...] } } — both lists always present, empty =
+ * no exclusions — or { success: false, error }.
+ */
+async function getMemberPolicyEvents(request) {
+  if (!config.ias.baseUrl || !config.ias.getMemberPolicyEventsApi) {
+    throw new Error('IAS_URL and GET_MEMBER_POLICY_EVENTS_API must be configured');
+  }
+  if (!request) throw new Error('The member policy events request needs a policy, a member and the policy start date');
+  return postIas(config.ias.getMemberPolicyEventsApi, request, 'member policy events');
+}
+
+module.exports = { getMemberInfo, getMemberLimitBalance, getMemberPolicyEvents };

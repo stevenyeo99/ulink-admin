@@ -69,10 +69,16 @@ The call uses the shared IAS POST helper in `member-verification/iasClient.js`: 
 
 ### 4.4 Judging by meaning
 
-1. One AI call per case judges all the counted events together. The input has three parts: the diagnosis and treatment text from the claim form, the voucher lines that were read, and each event's level, date and description. Burmese text is translated first, as the member check already does for the head pick.
+1. One AI call per case judges all the counted events together, by meaning only (owner, 2026-10-26). It gets what the claim is for, from the fields read from its documents: the diagnosis and treatment text, the voucher lines, and whether the treatment was outside Myanmar. It gets no dates. For each event, it gets the level and the description. Burmese text is translated first, as the member check already does for the head pick.
 2. The answer is one result per event: whether the claim falls under it (`applies`: yes or no), a confidence from 0 to 1, and a short reason in plain words.
-3. A new prompt file, `member-verification/prompts/exclusion-events.md`, holds the instructions. The call goes through the existing AI client and the AI call log (`llm-calls`), like every other AI judgment.
-4. If the AI says that an event applies, the event is a likely match. If the confidence is at or below the AI confidence threshold (System page), the event is unsure. Both stop the case (owner, 2026-10-26).
+3. The AI does no date reasoning on the free text (owner, 2026-10-26). It ignores a date or time limit written in a description, such as "18th NOV" or "for 1st yr". If a rule matches the claim's meaning and has a date or time limit, the rule applies, and the reason says that a person checks the date. The only date the system uses is the event's own `eventDate` (4.3).
+4. Events are not only medical exclusions (IAS samples, Q6). The prompt covers three kinds of event:
+   - A condition or treatment excluded, for example "ASTHMA for 1st yr". Any asthma claim matches, and a person checks the first year.
+   - A policy or cover that ended, for example "No further claims to be accepted, 18th NOV". It matches every claim, and a person checks the date.
+   - A rule on where the treatment or the member is, for example "claims only from India, Malaysia and Thailand". A treatment inside Myanmar does not match. A treatment outside Myanmar is unsure, because no country name is read.
+
+5. A new prompt file, `member-verification/prompts/exclusion-events.md`, holds the instructions. The call goes through the existing AI client and the AI call log (`llm-calls`), like every other AI judgment.
+6. If the AI says that an event applies, the event is a likely match. If the confidence is at or below the AI confidence threshold (System page), the event is unsure. Both stop the case (owner, 2026-10-26).
 
 ### 4.5 The outcome
 
@@ -107,6 +113,16 @@ The exclusion finding works like the balance finding:
 2. The AI checklist page gets one member check entry: *Is the claim under a member or policy exclusion in IAS?* (`member:exclusion`). It can stop the case and uses the AI. A reviewer can bypass it with a reason.
 3. The existing `POSSIBLE_EXCLUSION` warning stays, and its AI checklist entry says it compares with the general policy clauses.
 
+### 4.8 Sample events from IAS (Q6)
+
+These real descriptions are the prompt's test cases (phase A). All three are member events (owner, 2026-10-26). ULINK staff type exclusions by hand on the member record, so a member event can hold any kind of rule: a condition, a cut-off date, or a rule on where the treatment or the member is. The prompt must not assume that a member event is medical, or that a policy event is administrative. Member events have no policy period, so an event from an earlier period still comes back. The date rule (4.3) and the AI's reading of the event decide whether it still applies.
+
+| Sample | Kind | How the AI judges it |
+|---|---|---|
+| "1. ASTHMA for 1st yr 2. Any symptom related to GERD 3. DRT testing" | Conditions, one for a time | It applies to a claim for asthma, a GERD symptom (by meaning: acid reflux, heartburn), or DRT testing. For asthma, the reason says that a person checks the first year. Several exclusions in one event: the reason names the one that applies |
+| "Policy Terminated or expired in the system. No further claims to be accepted, 18th NOV" | Policy ended | It applies to every claim. The reason says that a person checks the date (18 November) |
+| "1. The diagnosis and claim can only be accepted from India, Malaysia, and Thailand.,2. The policy will be canceled once the insured decides to leave Myanmar permanently or if their visa is no longer valid.,3. If the life assured remains outside of Myanmar for a period of more than one hundred eighty-five (185) consecutive days, then the policy will be terminated." (quoted as IAS gave it) | Where the treatment or the member is | Treatment inside Myanmar: does not apply. Treatment outside Myanmar: unsure (no country name is read), so a person checks the country. The claim cannot answer the residency and visa rules. The AI answers unsure for them only for a claim with treatment outside Myanmar |
+
 ## 5. New settings and data
 
 1. A new configuration value `GET_MEMBER_POLICY_EVENTS_API=/api/get_member_policy_events`, in `.env`, `.env.example` and `.env.uat`.
@@ -124,12 +140,12 @@ The exclusion finding works like the balance finding:
 | No. | Question | For | Answer or proposed default |
 |---|---|---|---|
 | Q1 | Does a likely match stop the case at member review, with Bypass only? | Owner | Decided 2026-10-26: yes |
-| Q2 | Is `member:exclusion` locked on the AI checklist page, or can it be switched off? | Owner | Proposed: it can be switched off, because it is an AI judgment. A switched-off check blocks STP (the AI checklist rule) |
+| Q2 | Is `member:exclusion` locked on the AI checklist page, or can it be switched off? | Owner | Decided 2026-10-26: it can be switched off, because it is an AI judgment. A switched-off check blocks STP (the AI checklist rule) |
 | Q3 | Does the general policy-clause check stay as a warning? | Owner | Decided 2026-10-26: yes, and the new check names the level (member or policy) |
 | Q4 | Do events dated after the treatment date count? | Owner | Decided 2026-10-26: no. Only events on or before the treatment date, or with no date |
 | Q5 | Does an unsure AI answer stop the case? | Owner | Decided 2026-10-26: yes |
-| Q6 | Can IAS give one or two real `eventDescription` examples from UAT? | IAS | Needed before phase A's prompt is final |
-| Q7 | Which identifier does the call use: `policyNo` (`POCY_NO`) or `policyRefNo` (`POCY_REF_NO`)? | IAS | Proposed: `policyNo` and `memberNo`, with the reference numbers as a fallback |
+| Q6 | Can IAS give one or two real `eventDescription` examples from UAT? | IAS | Answered 2026-10-26 with three samples (section 4.8). They are the prompt's test cases |
+| Q7 | Which identifier does the call use: `policyNo` (`POCY_NO`) or `policyRefNo` (`POCY_REF_NO`)? | IAS | Decided 2026-10-26: `policyNo` and `memberNo`, with the reference numbers as a fallback |
 
 ## 8. Implementation plan
 
@@ -137,6 +153,6 @@ The owner approves one phase at a time. Each phase ends with the `ulink-api` tes
 
 | Phase | Content | Needs first | Status |
 |---|---|---|---|
-| A. IAS client, events and judge | `getMemberPolicyEvents` client and the `GET_MEMBER_POLICY_EVENTS_API` value. A pure function for the request and the counted events (date rule, levels). The AI judge with its prompt, tested on sample events with a faked AI answer. No change to any case | Owner approves this PRD, Q6 | Not started |
+| A. IAS client, events and judge | `getMemberPolicyEvents` client and the `GET_MEMBER_POLICY_EVENTS_API` value. A pure function for the request and the counted events (date rule, levels). The AI judge with its prompt, tested on sample events with a faked AI answer. No change to any case | Owner approves this PRD | Done, awaiting review (2026-10-26) |
 | B. In the member check | The check inside `checkCase` (both flows). The `member:exclusion` finding with Bypass only, covering the events by ID and level. AI answer reused while nothing changed. No STP after a bypass or override. The summary line. The AI checklist entry | A done, Q2 | Not started |
 | C. Docs | `OPERATIONS.md`, `CLAIM_FLOW_END_TO_END.md`, the API flowchart and its published page, the change log | B done | Not started |

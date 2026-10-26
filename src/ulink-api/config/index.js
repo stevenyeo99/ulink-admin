@@ -171,6 +171,8 @@ module.exports = {
     getMemberInfoApi: process.env.GET_MEMBER_INFO_API,
     // The member's remaining balance per limit (SYSTEM_5 member balance, docs/imp/CR/SYSTEM_5/PRD/MEMBER_BALANCE_PRD.md).
     getMemberLimitBalanceApi: process.env.GET_MEMBER_LIMIT_BALANCE_API,
+    // The member's and the policy period's exclusion events (SYSTEM_5, docs/imp/CR/SYSTEM_5/PRD/MEMBER_EXCLUSION_PRD.md).
+    getMemberPolicyEventsApi: process.env.GET_MEMBER_POLICY_EVENTS_API,
     claimApi: process.env.CL_CLAIM_API,
     // API cases: revise the claim IAS already created (same body as claimApi, plus claimNo).
     claimRevisionApi: process.env.CL_CLAIM_REVISION_API,

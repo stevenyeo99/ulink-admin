@@ -28,6 +28,13 @@ function iasDateToYYYYMMDD(mmddyyyy) {
   return `${yyyy}${mm}${dd}`;
 }
 
+// IAS MMDDYYYY → ISO YYYY-MM-DD; null when it is not 8 digits.
+function iasDateToIso(mmddyyyy) {
+  if (!/^\d{8}$/.test(String(mmddyyyy ?? ''))) return null;
+  const yyyymmdd = iasDateToYYYYMMDD(mmddyyyy);
+  return `${yyyymmdd.slice(0, 4)}-${yyyymmdd.slice(4, 6)}-${yyyymmdd.slice(6, 8)}`;
+}
+
 function isoToMMDDYYYY(isoDate) {
   if (!isoDate) return null;
   const [yyyy, mm, dd] = isoDate.split('-');
@@ -67,4 +74,4 @@ function todayInIasTimezone(now = new Date()) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Yangon' }).format(now);
 }
 
-module.exports = { toYYYYMMDD, iasDateToYYYYMMDD, isoToMMDDYYYY, dateToMMDDYYYY, dateToYYYYMMDD, todayInIasTimezone };
+module.exports = { toYYYYMMDD, iasDateToYYYYMMDD, isoToMMDDYYYY, dateToMMDDYYYY, dateToYYYYMMDD, todayInIasTimezone, iasDateToIso };
