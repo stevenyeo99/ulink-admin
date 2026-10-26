@@ -190,25 +190,24 @@ describe('second balance check (phase D)', () => {
   const basis = { typeOfPatient: 'Inpatient', plan: { planId: '2311', revNo: '01' } };
   const memberResult = { balance: { picks: items.map((item, i) => ({ voucher: i, key: { subtotal: item.subtotal, date: item.date, voucherType: item.voucher_type }, basis, benefitType: 'IP', benefitHead: 'SUR', confidence: 0.9 })) } };
 
-  it('a new shortage on the member check\'s own head goes back to member review', async () => {
+  it('a new shortage holds the case at claim preparation (BALANCE_REVIEW), with no AI call', async () => {
     const check = await recheckBalance(fields(items), info, memberResult, heads);
     expect(getMemberLimitBalance).toHaveBeenCalledTimes(1);
     expect(pickBenefit).not.toHaveBeenCalled(); // no AI call
-    expect(check).toMatchObject({ checked: true, uncovered: ['2|IP|SUR|5000000'], sendBack: true });
+    expect(check).toMatchObject({ checked: true, uncovered: ['2|IP|SUR|5000000'], hold: true });
   });
 
   it('a shortage a bypass covers goes on (the claim never goes STP)', async () => {
     const bypass = { kind: 'verdict', item: 'member:balance', corrected: true, coverKeys: ['2|IP|SUR|5000000'] };
     const check = await recheckBalance(fields(items, { corrections: [bypass] }), info, memberResult, heads);
-    expect(check).toMatchObject({ uncovered: [], sendBack: false });
+    expect(check).toMatchObject({ uncovered: [], hold: false });
     expect(check.issue).not.toBeNull();
   });
 
-  it('a shortage on a head chosen later at claim preparation stays with the approver: never back and forth', async () => {
+  it('a shortage on a head chosen later at claim preparation holds too: the case waits where it is, never loops', async () => {
     const later = [heads[0], { benefitType: 'IP', benefitHead: 'ICU' }];
     const check = await recheckBalance(fields(items), info, memberResult, later);
-    expect(check.uncovered.length).toBeGreaterThan(0);
-    expect(check.sendBack).toBe(false);
+    expect(check).toMatchObject({ hold: true });
   });
 });
 
@@ -219,15 +218,32 @@ describe('second balance check: review fixes', () => {
   const basis = { typeOfPatient: 'Inpatient', plan: { planId: '2311', revNo: '01' } };
   const picks = items.map((item, i) => ({ voucher: i, key: { subtotal: item.subtotal, date: item.date, voucherType: item.voucher_type }, basis, benefitType: 'IP', benefitHead: 'SUR', confidence: 0.9 }));
 
-  it('a whole-check override counts as letting the shortfall through: never sent back', async () => {
+  it('a whole-check override counts as letting the shortfall through: no hold', async () => {
     const overridden = { balance: { picks }, issues: [{ item: 'member:balance', coverKeys: ['2|IP|SUR|5000000'] }] };
-    expect(await recheckBalance(fields(items), info, overridden, heads)).toMatchObject({ uncovered: [], sendBack: false });
+    expect(await recheckBalance(fields(items), info, overridden, heads)).toMatchObject({ uncovered: [], hold: false });
   });
 
-  it('only the latest bypass counts, as in the member check', async () => {
+  it('every bypass counts, in both checks: a later bypass of another voucher keeps the earlier one', async () => {
     const old = { kind: 'verdict', item: 'member:balance', corrected: true, coverKeys: ['2|IP|SUR|5000000'] };
     const latest = { kind: 'verdict', item: 'member:balance', corrected: true, coverKeys: ['9|IP|SUR|1'] };
     const check = await recheckBalance(fields(items, { corrections: [old, latest] }), info, { balance: { picks } }, heads);
-    expect(check.uncovered).toEqual(['2|IP|SUR|5000000']);
+    expect(check.uncovered).toEqual([]);
+    const issue = { item: 'member:balance', reasonCode: 'BALANCE_NOT_ENOUGH', reason: 'x', coverKeys: ['2|IP|SUR|5000000'] };
+    expect(evaluate(fields([], { corrections: [{ ...old, covers: 'x' }, { ...latest, covers: 'y' }] }), info, [issue]).outcome).toBe('MEMBER_VERIFIED');
+  });
+
+  it('a held case with no heads to check with keeps waiting', async () => {
+    const { heldBalanceEnough } = require('../modules/member-verification/memberBalance');
+    expect(await heldBalanceEnough(fields(items), info, { balance: { picks } }, { lines: [] })).toBe(false);
+    expect(getMemberLimitBalance).not.toHaveBeenCalled();
+  });
+});
+
+describe('BALANCE_REVIEW: bypass goes back to claim preparation', () => {
+  const { recheckFrom } = require('../modules/ai-feedback/corrections');
+  it('a bypass at the balance stop goes back to claim preparation, never through the member check again', () => {
+    expect(recheckFrom('member:balance', 'BALANCE_REVIEW')).toMatchObject({ EMAIL: 'DOCUMENTS_UPLOADED', label: 'claim preparation' });
+    expect(recheckFrom('member:balance', 'API_BALANCE_REVIEW')).toMatchObject({ API: 'API_READY_FOR_CLAIM_PREPARATION' });
+    expect(recheckFrom('member:balance', 'MEMBER_REVIEW_REQUIRED')).toMatchObject({ EMAIL: 'RECOGNIZED' });
   });
 });

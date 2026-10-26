@@ -121,9 +121,9 @@ ias-claim-preparation → ias-claim-creation → *email: JD3 / IAS rejection* �
 |---|---|
 | **Reads** | `DOCUMENTS_UPLOADED` |
 | **Does** | 1. **Diagnosis:** Burmese text is translated to clinical English first; ICD-10 candidates by search on the **illness text only** (drug names in the treatment text would drown the symptoms); the AI picks one with a reason, seeing the treatment too. No confident pick → `R69` (unknown). 2. **Benefit:** one IAS claim line per voucher; the AI picks the benefit type and head from the member's own plan. 3. **STP decision** by the rules (section 4.4). 4. Builds the IAS payload: claim lines, barcode(s) (`barcode` + `suppBarcode1–5`), and **`AiSummaryRemark`** (the AI assessment, up to 10,000 characters). |
-| **Balance** | Each voucher's head is the member check's (AI or a person's) while the voucher is unchanged. Just before the claim is built, IAS `get_member_limit_balance` is asked again with the final heads and amounts (one IAS call, no AI). A shortage a person bypassed goes on; any shortage keeps the claim from STP. A new shortage on the member check's own head sends the case back to `RECOGNIZED`, so the member check holds it at member review (SYSTEM_5 member balance phase D, both flows) |
+| **Balance** | Each voucher's head is the member check's (AI or a person's) while the voucher is unchanged. Just before the claim is built, IAS `get_member_limit_balance` is asked again with the final heads and amounts (one IAS call, no AI). A shortage a person bypassed goes on; any shortage keeps the claim from STP. A new shortage holds the case at **`BALANCE_REVIEW`** *Balance changed before the claim*: the only action is **Bypass** with a reason, and the case then comes back to claim preparation (never back through the member check: the documents are already in the IAS console). A waiting case is asked again each run (balance only) and goes on by itself once the balance is enough (SYSTEM_5 member balance phase D, both flows) |
 | **Decided by** | **AI** (translation, diagnosis, benefit) + Rule (STP, balance) |
-| **Status** | `CLAIM_PAYLOAD_PREPARED` *Claim prepared* · back to `RECOGNIZED` when the balance changed |
+| **Status** | `CLAIM_PAYLOAD_PREPARED` *Claim prepared* · `BALANCE_REVIEW` *Balance changed before the claim* |
 
 ### 2.8 IAS claim creation — `ias-claim-creation`
 | | |

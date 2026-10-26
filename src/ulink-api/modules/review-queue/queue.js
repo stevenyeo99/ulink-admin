@@ -41,6 +41,9 @@ const STATUS_REASONS = {
   // SYSTEM_5 member balance phase C: a person chooses an unsure benefit head.
   BENEFIT_REVIEW: 'Choose the benefit',
   API_BENEFIT_REVIEW: 'Choose the benefit',
+  // SYSTEM_5 member balance phase D: the balance dropped before the claim; a person bypasses it.
+  BALANCE_REVIEW: 'Rule hold',
+  API_BALANCE_REVIEW: 'Rule hold',
 };
 
 const rank = (reason) => {

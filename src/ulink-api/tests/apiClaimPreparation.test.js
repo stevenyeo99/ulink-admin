@@ -39,8 +39,8 @@ beforeEach(() => jest.clearAllMocks());
 
 it('runs whether the documents passed or not (after api-console-upload), with every earlier output it needs', () => {
   expect(job).toMatchObject({
-    inputStatus: ['API_READY_FOR_CLAIM_PREPARATION'],
-    optionalInputs: ['case-override', 'api-console-barcode', 'preparation-review'],
+    inputStatus: ['API_READY_FOR_CLAIM_PREPARATION', 'API_BALANCE_REVIEW'],
+    optionalInputs: ['case-override', 'api-console-barcode', 'preparation-review', 'api-claim-preparation'],
     inputs: ['api-claim-intake', 'api-material-download', 'api-claim-recognition', 'api-member-verification', 'api-document-checking'],
   });
 });

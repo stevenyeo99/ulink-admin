@@ -3,7 +3,8 @@ const config = require('../../config');
 const { pickDiagnosis } = require('./diagnosisPicker');
 const { pickBenefit } = require('./benefitPicker');
 const { voucherKey, sameVoucher, diagnosisSource, sameDiagnosis } = require('./preparationReview');
-const { savedHead, recheckBalance } = require('../member-verification/memberBalance');
+const { savedHead, recheckBalance, heldBalanceEnough } = require('../member-verification/memberBalance');
+const logger = require('../../utils/logger');
 const { uniqueBenefitCandidates } = require('../shared/iasBenefits');
 const { buildPayload } = require('./payloadBuilder');
 const { vitaminRejection } = require('../document-checking/checklist');
@@ -129,12 +130,12 @@ async function checkCase(caseRecord) {
   };
 
   // The second balance check (SYSTEM_5 member balance phase D): with the final heads, just before the claim is built. A
-  // new shortage the member check would raise sends the case back to it (sendBack: the caller moves the case); any
-  // shortage at all keeps the claim from STP.
+  // new shortage holds the case at BALANCE_REVIEW for a person's bypass (hold: the caller moves the case); any shortage
+  // at all keeps the claim from STP.
   const balanceCheck = await recheckBalance(extractedFields, iasMemberInfoResponse, caseRecord.memberVerifyResult, lines.map((line) => line.benefit));
-  claimPrepMeta.balance = { checked: balanceCheck.checked, note: balanceCheck.note, lines: balanceCheck.lines, uncovered: balanceCheck.uncovered };
-  if (balanceCheck.sendBack) {
-    return { caseId: caseRecord.id, sendBack: true, claimPrepMeta, reason: balanceCheck.issue.reason };
+  claimPrepMeta.balance = { checked: balanceCheck.checked, note: balanceCheck.note, lines: balanceCheck.lines, uncovered: balanceCheck.uncovered, issue: balanceCheck.issue };
+  if (balanceCheck.hold) {
+    return { caseId: caseRecord.id, hold: true, claimPrepMeta, reason: balanceCheck.issue.reason };
   }
 
   // Open review points so far — member, documents and the picks just made — for the STP switch "open
@@ -197,11 +198,11 @@ async function checkCase(caseRecord) {
 async function persistOutcome(caseRecord, outcome) {
   return sequelize.transaction(async (transaction) => {
     const prevStatus = caseRecord.currentStatus;
-    // The second balance check found a new shortage (SYSTEM_5 member balance phase D): back to the member check, which
-    // holds the case at member review with the member:balance finding.
-    if (outcome.sendBack) {
-      await Case.update({ currentStatus: 'RECOGNIZED', claimPrepMeta: outcome.claimPrepMeta }, { where: { id: caseRecord.id }, transaction });
-      await logEvent(transaction, { caseId: caseRecord.id, prevStatus, newStatus: 'RECOGNIZED', reasonCode: 'BALANCE_RECHECK', message: `Member balance changed before the claim: ${outcome.reason} Checked again from the member check.` });
+    // The second balance check found a new shortage (SYSTEM_5 member balance phase D): the case waits here for a
+    // person's bypass, then comes back to claim preparation.
+    if (outcome.hold) {
+      await Case.update({ currentStatus: 'BALANCE_REVIEW', claimPrepMeta: outcome.claimPrepMeta }, { where: { id: caseRecord.id }, transaction });
+      await logEvent(transaction, { caseId: caseRecord.id, prevStatus, newStatus: 'BALANCE_REVIEW', reasonCode: 'BALANCE_RECHECK', message: `Member balance changed before the claim: ${outcome.reason}` });
       return;
     }
     await Case.update(
@@ -225,7 +226,33 @@ async function persistOutcome(caseRecord, outcome) {
   });
 }
 
+/**
+ * Cases waiting at BALANCE_REVIEW (SYSTEM_5 member balance phase D): the balance is asked again (one IAS call, no AI)
+ * with the heads claim preparation chose; if no shortage is left uncovered — another claim was reversed — the case goes
+ * back to claim preparation by itself.
+ */
+async function recheckHeldBalances() {
+  const held = await Case.findAll({ where: { currentStatus: 'BALANCE_REVIEW' }, limit: config.iasClaimPreparation.batchLimit, order: [['updatedAt', 'ASC']] });
+  for (const caseRecord of held) {
+    try {
+      if (!(await heldBalanceEnough(caseRecord.extractedFields, caseRecord.iasMemberInfoResponse, caseRecord.memberVerifyResult, caseRecord.claimPrepMeta))) {
+        // Still waiting: to the back of the queue (updatedAt), so every held case gets its turn.
+        await Case.update({ currentStatus: 'BALANCE_REVIEW' }, { where: { id: caseRecord.id, currentStatus: 'BALANCE_REVIEW' } });
+        continue;
+      }
+      await sequelize.transaction(async (transaction) => {
+        const [count] = await Case.update({ currentStatus: 'DOCUMENTS_UPLOADED' }, { where: { id: caseRecord.id, currentStatus: 'BALANCE_REVIEW' }, transaction });
+        if (count === 1) await logEvent(transaction, { caseId: caseRecord.id, prevStatus: 'BALANCE_REVIEW', newStatus: 'DOCUMENTS_UPLOADED', reasonCode: 'BALANCE_RECHECK', message: 'The member balance is enough again: claim preparation runs again.' });
+      });
+    } catch (error) {
+      // The case keeps waiting and is asked again next run.
+      logger.warn('Balance re-check of a held case failed', { caseId: caseRecord.id, error: error.message });
+    }
+  }
+}
+
 async function run() {
+  await recheckHeldBalances();
   // Reads DOCUMENTS_UPLOADED, not MEMBER_VERIFIED, as of 2026-09-15 — console-upload
   // (modules/console-upload/service.js) now sits between document-checking and this job, so
   // the barcode it generates (Case.consoleBarcode) is guaranteed to exist before

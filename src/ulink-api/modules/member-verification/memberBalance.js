@@ -149,14 +149,13 @@ function withChosenPicks(memberVerifyResult, chosenPicks) {
  * are paid. heads: the final head of each voucher, as claim preparation will send it ([{ benefitType, benefitHead }] by
  * voucher index). No AI call.
  *
- * Returns { checked, note, lines, issue, uncovered, sendBack }. issue: the vouchers short now. uncovered: their keys a
- * person's bypass does not cover (A1: voucher, head, amount). sendBack: true when the member check would raise the same
- * shortage — every uncovered voucher has the head the member check saved — so the case goes back to member review;
- * a shortage on a head chosen later (claim preparation's own review) is left to the approver (no STP) instead, so the
- * case can never go back and forth.
+ * Returns { checked, note, lines, issue, uncovered, hold }. issue: the vouchers short now (the member:balance finding).
+ * uncovered: their keys a person's bypass or override does not cover (A1: voucher, head, amount). hold: a new shortage —
+ * the case waits at BALANCE_REVIEW, claim preparation's own stop, for a person's bypass; it never goes back through the
+ * member check, because the documents are already in the IAS console (owner, 2026-10-26).
  */
 async function recheckBalance(extractedFields, iasMemberInfoResponse, memberVerifyResult, heads) {
-  const notChecked = (note) => ({ checked: false, note, lines: [], issue: null, uncovered: [], sendBack: false });
+  const notChecked = (note) => ({ checked: false, note, lines: [], issue: null, uncovered: [], hold: false });
   const request = balanceRequest(iasMemberInfoResponse);
   if (!request) return notChecked('The IAS member record has no member ref, policy number or policy start date.');
   const balanceResponse = await getMemberLimitBalance(request);
@@ -172,18 +171,25 @@ async function recheckBalance(extractedFields, iasMemberInfoResponse, memberVeri
   const lines = result.lines.map((line) => ({ ...line, text: balanceLineText(line) }));
   const issue = balanceIssue(lines);
 
-  // What a person let through at member review: the latest bypass (the one checks.js applies), or a whole-check
-  // override — the case passed with member:balance still among the member check's findings.
-  const bypass = (extractedFields.corrections || []).filter((c) => c.kind === 'verdict' && c.item === 'member:balance' && c.corrected === true).at(-1);
+  // What a person let through: every bypass (they add up, as in checks.js), or a whole-check override at member review —
+  // the case passed with member:balance still among the member check's findings.
+  const bypasses = (extractedFields.corrections || []).filter((c) => c.kind === 'verdict' && c.item === 'member:balance' && c.corrected === true);
   const overridden = (memberVerifyResult?.issues || []).find((i) => i.item === 'member:balance');
-  const bypassed = [...(bypass?.coverKeys || []), ...(overridden?.coverKeys || [])];
+  const bypassed = [...bypasses.flatMap((c) => c.coverKeys || []), ...(overridden?.coverKeys || [])];
   const uncovered = (issue?.coverKeys || []).filter((key) => !bypassed.includes(key));
-  const sameHeadAsMemberCheck = (key) => {
-    const i = Number(key.split('|')[0]) - 1;
-    const saved = savedHead(memberVerifyResult, i, items[i], iasMemberInfoResponse, extractedFields);
-    return Boolean(saved) && saved.benefitType === heads[i]?.benefitType && (saved.benefitHead ?? null) === (heads[i]?.benefitHead ?? null);
-  };
-  return { checked: true, note: null, lines, issue, uncovered, sendBack: uncovered.length > 0 && uncovered.every(sameHeadAsMemberCheck) };
+  return { checked: true, note: null, lines, issue, uncovered, hold: uncovered.length > 0 };
 }
 
-module.exports = { checkMemberBalance, pickHeads, pickBasis, savedHead, withChosenPicks, balanceIssue, recheckBalance };
+/**
+ * A case waiting at BALANCE_REVIEW / API_BALANCE_REVIEW, asked again (one IAS call, no AI) with the heads claim
+ * preparation chose (claimPrepMeta.lines[].pick). True: no shortage is left uncovered — it goes back to claim
+ * preparation. False: it keeps waiting (still short, IAS gave no balance, or no heads to check with).
+ */
+async function heldBalanceEnough(extractedFields, iasMemberInfoResponse, memberVerifyResult, claimPrepMeta) {
+  const lines = claimPrepMeta?.lines || [];
+  if (!lines.length) return false;
+  const check = await recheckBalance(extractedFields, iasMemberInfoResponse, memberVerifyResult, lines.map((line) => line.pick));
+  return check.checked && !check.hold;
+}
+
+module.exports = { checkMemberBalance, pickHeads, pickBasis, savedHead, withChosenPicks, balanceIssue, recheckBalance, heldBalanceEnough };

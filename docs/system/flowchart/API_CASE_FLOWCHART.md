@@ -52,7 +52,8 @@ flowchart TD
   F -->|no uploads| H
   G --> H[8 · Claim preparation<br/>ICD-10, benefit, rejections, STP, suspense]:::job
   H -->|AI unsure of diagnosis,<br/>benefit or vitamins| PR{{API_PREPARATION_REVIEW}}:::stop
-  H -->|balance dropped while waiting<br/>new shortage| D
+  H -->|balance dropped while waiting<br/>new shortage| BL{{API_BALANCE_REVIEW}}:::stop
+  BL -->|Bypass with a reason,<br/>or balance enough again| H
   PR -->|person chooses| H
   PR -->|choices + corrections, one save| E
   H --> I[9 · Claim revision<br/>POST to IAS]:::job
@@ -78,6 +79,7 @@ flowchart TD
 | `API_NO_DOCUMENTS` | The IAS console has no images for the claim. | Upload on the case page, or wait. Console watch checks every run. | None |
 | `API_MANUAL_REVIEW` | The documents are too long for the AI, or its answer did not match the claim schema. | Handle the claim by hand. | None |
 | `API_BENEFIT_REVIEW` | The AI was not sure of a voucher's benefit head (switch `holdUnsureBenefit`). | Choose the head from the member's plan on the *Choose the benefit* panel, and correct a misread amount. The member check runs again and checks the balance. | None |
+| `API_BALANCE_REVIEW` | The member balance dropped while the case waited for its documents: a voucher no longer fits. | Bypass with a reason (the only action). The revision is then prepared and never goes STP. Asked again every run: goes on by itself once the balance is enough. | None |
 | `API_MEMBER_REVIEW_REQUIRED` | Member, policy or bank details differ from IAS, or the IAS balance is not enough for a voucher (`member:balance`). | Fix IAS (rechecked every run), Mark OK, correct a value, or override. A short balance: Bypass with a reason only, and the claim then never goes STP. | None |
 | `API_DOCUMENTS_UNSURE` | The documents are complete, but the AI was unsure of an item. A reviewer's open request line also holds the case here, even when the switch is off. | Use the `Confirm and continue` button, or correct a value. | `holdUnsureDocumentPass` |
 | `API_DOCUMENTS_REVIEW` | Documents are missing and the AI was unsure, or a person corrected items. | Documents are missing: continue (suspended revision). Documents are fine: override. Or correct a value. | `holdUnsureMissingDocsEmail` |

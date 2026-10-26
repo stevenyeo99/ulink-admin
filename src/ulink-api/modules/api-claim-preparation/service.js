@@ -1,6 +1,8 @@
 const config = require('../../config');
 const { runApiJob } = require('../api-pipeline/runApiJob');
 const { checkCase } = require('../ias-claim-preparation/service');
+const { heldBalanceEnough } = require('../member-verification/memberBalance');
+const { Case } = require('../../db/models');
 const { barcodeFields } = require('../shared/barcodeFields');
 const { openRequests } = require('../case-requests/requests');
 const { getSettings } = require('../settings/settings');
@@ -34,7 +36,26 @@ function apiFlags({ isStp, documentsComplete }) {
   return { isValidation: 'N', isCSR: 'N', isSuspense: 'N' };
 }
 
+// A case waiting at API_BALANCE_REVIEW: the balance asked again (one IAS call, no AI) with the heads claim preparation
+// chose. No shortage left uncovered (another claim was reversed): back to claim preparation by itself; else it waits.
+async function recheckHeldBalance({ caseRecord, input }) {
+  const held = input['api-claim-preparation'];
+  const enough = await heldBalanceEnough(
+    input['api-claim-recognition'].extractedFields,
+    input['api-member-verification'].iasMemberInfoResponse,
+    input['api-member-verification'].memberVerifyResult,
+    held?.claimPrepMeta,
+  );
+  if (!enough) {
+    // Still waiting: to the back of the queue (updatedAt — a wait does not move it), so new cases are never starved.
+    await Case.update({ currentStatus: 'API_BALANCE_REVIEW' }, { where: { id: caseRecord.id, currentStatus: 'API_BALANCE_REVIEW' } });
+    return { wait: true, output: held };
+  }
+  return { output: held, nextStatus: 'API_READY_FOR_CLAIM_PREPARATION', message: 'The member balance is enough again: the revision is prepared again.' };
+}
+
 async function processCase({ caseRecord, input }) {
+  if (caseRecord.currentStatus === 'API_BALANCE_REVIEW') return recheckHeldBalance({ caseRecord, input });
   const claim = input['api-claim-intake'];
   const { extractedFields, recognizedType } = input['api-claim-recognition'];
   const documentCheck = input['api-document-checking'];
@@ -81,12 +102,13 @@ async function processCase({ caseRecord, input }) {
     claimPrepMeta: prepared.claimPrepMeta,
   };
 
-  // The second balance check found a new shortage (SYSTEM_5 member balance phase D): back to the member check.
-  if (prepared.sendBack) {
+  // The second balance check found a new shortage (SYSTEM_5 member balance phase D): the case waits at
+  // API_BALANCE_REVIEW for a person's bypass, then comes back here.
+  if (prepared.hold) {
     return {
-      output: { claimPrepMeta: prepared.claimPrepMeta, sendBack: true },
-      nextStatus: 'API_RECOGNIZED',
-      message: `Member balance changed before the revision: ${prepared.reason} Checked again from the member check.`,
+      output: { claimPrepMeta: prepared.claimPrepMeta, balanceHold: true },
+      nextStatus: 'API_BALANCE_REVIEW',
+      message: `Member balance changed before the revision: ${prepared.reason}`,
     };
   }
 
@@ -116,9 +138,11 @@ const job = {
   name: 'api-claim-preparation',
   // Both document-check outcomes continue here (incomplete → isSuspense=Y), after api-console-upload (and its
   // barcode wait, if a case-page upload went to the console).
-  inputStatus: ['API_READY_FOR_CLAIM_PREPARATION'],
+  // API_BALANCE_REVIEW: re-checked every run, balance only (SYSTEM_5 member balance phase D).
+  inputStatus: ['API_READY_FOR_CLAIM_PREPARATION', 'API_BALANCE_REVIEW'],
   inputs: ['api-claim-intake', 'api-material-download', 'api-claim-recognition', 'api-member-verification', 'api-document-checking'],
-  optionalInputs: ['case-override', 'api-console-barcode', 'preparation-review'],
+  // api-claim-preparation: its own last result, for a case waiting at API_BALANCE_REVIEW.
+  optionalInputs: ['case-override', 'api-console-barcode', 'preparation-review', 'api-claim-preparation'],
   batchLimit: config.iasClaimPreparation.batchLimit,
   process: processCase,
 };

@@ -17,12 +17,18 @@ const logger = require('../../utils/logger');
 // request (correctionHold — a correction never emails the customer on its own).
 // API_PREPARATION_REVIEW: a finding the reviewer still sees wrong at the claim-preparation stop is corrected there too.
 // BENEFIT_REVIEW: a misread voucher amount is corrected beside the head choice (SYSTEM_5 member balance phase C).
-const CORRECTABLE_STATUSES = [...new Set([...Object.keys(OVERRIDE_TARGETS), 'API_CLAIM_SUSPENDED', 'INCOMPLETE', 'API_PREPARATION_REVIEW', 'BENEFIT_REVIEW', 'API_BENEFIT_REVIEW'])];
+// BALANCE_REVIEW: the balance dropped before the claim — only its bypass (member:balance) is offered (SYSTEM_5 phase D).
+const CORRECTABLE_STATUSES = [...new Set([...Object.keys(OVERRIDE_TARGETS), 'API_CLAIM_SUSPENDED', 'INCOMPLETE', 'API_PREPARATION_REVIEW', 'BENEFIT_REVIEW', 'API_BENEFIT_REVIEW', 'BALANCE_REVIEW', 'API_BALANCE_REVIEW'])];
+const balanceHeld = (status) => /BALANCE_REVIEW$/.test(status || '');
 const RECOGNITION_JOB = 'api-claim-recognition';
 
 // Member findings are marked OK only while the member check holds the case — after a whole-check override the case is
 // past it, and a Mark OK there would send it back through the member check.
-const heldByMember = (fields) => (/MEMBER_REVIEW_REQUIRED$/.test(fields.currentStatus || '') ? fields.memberVerifyResult : null);
+// At BALANCE_REVIEW the finding is claim preparation's (claimPrepMeta.balance.issue), offered the same way.
+const heldByMember = (fields) => {
+  if (balanceHeld(fields.currentStatus)) return fields.claimPrepMeta?.balance?.issue ? { issues: [fields.claimPrepMeta.balance.issue] } : null;
+  return /MEMBER_REVIEW_REQUIRED$/.test(fields.currentStatus || '') ? fields.memberVerifyResult : null;
+};
 
 const operatorOf = (user) => (user.name ? `${user.name} (${user.username})` : user.username);
 
@@ -43,7 +49,9 @@ async function correctionsInfo(caseRecord, fields) {
   const list = rows.map((row) => ({ ...(row.toJSON ? row.toJSON() : row), applied: inForce.has(row.id) }));
   const allowed = CORRECTABLE_STATUSES.includes(fields.currentStatus) && Boolean(fields.extractedFields);
   // options: what can be corrected (when allowed) or confirmed (whenever the AI has read the case — E5b "✓ Right").
-  return { allowed, options: fields.extractedFields ? correctionOptions(fields.extractedFields, fields.documentCheckResult, heldByMember(fields)) : [], list };
+  const options = fields.extractedFields ? correctionOptions(fields.extractedFields, fields.documentCheckResult, heldByMember(fields)) : [];
+  // BALANCE_REVIEW: only the balance finding's bypass (the documents are already in the IAS console).
+  return { allowed, options: balanceHeld(fields.currentStatus) ? options.filter((o) => o.item === 'member:balance') : options, list };
 }
 
 // Where "check again" starts for these corrected items: the member check when one of them is a value it compares with
@@ -71,6 +79,9 @@ async function saveCorrections(req, res, items) {
 
   const options = correctionOptions(fields.extractedFields, fields.documentCheckResult, heldByMember(fields));
   const checked = [];
+  if (balanceHeld(caseRecord.currentStatus) && items.some((body) => body?.item !== 'member:balance')) {
+    return res.status(400).json({ error: { message: 'Here the only action is to bypass the balance finding: the documents are already in the IAS console.', status: 400 } });
+  }
   for (const [i, body] of items.entries()) {
     const result = validateCorrection(body, options);
     const error = result.error || (checked.some((c) => c.option.item === body.item) && `${result.option.label} is changed twice.`);

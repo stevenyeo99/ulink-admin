@@ -217,6 +217,9 @@ function correctionText(c) {
 const MEMBER_VOUCHER_ITEM = /^invoices\.items\.\d+\.(subtotal|voucher_type)$/;
 
 function recheckFrom(item, currentStatus) {
+  // The balance dropped before the claim (BALANCE_REVIEW, SYSTEM_5 member balance phase D): its bypass goes back to claim
+  // preparation — the documents are already in the IAS console, so nothing before it runs again.
+  if (/BALANCE_REVIEW$/.test(currentStatus)) return { EMAIL: 'DOCUMENTS_UPLOADED', API: 'API_READY_FOR_CLAIM_PREPARATION', label: 'claim preparation' };
   const member = MEMBER_CHECK_FIELDS.has(item) || MEMBER_VOUCHER_ITEM.test(item) || item.startsWith('member:') || /(MEMBER_REVIEW_REQUIRED|BENEFIT_REVIEW)$/.test(currentStatus);
   return member
     ? { EMAIL: 'RECOGNIZED', API: 'API_RECOGNIZED', label: 'the member check' }
