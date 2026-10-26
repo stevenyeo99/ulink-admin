@@ -80,7 +80,7 @@ async function checkMemberBalance(extractedFields, iasMemberInfoResponse, previo
   // The saved picks stay as they are when the balance cannot be read: no AI call is spent on it.
   const notChecked = (note) => ({ checked: false, note, picks: previousPicks, lines: [], issue: null });
 
-  const request = balanceRequest(iasMemberInfoResponse);
+  const request = balanceRequest(iasMemberInfoResponse, extractedFields.claim?.accident_date || extractedFields.claim?.appointment_date || null);
   if (!request) return notChecked('The IAS member record has no member ref, policy number or policy start date.');
   const balanceResponse = await getMemberLimitBalance(request);
   if (balanceResponse?.success !== true) return notChecked(`IAS did not return the balance${balanceResponse?.error ? ` (${balanceResponse.error})` : ''}.`);
@@ -156,7 +156,7 @@ function withChosenPicks(memberVerifyResult, chosenPicks) {
  */
 async function recheckBalance(extractedFields, iasMemberInfoResponse, memberVerifyResult, heads) {
   const notChecked = (note) => ({ checked: false, note, lines: [], issue: null, uncovered: [], hold: false });
-  const request = balanceRequest(iasMemberInfoResponse);
+  const request = balanceRequest(iasMemberInfoResponse, extractedFields.claim?.accident_date || extractedFields.claim?.appointment_date || null);
   if (!request) return notChecked('The IAS member record has no member ref, policy number or policy start date.');
   const balanceResponse = await getMemberLimitBalance(request);
   if (balanceResponse?.success !== true) return notChecked(`IAS did not return the balance${balanceResponse?.error ? ` (${balanceResponse.error})` : ''}.`);

@@ -47,8 +47,10 @@ const CHECKS = [
     does: 'The bank name, account holder and account number must match the IAS record. A title such as U or Daw is ignored in the name.', fields: BANK },
   { code: 'member:balance', section: 'member', question: 'Is there enough balance for each voucher?', label: MEMBER_ITEM_LABELS['member:balance'], effect: 'stops', usesAi: true, locked: true,
     does: "Picks each voucher's benefit head, then compares each voucher amount with the member's remaining balance in IAS: the head, its benefit type and any combined limit, whichever is lowest. Vouchers that share a limit are added up." },
+  { code: 'member:exclusion', section: 'member', question: 'Is the claim under a member or policy exclusion in IAS?', label: MEMBER_ITEM_LABELS['member:exclusion'], effect: 'stops', usesAi: true,
+    does: "Reads the exclusions IAS holds for this member and this policy period, and judges by meaning whether the claim falls under one. Only exclusions dated on or before the treatment count. A likely match or an unsure answer stops the case for a person. Each line says whether the exclusion is at member or policy level." },
   { code: 'POSSIBLE_EXCLUSION', section: 'member', question: 'Could the diagnosis be a policy exclusion?', label: 'Possible policy exclusion', effect: 'warning', usesAi: true,
-    does: 'Compares the diagnosis with the policy exclusion clauses. A possible match is flagged for the approver (JD3), never rejected.',
+    does: 'Compares the diagnosis with the general policy exclusion clauses (not the exclusions in IAS). A possible match is flagged for the approver (JD3), never rejected.',
     onFail: 'The case goes on, and the approver (JD3) sees the warning. If the System settings switch for review points is on, the claim does not go STP.' },
   { code: 'BENEFIT_NOT_ELIGIBLE', section: 'member', question: "Is the benefit type in the member's plan?", label: 'Benefit not eligible', effect: 'warning',
     does: "The claim's benefit type must be one of the benefit types in the member's IAS plan." },
@@ -144,8 +146,8 @@ function reviewerActions(check) {
   const isVerdict = check.section === 'member'
     ? ACCEPTABLE_MEMBER_ITEMS.has(check.code)
     : check.effect !== 'off' && !NOT_VERDICT_ITEMS.has(check.code);
-  // The balance finding's only action is a bypass with a reason (SYSTEM_5 member balance) — the same mark OK.
-  if (isVerdict) actions.push(check.code === 'member:balance' ? 'Bypass (with a reason)' : 'Mark passed');
+  // The balance and exclusion findings' only action is a bypass with a reason (SYSTEM_5) — the same mark OK.
+  if (isVerdict) actions.push(['member:balance', 'member:exclusion'].includes(check.code) ? 'Bypass (with a reason)' : 'Mark passed');
   if (isVerdict && check.section !== 'member' && ISSUES[check.code]) actions.push('Mark failed');
   const fields = (check.fields || []).map((key) => FIELD_LABELS[key] || VOUCHER_FIELDS[key]).filter(Boolean);
   if (fields.length) actions.push(`Correct: ${fields.join(', ')}`);

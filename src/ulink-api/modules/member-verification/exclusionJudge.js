@@ -52,7 +52,8 @@ async function judgeExclusionEvents(facts, events, threshold) {
   return events.map((e) => {
     if (e.counted && !e.description) return unreadable(e);
     if (!e.judgeable) return e;
-    const a = answers.get(e.key);
+    // The AI may echo the bare IAS id: use it only when no other judged event shares it.
+    const a = answers.get(e.key) ?? (judgeable.filter((x) => x.eventId === e.eventId).length === 1 ? answers.get(e.eventId) : undefined);
     const confidence = typeof a?.confidence === 'number' && a.confidence >= 0 && a.confidence <= 1 ? a.confidence : null;
     const unsure = confidence == null || confidence <= threshold;
     return {

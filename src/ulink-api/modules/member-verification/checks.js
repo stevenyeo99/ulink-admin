@@ -93,8 +93,9 @@ function checkCoverageActive(plan, treatmentDateYYYYMMDD) {
 }
 
 // The member findings a person may mark OK one by one (not coverage — see evaluate).
-// member:balance (SYSTEM_5 member balance): the only action on it is this mark OK — the review page's "Bypass", with a reason.
-const MEMBER_ITEM_LABELS = { 'member:dob': 'Member check: date of birth', 'member:bank': 'Member check: bank details', 'member:policy': 'Member check: policy number', 'member:balance': 'Member check: balance' };
+// member:balance / member:exclusion (SYSTEM_5): the only action on them is this mark OK — the review page's "Bypass", with
+// a reason.
+const MEMBER_ITEM_LABELS = { 'member:dob': 'Member check: date of birth', 'member:bank': 'Member check: bank details', 'member:policy': 'Member check: policy number', 'member:balance': 'Member check: balance', 'member:exclusion': 'Member check: exclusion in IAS' };
 const ACCEPTABLE_MEMBER_ITEMS = new Set(Object.keys(MEMBER_ITEM_LABELS));
 
 // extraIssues: findings from outside this record's fields, listed after its own (member-verification/memberBalance.js's
@@ -200,10 +201,10 @@ function evaluate(extractedFields, iasResponse, extraIssues = [], off = new Map(
     .map((c) => [c.item, c]));
   // A finding with coverKeys (member:balance) is covered while each of its keys was in a bypass — all of them add up
   // (member check and claim preparation bypasses alike: each covers the vouchers a person decided on).
-  const bypassedKeys = (extractedFields.corrections || [])
-    .filter((c) => c.kind === 'verdict' && c.item === 'member:balance' && c.corrected === true).flatMap((c) => c.coverKeys || []);
+  const bypassedKeys = (item) => (extractedFields.corrections || [])
+    .filter((c) => c.kind === 'verdict' && c.item === item && c.corrected === true).flatMap((c) => c.coverKeys || []);
   const isMarked = (issue) => marked.has(issue.item) && (issue.coverKeys
-    ? issue.coverKeys.every((key) => bypassedKeys.includes(key))
+    ? issue.coverKeys.every((key) => bypassedKeys(issue.item).includes(key))
     : marked.get(issue.item).covers === issue.reason);
   const accepted = issues.filter(isMarked)
     .map((issue) => ({ ...issue, by: marked.get(issue.item).by ?? 'a person', acceptedReason: marked.get(issue.item).reason ?? '' }));

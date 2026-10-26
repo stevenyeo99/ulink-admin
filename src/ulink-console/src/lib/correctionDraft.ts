@@ -13,7 +13,7 @@ export interface CorrectionDraft {
 // The value starts as the AI's; "what went wrong" starts as the usual answer (a value: misread; a verdict: the check's
 // decision) and can be changed.
 export function newDraft(option: CorrectionOption, passed?: boolean): CorrectionDraft {
-  return { option, passed, value: option.current == null ? '' : String(option.current), wrongStep: option.item === 'member:balance' ? 'exception' : option.kind === 'verdict' ? 'check' : 'reading', reason: '' };
+  return { option, passed, value: option.current == null ? '' : String(option.current), wrongStep: ['member:balance', 'member:exclusion'].includes(option.item) ? 'exception' : option.kind === 'verdict' ? 'check' : 'reading', reason: '' };
 }
 
 /** Why the draft can't be saved yet, or null. The server checks it again (dates, amounts, choices). */

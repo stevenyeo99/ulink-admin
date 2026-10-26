@@ -109,6 +109,7 @@ const REASON_CODE_TO_SOP_ACTION = {
   MEMBER_DETAILS_MISMATCH: 'Hold the case and verify against IAS/member census or escalate.',
   BANK_DETAILS_MISMATCH: 'Hold payment-related verification and clarify required bank information.',
   BALANCE_NOT_ENOUGH: 'Check the member balance in IAS; bypass with a reason to go on (the claim then needs approval, never STP).',
+  POSSIBLE_MEMBER_EXCLUSION: 'Check the member and policy exclusions in IAS against the claim; bypass with a reason to go on (the claim then needs approval, never STP).',
 };
 
 function renderMemberVerifyIssue(payload) {

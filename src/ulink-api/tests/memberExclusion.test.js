@@ -113,3 +113,19 @@ it('asks for the policy period that covers the treatment date', () => {
   expect(eventsRequest(two, '2026-03-01')).toMatchObject({ policyNo: 'OLD', policyEffDate: '2025-08-01' });
   expect(eventsRequest(two, null)).toMatchObject({ policyNo: 'NEW' });
 });
+
+it('reads event dates with a time part or in IAS form; an event with no id keeps its own key', () => {
+  const odd = { success: true, payload: { memberEvents: [
+    { eventId: '1', eventDate: '2026-12-01T00:00:00', eventDescription: 'after' },
+    { eventId: '2', eventDate: '12012026', eventDescription: 'after' },
+    { eventId: null, eventDescription: 'a' }, { eventDescription: 'b' },
+  ], policyEvents: [] } };
+  const events = readEvents(odd, '2026-10-01');
+  expect(events.map((e) => [e.key, e.counted])).toEqual([['Member:1', false], ['Member:2', false], ['Member:#3', true], ['Member:#4', true]]);
+});
+
+it('an answer echoing the bare IAS id still lands on its event', async () => {
+  synthesizeJson.mockResolvedValue({ results: [{ eventId: '1', applies: false, confidence: 0.9, reason: 'no' }] });
+  const one = readEvents({ success: true, payload: { memberEvents: [{ eventId: '1', eventDate: null, eventDescription: 'x' }], policyEvents: [] } }, '2026-10-01');
+  expect((await judgeExclusionEvents({}, one, 0.7))[0]).toMatchObject({ match: false, applies: false });
+});

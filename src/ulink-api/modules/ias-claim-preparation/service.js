@@ -159,6 +159,9 @@ async function checkCase(caseRecord) {
     // document check's line.
     vitaminVouchers: invoiceItems.map((item, i) => (item.has_vitamin_or_supplement === true || lines[i]?.vitamin ? i + 1 : null)).filter(Boolean),
     // Bypassed (accepted) or let through by a whole-check override (still in issues): never STP either way.
+    // A possible exclusion in IAS bypassed (accepted) or let through by an override (still in issues): never STP.
+    exclusionLetThrough: [...(caseFields.memberVerifyResult?.accepted || []), ...(caseFields.memberVerifyResult?.issues || [])].some((finding) => finding.item === 'member:exclusion')
+      || caseFields.memberVerifyResult?.exclusions?.checked === false, // could not be checked: a person approves
     // The checks that could stop a case and were switched off when this case was checked (AI checklist, Q2).
     checksOff: caseChecksOff(caseFields.memberVerifyResult, caseFields.documentCheckResult),
     balanceBypassed: Boolean(balanceCheck.issue) || !balanceCheck.checked

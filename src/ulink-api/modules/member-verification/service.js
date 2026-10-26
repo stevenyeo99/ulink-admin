@@ -5,6 +5,7 @@ const { evaluate } = require('./checks');
 const { checkExclusions } = require('./exclusionFlags');
 const { checkBenefitEligibility } = require('./benefitEligibility');
 const { checkMemberBalance, balanceIssue } = require('./memberBalance');
+const { checkMemberExclusions } = require('./memberExclusion');
 const { lastReadSettings } = require('../settings/settings');
 const { switchedOff, offNote } = require('../ai-checklist/switches');
 const { CHECKS } = require('../ai-checklist/catalog');
@@ -63,7 +64,14 @@ async function checkCase(caseRecord) {
   const issue = holdUnsure ? balanceIssue(balance.lines, balance.unsure) : balance?.issue;
   // Member checks a super admin switched off (AI checklist page, SYSTEM_5 phase B): skipped, listed as turned off.
   const off = await switchedOff();
-  const result = evaluate(extractedFields, iasResponse, issue ? [issue] : [], off);
+  // The member and policy exclusions in IAS, judged by meaning (SYSTEM_5 member exclusion): a likely match or an unsure
+  // answer is one more member finding (member:exclusion). Switched off: no IAS or AI call.
+  const exclusions = iasResponse?.success === true && !off.has('member:exclusion')
+    ? await checkMemberExclusions(extractedFields, iasResponse, caseRecord.memberVerifyResult?.exclusions)
+    : null;
+  const extra = [issue, exclusions?.issue].filter(Boolean);
+  const result = evaluate(extractedFields, iasResponse, extra, off);
+  if (exclusions) result.exclusions = { checked: exclusions.checked, note: exclusions.note, fingerprint: exclusions.fingerprint, events: exclusions.events };
   const memberOff = [...off].filter(([code]) => CHECKS.find((c) => c.code === code)?.section === 'member');
   if (memberOff.length) result.turnedOff = memberOff.map(([code, row]) => ({ code, note: offNote(row) }));
   for (const [code] of memberOff) if (HARD_CHECK_OF[code] && result.checks?.hard) delete result.checks.hard[HARD_CHECK_OF[code]];

@@ -51,6 +51,7 @@ const MEMBER_REVIEW = {
   MEMBER_DETAILS_MISMATCH: REVIEW.DATA_MISMATCH,
   BANK_DETAILS_MISMATCH: REVIEW.DATA_MISMATCH,
   BALANCE_NOT_ENOUGH: REVIEW.RULE_HOLD,
+  POSSIBLE_MEMBER_EXCLUSION: REVIEW.RULE_HOLD,
 };
 
 const MEMBER_CHECK_LABELS = {
@@ -189,6 +190,22 @@ function memberLines(memberVerifyResult) {
   // The member balance (SYSTEM_5 member balance): one line per voucher, with the benefit type and head codes. A short
   // voucher is also a member finding (member:balance) — the review point sits on the member line above, not here.
   lines.push(...balanceLines('Member balance', memberVerifyResult.balance));
+  // The member and policy exclusions in IAS, judged by meaning (SYSTEM_5 member exclusion): each counted event with its
+  // level and the AI's answer. A match is also a member finding — the review point sits on the member line above.
+  const exclusions = memberVerifyResult.exclusions;
+  if (exclusions) {
+    const counted = (exclusions.events || []).filter((e) => e.counted);
+    lines.push(line({
+      decision: 'Exclusions in IAS',
+      result: !exclusions.checked ? 'Not checked' : counted.some((e) => e.match) ? 'Possible exclusion' : counted.length ? 'None apply' : 'None',
+      status: !exclusions.checked ? 'not_checked' : counted.some((e) => e.match) ? 'issue' : 'ok',
+      why: !exclusions.checked ? exclusions.note
+        : counted.length ? counted.map((e) => `${e.level} exclusion: "${e.description ?? '(no description)'}" — ${e.match ? (e.applies === true ? 'applies' : 'not sure') : 'does not apply'}${e.reason ? `: ${e.reason}` : ''}`).join('; ')
+          : 'IAS holds no exclusion for this member or policy.',
+      verified: counted.some((e) => e.judgeable) ? VERIFIED.AI : VERIFIED.RULE,
+    }));
+  }
+
   // Member checks a super admin switched off (AI checklist, SYSTEM_5 phase B): not run — never a pass.
   if (memberVerifyResult.turnedOff?.length) {
     lines.push(line({ decision: 'Member checks turned off', result: 'Not run', status: 'not_checked', why: memberVerifyResult.turnedOff.map((t) => `${t.code}: ${t.note}`).join('; '), verified: VERIFIED.RULE }));

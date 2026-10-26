@@ -8,15 +8,24 @@ const { iasDateToIso: isoDate } = require('../shared/iasDates');
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 
+// An event date as YYYY-MM-DD: ISO with or without a time part, or IAS MMDDYYYY; null when unreadable.
+const toIso = (d) => (typeof d !== 'string' ? null : ISO.test(d.slice(0, 10)) ? d.slice(0, 10) : isoDate(d));
+
 // The request, from the member info answer: the policy and member numbers, each with its reference number as the
 // fallback (Q7), and the policy start date. The endpoint needs the exact start of the period that covers the treatment,
 // so the policy whose period holds the treatment date is used (else the first). Null when a value is missing.
-function eventsRequest(iasMemberInfoResponse, treatmentDate = null) {
-  const member = iasMemberInfoResponse?.payload?.member;
+// The policy period that holds the treatment date (YYYY-MM-DD), else the first — the period the balance and the
+// exclusion requests are about.
+function coveringPolicy(iasMemberInfoResponse, treatmentDate) {
   const policies = iasMemberInfoResponse?.payload?.policies || [];
   const covers = (p) => ISO.test(treatmentDate || '') && isoDate(p.EFF_DATE) && isoDate(p.EFF_DATE) <= treatmentDate
     && (!isoDate(p.EXP_DATE) || treatmentDate <= isoDate(p.EXP_DATE));
-  const policy = policies.find(covers) || policies[0];
+  return policies.find(covers) || policies[0];
+}
+
+function eventsRequest(iasMemberInfoResponse, treatmentDate = null) {
+  const member = iasMemberInfoResponse?.payload?.member;
+  const policy = coveringPolicy(iasMemberInfoResponse, treatmentDate);
   const policyEffDate = isoDate(policy?.EFF_DATE);
   const policyId = policy?.POCY_NO ? { policyNo: policy.POCY_NO } : policy?.POCY_REF_NO ? { policyRefNo: policy.POCY_REF_NO } : null;
   const memberId = member?.MBR_NO ? { memberNo: member.MBR_NO } : member?.MBR_REF_NO ? { memberRefNo: member.MBR_REF_NO } : null;
@@ -33,14 +42,16 @@ function readEvents(eventsResponse, treatmentDate) {
     ...(payload.memberEvents || []).map((e) => ({ ...e, level: 'Member' })),
     ...(payload.policyEvents || []).map((e) => ({ ...e, level: 'Policy' })),
   ];
-  return levelled.map((e) => {
+  return levelled.map((e, i) => {
     const description = typeof e.eventDescription === 'string' && e.eventDescription.trim() ? e.eventDescription.trim() : null;
     // A date that is not YYYY-MM-DD on either side, or no treatment date: the event counts (a person decides rather
     // than skip one).
-    const comparable = ISO.test(e.eventDate || '') && ISO.test(treatmentDate || '');
-    const counted = !comparable || e.eventDate <= treatmentDate;
-    // key: level + id — IDs are unique only within their own list (spec).
-    return { key: `${e.level}:${e.eventId}`, eventId: String(e.eventId), level: e.level, eventDate: e.eventDate ?? null, description, counted, judgeable: counted && Boolean(description) };
+    const eventDate = toIso(e.eventDate);
+    const comparable = Boolean(eventDate) && ISO.test(treatmentDate || '');
+    const counted = !comparable || eventDate <= treatmentDate;
+    // key: level + id — IDs are unique only within their own list (spec); an event with no id gets its place instead.
+    const id = e.eventId == null || e.eventId === '' ? `#${i + 1}` : String(e.eventId);
+    return { key: `${e.level}:${id}`, eventId: id, level: e.level, eventDate: eventDate ?? e.eventDate ?? null, description, counted, judgeable: counted && Boolean(description) };
   });
 }
 
@@ -56,4 +67,4 @@ function claimFacts(extractedFields, medical) {
   };
 }
 
-module.exports = { isoDate, eventsRequest, readEvents, claimFacts };
+module.exports = { isoDate, coveringPolicy, eventsRequest, readEvents, claimFacts };

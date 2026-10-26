@@ -302,7 +302,7 @@ export function FindingsPanel({
                 {o.note && <p className="mt-0.5 text-xs text-slate-500">{o.note}</p>}
                 {canCorrect && !hasDraft(o) && (
                   // A short balance (SYSTEM_5 member balance): the only action is a bypass with a reason — the same mark OK.
-                  <button onClick={() => openDraft(o.item, o, true)} className="mt-1 text-xs text-ulink-orange-dark hover:underline">{o.item === 'member:balance' ? 'Bypass' : 'Mark OK'}</button>
+                  <button onClick={() => openDraft(o.item, o, true)} className="mt-1 text-xs text-ulink-orange-dark hover:underline">{['member:balance', 'member:exclusion'].includes(o.item) ? 'Bypass' : 'Mark OK'}</button>
                 )}
                 {draftForm(o.item)}
               </li>

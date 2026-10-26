@@ -1,7 +1,7 @@
 // SYSTEM_5 member balance phase C: the member check stops for a person when the AI is unsure of a voucher's head
 // (holdUnsureBenefit, both flows) — after member problems, before the balance is judged.
 jest.mock('../modules/ias-claim-preparation/benefitPicker', () => ({ pickBenefit: jest.fn() }));
-jest.mock('../modules/member-verification/iasClient', () => ({ getMemberLimitBalance: jest.fn(), getMemberInfo: jest.fn() }));
+jest.mock('../modules/member-verification/iasClient', () => ({ getMemberLimitBalance: jest.fn(), getMemberInfo: jest.fn(), getMemberPolicyEvents: jest.fn(async () => ({ success: true, payload: { memberEvents: [], policyEvents: [] } })) }));
 jest.mock('../modules/member-verification/exclusionFlags', () => ({ checkExclusions: jest.fn(async () => []) }));
 // No check switched off (AI checklist switches) — no database here.
 jest.mock('../modules/ai-checklist/switches', () => ({ switchedOff: jest.fn(async () => new Map()), offNote: jest.fn() }));

@@ -16,15 +16,19 @@ const COMPARED_FIELDS = [...Object.keys(BALANCE_FIELDS), ...Object.keys(VISIT_FI
 const code = (value) => (value == null ? null : String(value).trim().toUpperCase());
 const id = (value) => (value == null ? null : String(value).trim().replace(/^0+(?=\d)/, ''));
 
+const { coveringPolicy } = require('./exclusions');
+
 const amount = (n) => Number(n).toLocaleString('en-US');
 
 // The three request values, from the member info answer (getMemberInfo). Null when one is missing.
-function balanceRequest(iasMemberInfoResponse) {
+// treatmentDate (YYYY-MM-DD): the policy period that holds it is asked about, as for the exclusions (coveringPolicy).
+function balanceRequest(iasMemberInfoResponse, treatmentDate = null) {
   const payload = iasMemberInfoResponse?.payload;
+  const policy = coveringPolicy(iasMemberInfoResponse, treatmentDate);
   const request = {
     memberRefNo: payload?.member?.MBR_REF_NO ?? null,
-    policyRefNo: payload?.policies?.[0]?.POCY_REF_NO ?? null,
-    policyEffDate: payload?.policies?.[0]?.EFF_DATE ?? null,
+    policyRefNo: policy?.POCY_REF_NO ?? null,
+    policyEffDate: policy?.EFF_DATE ?? null,
   };
   return Object.values(request).every(Boolean) ? request : null;
 }

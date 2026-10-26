@@ -154,5 +154,5 @@ The owner approves one phase at a time. Each phase ends with the `ulink-api` tes
 | Phase | Content | Needs first | Status |
 |---|---|---|---|
 | A. IAS client, events and judge | `getMemberPolicyEvents` client and the `GET_MEMBER_POLICY_EVENTS_API` value. A pure function for the request and the counted events (date rule, levels). The AI judge with its prompt, tested on sample events with a faked AI answer. No change to any case | Owner approves this PRD | Done, awaiting review (2026-10-26) |
-| B. In the member check | The check inside `checkCase` (both flows). The `member:exclusion` finding with Bypass only, covering the events by ID and level. AI answer reused while nothing changed. No STP after a bypass or override. The summary line. The AI checklist entry | A done, Q2 | Not started |
+| B. In the member check | The check inside `checkCase` (both flows). The `member:exclusion` finding with Bypass only, covering the events by ID and level. AI answer reused while nothing changed. No STP after a bypass or override. The summary line. The AI checklist entry | A done, Q2 | Done, awaiting review (2026-10-26) |
 | C. Docs | `OPERATIONS.md`, `CLAIM_FLOW_END_TO_END.md`, the API flowchart and its published page, the change log | B done | Not started |

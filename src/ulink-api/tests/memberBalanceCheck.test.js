@@ -1,7 +1,7 @@
 // SYSTEM_5 member balance, phase B: the balance in the member check (memberBalance.js), the member:balance finding and
 // its bypass (checks.js evaluate), and no STP after a bypass (stpEligibility.js). The AI pick and IAS are faked.
 jest.mock('../modules/ias-claim-preparation/benefitPicker', () => ({ pickBenefit: jest.fn() }));
-jest.mock('../modules/member-verification/iasClient', () => ({ getMemberLimitBalance: jest.fn(), getMemberInfo: jest.fn() }));
+jest.mock('../modules/member-verification/iasClient', () => ({ getMemberLimitBalance: jest.fn(), getMemberInfo: jest.fn(), getMemberPolicyEvents: jest.fn(async () => ({ success: true, payload: { memberEvents: [], policyEvents: [] } })) }));
 jest.mock('../modules/ias-claim-preparation/medicalTranslation', () => ({ toEnglishMedicalText: jest.fn(async (t) => ({ ...t, translation: null })) }));
 
 const { pickBenefit } = require('../modules/ias-claim-preparation/benefitPicker');
