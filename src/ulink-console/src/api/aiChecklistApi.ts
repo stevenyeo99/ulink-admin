@@ -3,6 +3,8 @@ import { request } from './client';
 // Every member and document check the system runs (ulink-api modules/ai-checklist/catalog.js, SYSTEM_5 phase A).
 export interface AiCheckSection {
   key: string;
+  /** The step it belongs to: the member check, then the document check. */
+  group: 'member' | 'document';
   title: string;
   intro: string;
 }

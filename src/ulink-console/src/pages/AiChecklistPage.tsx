@@ -11,6 +11,12 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: 'stops', label: 'Can stop a case' },
 ];
 
+// The two steps every claim goes through, in order.
+const STEPS: { group: AiCheck['group']; title: string; intro: string }[] = [
+  { group: 'member', title: 'Step 1: Member check', intro: "Compares the claim with the member's record in IAS. A check that can stop the case makes it wait for a person." },
+  { group: 'document', title: 'Step 2: Document check', intro: 'Looks at the claim form, the vouchers, the medical record and the bank details. A check that can stop the case asks the customer for what is missing.' },
+];
+
 const EFFECT: Record<AiCheck['effect'], { label: string; className: string }> = {
   stops: { label: 'Can stop the case', className: 'bg-red-50 text-red-700' },
   warning: { label: 'Warning only', className: 'bg-amber-50 text-amber-700' },
@@ -78,21 +84,31 @@ export function AiChecklistPage() {
 
       {isLoading && <p className="text-sm text-slate-500">Loading…</p>}
       {isError && <p className="text-sm text-red-600">{isSuperAdmin() ? 'Could not load the checklist.' : 'Only a super admin can see the AI checklist.'}</p>}
-      {data?.sections.map((s) => {
-        const checks = data.checks.filter((c) => c.section === s.key && shown(c));
-        if (!checks.length) return null;
-        return (
-          <section key={s.key} className="mb-6">
-            <h2 className="text-base font-semibold text-slate-800">{s.title}</h2>
-            <p className="mb-2 text-sm text-slate-500">{s.intro}</p>
-            <ul className="space-y-2">
-              {checks.map((c) => (
-                <CheckCard key={c.code} check={c} details={details} />
+      {data &&
+        STEPS.map((step) => {
+          const sections = data.sections
+            .filter((s) => s.group === step.group)
+            .map((s) => ({ ...s, checks: data.checks.filter((c) => c.section === s.key && shown(c)) }))
+            .filter((s) => s.checks.length);
+          if (!sections.length) return null;
+          return (
+            <div key={step.group} className="mb-8 rounded-2xl border border-slate-900/10 bg-slate-50/60 p-4 sm:p-5">
+              <h2 className="text-lg font-semibold text-slate-900">{step.title}</h2>
+              <p className="mb-4 text-sm text-slate-600">{step.intro}</p>
+              {sections.map((s) => (
+                <section key={s.key} className="mb-5 last:mb-0">
+                  <h3 className="text-base font-semibold text-slate-800">{s.title}</h3>
+                  <p className="mb-2 text-sm text-slate-500">{s.intro}</p>
+                  <ul className="space-y-2">
+                    {s.checks.map((c) => (
+                      <CheckCard key={c.code} check={c} details={details} />
+                    ))}
+                  </ul>
+                </section>
               ))}
-            </ul>
-          </section>
-        );
-      })}
+            </div>
+          );
+        })}
     </div>
   );
 }
@@ -109,7 +125,7 @@ function CheckCard({ check: c, details }: { check: AiCheck; details: boolean }) 
   return (
     <li className={clsx('rounded-xl2 border border-slate-900/10 bg-white/80 p-4 shadow-glass', c.effect === 'off' && 'opacity-60')}>
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        <h3 className="mr-auto font-medium text-slate-900">{c.question}</h3>
+        <h4 className="mr-auto font-medium text-slate-900">{c.question}</h4>
         <span className={clsx('rounded-full px-2 py-0.5 text-xs font-medium', EFFECT[c.effect].className)}>{EFFECT[c.effect].label}</span>
         {c.locked && <span className="rounded-full bg-slate-800 px-2 py-0.5 text-xs font-medium text-white">Locked on</span>}
       </div>

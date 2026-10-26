@@ -19,12 +19,12 @@ const { NOT_VERDICT_ITEMS } = require('../ai-feedback/corrections');
 
 // In the order the system runs: the member check first, then the document check by paper, then what the AI read.
 const SECTIONS = [
-  { key: 'member', title: 'Member and policy (IAS)', intro: "Step 1, the member check: the claim against the member's record in IAS." },
-  { key: 'claimForm', title: 'Claim form', intro: 'Step 2, the document check: what the claim form must give.' },
-  { key: 'vouchers', title: 'Vouchers (invoices and receipts)', intro: 'Step 2: what each voucher must show.' },
-  { key: 'medicalRecord', title: 'Medical record', intro: 'Step 2: the medical record, and whether it agrees with the claim form.' },
-  { key: 'bank', title: 'Bank and payee', intro: 'Step 2: who is paid.' },
-  { key: 'aiRead', title: 'What the AI read (information only)', intro: 'Shown on the case for the reviewer. These lines never stop a case.' },
+  { key: 'member', group: 'member', title: 'Member and policy (IAS)', intro: "The claim against the member's record in IAS." },
+  { key: 'claimForm', group: 'document', title: 'Claim form', intro: 'What the claim form must give.' },
+  { key: 'vouchers', group: 'document', title: 'Vouchers (invoices and receipts)', intro: 'What each voucher must show.' },
+  { key: 'medicalRecord', group: 'document', title: 'Medical record', intro: 'The medical record, and whether it agrees with the claim form.' },
+  { key: 'bank', group: 'document', title: 'Bank and payee', intro: 'Who is paid.' },
+  { key: 'aiRead', group: 'document', title: 'What the AI read (information only)', intro: 'Shown on the case for the reviewer. These lines never stop a case.' },
 ];
 
 const VOUCHER_FIELDS = { 'voucher.subtotal': 'Voucher amounts', 'voucher.date': 'Voucher dates', 'voucher.voucher_type': 'Voucher types' };
@@ -155,7 +155,7 @@ function reviewerActions(check) {
 // Built once: the list does not change while the API runs.
 const CATALOG = CHECKS.map(({ fields, onFail, ...check }) => ({
   usesAi: false, locked: false, ...check,
-  group: check.section === 'member' ? 'member' : 'document',
+  group: SECTIONS.find((s) => s.key === check.section).group,
   ifFails: ifFails({ ...check, onFail }),
   reviewerCan: reviewerActions({ ...check, fields }),
 }));
