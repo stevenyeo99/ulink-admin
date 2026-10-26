@@ -40,6 +40,8 @@ const REVIEW = {
   RULE_HOLD: { reason: 'Rule hold', mightBeWrong: [], check: 'Apply the policy rule.' },
   VITAMINS: { reason: 'Vitamins / supplements', mightBeWrong: ['AI vision'], check: 'Check the voucher items; a person approves the claim (no STP).' },
   // A reviewer's own lines (SYSTEM_4 E4-28 / E4-29): the AI cannot check them.
+  // SYSTEM_5 member balance phase C: the AI was unsure of a voucher's benefit head; a person chooses it.
+  CHOOSE_BENEFIT: { reason: 'Choose the benefit', mightBeWrong: ['AI judgment'], check: "Choose each unsure voucher's benefit head from the member's plan." },
   REQUESTED: { reason: 'Reviewer checklist open', mightBeWrong: ['Customer'], check: 'Check the documents against each line of the reviewer checklist; mark the ones that arrived done, then confirm.' },
 };
 
@@ -137,7 +139,8 @@ function memberLines(memberVerifyResult) {
   const labelsWhere = (value) => Object.keys(MEMBER_CHECK_LABELS).filter((key) => hard[key] === value).map((key) => MEMBER_CHECK_LABELS[key]);
 
   const lines = [];
-  if (outcome === 'MEMBER_VERIFIED') {
+  // BENEFIT_REVIEW: the member itself matched IAS — only a voucher's benefit head waits for a person (line below).
+  if (outcome === 'MEMBER_VERIFIED' || outcome === 'BENEFIT_REVIEW') {
     const matched = labelsWhere(true);
     const notChecked = labelsWhere(null);
     lines.push(line({
@@ -151,6 +154,9 @@ function memberLines(memberVerifyResult) {
       ].filter(Boolean).join(' '),
       verified: VERIFIED.CROSS_CHECK,
     }));
+    if (outcome === 'BENEFIT_REVIEW') {
+      lines.push(line({ decision: 'Benefit head', result: 'A person chooses', status: 'issue', why: reason, verified: VERIFIED.CROSS_CHECK, review: REVIEW.CHOOSE_BENEFIT }));
+    }
   } else if (outcome) {
     lines.push(line({
       decision: 'Member check',

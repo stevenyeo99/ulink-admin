@@ -45,7 +45,7 @@ const AI_SWITCHES: { key: SwitchKey; title: string; text: string }[] = [
   {
     key: 'holdUnsureBenefit',
     title: "Voucher benefit the AI wasn't sure of: a person chooses it first",
-    text: "API cases: when the AI found no benefit, no benefit head, or was unsure of a voucher's benefit (at or below the threshold above), the case waits for a person to choose it from the member's plan before the revision goes to IAS.",
+    text: "Email and API cases: when the AI found no benefit, no benefit head, or was unsure of a voucher's benefit (at or below the threshold above), the case waits for a person to choose it from the member's plan. This happens at the member check, before the documents, so the member balance is checked with the right head.",
   },
   {
     key: 'holdUnsureVitamin',

@@ -63,6 +63,15 @@ export function choosePreparation(
   return request(`/api/cases/${id}/preparation`, { method: 'POST', body: JSON.stringify(choice) });
 }
 
+// Choose the benefit head the AI was unsure of, before the documents (SYSTEM_5 member balance phase C, ulink-api
+// benefitController.js). recheck: saved with corrections, which then move the case back to the member check.
+export function chooseBenefit(
+  id: string,
+  choice: { benefits: { voucher: number; benefitType: string; benefitHead: string | null }[]; comment: string; recheck?: boolean }
+): Promise<{ caseId: string; currentStatus: string }> {
+  return request(`/api/cases/${id}/benefit`, { method: 'POST', body: JSON.stringify(choice) });
+}
+
 // ICD-10 codes nearest to a text — an exact scan, several seconds.
 export function searchDiagnosis(id: string, text: string): Promise<{ candidates: DiagnosisCandidate[] }> {
   return request(`/api/cases/${id}/diagnosis-candidates?text=${encodeURIComponent(text)}`);

@@ -2,6 +2,7 @@
 // its bypass (checks.js evaluate), and no STP after a bypass (stpEligibility.js). The AI pick and IAS are faked.
 jest.mock('../modules/ias-claim-preparation/benefitPicker', () => ({ pickBenefit: jest.fn() }));
 jest.mock('../modules/member-verification/iasClient', () => ({ getMemberLimitBalance: jest.fn(), getMemberInfo: jest.fn() }));
+jest.mock('../modules/ias-claim-preparation/medicalTranslation', () => ({ toEnglishMedicalText: jest.fn(async (t) => ({ ...t, translation: null })) }));
 
 const { pickBenefit } = require('../modules/ias-claim-preparation/benefitPicker');
 const { getMemberLimitBalance } = require('../modules/member-verification/iasClient');
@@ -132,4 +133,51 @@ it('a bypass is an exception, never an AI mistake', async () => {
   const body = { kind: 'verdict', item: 'member:balance', passed: true, reason: 'Partial payment agreed' };
   expect(validateCorrection({ ...body, wrongStep: 'check' }, options)).toEqual({ error: 'A short balance is bypassed as an exception.' });
   expect(validateCorrection({ ...body, wrongStep: 'exception' }, options)).toMatchObject({ corrected: true });
+});
+
+// Phase C: Choose the benefit.
+describe('Choose the benefit (phase C)', () => {
+  const { savedHead, withChosenPicks } = require('../modules/member-verification/memberBalance');
+
+  it('lists the vouchers the AI was unsure of, by the same rule as claim preparation', async () => {
+    pickBenefit
+      .mockResolvedValueOnce({ pick: null, confidence: 0.3 }) // no pick
+      .mockResolvedValueOnce({ pick: { benefitType: 'IP', benefitHead: 'SUR' }, confidence: 0.6 }) // at or below 0.7
+      .mockResolvedValueOnce({ pick: { benefitType: 'IP', benefitHead: 'SUR' }, confidence: 0.9 }); // sure
+    const balance = await checkMemberBalance(fields([surgeon(1000), surgeon(2000), surgeon(3000)]), info);
+    expect(balance.unsure).toEqual([]); // the fake member plan has no benefits to choose from: no stop
+    const withPlan = { ...info, payload: { ...info.payload, memberPlans: [{ ...info.payload.memberPlans[0], coverageLimits: [{ benefits: [{ benefit_type_code: 'IP', benefit_type_desc: 'Inpatient', benefit_head_code: 'SUR' }] }] }] } };
+    pickBenefit
+      .mockResolvedValueOnce({ pick: null, confidence: 0.3 })
+      .mockResolvedValueOnce({ pick: { benefitType: 'IP', benefitHead: 'SUR' }, confidence: 0.6 })
+      .mockResolvedValueOnce({ pick: { benefitType: 'IP', benefitHead: 'SUR' }, confidence: 0.9 });
+    const planned = await checkMemberBalance(fields([surgeon(1000), surgeon(2000), surgeon(3000)]), withPlan);
+    expect(planned.unsure).toEqual([0, 1]);
+  });
+
+  it("a person's choice counts as sure, and survives a corrected amount (same voucher type)", async () => {
+    pickBenefit.mockResolvedValue({ pick: null, confidence: 0.3 });
+    const first = await checkMemberBalance(fields([surgeon(1000)]), info);
+    const chosen = { ...first.picks[0], benefitType: 'IP', benefitHead: 'SUR', chosen: true, by: 'Ops', comment: 'Surgery bill' };
+    pickBenefit.mockClear();
+    const again = await checkMemberBalance(fields([surgeon(5000)]), info, [chosen]); // amount corrected 1,000 → 5,000
+    expect(pickBenefit).not.toHaveBeenCalled();
+    expect(again.unsure).toEqual([]);
+    expect(again.lines[0]).toMatchObject({ benefitHead: 'SUR', amount: 5000 });
+  });
+
+  it('merges a person\'s choices over the last picks, and hands claim preparation the head the balance used', () => {
+    const item = surgeon(1000);
+    const basis = { typeOfPatient: 'Inpatient', plan: { planId: '2311', revNo: '01' } };
+    const key = { subtotal: 1000, date: '2026-09-01', voucherType: 'other' };
+    const ai = { voucher: 0, key, basis, benefitType: null, benefitHead: null, confidence: 0.3 };
+    const person = { voucher: 0, key, basis, benefitType: 'IP', benefitHead: 'SUR', chosen: true, by: 'Ops' };
+    const merged = withChosenPicks({ balance: { picks: [ai] } }, [person]);
+    expect(merged.balance.picks).toEqual([person]);
+
+    const f = fields([item]);
+    expect(savedHead(merged, 0, item, info, f)).toMatchObject({ benefitHead: 'SUR', chosen: true });
+    expect(savedHead({ balance: { picks: [ai] } }, 0, item, info, f)).toBeNull(); // unsure: preparation picks itself
+    expect(savedHead(merged, 0, item, info, fields([item], { claim: { type_of_patient: 'Outpatient' } }))).toBeNull(); // basis changed
+  });
 });

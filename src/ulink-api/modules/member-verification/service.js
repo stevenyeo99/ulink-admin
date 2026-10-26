@@ -5,7 +5,8 @@ const { evaluate } = require('./checks');
 const { checkExclusions } = require('./exclusionFlags');
 const { checkBenefitEligibility } = require('./benefitEligibility');
 const { summarizeBenefitLimits } = require('./benefitLimits');
-const { checkMemberBalance } = require('./memberBalance');
+const { checkMemberBalance, balanceIssue } = require('./memberBalance');
+const { lastReadSettings } = require('../settings/settings');
 const { queueDedupedTask } = require('../shared/emailTaskQueue');
 const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment-summary/summary');
 const { caseBasics } = require('../assessment-summary/journey');
@@ -50,9 +51,22 @@ async function checkCase(caseRecord) {
   const balance = iasResponse?.success === true
     ? await checkMemberBalance(extractedFields, iasResponse, caseRecord.memberVerifyResult?.balance?.picks)
     : null;
-  const result = evaluate(extractedFields, iasResponse, balance?.issue ? [balance.issue] : []);
+  // An unsure head with the holdUnsureBenefit switch on (SYSTEM_5 member balance phase C, both flows): a person chooses it
+  // before the balance is judged — member problems first, then the head, then the balance (PRD 4.5).
+  // The unsure vouchers' own balance lines wait for the person's head; the sure ones are judged now, with any member
+  // problem, so an override at member review never skips a known shortfall.
+  const holdUnsure = Boolean(balance?.unsure?.length) && lastReadSettings().holdUnsureBenefit;
+  const issue = holdUnsure ? balanceIssue(balance.lines, balance.unsure) : balance?.issue;
+  const result = evaluate(extractedFields, iasResponse, issue ? [issue] : []);
+  if (holdUnsure && result.outcome === 'MEMBER_VERIFIED') {
+    result.outcome = 'BENEFIT_REVIEW';
+    result.reasonCode = 'BENEFIT_UNSURE';
+    result.reason = `The AI was not sure of the benefit of voucher ${balance.unsure.map((i) => i + 1).join(', ')}: a person chooses it.`;
+  }
   const previousPicks = caseRecord.memberVerifyResult?.balance?.picks;
-  if (balance) result.balance = { checked: balance.checked, note: balance.note, picks: balance.picks, lines: balance.lines };
+  if (balance) {
+    result.balance = { checked: balance.checked, note: balance.note, picks: balance.picks, lines: balance.lines, unsure: balance.unsure || [], candidates: balance.candidates || [] };
+  }
   else if (previousPicks) result.balance = { checked: false, note: 'IAS did not find the member.', picks: previousPicks, lines: [] };
 
   // Only run the exclusion-possibility check (SOP §6.3) and benefit-eligibility check (SOP
@@ -108,6 +122,8 @@ async function queueReviewRequiredEmail(transaction, caseRecord, result) {
 const OUTCOME_TO_STATUS = {
   MEMBER_VERIFIED: 'READY_FOR_DOCUMENT_CHECKING',
   MEMBER_REVIEW_REQUIRED: 'MEMBER_REVIEW_REQUIRED',
+  // A person chooses an unsure benefit head (SYSTEM_5 member balance phase C). Not re-checked every run: it waits.
+  BENEFIT_REVIEW: 'BENEFIT_REVIEW',
 };
 
 async function persistOutcome(caseRecord, outcome) {
@@ -132,7 +148,7 @@ async function persistOutcome(caseRecord, outcome) {
 
     // No email queued on a pass here — the customer was already acknowledged at claim
     // recognition (DOCUMENT_COMPLETE_ACK, claim-recognition/service.js persistOutcome).
-    if (outcome.outcome !== 'MEMBER_VERIFIED') {
+    if (outcome.outcome === 'MEMBER_REVIEW_REQUIRED') {
       await queueReviewRequiredEmail(transaction, caseRecord, outcome.result);
     }
   });
@@ -148,7 +164,9 @@ async function run() {
   // No retry cap/backoff for now — re-checked every run indefinitely; revisit if that
   // proves wasteful against a real IAS environment.
   const cases = await Case.findAll({
-    where: { currentStatus: { [Sequelize.Op.in]: ['RECOGNIZED', 'MEMBER_REVIEW_REQUIRED'] } },
+    // BENEFIT_REVIEW too (SYSTEM_5 member balance phase C): still waiting while holdUnsureBenefit is on, on its way once
+    // it is off; the saved head picks are reused, so no AI call.
+    where: { currentStatus: { [Sequelize.Op.in]: ['RECOGNIZED', 'MEMBER_REVIEW_REQUIRED', 'BENEFIT_REVIEW'] } },
     limit: config.memberVerification.batchLimit,
     order: [['updatedAt', 'ASC']],
   });

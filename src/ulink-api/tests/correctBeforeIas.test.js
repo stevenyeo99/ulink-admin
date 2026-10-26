@@ -22,7 +22,8 @@ beforeEach(() => getSettings()); // formatCheck reads the voucher-date limit fro
 it('corrections are allowed while the case waits for the customer, never on a finished case', () => {
   expect(CORRECTABLE_STATUSES).toEqual(expect.arrayContaining(['API_CLAIM_SUSPENDED', 'INCOMPLETE', 'API_MEMBER_REVIEW_REQUIRED', 'API_DOCUMENTS_REVIEW']));
   for (const done of ['API_CLAIM_REVISED', 'API_CSR_SENT', 'CLAIM_CREATED', 'CSR_SENT']) expect(CORRECTABLE_STATUSES).not.toContain(done);
-  expect(recheckFrom('invoices.items.0.subtotal', 'API_CLAIM_SUSPENDED').API).toBe('API_READY_FOR_DOCUMENT_CHECKING');
+  // A voucher amount: the member balance uses it (SYSTEM_5 member balance phase C), so from the member check.
+  expect(recheckFrom('invoices.items.0.subtotal', 'API_CLAIM_SUSPENDED').API).toBe('API_RECOGNIZED');
 });
 
 it("a corrected voucher amount is not compared with the AI's recount (no false review point)", () => {

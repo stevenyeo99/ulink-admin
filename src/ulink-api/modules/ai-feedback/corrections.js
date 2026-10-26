@@ -213,8 +213,11 @@ function correctionText(c) {
 
 // Where the case is checked again: the member check when the corrected value is one it compares with IAS, or the case
 // is still held there; the document check otherwise. { EMAIL, API } status pairs.
+// A voucher's amount or type: the member balance check uses them (SYSTEM_5 member balance phase C), so from the member check.
+const MEMBER_VOUCHER_ITEM = /^invoices\.items\.\d+\.(subtotal|voucher_type)$/;
+
 function recheckFrom(item, currentStatus) {
-  const member = MEMBER_CHECK_FIELDS.has(item) || item.startsWith('member:') || /MEMBER_REVIEW_REQUIRED$/.test(currentStatus);
+  const member = MEMBER_CHECK_FIELDS.has(item) || MEMBER_VOUCHER_ITEM.test(item) || item.startsWith('member:') || /(MEMBER_REVIEW_REQUIRED|BENEFIT_REVIEW)$/.test(currentStatus);
   return member
     ? { EMAIL: 'RECOGNIZED', API: 'API_RECOGNIZED', label: 'the member check' }
     : { EMAIL: 'READY_FOR_DOCUMENT_CHECKING', API: 'API_READY_FOR_DOCUMENT_CHECKING', label: 'the document check' };

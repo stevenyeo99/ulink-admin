@@ -23,7 +23,7 @@ beforeEach(() => jest.clearAllMocks());
 
 describe('api-member-verification', () => {
   it('takes the OCR output and re-checks cases waiting on a member issue', () => {
-    expect(memberJob).toMatchObject({ inputStatus: ['API_RECOGNIZED', 'API_MEMBER_REVIEW_REQUIRED'], inputs: ['api-claim-recognition'] });
+    expect(memberJob).toMatchObject({ inputStatus: ['API_RECOGNIZED', 'API_MEMBER_REVIEW_REQUIRED', 'API_BENEFIT_REVIEW'], inputs: ['api-claim-recognition'] });
   });
 
   it("passes the extracted fields to the email flow's member check and moves on when verified", async () => {

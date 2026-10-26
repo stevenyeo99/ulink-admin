@@ -31,6 +31,8 @@ flowchart TD
   D -->|mismatch / balance not enough| MV{{API_MEMBER_REVIEW_REQUIRED<br/>rechecked every run}}:::stop
   MV -.-> E3[/Team: member verification hold/]:::mail
   MV -->|override / IAS fixed / Mark OK or Bypass| E
+  D -->|AI unsure of a voucher's head| BR{{API_BENEFIT_REVIEW}}:::stop
+  BR -->|person chooses the head| D
   D -->|verified| E[5 · Document checking<br/>checklist + AI confidence]:::job
   E -->|complete, AI unsure| DU{{API_DOCUMENTS_UNSURE}}:::stop
   DU -->|person confirms| F
@@ -74,6 +76,7 @@ flowchart TD
 |---|---|---|---|
 | `API_NO_DOCUMENTS` | The IAS console has no images for the claim. | Upload on the case page, or wait. Console watch checks every run. | None |
 | `API_MANUAL_REVIEW` | The documents are too long for the AI, or its answer did not match the claim schema. | Handle the claim by hand. | None |
+| `API_BENEFIT_REVIEW` | The AI was not sure of a voucher's benefit head (switch `holdUnsureBenefit`). | Choose the head from the member's plan on the *Choose the benefit* panel, and correct a misread amount. The member check runs again and checks the balance. | None |
 | `API_MEMBER_REVIEW_REQUIRED` | Member, policy or bank details differ from IAS, or the IAS balance is not enough for a voucher (`member:balance`). | Fix IAS (rechecked every run), Mark OK, correct a value, or override. A short balance: Bypass with a reason only, and the claim then never goes STP. | None |
 | `API_DOCUMENTS_UNSURE` | The documents are complete, but the AI was unsure of an item. A reviewer's open request line also holds the case here, even when the switch is off. | Use the `Confirm and continue` button, or correct a value. | `holdUnsureDocumentPass` |
 | `API_DOCUMENTS_REVIEW` | Documents are missing and the AI was unsure, or a person corrected items. | Documents are missing: continue (suspended revision). Documents are fine: override. Or correct a value. | `holdUnsureMissingDocsEmail` |

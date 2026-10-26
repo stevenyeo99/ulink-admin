@@ -217,7 +217,9 @@ describe('code review 2026-10-15', () => {
   it('re-checks from the member check only for a value it compares with IAS, or a case held there', () => {
     expect(recheckFrom('claimant.claimant_nrc_passport', 'INCOMPLETE')).toMatchObject({ EMAIL: 'RECOGNIZED', API: 'API_RECOGNIZED' });
     expect(recheckFrom('bank.bank_account_number', 'API_DOCUMENTS_REVIEW')).toMatchObject({ API: 'API_RECOGNIZED' });
-    expect(recheckFrom('invoices.items.0.subtotal', 'INCOMPLETE')).toMatchObject({ EMAIL: 'READY_FOR_DOCUMENT_CHECKING' });
+    // A voucher amount or type: the member balance uses it (SYSTEM_5 member balance phase C) — from the member check.
+    expect(recheckFrom('invoices.items.0.subtotal', 'INCOMPLETE')).toMatchObject({ EMAIL: 'RECOGNIZED', API: 'API_RECOGNIZED' });
+    expect(recheckFrom('invoices.items.0.date', 'INCOMPLETE')).toMatchObject({ EMAIL: 'READY_FOR_DOCUMENT_CHECKING' });
     expect(recheckFrom('INCORRECT_VOUCHER', 'API_DOCUMENTS_UNSURE')).toMatchObject({ API: 'API_READY_FOR_DOCUMENT_CHECKING' });
     expect(recheckFrom('INCORRECT_VOUCHER', 'MEMBER_REVIEW_REQUIRED')).toMatchObject({ EMAIL: 'RECOGNIZED' });
   });

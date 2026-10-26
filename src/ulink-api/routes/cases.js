@@ -6,6 +6,7 @@ const { claim, release } = require('../controllers/cases/claimController');
 const { requestInformation, markRequestDone, getEmailDraft } = require('../controllers/cases/requestsController');
 const { requireNotHeldByOther } = require('../modules/case-claim/claim');
 const { choosePreparation, searchDiagnosis } = require('../controllers/cases/preparationController');
+const { chooseBenefit } = require('../controllers/cases/benefitController');
 
 const router = express.Router();
 
@@ -506,6 +507,37 @@ router.post('/:id/retry', requireNotHeldByOther, retryCase);
  *       409: { description: The case changed meanwhile }
  */
 router.post('/:id/preparation', requireRole('super_admin'), requireNotHeldByOther, choosePreparation);
+
+/**
+ * @openapi
+ * /api/cases/{id}/benefit:
+ *   post:
+ *     tags: [cases]
+ *     summary: Choose the benefit head the AI was unsure of, before the documents (SYSTEM_5 member balance phase C)
+ *     description: >
+ *       Only at BENEFIT_REVIEW / API_BENEFIT_REVIEW. Every voucher the AI was unsure of must be chosen, from the member's
+ *       own plan. The case goes back to the member check, which reuses the choices and checks the member balance; claim
+ *       preparation reuses them too. recheck true stores the choices without moving the case (saved with corrections,
+ *       which move it back to the member check). Super admin.
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [benefits, comment]
+ *             properties:
+ *               benefits: { type: array, items: { type: object, properties: { voucher: { type: integer, description: 0-based }, benefitType: { type: string }, benefitHead: { type: string, nullable: true } } } }
+ *               comment: { type: string, minLength: 3 }
+ *               recheck: { type: boolean, description: Store the choices without moving the case (saved with corrections) }
+ *     responses:
+ *       200: { description: "{ caseId, currentStatus }" }
+ *       400: { description: No comment, a choice missing or not on the plan, or the case is not waiting for a benefit choice }
+ *       409: { description: The case changed meanwhile }
+ */
+router.post('/:id/benefit', requireRole('super_admin'), requireNotHeldByOther, chooseBenefit);
 
 /**
  * @openapi

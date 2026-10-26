@@ -12,6 +12,7 @@ import { CaseAdminActions } from '../components/cases/CaseAdminActions';
 import { CaseOverridePanel } from '../components/cases/CaseOverridePanel';
 import { CaseRetryPanel } from '../components/cases/CaseRetryPanel';
 import { PreparationReviewPanel } from '../components/cases/PreparationReviewPanel';
+import { BenefitReviewPanel } from '../components/cases/BenefitReviewPanel';
 import { ReviewerChecklistPanel } from '../components/cases/ReviewerChecklistPanel';
 import { LlmCallsSection } from '../components/cases/LlmCallsSection';
 import { CaseUploadPanel } from '../components/cases/CaseUploadPanel';
@@ -128,6 +129,7 @@ export function CaseDetailPage() {
       ) : null}
 
       <CaseRetryPanel key={caseRecord.id} caseId={caseRecord.id} retry={retry} />
+      {isSuperAdmin() && <BenefitReviewPanel key={`benefit-${caseRecord.id}`} caseRecord={caseRecord} />}
       {isSuperAdmin() && <PreparationReviewPanel key={`preparation-${caseRecord.id}`} caseRecord={caseRecord} />}
       {isSuperAdmin() && <CaseOverridePanel caseRecord={caseRecord} override={override} summary={assessmentSummary} />}
       <ReviewerChecklistPanel key={caseRecord.id} caseId={caseRecord.id} requests={requests} />

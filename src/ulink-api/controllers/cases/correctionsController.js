@@ -16,7 +16,8 @@ const logger = require('../../utils/logger');
 // a new IAS revision that lifts the suspense; documents still missing → it waits for that person, who sends the
 // request (correctionHold — a correction never emails the customer on its own).
 // API_PREPARATION_REVIEW: a finding the reviewer still sees wrong at the claim-preparation stop is corrected there too.
-const CORRECTABLE_STATUSES = [...new Set([...Object.keys(OVERRIDE_TARGETS), 'API_CLAIM_SUSPENDED', 'INCOMPLETE', 'API_PREPARATION_REVIEW'])];
+// BENEFIT_REVIEW: a misread voucher amount is corrected beside the head choice (SYSTEM_5 member balance phase C).
+const CORRECTABLE_STATUSES = [...new Set([...Object.keys(OVERRIDE_TARGETS), 'API_CLAIM_SUSPENDED', 'INCOMPLETE', 'API_PREPARATION_REVIEW', 'BENEFIT_REVIEW', 'API_BENEFIT_REVIEW'])];
 const RECOGNITION_JOB = 'api-claim-recognition';
 
 // Member findings are marked OK only while the member check holds the case — after a whole-check override the case is

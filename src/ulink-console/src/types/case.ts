@@ -110,7 +110,36 @@ export interface MemberVerifyHardChecks {
   policyNoMatch: boolean | null;
 }
 
+// The member balance (SYSTEM_5 member balance, ulink-api member-verification/memberBalance.js).
+export interface BalancePick {
+  /** 0-based voucher index. */
+  voucher: number;
+  benefitType: string | null;
+  benefitHead: string | null;
+  confidence: number | null;
+  reason?: string | null;
+  /** A person's choice (Choose the benefit). */
+  chosen?: boolean;
+}
+export interface BalanceLine {
+  /** 1-based voucher number; null = the claim total (no voucher yet). */
+  voucher: number | null;
+  enough: boolean | null;
+  text: string;
+}
+export interface MemberBalance {
+  checked: boolean;
+  note: string | null;
+  picks: BalancePick[];
+  lines: BalanceLine[];
+  /** Vouchers the AI was unsure of (0-based). */
+  unsure?: number[];
+  /** The heads the member's plan allows. */
+  candidates?: BenefitCandidate[];
+}
+
 export interface MemberVerifyResult {
+  balance?: MemberBalance;
   reasonCode?: string | null;
   reason?: string | null;
   /** Every failed check, first = reasonCode (cases checked from 2026-09-29). */

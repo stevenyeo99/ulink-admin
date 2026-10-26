@@ -3,6 +3,8 @@ const config = require('../../config');
 const { pickDiagnosis } = require('./diagnosisPicker');
 const { pickBenefit } = require('./benefitPicker');
 const { voucherKey, sameVoucher, diagnosisSource, sameDiagnosis } = require('./preparationReview');
+const { savedHead } = require('../member-verification/memberBalance');
+const { uniqueBenefitCandidates } = require('../shared/iasBenefits');
 const { buildPayload } = require('./payloadBuilder');
 const { vitaminRejection } = require('../document-checking/checklist');
 const { stpDecision } = require('./stpEligibility');
@@ -81,9 +83,19 @@ async function checkCase(caseRecord) {
   if (invoiceItems.length > 0) {
     for (const [i, item] of invoiceItems.entries()) {
       const mine = chosenBenefit(i, item);
+      // The member check's head for this voucher (SYSTEM_5 member balance 4.8): the one its balance was checked with —
+      // the AI's sure pick or a person's choice — so the balance and the IAS claim use one head, and nobody is asked twice.
+      const member = mine ? null : savedHead(caseRecord.memberVerifyResult, i, item, iasMemberInfoResponse, extractedFields);
       const benefitPick = mine
         ? { ...mine.aiPick, pick: { benefitType: mine.benefitType, benefitHead: mine.benefitHead }, chosen }
-        : await pickBenefit({ ...benefitContext, voucherType: item.voucher_type }, memberPlansRaw);
+        : member
+          ? {
+            pick: { benefitType: member.benefitType, benefitHead: member.benefitHead },
+            confidence: member.chosen ? null : member.confidence, reason: member.chosen ? member.comment : member.reason,
+            candidates: uniqueBenefitCandidates(memberPlansRaw), fromMemberCheck: true,
+            ...(member.chosen ? { chosen: { by: member.by, comment: member.comment } } : {}),
+          }
+          : await pickBenefit({ ...benefitContext, voucherType: item.voucher_type }, memberPlansRaw);
       // Vitamins / supplements on this voucher → man_rej set 1 on its IAS item (SYSTEM_4 E4-10, owner 2026-10-16) — the
       // AI's, or a person's (amount null: no rejection on this voucher).
       const ai = vitaminRejection(item);

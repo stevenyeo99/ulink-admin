@@ -27,7 +27,8 @@ beforeEach(() => jest.clearAllMocks());
 
 it('turns group and module into the status codes they share', async () => {
   await call(listCases, { group: 'needs_review', module: 'member' });
-  expect(lastQuery().where.currentStatus.sort()).toEqual(['API_MEMBER_REVIEW_REQUIRED', 'MEMBER_REVIEW_REQUIRED']);
+  // Choose the benefit is a member check stop too (SYSTEM_5 member balance phase C).
+  expect(lastQuery().where.currentStatus.sort()).toEqual(['API_BENEFIT_REVIEW', 'API_MEMBER_REVIEW_REQUIRED', 'BENEFIT_REVIEW', 'MEMBER_REVIEW_REQUIRED']);
 });
 
 it('searches claim no., TPA case number, case id, claimant name and NRC, escaping LIKE wildcards', async () => {

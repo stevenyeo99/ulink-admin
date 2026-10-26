@@ -12,6 +12,7 @@ import { CaseCorrectionPanel } from '../components/cases/CaseCorrectionPanel';
 import { CaseOverridePanel } from '../components/cases/CaseOverridePanel';
 import { CaseRetryPanel } from '../components/cases/CaseRetryPanel';
 import { PreparationReviewPanel } from '../components/cases/PreparationReviewPanel';
+import { BenefitReviewPanel } from '../components/cases/BenefitReviewPanel';
 import { useConfidenceThreshold } from '../hooks/useConfidenceThreshold';
 import { DocumentViewer } from '../components/review/DocumentViewer';
 import { caseFiles, type PageRef } from '../lib/caseFiles';
@@ -80,7 +81,8 @@ export function ReviewWorkspacePage() {
   const checklist = caseRecord.documentCheckResult?.checklist ?? [];
   const fields = (caseRecord.extractedFields ?? {}) as { claimant?: { claimant_name?: string | null }; claim?: { total_claim_amount?: number | null } };
   const unsureCount = assessmentSummary.reviewPoints.filter((p) => !p.overridden).length;
-  const atPreparationStop = caseRecord.currentStatus === 'API_PREPARATION_REVIEW' && isSuperAdmin();
+  // The benefit choice saves the review page's corrections with it too (SYSTEM_5 member balance phase C).
+  const atPreparationStop = ['API_PREPARATION_REVIEW', 'BENEFIT_REVIEW', 'API_BENEFIT_REVIEW'].includes(caseRecord.currentStatus) && isSuperAdmin();
 
   // "✓ Right" (E5b): recorded as learning data; the list refreshes to show it.
   const me = getSession()?.user.username;
@@ -180,6 +182,7 @@ export function ReviewWorkspacePage() {
             saveBelow={atPreparationStop}
           />
           <CaseRetryPanel key={`retry-${id}`} caseId={id} retry={retry} />
+          {isSuperAdmin() && <BenefitReviewPanel key={`benefit-${id}`} caseRecord={caseRecord} corrections={pendingCorrections} onSaved={setSaved} />}
           {isSuperAdmin() && <PreparationReviewPanel key={`preparation-${id}`} caseRecord={caseRecord} corrections={pendingCorrections} onSaved={setSaved} />}
           {/* Override and continue (same rules as the case page): a reviewer who checked the member or documents by hand,
               or fixed it in IAS, lets the case go on to the next job without leaving the review page. */}

@@ -2,6 +2,7 @@ const config = require('../../config');
 const { runApiJob } = require('../api-pipeline/runApiJob');
 const { ApiCaseStep } = require('../../db/models');
 const { checkCase } = require('../member-verification/service');
+const { withChosenPicks } = require('../member-verification/memberBalance');
 const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment-summary/summary');
 const { caseBasics } = require('../assessment-summary/journey');
 
@@ -19,13 +20,19 @@ const { caseBasics } = require('../assessment-summary/journey');
 const OUTCOME_TO_STATUS = {
   MEMBER_VERIFIED: 'API_READY_FOR_DOCUMENT_CHECKING',
   MEMBER_REVIEW_REQUIRED: 'API_MEMBER_REVIEW_REQUIRED',
+  // A person chooses an unsure benefit head (SYSTEM_5 member balance phase C). Not re-checked every run: it waits.
+  BENEFIT_REVIEW: 'API_BENEFIT_REVIEW',
 };
 
 async function processCase({ caseRecord, input }) {
   const { extractedFields, recognizedType } = input['api-claim-recognition'];
   // The last member check's result (a waiting run keeps its output too): its head picks are reused (SYSTEM_5 member balance).
   const last = await ApiCaseStep.findOne({ where: { caseId: caseRecord.id, job: 'api-member-verification', status: ['DONE', 'WAITING'] }, order: [['createdAt', 'DESC']] });
-  const { outcome, result, iasResponse } = await checkCase({ id: caseRecord.id, extractedFields, recognizedType, memberVerifyResult: last?.output?.memberVerifyResult });
+  // A person's head choices (the 'benefit-review' step, POST /api/cases/:id/benefit) go over the last picks.
+  const chosen = await ApiCaseStep.findOne({ where: { caseId: caseRecord.id, job: 'benefit-review', status: 'DONE' }, order: [['createdAt', 'DESC']] });
+  const fresh = chosen && (!last || chosen.createdAt > last.createdAt); // later runs find the choice in the last picks
+  const memberVerifyResult = withChosenPicks(last?.output?.memberVerifyResult, fresh ? chosen.output.picks : null);
+  const { outcome, result, iasResponse } = await checkCase({ id: caseRecord.id, extractedFields, recognizedType, memberVerifyResult });
   const nextStatus = OUTCOME_TO_STATUS[outcome];
   if (!nextStatus) throw new Error(`Unexpected member check outcome: ${outcome}`);
 
@@ -55,7 +62,7 @@ async function processCase({ caseRecord, input }) {
   };
 
   // A re-check that still finds a problem changes nothing: the case keeps waiting.
-  if (caseRecord.currentStatus === 'API_MEMBER_REVIEW_REQUIRED' && nextStatus === 'API_MEMBER_REVIEW_REQUIRED') {
+  if (caseRecord.currentStatus === nextStatus && ['API_MEMBER_REVIEW_REQUIRED', 'API_BENEFIT_REVIEW'].includes(nextStatus)) {
     return { wait: true, output };
   }
   return {
@@ -67,7 +74,9 @@ async function processCase({ caseRecord, input }) {
 
 const job = {
   name: 'api-member-verification',
-  inputStatus: ['API_RECOGNIZED', 'API_MEMBER_REVIEW_REQUIRED'],
+  // API_BENEFIT_REVIEW: re-checked every run like member review — still waiting while the switch is on, on its way once
+  // it is off (SYSTEM_5 member balance phase C).
+  inputStatus: ['API_RECOGNIZED', 'API_MEMBER_REVIEW_REQUIRED', 'API_BENEFIT_REVIEW'],
   inputs: ['api-claim-recognition'],
   batchLimit: config.memberVerification.batchLimit,
   process: processCase,

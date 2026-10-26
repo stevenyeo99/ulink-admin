@@ -36,6 +36,7 @@ const CASE_STATUSES = {
   NOT_RECOGNIZED: status('recognition', 'failed', 'Not a claim we handle', "The email didn't match any claim type; the sender was asked to contact customer service."),
   MANUAL_REVIEW: status('recognition', 'needs_review', 'Needs manual reading', "The AI couldn't read the documents reliably; a person should check them."),
   MEMBER_REVIEW_REQUIRED: status('member', 'needs_review', 'Member check issue', "Member, coverage or bank details don't match IAS; held for internal review."),
+  BENEFIT_REVIEW: status('member', 'needs_review', 'Choose the benefit', "The AI wasn't sure of a voucher's benefit head. Choose it on this page; the member balance is then checked with it, before the documents."),
   READY_FOR_DOCUMENT_CHECKING: status('documents', 'in_progress', 'Checking documents', 'The member check passed; the document checklist runs next.'),
   INCOMPLETE: status('documents', 'waiting_customer', 'Documents incomplete', "Documents are missing or unclear; the customer was emailed the list and the case waits for their reply."),
   // Switch "hold the missing-documents email when the AI is unsure" on: a person checks before the customer is emailed.
@@ -63,6 +64,7 @@ const CASE_STATUSES = {
   API_RECOGNIZED: status('recognition', 'in_progress', 'Read by AI', 'Documents were read; the member check runs next.'),
   API_MANUAL_REVIEW: status('recognition', 'needs_review', 'Needs manual reading', "The AI couldn't read the documents reliably; a person should check them."),
   API_MEMBER_REVIEW_REQUIRED: status('member', 'needs_review', 'Member check issue', "Member, coverage or bank details don't match IAS; held for internal review."),
+  API_BENEFIT_REVIEW: status('member', 'needs_review', 'Choose the benefit', "The AI wasn't sure of a voucher's benefit head. Choose it on this page; the member balance is then checked with it, before the documents."),
   API_READY_FOR_DOCUMENT_CHECKING: status('documents', 'in_progress', 'Checking documents', 'The member check passed; the document checklist runs next.'),
   API_INCOMPLETE: status('documents', 'in_progress', 'Documents missing', 'Documents are missing; the claim will be revised with suspense and the customer asked.'),
   API_DOCUMENTS_REVIEW: status('documents', 'needs_review', 'Check before asking customer', "Documents look incomplete, and a person checks first: the AI was unsure, or a person corrected items. The customer has NOT been asked and IAS is unchanged: check the documents, then continue or override the check."),
