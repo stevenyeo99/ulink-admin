@@ -5,6 +5,7 @@ const { pickBenefit } = require('./benefitPicker');
 const { voucherKey, sameVoucher, diagnosisSource, sameDiagnosis } = require('./preparationReview');
 const { savedHead, recheckBalance, heldBalanceEnough } = require('../member-verification/memberBalance');
 const logger = require('../../utils/logger');
+const { caseChecksOff } = require('../ai-checklist/switches');
 const { uniqueBenefitCandidates } = require('../shared/iasBenefits');
 const { buildPayload } = require('./payloadBuilder');
 const { vitaminRejection } = require('../document-checking/checklist');
@@ -158,6 +159,8 @@ async function checkCase(caseRecord) {
     // document check's line.
     vitaminVouchers: invoiceItems.map((item, i) => (item.has_vitamin_or_supplement === true || lines[i]?.vitamin ? i + 1 : null)).filter(Boolean),
     // Bypassed (accepted) or let through by a whole-check override (still in issues): never STP either way.
+    // The checks that could stop a case and were switched off when this case was checked (AI checklist, Q2).
+    checksOff: caseChecksOff(caseFields.memberVerifyResult, caseFields.documentCheckResult),
     balanceBypassed: Boolean(balanceCheck.issue) || !balanceCheck.checked
       || [...(caseFields.memberVerifyResult?.accepted || []), ...(caseFields.memberVerifyResult?.issues || [])].some((finding) => finding.item === 'member:balance'),
   });

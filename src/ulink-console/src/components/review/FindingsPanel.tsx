@@ -279,7 +279,7 @@ export function FindingsPanel({
       {notChecked.length > 0 && (
         <section className="mb-4">
           <button onClick={() => setShowNotChecked((s) => !s)} aria-expanded={showNotChecked} className="mb-1 inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            <ChevronDown size={14} className={clsx(showNotChecked && 'rotate-180')} /> Not checked (nothing to compare) · {notChecked.length}
+            <ChevronDown size={14} className={clsx(showNotChecked && 'rotate-180')} /> Not checked (nothing to compare, or turned off) · {notChecked.length}
           </button>
           {showNotChecked && <ul className="divide-y divide-slate-900/5">{notChecked.map(row)}</ul>}
         </section>

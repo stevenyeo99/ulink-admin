@@ -141,8 +141,9 @@ Some checks protect the payment or the IAS revision itself. The page shows them 
 2. `COVERAGE_NOT_ACTIVE`: paying outside the coverage period is a payment risk.
 3. `member:bank`: a wrong account means a wrong payment.
 4. `MISSING_VOUCHER`: no claim amount can be proved without a voucher.
+5. `member:balance`: paying beyond the member's remaining balance is a payment risk (added 2026-10-26, with the member balance check).
 
-The owner makes sure that this list is correct (Q1).
+The owner approved this list on 2026-10-26 (Q1).
 
 ### 4.6 One source for the list
 
@@ -150,7 +151,7 @@ A new catalog file in the API (`modules/ai-checklist/catalog.js`) holds one entr
 
 ## 5. New settings and data
 
-1. A new table `ulink_check_switches`: `code` (key), `enabled`, `changed_by`, `changed_at`, `reason`. A check with no row is on. Each change also writes one row to a history table `ulink_check_switch_history`, so that past changes stay visible (Q4).
+1. One append-only table `ulink_check_switches` (migration `20261026120000-create-check-switches`, run on dev): `code`, `enabled`, `reason`, `changed_by`, `created_at`. Each change adds a row. The latest row for a code is its state, and a check with no row is on. The rows are also the full history (Q4), so no second table is needed.
 2. `GET /api/ai-checklist`: the catalog, each check's switch, and the *Reviewer can* column. Super admin.
 3. `PUT /api/ai-checklist/:code` with `{ enabled, reason }`. Super admin. The API refuses a locked check and an empty reason.
 
@@ -158,10 +159,10 @@ A new catalog file in the API (`modules/ai-checklist/catalog.js`) holds one entr
 
 | No. | Question | Proposed default |
 |---|---|---|
-| Q1 | Which checks are locked on? | The four in 4.5 |
-| Q2 | Can a case go STP while a check that can stop a case is switched off? | No. Any check that is switched off sends the case to a person (JD3) |
-| Q3 | Do switches apply to the email flow and the API flow together, or to each one separately? | Together, one switch for each check |
-| Q4 | Must the page show the full history of changes, or only the last change? | Last change on the page, full history in the table |
+| Q1 | Which checks are locked on? | Decided 2026-10-26: the five in 4.5 |
+| Q2 | Can a case go STP while a check that can stop a case is switched off? | Decided 2026-10-26: no. Any check that can stop a case and is switched off sends the case to a person (JD3) |
+| Q3 | Do switches apply to the email flow and the API flow together, or to each one separately? | Decided 2026-10-26: together, one switch for each check |
+| Q4 | Must the page show the full history of changes, or only the last change? | Decided 2026-10-26: last change on the page, full history in the table |
 | Q5 | Can reviewers and operations staff see the page read-only? | No, super admin only at first |
 | Q6 | Can the two AI comparisons that are off in the code (doctor name, diagnosis) be switched on from this page? | No. They stay off in the code until an accuracy pass on real samples |
 | Q7 | Do the information lines get a switch, or are they always shown? | Shown always, no switch, because they never stop a case |
@@ -173,7 +174,7 @@ The owner approves one phase at a time. Each phase ends with the `ulink-api` tes
 | Phase | Content | Needs first | Status |
 |---|---|---|---|
 | A. Read-only list | Catalog file, coverage test, `GET /api/ai-checklist`, console page with the columns in 4.2 (no switches) | Owner approves this PRD | Done, awaiting review (2026-10-26) |
-| B. Switches | Tables, migration and `PUT` endpoint. The member check and the document check skip switched-off checks. *Turned off* on the checklist and the assessment summary. Console switches with a reason | A done, Q1 to Q4 | Not started |
+| B. Switches | Tables, migration and `PUT` endpoint. The member check and the document check skip switched-off checks. *Turned off* on the checklist and the assessment summary. Console switches with a reason | A done, Q1 to Q4 | Done, awaiting review (2026-10-26) |
 | C. Docs | `OPERATIONS.md` and the API flowchart updated, a short user guide for the page | B done | Not started |
 
 Phase A alone already answers the first goal: the owner and ULINK can see what the system checks today.

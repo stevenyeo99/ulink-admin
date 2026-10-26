@@ -189,6 +189,10 @@ function memberLines(memberVerifyResult) {
   // The member balance (SYSTEM_5 member balance): one line per voucher, with the benefit type and head codes. A short
   // voucher is also a member finding (member:balance) — the review point sits on the member line above, not here.
   lines.push(...balanceLines('Member balance', memberVerifyResult.balance));
+  // Member checks a super admin switched off (AI checklist, SYSTEM_5 phase B): not run — never a pass.
+  if (memberVerifyResult.turnedOff?.length) {
+    lines.push(line({ decision: 'Member checks turned off', result: 'Not run', status: 'not_checked', why: memberVerifyResult.turnedOff.map((t) => `${t.code}: ${t.note}`).join('; '), verified: VERIFIED.RULE }));
+  }
 
   // Advisory flags on a verified member: benefit eligibility (rule) and possible policy exclusion (AI).
   for (const flag of flags || []) {
@@ -295,6 +299,11 @@ function documentLines(documentCheckResult) {
       continue;
     }
     const decision = DOCUMENT_DECISIONS[item.code] || item.label;
+    // Switched off on the AI checklist page (SYSTEM_5 phase B): not run, never a pass, with who, when and why.
+    if (item.turnedOff) {
+      lines.push(line({ decision, result: 'Turned off', status: 'not_checked', why: item.note, verified: VERIFIED.RULE }));
+      continue;
+    }
     if (item.passed === null || item.passed === undefined) {
       notChecked.push(decision);
       continue;

@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
-import { getAiChecklist, type AiCheck } from '../api/aiChecklistApi';
+import { getAiChecklist, setCheckSwitch, type AiCheck } from '../api/aiChecklistApi';
 import { isSuperAdmin } from '../lib/session';
 
 type Filter = 'all' | 'stops';
@@ -58,6 +58,7 @@ export function AiChecklistPage() {
         <div className="mb-4 flex flex-wrap gap-2 text-sm">
           <Stat value={running.filter((c) => c.effect === 'stops').length} label="can stop a case" />
           <Stat value={running.filter((c) => c.locked).length} label="locked on" />
+          <Stat value={running.filter((c) => !c.enabled).length} label="switched off" />
           <Stat value={running.filter((c) => c.effect === 'warning' || c.effect === 'info').length} label="only inform" />
         </div>
       )}
@@ -123,11 +124,12 @@ function Stat({ value, label }: { value: number; label: string }) {
 
 function CheckCard({ check: c, details }: { check: AiCheck; details: boolean }) {
   return (
-    <li className={clsx('rounded-xl2 border border-slate-900/10 bg-white/80 p-4 shadow-glass', c.effect === 'off' && 'opacity-60')}>
+    <li className={clsx('rounded-xl2 border bg-white/80 p-4 shadow-glass', c.enabled ? 'border-slate-900/10' : 'border-amber-300', c.effect === 'off' && 'opacity-60')}>
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <h4 className="mr-auto font-medium text-slate-900">{c.question}</h4>
         <span className={clsx('rounded-full px-2 py-0.5 text-xs font-medium', EFFECT[c.effect].className)}>{EFFECT[c.effect].label}</span>
         {c.locked && <span className="rounded-full bg-slate-800 px-2 py-0.5 text-xs font-medium text-white">Locked on</span>}
+        {!c.enabled && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">Switched off</span>}
       </div>
       <dl className="grid gap-x-4 gap-y-1.5 text-sm sm:grid-cols-[9rem_1fr]">
         <dt className="text-slate-500">What it does</dt>
@@ -149,6 +151,65 @@ function CheckCard({ check: c, details }: { check: AiCheck; details: boolean }) 
           </>
         )}
       </dl>
+      <CheckSwitch check={c} />
     </li>
+  );
+}
+
+/**
+ * The check's switch (SYSTEM_5 phase B): off or on with a required reason; the last change (who, when, why). A check
+ * that is off is skipped on cases checked from now on and shows Turned off there; while one that can stop a case is off,
+ * no claim goes STP. Locked checks and information lines have no switch.
+ */
+function CheckSwitch({ check: c }: { check: AiCheck }) {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const save = useMutation({
+    mutationFn: () => setCheckSwitch(c.code, !c.enabled, reason.trim()),
+    onSuccess: () => {
+      setOpen(false);
+      setReason('');
+      queryClient.invalidateQueries({ queryKey: ['ai-checklist'] });
+    },
+  });
+  const last = c.lastChange;
+  if (!c.switchable && !last) return null;
+  return (
+    <div className="mt-3 border-t border-slate-900/5 pt-3 text-sm">
+      {last && (
+        <p className="mb-2 text-xs text-slate-500">
+          {last.enabled ? 'Switched on' : 'Switched off'} by {last.by} on {new Date(last.at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}: {last.reason}
+        </p>
+      )}
+      {c.switchable && !open && (
+        <button onClick={() => setOpen(true)} className="text-xs font-medium text-ulink-orange-dark hover:underline">
+          {c.enabled ? 'Switch off' : 'Switch on'}
+        </button>
+      )}
+      {open && (
+        <div className="space-y-2">
+          {c.enabled && (
+            <p className="text-xs text-amber-700">
+              Off: this check is skipped on cases checked from now on and shows "Turned off" there.{c.effect === 'stops' ? ' While it is off, no claim goes STP.' : ''}
+            </p>
+          )}
+          <input
+            aria-label="Reason"
+            className="w-full rounded-lg border border-slate-900/10 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-ulink-orange"
+            placeholder="Reason (required)"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
+          {save.isError && <p className="text-xs text-red-600">{(save.error as Error).message}</p>}
+          <div className="flex gap-2">
+            <button disabled={reason.trim().length < 3 || save.isPending} onClick={() => save.mutate()} className="rounded-lg bg-ulink-orange px-3 py-1 text-xs font-medium text-white disabled:opacity-50">
+              {save.isPending ? 'Saving…' : c.enabled ? 'Switch off' : 'Switch on'}
+            </button>
+            <button onClick={() => { setOpen(false); setReason(''); save.reset(); }} className="rounded-lg px-3 py-1 text-xs text-slate-600 hover:bg-slate-100">Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

@@ -3,6 +3,8 @@
 jest.mock('../modules/ias-claim-preparation/benefitPicker', () => ({ pickBenefit: jest.fn() }));
 jest.mock('../modules/member-verification/iasClient', () => ({ getMemberLimitBalance: jest.fn(), getMemberInfo: jest.fn() }));
 jest.mock('../modules/member-verification/exclusionFlags', () => ({ checkExclusions: jest.fn(async () => []) }));
+// No check switched off (AI checklist switches) — no database here.
+jest.mock('../modules/ai-checklist/switches', () => ({ switchedOff: jest.fn(async () => new Map()), offNote: jest.fn() }));
 jest.mock('../modules/ias-claim-preparation/medicalTranslation', () => ({ toEnglishMedicalText: jest.fn(async (t) => ({ ...t, translation: null })) }));
 // The switches as last read: holdUnsureBenefit per test.
 let mockHold = true;

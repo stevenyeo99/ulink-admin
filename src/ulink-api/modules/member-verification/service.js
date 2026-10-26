@@ -6,6 +6,11 @@ const { checkExclusions } = require('./exclusionFlags');
 const { checkBenefitEligibility } = require('./benefitEligibility');
 const { checkMemberBalance, balanceIssue } = require('./memberBalance');
 const { lastReadSettings } = require('../settings/settings');
+const { switchedOff, offNote } = require('../ai-checklist/switches');
+const { CHECKS } = require('../ai-checklist/catalog');
+
+// A member check's comparison in checks.hard (a switched-off check's is dropped, so it never reads as a match).
+const HARD_CHECK_OF = { 'member:dob': 'dobMatch', 'member:policy': 'policyNoMatch' };
 const { queueDedupedTask } = require('../shared/emailTaskQueue');
 const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment-summary/summary');
 const { caseBasics } = require('../assessment-summary/journey');
@@ -56,7 +61,12 @@ async function checkCase(caseRecord) {
   // problem, so an override at member review never skips a known shortfall.
   const holdUnsure = Boolean(balance?.unsure?.length) && lastReadSettings().holdUnsureBenefit;
   const issue = holdUnsure ? balanceIssue(balance.lines, balance.unsure) : balance?.issue;
-  const result = evaluate(extractedFields, iasResponse, issue ? [issue] : []);
+  // Member checks a super admin switched off (AI checklist page, SYSTEM_5 phase B): skipped, listed as turned off.
+  const off = await switchedOff();
+  const result = evaluate(extractedFields, iasResponse, issue ? [issue] : [], off);
+  const memberOff = [...off].filter(([code]) => CHECKS.find((c) => c.code === code)?.section === 'member');
+  if (memberOff.length) result.turnedOff = memberOff.map(([code, row]) => ({ code, note: offNote(row) }));
+  for (const [code] of memberOff) if (HARD_CHECK_OF[code] && result.checks?.hard) delete result.checks.hard[HARD_CHECK_OF[code]];
   if (holdUnsure && result.outcome === 'MEMBER_VERIFIED') {
     result.outcome = 'BENEFIT_REVIEW';
     result.reasonCode = 'BENEFIT_UNSURE';
@@ -75,9 +85,9 @@ async function checkCase(caseRecord) {
   // first. checkBenefitEligibility itself is free (no LLM), gated here for the same
   // noise-reduction reason as exclusions, not cost.
   if (result.outcome === 'MEMBER_VERIFIED') {
-    const eligibilityFlag = checkBenefitEligibility(extractedFields, iasResponse.payload?.memberPlans);
+    const eligibilityFlag = off.has('BENEFIT_NOT_ELIGIBLE') ? null : checkBenefitEligibility(extractedFields, iasResponse.payload?.memberPlans);
     result.flags = [
-      ...(await checkExclusions(extractedFields, caseRecord.recognizedType)),
+      ...(off.has('POSSIBLE_EXCLUSION') ? [] : await checkExclusions(extractedFields, caseRecord.recognizedType)),
       ...(eligibilityFlag ? [eligibilityFlag] : []),
     ];
   } else {

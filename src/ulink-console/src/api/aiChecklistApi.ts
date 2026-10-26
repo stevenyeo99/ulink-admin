@@ -28,6 +28,16 @@ export interface AiCheck {
   ifFails: string | null;
   /** What a person can do about it on a case (from the correction panel's rules). */
   reviewerCan: string[];
+  /** Its switch (phase B): on unless a super admin switched it off. */
+  enabled: boolean;
+  /** Can be switched: not locked, not an information line, not off in the code. */
+  switchable: boolean;
+  lastChange: { enabled: boolean; reason: string; by: string; at: string } | null;
+}
+
+// Switch a check off or on, with a reason (SYSTEM_5 phase B). Applies to cases checked from now on.
+export function setCheckSwitch(code: string, enabled: boolean, reason: string): Promise<{ code: string; enabled: boolean }> {
+  return request(`/api/ai-checklist/${encodeURIComponent(code)}`, { method: 'PUT', body: JSON.stringify({ enabled, reason }) });
 }
 
 export function getAiChecklist(): Promise<{ sections: AiCheckSection[]; checks: AiCheck[] }> {

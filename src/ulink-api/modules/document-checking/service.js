@@ -4,6 +4,7 @@ const { evaluateDocumentChecks, evaluateJudgmentDependentChecks, vitaminCheck, d
 const { applyVerdicts, correctionHold } = require('../ai-feedback/corrections');
 const { withConfirmedValues, withConfirmedChecks } = require('../ai-feedback/confirmations');
 const { entityMatch } = require('./identityJudgment');
+const { switchedOff, withSwitchedOff } = require('../ai-checklist/switches');
 const { queueDedupedTask } = require('../shared/emailTaskQueue');
 const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment-summary/summary');
 const { overridesFromEvents } = require('../case-override/override');
@@ -44,17 +45,18 @@ async function logEvent(transaction, { caseId, prevStatus = null, newStatus, rea
  * set (see checklist.js's own "Re-enable... once there's time to revisit reliability").
  * patientName and hospitalName are left running — narrower evidence against them so far.
  */
-async function runJudgments(fields) {
+// off: the switched-off checks (AI checklist, SYSTEM_5 phase B) — their AI comparison is not asked.
+async function runJudgments(fields, off = new Map()) {
   const claimDiagnosisText = [fields.medical?.detail_of_illness_injury, fields.medical?.full_description_of_treatment]
     .filter(Boolean)
     .join(' — ') || null;
 
   const [bankAccountHolder, delegationPayee, patientName, hospitalName, invoiceName] = await Promise.all([
-    entityMatch(fields.claimant?.claimant_name, fields.bank?.bank_account_name),
-    entityMatch(fields.delegation_letter?.authorized_payee_name, fields.bank?.bank_account_name),
-    entityMatch(fields.claimant?.claimant_name, fields.medical_record?.patient_name),
-    entityMatch(fields.medical?.hospital_or_clinic_name, fields.medical_record?.hospital_or_clinic_name),
-    judgeInvoiceNames(fields),
+    off.has('DELEGATION_LETTER_REQUIRED') ? null : entityMatch(fields.claimant?.claimant_name, fields.bank?.bank_account_name),
+    off.has('DELEGATION_PAYEE_INCONSISTENT') ? null : entityMatch(fields.delegation_letter?.authorized_payee_name, fields.bank?.bank_account_name),
+    off.has('PATIENT_NAME_INCONSISTENT') ? null : entityMatch(fields.claimant?.claimant_name, fields.medical_record?.patient_name),
+    off.has('HOSPITAL_NAME_INCONSISTENT') ? null : entityMatch(fields.medical?.hospital_or_clinic_name, fields.medical_record?.hospital_or_clinic_name),
+    off.has('INVOICE_NAME_INCONSISTENT') ? null : judgeInvoiceNames(fields),
   ]);
   const providerName = null;
   const diagnosisTreatment = null;
@@ -122,10 +124,12 @@ async function checkCase(caseRecord) {
 
   const stage1 = evaluateDocumentChecks(fields);
   const documentList = documentListCheck(fields);
-  const judgments = await runJudgments(fields);
+  // Checks a super admin switched off (AI checklist page): skipped, shown as Turned off (SYSTEM_5 phase B).
+  const off = await switchedOff();
+  const judgments = await runJudgments(fields, off);
   const stage2 = evaluateJudgmentDependentChecks(fields, judgments);
   // A check's verdict a person corrected (SYSTEM_4 E4-12) replaces the AI's; corrected values are already in fields.
-  const result = withConfirmedChecks(applyVerdicts({
+  const result = withSwitchedOff(withConfirmedChecks(applyVerdicts({
     issues: [...stage1.issues, ...stage2.issues],
     details: [...stage1.details, ...stage2.details],
     flags: [...stage1.flags, ...stage2.flags],
@@ -135,7 +139,7 @@ async function checkCase(caseRecord) {
     // are dated — information for STP and
     // the reviewer, never an issue.
     checklist: [...stage1.checklist, ...stage2.checklist, ...[vitaminCheck(fields), documentList, benefitTypeCheck(fields, documentList), documentDatesCheck(fields, documentList), formatCheck(fields), fieldsReadCheck(fields, stage1.checklist)].filter(Boolean)],
-  }, fields.corrections), confirmations);
+  }, fields.corrections), confirmations), off);
 
   const outcome = result.passed ? 'DOCUMENT_CHECKED' : 'INCOMPLETE';
   return { caseId: caseRecord.id, outcome, result };

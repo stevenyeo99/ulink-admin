@@ -45,7 +45,7 @@ const CHECKS = [
     does: 'The policy number on the claim form must match the IAS record.', fields: ['policy.policy_no'] },
   { code: 'member:bank', section: 'member', question: 'Do the bank details match IAS?', label: MEMBER_ITEM_LABELS['member:bank'], effect: 'stops', locked: true,
     does: 'The bank name, account holder and account number must match the IAS record. A title such as U or Daw is ignored in the name.', fields: BANK },
-  { code: 'member:balance', section: 'member', question: 'Is there enough balance for each voucher?', label: MEMBER_ITEM_LABELS['member:balance'], effect: 'stops', usesAi: true,
+  { code: 'member:balance', section: 'member', question: 'Is there enough balance for each voucher?', label: MEMBER_ITEM_LABELS['member:balance'], effect: 'stops', usesAi: true, locked: true,
     does: "Picks each voucher's benefit head, then compares each voucher amount with the member's remaining balance in IAS: the head, its benefit type and any combined limit, whichever is lowest. Vouchers that share a limit are added up." },
   { code: 'POSSIBLE_EXCLUSION', section: 'member', question: 'Could the diagnosis be a policy exclusion?', label: 'Possible policy exclusion', effect: 'warning', usesAi: true,
     does: 'Compares the diagnosis with the policy exclusion clauses. A possible match is flagged for the approver (JD3), never rejected.',

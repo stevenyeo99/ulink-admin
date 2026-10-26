@@ -99,7 +99,8 @@ const ACCEPTABLE_MEMBER_ITEMS = new Set(Object.keys(MEMBER_ITEM_LABELS));
 
 // extraIssues: findings from outside this record's fields, listed after its own (member-verification/memberBalance.js's
 // member:balance) — set aside by a person's mark OK the same way.
-function evaluate(extractedFields, iasResponse, extraIssues = []) {
+// off: the member checks a super admin switched off (AI checklist, SYSTEM_5 phase B) — their findings are dropped.
+function evaluate(extractedFields, iasResponse, extraIssues = [], off = new Map()) {
   if (!iasResponse || iasResponse.success !== true) {
     return {
       outcome: 'MEMBER_REVIEW_REQUIRED',
@@ -188,6 +189,7 @@ function evaluate(extractedFields, iasResponse, extraIssues = []) {
   }
 
   issues.push(...extraIssues);
+  for (let i = issues.length - 1; i >= 0; i -= 1) if (off.has(issues[i].item)) issues.splice(i, 1);
 
   // Findings a person marked OK one by one (review page, a "member:…" verdict correction): set aside with who and why,
   // only while the finding is the one they saw (covers: its text, with both values) — a changed bank account or a new
