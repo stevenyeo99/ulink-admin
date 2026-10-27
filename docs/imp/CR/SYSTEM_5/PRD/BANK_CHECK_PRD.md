@@ -83,4 +83,4 @@ The owner approves one phase at a time. Each phase ends with these steps: the `u
 | Phase | Content | Needs first | Status |
 |---|---|---|---|
 | A. Backend | `member:bank` becomes a warning flag (not a member finding), with both values. It does not block STP. Account number digits-only rule in `formatCheck`. AI checklist cards (the bank card is *Warning only* and not locked, and the format card names the account number). Tests | Owner approves this PRD (Q1 to Q4 decided 2026-10-27) | Done, awaiting review (2026-10-27). The warning also shows in the case journey |
-| B. Docs | `OPERATIONS.md`, `CLAIM_FLOW_END_TO_END.md`, the API flowchart and its published page, the SYSTEM_5 PRD locked list, the change log | A done | Not started |
+| B. Docs | `OPERATIONS.md`, `CLAIM_FLOW_END_TO_END.md`, the API flowchart and its published page, the SYSTEM_5 PRD locked list, the AI checklist user guide, the change log | A done | Done, awaiting review (2026-10-27) |

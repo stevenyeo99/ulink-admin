@@ -41,13 +41,14 @@ A switch applies to the next check of a case: a new case, a re-check after an up
 
 ## Checks that cannot be switched off
 
-These five checks protect the payment or the IAS revision. The page shows them as *Locked on*:
+These four checks protect the payment or the IAS revision. The page shows them as *Locked on*:
 
 1. The member is in IAS.
 2. The policy was active on the treatment date.
-3. The bank details match IAS.
-4. There is enough balance for each voucher.
-5. There is a voucher.
+3. There is enough balance for each voucher.
+4. There is a voucher.
+
+The bank details check is a warning only since 2026-10-27. The IAS claim pays to the IAS account, so a difference does not stop the case. You can switch it off.
 
 The information lines (what the AI read) have no switch, because they never stop a case. The doctor name check and the diagnosis check are off in the code. They cannot be switched on from this page.
 

@@ -76,7 +76,7 @@ Member check (`modules/member-verification`):
 | `MEMBER_NOT_FOUND` | Member found in IAS | Stops the case | No | Nothing |
 | `COVERAGE_NOT_ACTIVE` | Coverage active on the treatment date | Stops the case | No | Nothing |
 | `member:dob` | Date of birth matches IAS | Stops the case | No | Mark passed, correct *Date of birth* |
-| `member:bank` | Bank name, account holder and account number match IAS | Stops the case | No | Mark passed, correct the bank fields |
+| `member:bank` | Bank name, account holder and account number match IAS | Warning only (since 2026-10-27, `BANK_CHECK_PRD.md`) | No | Correct the bank fields |
 | `member:policy` | Policy number matches IAS | Stops the case | No | Mark passed, correct *Policy number* |
 | `POSSIBLE_EXCLUSION` | Diagnosis is not a policy exclusion | Warning for the approver | Yes | Nothing |
 | `BENEFIT_NOT_ELIGIBLE` | Benefit type is in the member's plan | Warning | No | Nothing |
@@ -120,7 +120,7 @@ Document check, information lines (never stop a case):
 | `DOCUMENT_LIST` | Documents found, with the kind and date of each page | Yes | Nothing |
 | `BENEFIT_TYPE` | The benefit type that the documents show | Yes | Nothing |
 | `DOCUMENT_DATES` | The medical documents are dated | Yes | Nothing |
-| `VALUE_FORMAT` | The values read look valid (NRC, dates, amounts) | No | Nothing |
+| `VALUE_FORMAT` | The values read look valid (NRC, dates, amounts, bank account number) | No | Nothing |
 | `FIELDS_READ` | The key values were read clearly (AI confidence) | Yes | Nothing |
 
 ### 4.4 Switching a check off
@@ -139,7 +139,7 @@ Some checks protect the payment or the IAS revision itself. The page shows them 
 
 1. `MEMBER_NOT_FOUND`: the IAS revision cannot run without the member.
 2. `COVERAGE_NOT_ACTIVE`: paying outside the coverage period is a payment risk.
-3. `member:bank`: a wrong account means a wrong payment.
+3. `member:bank`: removed on 2026-10-27. A bank difference is now a warning only, because the IAS claim pays to the IAS account (`BANK_CHECK_PRD.md`).
 4. `MISSING_VOUCHER`: no claim amount can be proved without a voucher.
 5. `member:balance`: paying beyond the member's remaining balance is a payment risk (added 2026-10-26, with the member balance check).
 
@@ -159,7 +159,7 @@ A new catalog file in the API (`modules/ai-checklist/catalog.js`) holds one entr
 
 | No. | Question | Proposed default |
 |---|---|---|
-| Q1 | Which checks are locked on? | Decided 2026-10-26: the five in 4.5 |
+| Q1 | Which checks are locked on? | Decided 2026-10-26: the five in 4.5. Four since 2026-10-27, without `member:bank` |
 | Q2 | Can a case go STP while a check that can stop a case is switched off? | Decided 2026-10-26: no. Any check that can stop a case and is switched off sends the case to a person (JD3) |
 | Q3 | Do switches apply to the email flow and the API flow together, or to each one separately? | Decided 2026-10-26: together, one switch for each check |
 | Q4 | Must the page show the full history of changes, or only the last change? | Decided 2026-10-26: last change on the page, full history in the table |

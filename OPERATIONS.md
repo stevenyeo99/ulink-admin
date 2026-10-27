@@ -107,7 +107,8 @@ switch is the quick way to stop one environment reading a mailbox it shares with
 - **Console → Admin → AI checklist** (super admin): every check the system runs on a claim, in plain words, grouped by
   the paper it looks at. A check that can stop a case or warn can be switched off or on, with a required reason. The
   page shows the last change (who, when, why), and the table `ulink_check_switches` keeps every change. Locked on:
-  member found, coverage active, bank details, member balance, voucher attached. A switch applies to cases checked
+  member found, coverage active, member balance, voucher attached. Bank details that differ from IAS are a
+  warning only: the case goes on and can go STP, because the IAS claim pays to the IAS account. A switch applies to cases checked
   after it (a new case, a re-check after an upload or a correction). A case already checked keeps its result. While a
   check that can stop a case is off, no claim goes STP. User guide: `docs/imp/CR/SYSTEM_5/AI_CHECKLIST_USER_GUIDE.md`.
 - Both pages: one form, one Save. Edits are marked until **Review & save**, which lists every change and saves all of
