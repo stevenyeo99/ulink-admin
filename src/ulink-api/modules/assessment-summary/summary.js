@@ -218,8 +218,8 @@ function memberLines(memberVerifyResult) {
     // An exclusion shows the clause's own words and what in the claim matched, so a reviewer can judge it.
     const clauseText = exclusion ? flag.clauseText || CLAUSE_TEXT[flag.clauseRef] : null;
     lines.push(line({
-      decision: exclusion ? 'Policy exclusion' : 'Benefit eligibility',
-      result: exclusion ? `Possible exclusion${flag.clauseRef ? ` (clause ${flag.clauseRef})` : ''}` : flag.code,
+      decision: exclusion ? 'Policy contract exclusion' : 'Benefit eligibility',
+      result: exclusion ? `Possible contract exclusion${flag.clauseRef ? ` (clause ${flag.clauseRef})` : ''}` : flag.code,
       status: 'issue',
       why: exclusion
         ? [

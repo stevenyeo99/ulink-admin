@@ -17,7 +17,7 @@ cp .env.example .env            # fill in: DB, LLM, IMAP/SMTP, IAS, INTERNAL_REV
 npm install
 npm run db:migrate
 node scripts/ingestIcd10Diagnoses.js      # once: ICD-10 diagnoses + embeddings
-node scripts/ingestPolicyExclusions.js    # once: policy exclusion clauses + embeddings
+node scripts/ingestPolicyExclusions.js    # once: policy contract exclusion clauses + embeddings
 npm run user:create -- <username> --name "Full Name" --role super_admin
 npm run dev                     # http://localhost:3088 (PORT) · API docs at /api/docs
 

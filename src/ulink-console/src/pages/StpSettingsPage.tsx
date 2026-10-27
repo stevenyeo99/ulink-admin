@@ -20,7 +20,7 @@ const STP_SWITCHES: { key: SwitchKey; title: string; text: string }[] = [
   {
     key: 'stpBlockOnReviewPoints',
     title: "Don't pay automatically when the AI was unsure",
-    text: 'A claim with an open review point (the AI unsure — at or below the threshold on System settings — a possible policy exclusion, …) never goes STP — it goes to JD3 for approval, and the STP reason says why.',
+    text: 'A claim with an open review point (the AI unsure — at or below the threshold on System settings — a possible policy contract exclusion, …) never goes STP — it goes to JD3 for approval, and the STP reason says why.',
   },
   {
     key: 'vitaminsBlockStp',

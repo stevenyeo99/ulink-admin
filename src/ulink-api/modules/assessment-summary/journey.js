@@ -45,7 +45,7 @@ function buildCaseJourney(fields = {}, lines = []) {
 
   // Advisory warnings from the member check (possible policy exclusion, benefit not on the plan): they
   // don't stop the case, but JD3 should weigh them — so the path says so.
-  for (const warning of lines.filter((l) => l.decision === 'Policy exclusion' || l.decision === 'Benefit eligibility')) {
+  for (const warning of lines.filter((l) => l.decision === 'Policy contract exclusion' || l.decision === 'Benefit eligibility')) {
     steps.push(step('Policy check', warning.result, `${warning.brief || warning.why}${handled(warning)}`));
   }
 
