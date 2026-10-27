@@ -21,6 +21,9 @@ const GIVE_UP_MS = 30 * 60 * 1000;
 const REVIEW_JOBS = ['api-claim-recognition', 'api-member-verification', 'api-document-checking', 'api-console-upload', 'api-claim-preparation', 'api-claim-revision'];
 
 const MARKED = { source: 'API', reviewPendingAt: { [Op.ne]: null } };
+// Cases a person asked to run first while a round was busy: the next round takes them first.
+// ponytail: kept in memory — one API process; move to the lock row if the API ever runs as several processes.
+const queuedFirst = new Set();
 
 // One round: each job over the marked cases at its input status, then the emails of every API case that moved during
 // the round (a case marked or leaving the lane meanwhile too). No round, and no run in the history, with nothing marked.
@@ -57,6 +60,7 @@ async function runReviewLane({ first = [] } = {}) {
   const before = await JobLock.findByPk(LOCK);
   const stale = Boolean(before?.running && before.startedAt && Date.now() - new Date(before.startedAt).getTime() > STALE_MS);
   if (!(await jobLock.acquire(LOCK, { staleMs: STALE_MS }))) {
+    for (const id of first) queuedFirst.add(id);
     await jobLock.requestRerun(LOCK);
     return { started: false, queued: true };
   }
@@ -68,7 +72,10 @@ async function runReviewLane({ first = [] } = {}) {
     let ids = first;
     try {
       do {
-        const run = await round(ids);
+        // Taken before the round: ids asked for during it wait for the next round.
+        const asked = [...queuedFirst];
+        queuedFirst.clear();
+        const run = await round([...new Set([...ids, ...asked])]);
         if (run) logger.info('Review lane round finished', { pipelineRunId: run.id, status: run.status });
         ids = [];
       } while (await jobLock.takeRerun(LOCK));

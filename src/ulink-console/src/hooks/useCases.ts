@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { getApprovals, getCaseOverview, getReviewQueue, listCases } from '../api/casesApi';
+import { getApprovals, getCaseOverview, getReviewQueue, getReviewed, listCases } from '../api/casesApi';
 import type { CaseListQuery } from '../types/case';
 import type { Source } from '../types/pipeline';
 
@@ -26,6 +26,19 @@ export function useCaseOverview(source?: Source) {
 /** The Review Queue; without a source, both workflows (the sidebar count). */
 export function useReviewQueue(source?: Source) {
   return useQuery({ queryKey: ['review-queue', source ?? 'all'], queryFn: () => getReviewQueue(source), staleTime: 30_000 });
+}
+
+/**
+ * The Reviewed page and its sidebar count (SYSTEM_5 review lane). Polls every 5 seconds only while cases are being
+ * checked again — they move within seconds or minutes — and not otherwise; a save invalidates it ('reviewed').
+ */
+export function useReviewed(source?: Source) {
+  return useQuery({
+    queryKey: ['reviewed', source ?? 'all'],
+    queryFn: () => getReviewed(source),
+    staleTime: 30_000,
+    refetchInterval: (query) => (query.state.data?.total ? 5_000 : false),
+  });
 }
 
 /** Claims waiting for JD3 approval in IAS. */

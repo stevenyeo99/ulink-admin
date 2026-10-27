@@ -106,7 +106,8 @@ async function refreshRequestLine(caseRecord, transaction) {
 // For the case page: whether a request can be made now, and the open lines (the form starts from them).
 async function requestsInfo(caseRecord) {
   const open = await openRequests(caseRecord.id);
-  return { allowed: Boolean(REQUEST_FROM[caseRecord.currentStatus]), open: open.map(shownRequest) };
+  // Not while the review lane checks the case again after a decision (SYSTEM_5).
+  return { allowed: Boolean(REQUEST_FROM[caseRecord.currentStatus]) && !caseRecord.reviewPendingAt, open: open.map(shownRequest) };
 }
 
 module.exports = { REQUEST_FROM, requestsInfo, closeRequests, refreshRequestLine, CODE, MAX_LINES, MAX_CHARS, validateLines, openRequests, requestLine, withRequests, requestedLines, requestHold, requestedDedupeKey };

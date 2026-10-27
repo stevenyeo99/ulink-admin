@@ -57,7 +57,8 @@ async function correctionsInfo(caseRecord, fields) {
   const rows = await AiFeedback.findAll({ where: { caseId: caseRecord.id }, order: [['createdAt', 'ASC']] });
   const inForce = new Set((fields.extractedFields?.corrections || []).map((c) => c.id));
   const list = rows.map((row) => ({ ...(row.toJSON ? row.toJSON() : row), applied: inForce.has(row.id) }));
-  const allowed = CORRECTABLE_STATUSES.includes(fields.currentStatus) && Boolean(fields.extractedFields);
+  // Not while the review lane checks the case again after a decision (SYSTEM_5): the API refuses it then.
+  const allowed = CORRECTABLE_STATUSES.includes(fields.currentStatus) && Boolean(fields.extractedFields) && !caseRecord.reviewPendingAt;
   // options: what can be corrected (when allowed) or confirmed (whenever the AI has read the case — E5b "✓ Right").
   const options = fields.extractedFields ? correctionOptions(fields.extractedFields, fields.documentCheckResult, heldByMember(fields)) : [];
   // BALANCE_REVIEW: only the balance finding's bypass (the documents are already in the IAS console).

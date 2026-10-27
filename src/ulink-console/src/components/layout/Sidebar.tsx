@@ -7,6 +7,9 @@ import { isSuperAdmin } from '../../lib/session';
 
 interface SidebarProps {
   reviewCount?: number;
+  /** Cases being checked again after a decision (SYSTEM_5 review lane), and how many wait too long. */
+  reviewedCount?: number;
+  reviewedHighlighted?: number;
   /** Small screens: the sidebar is a drawer, open or closed. */
   open: boolean;
   /** Large screens: the sidebar is hidden (menu button in the top bar). */
@@ -25,7 +28,7 @@ const itemClass = ({ isActive }: { isActive: boolean }) =>
  * Left navigation in the SB Admin pattern: brand at the top, pages grouped by who uses them.
  * On small screens it slides in over the page (opened from the top bar's menu button).
  */
-export function Sidebar({ reviewCount, open, collapsed, onClose }: SidebarProps) {
+export function Sidebar({ reviewCount, reviewedCount, reviewedHighlighted = 0, open, collapsed, onClose }: SidebarProps) {
   return (
     <>
       {open && <div aria-hidden className="fixed inset-0 z-30 bg-slate-900/20 lg:hidden" onClick={onClose} />}
@@ -77,6 +80,14 @@ export function Sidebar({ reviewCount, open, collapsed, onClose }: SidebarProps)
                               aria-label={`${reviewCount} need review`}
                             >
                               {reviewCount}
+                            </span>
+                          )}
+                          {item.showReviewedCount && typeof reviewedCount === 'number' && reviewedCount > 0 && (
+                            <span
+                              className={clsx('rounded-full px-1.5 py-0.5 text-[10px] font-semibold text-white', reviewedHighlighted ? 'bg-red-600' : 'bg-ulink-teal')}
+                              aria-label={`${reviewedCount} being checked again${reviewedHighlighted ? `, ${reviewedHighlighted} waiting too long` : ''}`}
+                            >
+                              {reviewedCount}
                             </span>
                           )}
                         </>

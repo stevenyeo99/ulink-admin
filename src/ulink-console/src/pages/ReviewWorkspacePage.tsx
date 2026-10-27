@@ -6,6 +6,7 @@ import { claimCase, confirmFinding, getCase, getNextCase, releaseCase } from '..
 import { getSession, isSuperAdmin } from '../lib/session';
 import { Button } from '../components/common/Button';
 import { CaseStatusPill } from '../components/cases/CaseStatusPill';
+import { useCaseStatuses } from '../hooks/useCaseStatuses';
 import { CaseClaimBar } from '../components/cases/CaseClaimBar';
 import { ReviewerChecklistPanel } from '../components/cases/ReviewerChecklistPanel';
 import { CaseCorrectionPanel } from '../components/cases/CaseCorrectionPanel';
@@ -43,7 +44,27 @@ export function ReviewWorkspacePage() {
   // What the last save did, so the reviewer sees it after its panel goes away (the case moved on).
   const [saved, setSaved] = useState<string | null>(null);
 
-  const { data, isLoading, isError } = useQuery({ queryKey: ['case', id], queryFn: () => getCase(id as string), enabled: !!id });
+  // Polls every 5 seconds while the review lane checks the case again after a decision (SYSTEM_5), so the banner below
+  // shows where it is and the buttons come back when it stops again.
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['case', id], queryFn: () => getCase(id as string), enabled: !!id,
+    refetchInterval: (query) => (query.state.data?.case.reviewPendingAt ? 5_000 : false),
+  });
+  // The round that checked the case again ended (SYSTEM_5 review lane 4.8.3): say how, and refresh the lists.
+  const { info: statusInfo } = useCaseStatuses();
+  const wasPending = useRef(false);
+  const pendingNow = Boolean(data?.case.reviewPendingAt);
+  useEffect(() => {
+    if (wasPending.current && !pendingNow && data) {
+      const status = statusInfo(data.case.currentStatus);
+      const points = data.assessmentSummary.reviewPoints.filter((p) => !p.overridden).length;
+      setSaved(status.group === 'needs_review' || status.group === 'failed'
+        ? `Checked again: it needs review again${points ? ` (${points} point${points === 1 ? '' : 's'})` : ''}. ${status.label}.`
+        : `Checked again: ${status.label}.`);
+      for (const key of ['review-queue', 'reviewed', 'cases', 'cases-overview']) queryClient.invalidateQueries({ queryKey: [key] });
+    }
+    wasPending.current = pendingNow;
+  }, [pendingNow, data, statusInfo, queryClient]);
 
   // Opening the workspace claims the case (nobody else holds it) — "Being reviewed by me". Leaving it (Next case, back,
   // another page) gives that claim back, so just looking at cases doesn't lock them for others.
@@ -157,7 +178,18 @@ export function ReviewWorkspacePage() {
           {saved && (
             <div role="status" className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-ulink-teal/30 bg-ulink-teal/5 px-4 py-3 text-sm text-slate-800">
               <span>{saved}</span>
-              <Button variant="ghost" disabled={moving} onClick={nextCase}>Next case</Button>
+              <div className="flex gap-2">
+                <Button disabled={moving} onClick={nextCase}>Next case</Button>
+                <Button variant="ghost" onClick={() => setSaved(null)}>Stay on this case</Button>
+              </div>
+            </div>
+          )}
+          {caseRecord.reviewPendingAt && (
+            <div role="status" className="mb-4 rounded-lg border border-ulink-teal/30 bg-ulink-teal/5 px-4 py-3 text-sm text-slate-800">
+              <span className="font-semibold">Being checked again after a decision</span>
+              {caseRecord.reviewPendingBy ? ` by ${caseRecord.reviewPendingBy}` : ''}:{' '}
+              <CaseStatusPill status={caseRecord.currentStatus} />, {Math.max(0, Math.floor((Date.now() - new Date(caseRecord.reviewPendingAt).getTime()) / 60000))} min.
+              <span className="block text-xs text-slate-600">Nothing can be changed until it stops again. This page updates by itself.</span>
             </div>
           )}
           {nextAction && <NextActionBox next={nextAction} className="mb-4" />}

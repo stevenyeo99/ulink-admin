@@ -3,7 +3,8 @@
 jest.mock('../db/models', () => ({
   sequelize: { transaction: jest.fn(async (fn) => fn('tx')), query: jest.fn() },
   Case: { findAll: jest.fn(async () => []), update: jest.fn(async () => [1]) },
-  CaseEvent: { create: jest.fn() },
+  CaseEvent: { create: jest.fn(), bulkCreate: jest.fn() },
+  PipelineRun: { findOne: jest.fn(), update: jest.fn() },
   ApiCaseStep: { findOne: jest.fn(async () => ({ output: {} })), create: jest.fn() },
   JobLock: { tableName: 'ulink_job_locks', update: jest.fn(), findByPk: jest.fn() },
   Setting: { findAll: jest.fn(async () => []) },
@@ -70,4 +71,22 @@ it('the lock: a stale lock can be taken over, and the run again flag is set and 
   sequelize.query.mockResolvedValueOnce([[{ block_name: 'api-review-pipeline' }]]).mockResolvedValueOnce([[]]);
   expect(await jobLock.takeRerun('api-review-pipeline')).toBe(true);
   expect(await jobLock.takeRerun('api-review-pipeline')).toBe(false);
+});
+
+describe('the Reviewed page (SYSTEM_5 review lane 4.6)', () => {
+  const { runReviewed } = require('../controllers/cases/reviewedController');
+  const send = async (body) => {
+    const res = { status: jest.fn(() => res), json: jest.fn() };
+    await runReviewed({ user: { username: 'tz', name: 'Thin Zar' }, body }, res);
+    return { status: res.status.mock.calls[0]?.[0] ?? 200, body: res.json.mock.calls[0][0] };
+  };
+
+  it('refuses a run with no case, more than 20, or a case that is not being checked again', async () => {
+    expect((await send({ caseIds: [] })).status).toBe(400);
+    expect((await send({ caseIds: Array.from({ length: 21 }, (_, i) => `c${i}`) })).status).toBe(400);
+    Case.findAll.mockResolvedValueOnce([{ id: 'c1', source: 'API', reviewPendingAt: null }]);
+    const { status, body } = await send({ caseIds: ['c1'] });
+    expect(status).toBe(400);
+    expect(body.error.notMarked).toEqual(['c1']);
+  });
 });

@@ -230,6 +230,9 @@ export interface EmailThread {
 export interface CaseDetail {
   id: string;
   currentStatus: string;
+  /** Set while the review lane checks the case again after a person's decision (SYSTEM_5): read-only meanwhile. */
+  reviewPendingAt?: string | null;
+  reviewPendingBy?: string | null;
   recognizedType: string | null;
   extractedFields: unknown;
   documentCheckResult: DocumentCheckResult | null;
@@ -544,4 +547,35 @@ export interface ApprovalItem {
 export interface ApprovalsResponse {
   items: ApprovalItem[];
   total: number;
+}
+
+// The Reviewed page (SYSTEM_5 review lane, ulink-api controllers/cases/reviewedController.js): a case a person decided
+// that the review lane is checking again.
+export interface ReviewedItem {
+  id: string;
+  source: 'EMAIL' | 'API';
+  currentStatus: string;
+  statusLabel: string;
+  claimNo: string | null;
+  tpaCaseNumber: string | null;
+  claimant: string | null;
+  decidedAt: string;
+  decidedBy: string | null;
+  /** The decision's case history line, e.g. "Checked again from the document check by …". */
+  decision: string | null;
+  waitingMinutes: number;
+  /** Waiting longer than highlightMinutes. */
+  highlighted: boolean;
+  lastRound: { state: 'running' | 'waiting' | 'failed'; job?: string; error?: string | null };
+}
+
+export interface ReviewedResponse {
+  items: ReviewedItem[];
+  total: number;
+  highlighted: number;
+  /** When the review lane last ran (null: never). */
+  lastRoundAt: string | null;
+  /** A review round is working now. */
+  lastRoundRunning: boolean;
+  highlightMinutes: number;
 }

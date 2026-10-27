@@ -408,7 +408,10 @@ async function getCase(req, res) {
     return {
       assessmentSummary,
       nextAction: nextAction(fields, assessmentSummary, events),
-      override: { ...overrideCheck(fields.currentStatus, fields), findings: findingsFor(fields.currentStatus) },
+      // Not while the review lane checks the case again after a decision (SYSTEM_5): the API refuses it then.
+      override: caseRecord.reviewPendingAt
+        ? { allowed: false, reason: BEING_CHECKED, findings: {} }
+        : { ...overrideCheck(fields.currentStatus, fields), findings: findingsFor(fields.currentStatus) },
     };
   };
   // corrections: per-item corrections allowed now, what can be corrected, and those made (SYSTEM_4 E4-12).

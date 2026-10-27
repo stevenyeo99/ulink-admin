@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { ApprovalsResponse, CaseClaim, Correction, DiagnosisCandidate, EmailDraft, TimelineEntry, WrongStep, CaseListQuery, CaseOverview, ReviewQueueResponse, CaseStatusCatalog, GetCaseResponse, ListCasesResponse, LlmCall, OverrideCaseResponse, ResetCaseResponse } from '../types/case';
+import type { ApprovalsResponse, CaseClaim, Correction, DiagnosisCandidate, EmailDraft, TimelineEntry, WrongStep, CaseListQuery, CaseOverview, ReviewQueueResponse, CaseStatusCatalog, GetCaseResponse, ListCasesResponse, LlmCall, OverrideCaseResponse, ResetCaseResponse, ReviewedResponse } from '../types/case';
 import type { Source } from '../types/pipeline';
 
 export function listCases(query: CaseListQuery = {}): Promise<ListCasesResponse> {
@@ -13,6 +13,16 @@ export function listCases(query: CaseListQuery = {}): Promise<ListCasesResponse>
 
 export function getReviewQueue(source?: Source): Promise<ReviewQueueResponse> {
   return request<ReviewQueueResponse>(`/api/cases/review-queue${source ? `?source=${source}` : ''}`);
+}
+
+// The Reviewed page (SYSTEM_5 review lane): cases a person decided that the review lane is checking again.
+export function getReviewed(source?: Source): Promise<ReviewedResponse> {
+  return request<ReviewedResponse>(`/api/cases/reviewed${source ? `?source=${source}` : ''}`);
+}
+
+// Run the review lane now for these cases, first (1 to 20, super admin). queued: a round was busy, they run next.
+export function runReviewed(caseIds: string[]): Promise<{ started: boolean; queued?: boolean; skipped?: string }> {
+  return request(`/api/cases/reviewed/run`, { method: 'POST', body: JSON.stringify({ caseIds }) });
 }
 
 export function getApprovals(source?: Source): Promise<ApprovalsResponse> {

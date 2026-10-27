@@ -1,4 +1,4 @@
-import { ClipboardCheck, ClipboardList, FolderOpen, LayoutDashboard, Settings, SlidersHorizontal, Stamp, Workflow, type LucideIcon } from 'lucide-react';
+import { ClipboardCheck, ClipboardList, FolderOpen, LayoutDashboard, RotateCw, Settings, SlidersHorizontal, Stamp, Workflow, type LucideIcon } from 'lucide-react';
 
 export interface NavItem {
   to: string;
@@ -6,6 +6,8 @@ export interface NavItem {
   icon: LucideIcon;
   /** Shows the Review Queue count next to the item. */
   showReviewCount?: boolean;
+  /** Shows the Reviewed count (cases being checked again after a decision) next to the item. */
+  showReviewedCount?: boolean;
   /** Shown to super admins only (the API refuses others too). */
   superAdminOnly?: boolean;
 }
@@ -19,6 +21,8 @@ export const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     title: 'Work',
     items: [
       { to: '/review', label: 'Review queue', icon: ClipboardCheck, showReviewCount: true },
+      // Cases a person decided, being checked again by the review lane (SYSTEM_5).
+      { to: '/reviewed', label: 'Reviewed', icon: RotateCw, showReviewedCount: true },
       { to: '/approvals', label: 'Approvals', icon: Stamp },
       { to: '/cases', label: 'Cases', icon: FolderOpen },
     ],

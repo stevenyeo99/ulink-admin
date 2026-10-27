@@ -7,6 +7,7 @@ const { requestInformation, markRequestDone, getEmailDraft } = require('../contr
 const { requireNotHeldByOther } = require('../modules/case-claim/claim');
 const { choosePreparation, searchDiagnosis } = require('../controllers/cases/preparationController');
 const { chooseBenefit } = require('../controllers/cases/benefitController');
+const { getReviewed, runReviewed } = require('../controllers/cases/reviewedController');
 
 const router = express.Router();
 
@@ -112,6 +113,23 @@ router.get('/overview', getOverview);
  *         description: "{ items: [{ id, source, currentStatus, claimNo, tpaCaseNumber, reason, check, reasons, pointCount, … }], counts: { reason: n }, total }"
  */
 router.get('/review-queue', getReviewQueue);
+
+/**
+ * @openapi
+ * /api/cases/reviewed:
+ *   get:
+ *     tags: [cases]
+ *     summary: Cases a person decided that the review lane is checking again (SYSTEM_5 review lane)
+ *     responses:
+ *       200:
+ *         description: "{ items: [{ id, source, statusLabel, decision, decidedBy, waitingMinutes, highlighted, lastRound }], total, highlighted, lastRoundAt }"
+ * /api/cases/reviewed/run:
+ *   post:
+ *     tags: [cases]
+ *     summary: Run the review lane now for 1 to 20 decided API cases, these first. Super admin.
+ */
+router.get('/reviewed', getReviewed);
+router.post('/reviewed/run', requireRole('super_admin'), runReviewed);
 
 /**
  * @openapi

@@ -208,8 +208,8 @@ export function FindingsPanel({
       setDone({});
       setNewLines([]);
       setReviewOpen(false);
-      onSaved?.('Saved. The case is checked again on the next pipeline run.');
-      for (const key of ['case', 'cases', 'review-queue', 'cases-overview', 'approvals']) queryClient.invalidateQueries({ queryKey: [key] });
+      onSaved?.('Saved. The case is being checked again. You can follow it on the Reviewed page.');
+      for (const key of ['case', 'cases', 'review-queue', 'reviewed', 'cases-overview', 'approvals']) queryClient.invalidateQueries({ queryKey: [key] });
     },
   });
   useEffect(() => {

@@ -9,12 +9,13 @@ import { ReviewWorkspacePage } from './pages/ReviewWorkspacePage';
 import { CaseDetailPage } from './pages/CaseDetailPage';
 import { OverviewPage } from './pages/OverviewPage';
 import { ReviewQueuePage } from './pages/ReviewQueuePage';
+import { ReviewedPage } from './pages/ReviewedPage';
 import { ApprovalsPage } from './pages/ApprovalsPage';
 import { StpSettingsPage } from './pages/StpSettingsPage';
 import { LoginPage } from './pages/LoginPage';
 import { AiPerformancePage } from './pages/AiPerformancePage';
 import { AiChecklistPage } from './pages/AiChecklistPage';
-import { useReviewQueue } from './hooks/useCases';
+import { useReviewQueue, useReviewed } from './hooks/useCases';
 import { getSession } from './lib/session';
 
 export function App() {
@@ -42,6 +43,7 @@ function LoggedIn() {
 function Shell() {
   // The sidebar count: cases in the Review Queue, both workflows.
   const { data } = useReviewQueue();
+  const { data: reviewed } = useReviewed();
   const [menuOpen, setMenuOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   // Large screens: the menu button hides or shows the sidebar. Small screens: it opens the drawer.
@@ -51,7 +53,7 @@ function Shell() {
   // Dashboard shell (SB Admin pattern): sidebar on the left, top bar + page on the right.
   return (
     <div className="relative flex h-screen overflow-hidden">
-      <Sidebar reviewCount={data?.total} open={menuOpen} collapsed={collapsed} onClose={() => setMenuOpen(false)} />
+      <Sidebar reviewCount={data?.total} reviewedCount={reviewed?.total} reviewedHighlighted={reviewed?.highlighted} open={menuOpen} collapsed={collapsed} onClose={() => setMenuOpen(false)} />
       <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
         <TopBar onOpenMenu={toggleMenu} />
         {/* React Flow (PipelinePage) needs a bounded, non-scrolling container to measure
@@ -64,6 +66,7 @@ function Shell() {
             <Route path="/overview" element={<OverviewPage />} />
             <Route path="/pipeline" element={<PipelinePage />} />
             <Route path="/review" element={<ReviewQueuePage />} />
+            <Route path="/reviewed" element={<ReviewedPage />} />
             <Route path="/approvals" element={<ApprovalsPage />} />
             <Route path="/cases" element={<CasesPage />} />
             <Route path="/cases/:id" element={<CaseDetailPage />} />

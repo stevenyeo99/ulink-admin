@@ -112,8 +112,8 @@ Non-goals:
 
 3. Super admins see *Run now* on each row, and *Run selected* above the table with a checkbox on each row (at most 20 cases).
 4. A manual run is refused for a case with no marker, with the reason. Each manual run writes a case event, for example "Run again by Thin Zar, 10:45".
-5. If a case waits longer than the time limit, its row is highlighted. The limit is 30 minutes by default (a System settings value).
-6. A new endpoint `GET /api/cases/reviewed` feeds the page. `POST /api/jobs/review-pipeline/run` and `POST /api/jobs/api-review-pipeline/run` take an optional `{ caseIds: [...] }`.
+5. If a case waits longer than 15 minutes, its row is highlighted (a fixed value). After 30 minutes the lane gives the case back to lane 1 (4.3.4), so it leaves the page.
+6. A new endpoint `GET /api/cases/reviewed` feeds the page. A manual run is `POST /api/cases/reviewed/run` with `{ caseIds: [...] }`, behind login. The job routes `POST /api/jobs/api-review-pipeline/run` (and later `/api/jobs/review-pipeline/run` for email) take no body: they are open for the retry cron.
 
 ### 4.7 Review queue
 
@@ -135,7 +135,7 @@ Non-goals:
 
 1. One migration adds `review_pending_at`, `review_pending_by` and an index on `review_pending_at` to `ulink_cases`.
 2. One row in the job lock table (`ulink_job_locks`) for each lane 2 holds the *run again* flag, in a new column `rerun_requested_at`. One migration adds it.
-3. New System settings value: the time limit for a highlighted row (4.6.5), 30 minutes by default.
+3. No new System settings value. The highlight limit (15 minutes) and the give-up limit (30 minutes) are fixed.
 4. New endpoints: 4.6.6.
 5. Two new cron lines on each server (4.4.2). `CRONTAB_SETUP.md` gets them as a reusable step for UAT and prod.
 
@@ -161,5 +161,5 @@ The owner approves one phase at a time. Each phase ends with these steps: the `u
 |---|---|---|
 | A. API lane | Migrations, marker set and clear, lane 1 filter, API review pipeline with its locks, Save trigger, run again flag, stale lock, refusal while marked, review queue rule, tests | Done, awaiting review (2026-10-27). The migration must still run on dev (DNS failed on 2026-10-27). Email cases are not marked yet (phase B) |
 | B. Email lane | The email review pipeline, with the same rules | Not started |
-| C. Reviewed page | Sidebar item, page, endpoints, manual runs, page after Save, banner, polling, health alert | Not started |
+| C. Reviewed page | Sidebar item, page, endpoints, manual runs, page after Save, banner, polling, health alert | Done (2026-10-27). Run now and Run selected for API cases only, until phase B |
 | D. Server and docs | Retry crons in `CRONTAB_SETUP.md`, `OPERATIONS.md`, `CLAIM_FLOW_END_TO_END.md`, the API flowchart and its published page, the change log. Done together with the review actions PRD, phase E (with the reviewer guide) | Not started |
