@@ -1,7 +1,8 @@
-const { sequelize, Case, CaseEvent, ApiCaseStep, AiFeedback } = require('../../db/models');
+const { sequelize, Case, CaseEvent, ApiCaseStep, AiFeedback, CaseRequest } = require('../../db/models');
 const { apiCaseView } = require('../../modules/api-pipeline/caseView');
 const { OVERRIDE_TARGETS } = require('../../modules/case-override/override');
-const { correctionOptions, validateCorrection, aiOriginal, applyCorrection, correctionText, recheckFrom, reasonLongEnough, REASON_TOO_SHORT } = require('../../modules/ai-feedback/corrections');
+const { correctionOptions, validateCorrection, aiOriginal, applyCorrection, correctionText, recheckFrom, reasonLongEnough, REASON_TOO_SHORT, failedCodes } = require('../../modules/ai-feedback/corrections');
+const { REQUEST_FROM, MAX_LINES, validateLines, openRequests } = require('../../modules/case-requests/requests');
 const logger = require('../../utils/logger');
 
 // Per-item correction (SYSTEM_4 E4-12, E4-15 step 1). Allowed where a whole-check override is (a member or document
@@ -20,6 +21,12 @@ const logger = require('../../utils/logger');
 // BALANCE_REVIEW: the balance dropped before the claim — only its bypass (member:balance) is offered (SYSTEM_5 phase D).
 const CORRECTABLE_STATUSES = [...new Set([...Object.keys(OVERRIDE_TARGETS), 'API_CLAIM_SUSPENDED', 'INCOMPLETE', 'API_PREPARATION_REVIEW', 'BENEFIT_REVIEW', 'API_BENEFIT_REVIEW', 'BALANCE_REVIEW', 'API_BALANCE_REVIEW'])];
 const balanceHeld = (status) => /BALANCE_REVIEW$/.test(status || '');
+// The stops where every open finding needs a decision before the save (SYSTEM_5 review actions 4.8, owner 2026-10-27):
+// an open finding left out would hold the case again at the next check. Not the benefit, balance and claim preparation
+// stops, whose panels save only what they show.
+const DECIDE_ALL_STATUSES = new Set(['MEMBER_REVIEW_REQUIRED', 'API_MEMBER_REVIEW_REQUIRED', 'DOCUMENTS_REVIEW', 'API_DOCUMENTS_REVIEW', 'DOCUMENTS_UNSURE', 'API_DOCUMENTS_UNSURE']);
+// Ask the customer (4.9): only where the documents are missing and wait for a person.
+const ASK_STATUSES = new Set(['DOCUMENTS_REVIEW', 'API_DOCUMENTS_REVIEW']);
 const RECOGNITION_JOB = 'api-claim-recognition';
 
 // Member findings are marked OK only while the member check holds the case — after a whole-check override the case is
@@ -62,11 +69,28 @@ function recheckTarget(items, prevStatus, source) {
   return { label: recheck.label, status: recheck[source === 'API' ? 'API' : 'EMAIL'] };
 }
 
+// The open findings that the save leaves without a decision, as labels (4.8): every member finding the case offers, and
+// every failed document line — decided by its own verdict, a revised value it compared (editItems), or Ask the customer.
+function undecided(fields, options, items, askCustomer) {
+  const decided = new Set(items.map((i) => i?.item));
+  const asked = new Set(askCustomer.map((a) => a.item));
+  const member = options.filter((o) => o.item.startsWith('member:') && !decided.has(o.item)).map((o) => o.label);
+  if (!/DOCUMENTS_(REVIEW|UNSURE)$/.test(fields.currentStatus)) return member;
+  const lines = (fields.documentCheckResult?.checklist || []).filter((l) => l.passed === false);
+  const documents = failedCodes(fields.documentCheckResult)
+    .filter((code) => !decided.has(code) && !asked.has(code)
+      && !lines.filter((l) => l.code === code).some((l) => (l.editItems || []).some((item) => decided.has(item))))
+    .map((code) => lines.find((l) => l.code === code)?.label || code);
+  return [...member, ...new Set(documents)];
+}
+
 /**
  * Saves corrections ([{ kind: value|verdict, item, value? | passed?, reason, wrongStep }]) on a held case — all or none:
  * every item is checked first — and checks the case again once. Responds itself; returns nothing.
+ * askCustomer ([{ item: check code, reason }]) and requestLines ([text]): the review page's Ask the customer and the
+ * reviewer's own lines (SYSTEM_5 review actions 4.9, 4.10), saved with the same save.
  */
-async function saveCorrections(req, res, items) {
+async function saveCorrections(req, res, items, { askCustomer = [], requestLines = [] } = {}) {
   const caseRecord = await Case.findByPk(req.params.id);
   if (!caseRecord) return res.status(404).json({ error: { message: `Case ${req.params.id} not found`, status: 404 } });
   if (!CORRECTABLE_STATUSES.includes(caseRecord.currentStatus)) {
@@ -91,9 +115,37 @@ async function saveCorrections(req, res, items) {
     checked.push({ ...result, body });
   }
 
-  const operator = operatorOf(req.user);
+  const bad = (message) => res.status(400).json({ error: { message, status: 400 } });
   const prevStatus = caseRecord.currentStatus;
-  const target = recheckTarget(checked.map((c) => c.option.item), prevStatus, caseRecord.source);
+  // Ask the customer: a failed document line of this case, once, with a reason.
+  const failedLines = (fields.documentCheckResult?.checklist || []).filter((l) => l.passed === false);
+  if (askCustomer.length && !ASK_STATUSES.has(prevStatus)) return bad('Ask the customer is for a case whose documents are missing and wait for a person.');
+  for (const ask of askCustomer) {
+    const line = failedLines.find((l) => l.code === ask?.item && l.code !== 'PERSON_REQUEST');
+    if (!line) return bad(`${ask?.item ?? 'This finding'} is not a failed finding of this case.`);
+    if (askCustomer.filter((a) => a.item === ask.item).length > 1) return bad(`${line.label} is asked twice.`);
+    if (checked.some((c) => c.option.item === ask.item)) return bad(`${line.label}: Mark OK and Ask the customer at once.`);
+    if (!reasonLongEnough(ask.reason)) return bad(`${line.label}: ${REASON_TOO_SHORT}`);
+  }
+  // The reviewer's own lines: where a request can be made, and no more than the limit with the open ones.
+  const newLines = validateLines(requestLines, { allowEmpty: true });
+  if (newLines.error) return bad(newLines.error);
+  const open = newLines.lines.length ? await openRequests(caseRecord.id) : [];
+  const added = newLines.lines.filter((text) => !open.some((r) => r.text === text));
+  if (added.length && !REQUEST_FROM[prevStatus]) return bad('Your own request lines are added while the documents wait for a person to check them.');
+  if (open.length + added.length > MAX_LINES) return bad(`At most ${MAX_LINES} open request lines.`);
+  // Every open finding decided first (4.8): one left out would bring the case back to the review queue.
+  if (DECIDE_ALL_STATUSES.has(prevStatus)) {
+    const left = undecided(fields, options, items, askCustomer);
+    if (left.length) return res.status(400).json({ error: { message: `Decide every finding before you save. Still open: ${left.join('; ')}.`, status: 400, open: left } });
+  }
+  if (!checked.length && !askCustomer.length && !added.length) return bad('Send the changes to save.');
+
+  const operator = operatorOf(req.user);
+  // Nothing corrected (only Ask the customer or own lines): the document check runs again and sends the request.
+  const target = checked.length
+    ? recheckTarget(checked.map((c) => c.option.item), prevStatus, caseRecord.source)
+    : { label: 'the document check', status: caseRecord.source === 'API' ? 'API_READY_FOR_DOCUMENT_CHECKING' : 'READY_FOR_DOCUMENT_CHECKING' };
   const newStatus = target.status;
 
   const rows = await sequelize.transaction(async (transaction) => {
@@ -118,6 +170,40 @@ async function saveCorrections(req, res, items) {
       saved.push({ row, correction });
     }
 
+    // Ask the customer and the reviewer's own lines (4.9, 4.10): stored on the fields for the next document check, which
+    // sends the request instead of holding the case again (corrections.js askCovers, requestsReleased).
+    // A later save with neither drops the old decision: it was for the check that sent that request.
+    if (askCustomer.length || added.length) {
+      extractedFields = { ...extractedFields, askCustomer: { codes: askCustomer.map((a) => a.item), by: operator, at: new Date().toISOString() } };
+    } else if (extractedFields?.askCustomer) {
+      const { askCustomer: _old, ...rest } = extractedFields;
+      extractedFields = rest;
+    }
+    // Learning data: the AI was right to fail this check (one row per person and check, as a confirmation).
+    const confirmed = askCustomer.length
+      ? await AiFeedback.findAll({ where: { caseId: caseRecord.id, kind: 'confirm', item: askCustomer.map((a) => a.item), createdBy: req.user.username }, transaction })
+      : [];
+    for (const ask of askCustomer) {
+      const line = failedLines.find((l) => l.code === ask.item);
+      if (!confirmed.some((r) => r.item === ask.item && r.correctedValue === false)) {
+        await AiFeedback.create({
+          caseId: caseRecord.id, kind: 'confirm', item: ask.item, label: line.label, aiValue: false, aiConfidence: line.confidence ?? null,
+          correctedValue: false, reason: ask.reason.trim(), wrongStep: null, page: null, createdBy: req.user.username,
+        }, { transaction });
+      }
+      await CaseEvent.create({
+        caseId: caseRecord.id, blockName: 'case-review', prevStatus, newStatus: prevStatus, reasonCode: 'ASK_CUSTOMER',
+        message: `Ask the customer: ${line.label}, by ${operator} — ${ask.reason.trim()}.`,
+      }, { transaction });
+    }
+    if (added.length) {
+      await CaseRequest.bulkCreate(added.map((text) => ({ caseId: caseRecord.id, text, createdBy: operator })), { transaction });
+      await CaseEvent.create({
+        caseId: caseRecord.id, blockName: 'case-review', prevStatus, newStatus: prevStatus, reasonCode: 'INFORMATION_REQUESTED',
+        message: `Information requested by ${operator}: ${added.join('; ')}.`,
+      }, { transaction });
+    }
+
     // Only if nothing moved the case meanwhile (same guard as override).
     const [count] = await Case.update(
       caseRecord.source === 'API' ? { currentStatus: newStatus } : { currentStatus: newStatus, extractedFields },
@@ -136,14 +222,18 @@ async function saveCorrections(req, res, items) {
       const now = new Date();
       await ApiCaseStep.create({
         caseId: caseRecord.id, job: RECOGNITION_JOB, status: 'DONE',
-        input: { correction: saved[0].row.id, corrections: saved.map((s) => s.row.id), username: req.user.username },
+        input: { correction: saved[0]?.row.id ?? null, corrections: saved.map((s) => s.row.id), askCustomer: askCustomer.map((a) => a.item), username: req.user.username },
         output: { ...recognitionStep.output, extractedFields },
         startedAt: now, finishedAt: now,
       }, { transaction });
     }
     await CaseEvent.create({
       caseId: caseRecord.id, blockName: 'case-review', prevStatus, newStatus, reasonCode: 'MANUAL_RECHECK',
-      message: `Checked again from ${target.label} by ${operator}, with ${saved.length} correction(s).`,
+      message: `Checked again from ${target.label} by ${operator}, with ${[
+        saved.length ? `${saved.length} correction(s)` : null,
+        askCustomer.length ? `${askCustomer.length} finding(s) to ask the customer` : null,
+        added.length ? `${added.length} request line(s)` : null,
+      ].filter(Boolean).join(', ')}.`,
     }, { transaction });
     return saved.map((s) => s.row);
   }).catch((error) => {
@@ -154,8 +244,8 @@ async function saveCorrections(req, res, items) {
     return res.status(409).json({ error: { message: 'The case changed while you were reviewing it. Reload the page and check again.', status: 409 } });
   }
 
-  logger.info('Case items corrected', { caseId: caseRecord.id, items: checked.map((c) => c.option.item), username: req.user.username });
-  return res.json({ caseId: caseRecord.id, previousStatus: prevStatus, currentStatus: newStatus, correction: rows[0], corrections: rows });
+  logger.info('Case items corrected', { caseId: caseRecord.id, items: checked.map((c) => c.option.item), askCustomer: askCustomer.map((a) => a.item), requestLines: added.length, username: req.user.username });
+  return res.json({ caseId: caseRecord.id, previousStatus: prevStatus, currentStatus: newStatus, correction: rows[0] ?? null, corrections: rows });
 }
 
 /**
@@ -169,11 +259,15 @@ const createCorrection = (req, res) => saveCorrections(req, res, [req.body || {}
  * every change saved together (or none), and the case checked once.
  */
 function createCorrections(req, res) {
-  const items = req.body?.items;
-  if (!Array.isArray(items) || items.length === 0 || items.length > 50) {
+  const items = req.body?.items ?? [];
+  const askCustomer = req.body?.askCustomer ?? [];
+  const requestLines = req.body?.requestLines ?? [];
+  if (!Array.isArray(items) || !Array.isArray(askCustomer) || !Array.isArray(requestLines)
+    || askCustomer.some((a) => !a || typeof a !== 'object' || typeof a.item !== 'string')
+    || items.length + askCustomer.length + requestLines.length === 0 || items.length > 50 || askCustomer.length > 50) {
     return res.status(400).json({ error: { message: 'Send the changes to save (1 to 50).', status: 400 } });
   }
-  return saveCorrections(req, res, items);
+  return saveCorrections(req, res, items, { askCustomer, requestLines });
 }
 
 /**

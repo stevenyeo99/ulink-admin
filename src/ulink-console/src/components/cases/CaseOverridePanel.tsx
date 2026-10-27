@@ -90,8 +90,26 @@ export function CaseOverridePanel({
           ))}
         </select>
       </label>
+      {/* Quick reasons (SYSTEM_5 review actions 4.7): one click fills the reason, the reviewer can add to it. */}
+      <p className="mb-1 text-xs font-medium text-slate-600">Pick a reason, or write your own</p>
+      <div className="mb-2 flex flex-wrap gap-2">
+        {(isUnsurePass
+          ? ['Checked against the documents: the AI read them right.', 'The requested lines are done: the documents arrived.']
+          : ['The documents are complete. The AI was wrong.', 'IAS was fixed. The member details now match.', 'Accepted as an exception after review.']
+        ).map((text) => (
+          <button
+            key={text}
+            type="button"
+            onClick={() => setReason(text)}
+            aria-pressed={reason === text}
+            className={`rounded-full border px-3 py-1 text-left text-[13px] ${reason === text ? 'border-ulink-orange bg-ulink-orange/10 text-slate-900' : 'border-slate-900/15 bg-white text-slate-700 hover:border-ulink-orange/60'}`}
+          >
+            {text}
+          </button>
+        ))}
+      </div>
       <label className="mb-4 block">
-        <span className="mb-1 block text-sm font-medium text-slate-700">Reason</span>
+        <span className="mb-1 block text-sm font-medium text-slate-700">Reason (required)</span>
         <textarea
           value={reason}
           onChange={(e) => setReason(e.target.value)}

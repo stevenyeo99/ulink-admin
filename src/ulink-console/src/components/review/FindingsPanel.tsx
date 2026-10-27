@@ -2,13 +2,13 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import * as AlertDialog from '@radix-ui/react-alert-dialog';
-import { AlertTriangle, Check, ChevronDown, FileText, Pencil, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, FileText, Mail, Pencil, Plus, X } from 'lucide-react';
 import { ConfidenceBadge } from '../common/ConfidenceBadge';
 import { useConfidenceThreshold } from '../../hooks/useConfidenceThreshold';
 import type { AssessmentLine, ChecklistItem, CorrectionOption, FieldRead, WrongStep } from '../../types/case';
 import { pageRef, type PageRef, type ViewFile } from '../../lib/caseFiles';
 import { InlineCorrection } from './InlineCorrection';
-import { CONFIRM_QUICK_REASON, CONTRACT_EXCLUSION_ITEM, isBypassItem, draftItem, draftLine, draftProblem, newDraft, reasonProblem, type CorrectionDraft, type PendingCorrections } from '../../lib/correctionDraft';
+import { CONFIRM_QUICK_REASON, CONTRACT_EXCLUSION_ITEM, isBypassItem, askItem, newAskDraft, draftItem, draftLine, draftProblem, newDraft, reasonProblem, type CorrectionDraft, type PendingCorrections } from '../../lib/correctionDraft';
 import { createCorrections } from '../../api/casesApi';
 import { getAiChecklist, type AiCheck } from '../../api/aiChecklistApi';
 import { Button } from '../common/Button';
@@ -123,7 +123,15 @@ export function FindingsPanel({
   onPendingChange,
   saveBelow = false,
   onSaved,
+  status = '',
+  requestsAllowed = false,
+  openRequestLines = [],
 }: {
+  /** The case status: where every finding needs a decision, and where Ask the customer is offered (SYSTEM_5 review actions 4.8, 4.9). */
+  status?: string;
+  /** The reviewer's own request lines can be added now (case-requests REQUEST_FROM), and the open ones. */
+  requestsAllowed?: boolean;
+  openRequestLines?: string[];
   /** After a save: what happened, for the page to show. */
   onSaved?: (message: string) => void;
   /** The open changes, each time they change — for a save elsewhere on the page (the claim preparation stop). */
@@ -174,48 +182,58 @@ export function FindingsPanel({
   const checkOf = (code?: string | null): AiCheck | undefined => (code ? checklistCatalog?.checks.find((c) => c.code === code || c.item === code) : undefined);
   // One draft per value or check: a value offered in two places (a finding and a rule check's ✎ Edit) opens once.
   const hasDraft = (option: CorrectionOption) => Object.values(drafts).some((d) => d.option.kind === option.kind && d.option.item === option.item);
-  const draftForm = (key: string, risk?: string | null) => drafts[key] && (
+  const draftForm = (key: string, risk?: string | null, customerText?: string | null) => drafts[key] && (
     <InlineCorrection
       draft={drafts[key]}
       onChange={(draft) => setDrafts((d) => ({ ...d, [key]: draft }))}
       onUndo={() => closeDraft(key)}
       risk={risk}
+      customerText={customerText}
       done={!!done[key]}
       onDone={(isDone) => setDone((d) => ({ ...d, [key]: isDone }))}
     />
   );
   const pending = Object.values(drafts);
   const notReady = pending.filter((d) => draftProblem(d)).length;
+  // The reviewer's own new request lines (4.10), saved with the decisions.
+  const [newLines, setNewLines] = useState<string[]>([]);
+  const [lineText, setLineText] = useState('');
+  const corrections = pending.filter((d) => !d.ask);
+  const asks = pending.filter((d) => d.ask);
   const queryClient = useQueryClient();
   const saveAll = useMutation({
-    mutationFn: () => createCorrections(caseId, pending.map(draftItem)),
+    mutationFn: () => createCorrections(caseId, corrections.map(draftItem), asks.map(askItem), newLines),
     onSuccess: () => {
       setDrafts({});
       setDone({});
+      setNewLines([]);
       setReviewOpen(false);
       onSaved?.('Saved. The case is checked again on the next pipeline run.');
       for (const key of ['case', 'cases', 'review-queue', 'cases-overview', 'approvals']) queryClient.invalidateQueries({ queryKey: [key] });
     },
   });
   useEffect(() => {
-    onPendingChange?.({ items: pending.map(draftItem), notReady, lines: pending.map(draftLine) });
+    onPendingChange?.({ items: corrections.map(draftItem), notReady, lines: corrections.map(draftLine) });
     // pending and notReady are derived from drafts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drafts, onPendingChange]);
   // Corrections no longer allowed (the case moved, someone else decided it): open changes can't be saved.
   useEffect(() => {
-    if (!canCorrect) setDrafts({});
+    if (!canCorrect) {
+      setDrafts({});
+      setNewLines([]);
+    }
   }, [canCorrect]);
   // Unsaved changes: the browser asks before the tab is closed or reloaded.
   useEffect(() => {
-    if (!pending.length) return undefined;
+    if (!pending.length && !newLines.length) return undefined;
     const warn = (e: BeforeUnloadEvent) => {
       e.preventDefault();
       e.returnValue = '';
     };
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
-  }, [pending.length]);
+  }, [pending.length, newLines.length]);
   const optionOf = (item: string | null) => (item ? options.find((o) => `${o.kind}:${o.item}` === item) ?? null : null);
   const findings = buildFindings(checklist, options);
   const notChecked = findings.filter((f) => f.passed === null);
@@ -252,31 +270,55 @@ export function FindingsPanel({
 
   // A failed or unsure finding (SYSTEM_5 review actions 4.1): a card with "Needs your decision", What to do, and clear
   // buttons — Mark OK and Revise first.
-  const openRow = (f: Finding) => {
-    const ref = pageRef(f.page, files);
+  // Ask the customer (4.9): where the documents are missing and wait for a person, on a failed document finding.
+  const canAskHere = canCorrect && /DOCUMENTS_REVIEW$/.test(status);
+  // Every open finding decided before the save (4.8), at the member and document review stops.
+  const decideAll = canCorrect && /(MEMBER_REVIEW_REQUIRED|DOCUMENTS_REVIEW|DOCUMENTS_UNSURE)$/.test(status);
+  const askKey = (f: Finding) => `${f.key}|ask`;
+
+  // What the reviewer can do on one open finding (4.1). Nothing possible: "No action here", never a blocker (4.8.3).
+  const actionsOf = (f: Finding) => {
     const option = optionOf(f.correct);
-    const guide = whatToDo(f);
-    const decided = hasDecision(f);
+    const asking = !!drafts[askKey(f)];
     const confirmItems = toConfirm(f);
     const confirmOpen = confirmReason[f.key] != null;
-    const canMarkOk = canCorrect && option?.kind === 'verdict' && option.current === false && !hasDraft(option);
+    const canMarkOk = canCorrect && !asking && option?.kind === 'verdict' && option.current === false && !hasDraft(option);
     // Mark OK on an unsure value (saved at once) — never on a failed check, whose Mark OK is the draft above.
     const canConfirm = isUnsure(f) && !(option?.kind === 'verdict' && option.current === false) && !(option && hasDraft(option))
-      && onConfirm && confirmItems.length > 0 && !isConfirmed(f) && !confirmOpen;
-    const revise = canCorrect ? [
+      && !!onConfirm && confirmItems.length > 0 && !isConfirmed(f) && !confirmOpen;
+    const revise = canCorrect && !asking ? [
       ...(option?.kind === 'value' && !hasDraft(option) ? [{ key: f.key, o: option, label: 'Revise' }] : []),
       ...(f.edits ?? []).map((item) => optionOf(item)!).filter((o) => !hasDraft(o)).map((o) => ({
         key: `${f.key}|${o.kind}:${o.item}`, o,
         label: `Revise ${o.label}${o.current != null ? ` (${typeof o.current === 'number' ? o.current.toLocaleString('en-US') : String(o.current)})` : ''}`,
       })),
     ] : [];
-    const canMarkWrong = canCorrect && option?.kind === 'verdict' && option.current === true && option.canFail && !hasDraft(option);
+    const canMarkWrong = canCorrect && !asking && option?.kind === 'verdict' && option.current === true && !!option.canFail && !hasDraft(option);
+    // The verdict when the check offers one, else the finding's own code (the mandatory fields line).
+    // Not the reviewer's own open lines (PERSON_REQUEST): those are already a request (the lines box below).
+    const askOption: CorrectionOption | null = canAskHere && f.passed === false && f.code && f.code !== 'PERSON_REQUEST'
+      ? (option?.kind === 'verdict' ? option : { kind: 'verdict', item: f.code, label: f.label, type: 'verdict', current: false })
+      : null;
+    const othersOpen = Object.keys(drafts).some((k) => k !== askKey(f) && (k === f.key || k.startsWith(`${f.key}|`)));
+    const canAsk = !!askOption && !asking && !othersOpen;
+    const any = canMarkOk || canConfirm || revise.length > 0 || canMarkWrong || canAsk || asking || othersOpen || confirmOpen;
+    return { option, confirmItems, confirmOpen, canMarkOk, canConfirm, revise, canMarkWrong, askOption, canAsk, any };
+  };
+
+  const openRow = (f: Finding) => {
+    const ref = pageRef(f.page, files);
+    const guide = whatToDo(f);
+    const decided = hasDecision(f);
+    const { option, confirmItems, confirmOpen, canMarkOk, canConfirm, revise, canMarkWrong, askOption, canAsk, any } = actionsOf(f);
+    const noAction = canCorrect && !decided && !any;
     return (
-      <li key={f.key} className={clsx('my-2 rounded-lg border-l-4 bg-white/80 p-3 text-sm shadow-glass', decided ? 'border-ulink-teal' : f.passed === false ? 'border-red-500' : 'border-amber-500')}>
+      <li key={f.key} id={`finding-${f.key}`} className={clsx('my-2 scroll-mt-4 rounded-lg border-l-4 bg-white/80 p-3 text-sm shadow-glass', decided ? 'border-ulink-teal' : noAction ? 'border-slate-300' : f.passed === false ? 'border-red-500' : 'border-amber-500')}>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           {canCorrect && (decided
             ? <span className="rounded-full bg-ulink-teal/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-ulink-teal-dark">Decided</span>
-            : <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-800"><AlertTriangle size={12} /> Needs your decision</span>)}
+            : noAction
+              ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600" title="Nothing to decide on this page: the customer or the override handles it.">No action here</span>
+              : <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-800"><AlertTriangle size={12} /> Needs your decision</span>)}
           <span className="font-medium text-slate-800">{f.label}</span>
           {f.value != null && <span className="text-slate-700">"{f.value}"</span>}
           {f.confidence != null && <ConfidenceBadge confidence={f.confidence} failed={f.passed === false} />}
@@ -312,6 +354,11 @@ export function FindingsPanel({
           {canMarkWrong && (
             <Button size="sm" variant="ghost" aria-label={`Mark wrong: ${f.label}`} onClick={() => openDraft(f.key, option!, false)} className="border border-red-300 text-red-700 shadow-none">
               <X size={14} /> Mark wrong
+            </Button>
+          )}
+          {canAsk && (
+            <Button size="sm" variant="ghost" aria-label={`Ask the customer: ${f.label}`} onClick={() => setDrafts((d) => ({ ...d, [askKey(f)]: newAskDraft(askOption!) }))} className="border border-slate-400 text-slate-700 shadow-none">
+              <Mail size={14} /> Ask the customer
             </Button>
           )}
           {ref ? (
@@ -350,6 +397,7 @@ export function FindingsPanel({
           </div>
         )}
         {draftForm(f.key, guide?.risk)}
+        {draftForm(askKey(f), null, checkOf(f.code)?.ifFails ?? null)}
         {(f.edits ?? []).map((item) => <div key={item}>{draftForm(`${f.key}|${item}`)}</div>)}
       </li>
     );
@@ -405,8 +453,15 @@ export function FindingsPanel({
       </li>
     );
   };
-  const needDecision = unsure.length + failed.length + memberFindings.length;
-  const decidedCount = [...unsure, ...failed].filter(hasDecision).length + memberFindings.filter(memberDecided).length;
+  // Findings with no possible action are not counted: they never block the save (4.8.3).
+  // At the member stop only the member findings: the document findings there are from an earlier check, not decided now.
+  const memberStop = /MEMBER_REVIEW_REQUIRED$/.test(status);
+  const toDecide = memberStop ? [] : [...unsure, ...failed].filter((f) => hasDecision(f) || actionsOf(f).any);
+  const needDecision = toDecide.length + memberFindings.length;
+  const decidedCount = toDecide.filter(hasDecision).length + memberFindings.filter(memberDecided).length;
+  const firstOpen = toDecide.find((f) => !hasDecision(f));
+  const allDecided = !decideAll || decidedCount >= needDecision;
+  const changes = pending.length + newLines.length;
   const section = (title: string, items: Finding[], tone: string) =>
     items.length > 0 && (
       <section className="mb-4">
@@ -524,28 +579,78 @@ export function FindingsPanel({
           </ul>
         </section>
       )}
-      {pending.length > 0 && (
+      {canCorrect && requestsAllowed && !saveBelow && (
+        // The reviewer's own request lines (SYSTEM_5 review actions 4.10): what the customer must send or fix that the
+        // checklist does not cover. Saved with the decisions; they go out with the request, never in an automatic email.
+        <section className="mb-4 rounded-lg border border-slate-900/10 bg-white/70 p-3">
+          <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-600">Your own request lines</h3>
+          {openRequestLines.length > 0 && (
+            <ul className="mb-2 list-disc pl-5 text-sm text-slate-600">{openRequestLines.map((l) => <li key={l}>{l} <span className="text-xs text-slate-400">(already asked)</span></li>)}</ul>
+          )}
+          {newLines.length > 0 && (
+            <ul className="mb-2 space-y-1 text-sm">
+              {newLines.map((l) => (
+                <li key={l} className="flex items-center gap-2">
+                  <span className="min-w-0 flex-1">{l}</span>
+                  <Button size="sm" variant="ghost" aria-label={`Remove: ${l}`} onClick={() => setNewLines((ls) => ls.filter((x) => x !== l))} className="shadow-none"><X size={14} /></Button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const text = lineText.trim();
+              if (text && !newLines.includes(text) && !openRequestLines.includes(text)) setNewLines((ls) => [...ls, text]);
+              setLineText('');
+            }}
+          >
+            <input
+              value={lineText}
+              onChange={(e) => setLineText(e.target.value)}
+              maxLength={300}
+              placeholder="e.g. Please send the original pharmacy receipt"
+              className="min-w-0 flex-1 rounded-lg border border-slate-900/10 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-ulink-orange focus:ring-2 focus:ring-ulink-orange/20"
+            />
+            <Button size="sm" type="submit" variant="ghost" disabled={!lineText.trim() || openRequestLines.length + newLines.length >= 10} className="shadow-none"><Plus size={14} /> Add line</Button>
+          </form>
+        </section>
+      )}
+      {changes > 0 && (
         <div className="sticky bottom-0 mt-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-ulink-orange/30 bg-white px-3 py-2 shadow-glass">
           <p className="text-sm text-slate-700">
-            {pending.length - notReady} decision{pending.length - notReady === 1 ? '' : 's'} ready{notReady ? ` · ${notReady} not complete` : ''}.
+            {decideAll
+              ? `${decidedCount} of ${needDecision} decided.${allDecided ? '' : ' Decide all findings to save.'}`
+              : `${pending.length - notReady} decision${pending.length - notReady === 1 ? '' : 's'} ready.`}
+            {notReady ? ` ${notReady} not complete.` : ''}
+            {newLines.length ? ` ${newLines.length} new request line${newLines.length === 1 ? '' : 's'}.` : ''}
             {saveBelow && ' Saved with the claim preparation below, in one save.'}
+            {!allDecided && firstOpen && (
+              <button type="button" onClick={() => document.getElementById(`finding-${firstOpen.key}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })} className="ml-2 font-medium text-ulink-orange-dark underline">
+                Go to the next one
+              </button>
+            )}
           </p>
           <div className="flex gap-2">
-            <Button variant="ghost" disabled={saveAll.isPending} onClick={() => { setDrafts({}); setDone({}); }}>Discard all</Button>
+            <Button variant="ghost" disabled={saveAll.isPending} onClick={() => { setDrafts({}); setDone({}); setNewLines([]); }}>Discard all</Button>
             {saveBelow ? (
               <Button onClick={() => document.getElementById('preparation-save')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>Go to save</Button>
             ) : (
               <AlertDialog.Root open={reviewOpen} onOpenChange={setReviewOpen}>
                 <AlertDialog.Trigger asChild>
-                  <Button disabled={notReady > 0 || saveAll.isPending}>Review and save</Button>
+                  <Button disabled={notReady > 0 || !allDecided || saveAll.isPending}>Review and save</Button>
                 </AlertDialog.Trigger>
                 <AlertDialog.Portal>
                   <AlertDialog.Overlay className="fixed inset-0 z-40 bg-slate-900/30 backdrop-blur-sm" />
                   <AlertDialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[85vh] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl2 bg-white p-5 shadow-glass">
-                    <AlertDialog.Title className="text-sm font-semibold text-slate-900">Save {pending.length} decision{pending.length === 1 ? '' : 's'}?</AlertDialog.Title>
+                    <AlertDialog.Title className="text-sm font-semibold text-slate-900">Save {changes} change{changes === 1 ? '' : 's'}?</AlertDialog.Title>
                     <AlertDialog.Description asChild>
                       <div className="mt-2 text-sm text-slate-600">
-                        <ul className="list-disc space-y-1 pl-5">{pending.map((d) => <li key={`${d.option.kind}:${d.option.item}`}>{draftLine(d)}</li>)}</ul>
+                        <ul className="list-disc space-y-1 pl-5">
+                          {pending.map((d) => <li key={`${d.ask ? 'ask' : d.option.kind}:${d.option.item}`}>{draftLine(d)}</li>)}
+                          {newLines.map((l) => <li key={`line:${l}`}>New request line: {l}</li>)}
+                        </ul>
                         <p className="mt-3">The case is checked again on the next pipeline run. Each decision is logged with your name and reason.</p>
                       </div>
                     </AlertDialog.Description>

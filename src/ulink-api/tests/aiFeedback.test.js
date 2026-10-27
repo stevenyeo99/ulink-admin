@@ -9,13 +9,14 @@ jest.mock('../db/models', () => ({
   ApiCaseStep: { findAll: jest.fn(async () => []), create: jest.fn() },
   AiFeedback: { create: jest.fn(async (row) => ({ id: 'f1', createdAt: new Date('2026-10-15T08:00:00Z'), ...row })), findOne: jest.fn(), findAll: jest.fn(async () => []) },
   Setting: { findAll: jest.fn(async () => []) },
+  CaseRequest: { findAll: jest.fn(async () => []), bulkCreate: jest.fn() },
 }));
 
 const fs = require('fs');
 const path = require('path');
-const { Case, CaseEvent, ApiCaseStep, AiFeedback } = require('../db/models');
+const { Case, CaseEvent, ApiCaseStep, AiFeedback, CaseRequest } = require('../db/models');
 const { evaluateDocumentChecks } = require('../modules/document-checking/checklist');
-const { correctionOptions, validateCorrection, aiOriginal, applyCorrection, applyVerdicts, recheckFrom, correctionHold } = require('../modules/ai-feedback/corrections');
+const { correctionOptions, validateCorrection, aiOriginal, applyCorrection, applyVerdicts, recheckFrom, correctionHold, failedCodes, askCovers } = require('../modules/ai-feedback/corrections');
 const { buildAssessmentSummary } = require('../modules/assessment-summary/summary');
 const { createCorrection, createCorrections, trustCorrection } = require('../controllers/cases/correctionsController');
 
@@ -150,13 +151,75 @@ describe('POST /api/cases/:id/corrections', () => {
     const checkStep = { job: 'api-document-checking', status: 'DONE', createdAt: 2, output: { documentCheckResult: evaluateDocumentChecks(fields()) } };
     ApiCaseStep.findAll.mockResolvedValue([aiStep, checkStep]);
     Case.findByPk.mockResolvedValue(emailCase({ source: 'API', currentStatus: 'API_DOCUMENTS_REVIEW', extractedFields: null }));
-    const { status } = await send(createCorrection, { body });
+    // Every other failed finding decided too (SYSTEM_5 review actions 4.8): the customer is asked for them.
+    const askCustomer = failedCodes(checkStep.output.documentCheckResult).map((item) => ({ item, reason: 'Not attached by the customer' }));
+    const { status } = await send(createCorrections, { body: { items: [body], askCustomer } });
     expect(status).toBe(200);
     expect(Case.update.mock.calls[0][0]).toEqual({ currentStatus: 'API_READY_FOR_DOCUMENT_CHECKING' });
     const step = ApiCaseStep.create.mock.calls[0][0];
     expect(step).toMatchObject({ job: 'api-claim-recognition', status: 'DONE', output: { recognizedType: 'ayas_member_claim' } });
     expect(step.output.extractedFields.invoices.items[0].date).toBe('2026-08-14');
     expect(aiStep.output.extractedFields.invoices.items[0].date).toBe('2026-08-17');
+  });
+
+  // SYSTEM_5 review actions 4.8 to 4.10: every open finding decided before the save, Ask the customer, own lines.
+  describe('every finding decided, Ask the customer, own request lines', () => {
+    const held = () => emailCase({ currentStatus: 'DOCUMENTS_REVIEW' });
+    const failed = () => failedCodes(evaluateDocumentChecks(fields()));
+    const ask = (codes) => codes.map((item) => ({ item, reason: 'Not attached by the customer' }));
+
+    it('refuses a save that leaves a failed finding open, and names it', async () => {
+      Case.findByPk.mockResolvedValue(held());
+      expect(failed().length).toBeGreaterThan(1);
+      const { status, body: res } = await send(createCorrections, { body: { items: [], askCustomer: ask(failed().slice(1)) } });
+      expect(status).toBe(400);
+      expect(res.error.message).toMatch(/^Decide every finding before you save\. Still open: /);
+      expect(res.error.open).toHaveLength(1);
+    });
+
+    it('Ask the customer alone: stored on the fields, logged, learning data, and the document check runs again', async () => {
+      Case.findByPk.mockResolvedValue(held());
+      const { status } = await send(createCorrections, { body: { askCustomer: ask(failed()) } });
+      expect(status).toBe(200);
+      const [update] = Case.update.mock.calls.at(-1);
+      expect(update.currentStatus).toBe('READY_FOR_DOCUMENT_CHECKING');
+      expect(update.extractedFields.askCustomer).toMatchObject({ codes: failed(), by: 'Ulink (ulink)' });
+      expect(AiFeedback.create).toHaveBeenCalledWith(expect.objectContaining({ kind: 'confirm', item: failed()[0], aiValue: false, correctedValue: false }), { transaction: 'tx' });
+      expect(CaseEvent.create).toHaveBeenCalledWith(expect.objectContaining({ reasonCode: 'ASK_CUSTOMER', message: expect.stringMatching(/^Ask the customer: .*, by Ulink \(ulink\) — Not attached by the customer\.$/) }), { transaction: 'tx' });
+    });
+
+    it('refuses Ask the customer for a passed line, a short reason, or where the documents do not wait for a person', async () => {
+      Case.findByPk.mockResolvedValue(held());
+      expect((await send(createCorrections, { body: { askCustomer: [{ item: 'MISSING_VOUCHER', reason: 'Not attached by the customer' }] } })).status).toBe(400);
+      expect((await send(createCorrections, { body: { askCustomer: failed().map((item) => ({ item, reason: 'no' })) } })).body.error.message).toMatch('at least 10 characters');
+      Case.findByPk.mockResolvedValue(emailCase());
+      expect((await send(createCorrections, { body: { askCustomer: ask(failed()) } })).status).toBe(400);
+    });
+
+    it('own request lines are saved with the decisions', async () => {
+      Case.findByPk.mockResolvedValue(held());
+      const { status } = await send(createCorrections, { body: { askCustomer: ask(failed()), requestLines: ['Please send the original pharmacy receipt'] } });
+      expect(status).toBe(200);
+      expect(CaseRequest.bulkCreate).toHaveBeenCalledWith([{ caseId: 'c1', text: 'Please send the original pharmacy receipt', createdBy: 'Ulink (ulink)' }], { transaction: 'tx' });
+    });
+
+    it('a later save with no Ask the customer drops the old decision, and a bad entry is refused (not a 500)', async () => {
+      Case.findByPk.mockResolvedValue(emailCase({ extractedFields: { ...fields(), askCustomer: { codes: ['INCORRECT_VOUCHER'] } } }));
+      expect((await send(createCorrection, { body })).status).toBe(200);
+      expect(Case.update.mock.calls.at(-1)[0].extractedFields.askCustomer).toBeUndefined();
+      Case.findByPk.mockResolvedValue(held());
+      expect((await send(createCorrections, { body: { askCustomer: [...ask(failed()), null] } })).status).toBe(400);
+    });
+
+    it('the next check: Ask the customer covering every failed line sends the request instead of holding the case', () => {
+      const result = evaluateDocumentChecks(fields());
+      const corrected = { corrections: [{ item: 'x' }] };
+      expect(correctionHold(result, corrected)).toHaveLength(1);
+      expect(askCovers(result, { ...corrected, askCustomer: { codes: failed() } })).toBe(true);
+      expect(correctionHold(result, { ...corrected, askCustomer: { codes: failed() } })).toEqual([]);
+      // One failed line not asked for: still held for the person.
+      expect(correctionHold(result, { ...corrected, askCustomer: { codes: failed().slice(1) } })).toHaveLength(1);
+    });
   });
 
   it('refuses a case not held by a finding, an invalid correction, and a case that moved meanwhile', async () => {

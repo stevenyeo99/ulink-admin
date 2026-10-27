@@ -1,7 +1,7 @@
 const { sequelize, Case, CaseEvent, AiFeedback } = require('../../db/models');
 const config = require('../../config');
 const { evaluateDocumentChecks, evaluateJudgmentDependentChecks, vitaminCheck, documentListCheck, benefitTypeCheck, documentDatesCheck, formatCheck, fieldsReadCheck } = require('./checklist');
-const { applyVerdicts, correctionHold } = require('../ai-feedback/corrections');
+const { applyVerdicts, correctionHold, askCovers, requestsReleased } = require('../ai-feedback/corrections');
 const { withConfirmedValues, withConfirmedChecks } = require('../ai-feedback/confirmations');
 const { entityMatch } = require('./identityJudgment');
 const { switchedOff, withSwitchedOff } = require('../ai-checklist/switches');
@@ -11,7 +11,7 @@ const { overridesFromEvents } = require('../case-override/override');
 const { getSettings } = require('../settings/settings');
 const { unsureDocumentPoints, unsurePassedPoints } = require('./holdForReview');
 const { forCase } = require('../llm-calls/log');
-const { openRequests, withRequests, requestHold, requestedDedupeKey } = require('../case-requests/requests');
+const { openRequests, withRequests, requestHold, requestedLines, requestedDedupeKey } = require('../case-requests/requests');
 
 const BLOCK_NAME = 'document-checking';
 
@@ -249,12 +249,16 @@ const OUTCOME_TO_STATUS = {
 async function persistOutcome(caseRecord, rawOutcome) {
   // A reviewer's own lines (SYSTEM_4 E4-28) go on the result; open ones hold a pass for a person whatever the switch.
   const outcome = { ...rawOutcome, result: withRequests(rawOutcome.result, await openRequests(caseRecord.id)) };
-  const requested = requestHold(outcome.result);
+  // A reviewer decided the case (Ask the customer, own lines: SYSTEM_5 review actions 4.9, 4.10): the request goes out.
+  const released = requestsReleased(caseRecord.extractedFields);
+  const requested = released ? [] : requestHold(outcome.result);
+  // Every Ask the customer finding was fixed, but the reviewer's own lines are open: they still go out (INCOMPLETE).
+  const lines = released && outcome.result.passed ? requestedLines(outcome.result) : [];
   // Missing documents the AI wasn't sure about wait for a person before the customer is emailed —
   // only with the switch on (settings.holdUnsureMissingDocsEmail); off, exactly as before.
   // After a person corrected items (SYSTEM_4 E4-12): held for them whatever the switch — they send the request.
   const corrected = correctionHold(outcome.result, caseRecord.extractedFields);
-  const unsure = [
+  const unsure = askCovers(outcome.result, caseRecord.extractedFields) ? [] : [
     ...(outcome.result.passed || !(await getSettings()).holdUnsureMissingDocsEmail ? [] : unsureDocumentPoints(outcome.result)),
     ...corrected,
   ];
@@ -265,7 +269,7 @@ async function persistOutcome(caseRecord, rawOutcome) {
   const confirm = requested.length > 0 || (unsurePassed.length > 0 && (await getSettings()).holdUnsureDocumentPass);
   return sequelize.transaction(async (transaction) => {
     const prevStatus = caseRecord.currentStatus;
-    const newStatus = held ? 'DOCUMENTS_REVIEW' : confirm ? 'DOCUMENTS_UNSURE' : OUTCOME_TO_STATUS[outcome.outcome];
+    const newStatus = held ? 'DOCUMENTS_REVIEW' : lines.length ? 'INCOMPLETE' : confirm ? 'DOCUMENTS_UNSURE' : OUTCOME_TO_STATUS[outcome.outcome];
     await Case.update(
       { currentStatus: newStatus, documentCheckResult: outcome.result },
       { where: { id: caseRecord.id }, transaction }
@@ -275,7 +279,7 @@ async function persistOutcome(caseRecord, rawOutcome) {
       prevStatus,
       newStatus,
       reasonCode: outcome.result.passed ? null : 'DOCUMENT_ISSUES_FOUND',
-      message: outcome.result.passed
+      message: lines.length ? `All document checks passed — the reviewer's lines go to the customer: ${lines.join('; ')}` : outcome.result.passed
         ? `All document checks passed${requested.length ? ` — a person checks the requested lines first: ${requested.join('; ')}`
           : confirm ? ` — a person confirms first: the AI was unsure about ${unsurePassed.join('; ')}` : ''}`
         : `${outcome.result.issues.join('; ')}${held ? ` — customer email held for a person: ${unsure.join('; ')}` : ''}`,
@@ -285,7 +289,12 @@ async function persistOutcome(caseRecord, rawOutcome) {
     // (17/09 meeting, action 6).
     if (!outcome.result.passed) {
       if (!held) await queueMissingDocumentsEmail(transaction, caseRecord.id, outcome.result);
-      await queueDocumentsIncompleteEmail(transaction, caseRecord, outcome.result, { status: newStatus, held: held ? unsure : null });
+      // A released request (Ask the customer): the team email names the reviewer's own lines too (they are never in the
+      // customer's email).
+      const asked = released && !held ? requestedLines(outcome.result) : [];
+      await queueDocumentsIncompleteEmail(transaction, caseRecord, outcome.result, { status: newStatus, held: held ? unsure : null, requested: asked.length ? asked : null });
+    } else if (lines.length) {
+      await queueDocumentsIncompleteEmail(transaction, caseRecord, outcome.result, { status: newStatus, requested: lines });
     }
   });
 }

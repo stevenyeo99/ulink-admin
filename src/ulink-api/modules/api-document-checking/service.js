@@ -3,10 +3,10 @@ const { runApiJob } = require('../api-pipeline/runApiJob');
 const { checkCase, missingDocumentItems } = require('../document-checking/service');
 const { getSettings } = require('../settings/settings');
 const { unsureDocumentPoints, unsurePassedPoints } = require('../document-checking/holdForReview');
-const { correctionHold } = require('../ai-feedback/corrections');
+const { correctionHold, askCovers, requestsReleased } = require('../ai-feedback/corrections');
 const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment-summary/summary');
 const { caseBasics } = require('../assessment-summary/journey');
-const { openRequests, withRequests, requestHold } = require('../case-requests/requests');
+const { openRequests, withRequests, requestHold, requestedLines, requestedDedupeKey } = require('../case-requests/requests');
 
 // api-document-checking: API case workflow job 5 (docs/imp/day1/api-case-workflow.md section 6.5).
 //
@@ -37,14 +37,16 @@ async function processCase({ caseRecord, input }) {
   const { outcome } = checked;
   // A reviewer's own lines (SYSTEM_4 E4-28) go on the result; open ones hold a pass for a person whatever the switch.
   const result = withRequests(checked.result, await openRequests(caseRecord.id));
-  const requested = requestHold(result);
+  // A reviewer decided the case (Ask the customer, own lines: SYSTEM_5 review actions 4.9, 4.10): the request goes out.
+  const released = requestsReleased(extractedFields);
+  const requested = released ? [] : requestHold(result);
   if (!OUTCOME_TO_STATUS[outcome]) throw new Error(`Unexpected document check outcome: ${outcome}`);
 
   // Switch "hold the missing-documents email when the AI is unsure" (settings): the case waits for a
   // person (API_DOCUMENTS_REVIEW) instead of going on to a suspended revision; the customer email is kept
   // aside (heldEmail) and sent only if the person confirms (POST /api/cases/:id/release-missing-documents).
   // After a person corrected items (SYSTEM_4 E4-12): held for them whatever the switch — they send the request.
-  const unsure = [
+  const unsure = askCovers(result, extractedFields) ? [] : [
     ...(result.passed || !(await getSettings()).holdUnsureMissingDocsEmail ? [] : unsureDocumentPoints(result)),
     ...correctionHold(result, extractedFields),
   ];
@@ -64,6 +66,24 @@ async function processCase({ caseRecord, input }) {
       },
       nextStatus: 'API_DOCUMENTS_REVIEW',
       message: `Documents incomplete: ${result.issues.join('; ')} — customer email held for a person: ${unsure.join('; ')}`,
+    };
+  }
+
+  // Every Ask the customer finding was fixed by a revised value, but the reviewer's own lines are open: they still go to
+  // the customer, as *Save and request* does (requestsController): suspended revision, team email with the lines.
+  const lines = released && result.passed ? requestedLines(result) : [];
+  if (lines.length) {
+    const assessment = assessmentSummaryText(buildAssessmentSummary({
+      ...caseBasics(caseRecord), recognizedType, currentStatus: 'API_INCOMPLETE', documentCheckResult: result,
+      memberVerifyResult: input['api-member-verification']?.memberVerifyResult,
+    }));
+    return {
+      output: {
+        outcome: 'INCOMPLETE', documentCheckResult: result, checkedAt: new Date().toISOString(),
+        email: { taskType: 'DOCUMENTS_INCOMPLETE', audience: 'internal', payload: { caseId: caseRecord.id, claimNo: caseRecord.claimNo, issues: [], requested: lines, assessment }, dedupeKey: requestedDedupeKey(lines, []) },
+      },
+      nextStatus: 'API_INCOMPLETE',
+      message: `Documents complete — the reviewer's lines go to the customer: ${lines.join('; ')}`,
     };
   }
 

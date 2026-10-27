@@ -128,6 +128,41 @@ Each quick reason fills the reason box with its text and sets `wrongStep`.
 2. Quick reasons for an override: "The documents are complete. The AI was wrong.", "IAS was fixed. The member details now match.", "Accepted as an exception after review."
 3. The confirm dialog of today stays. It also shows the reason.
 
+### 4.8 Every finding is decided before the save
+
+Owner decision, 2026-10-27. If a reviewer saves with an open finding, the new check finds the same point, and the case comes back to the review queue. So every open finding needs a decision first.
+
+1. *Review and save* stays off until every failed or unsure finding and every member finding has a decision. The save bar says, for example, "3 of 5 decided. Decide all findings to save." A link jumps to the first finding with no decision.
+2. A decision is one of: Mark OK, Mark wrong, Revise, Bypass, *Does not apply*, *Let it go on*, or *Ask the customer* (4.9). A Mark OK on an unsure value counts too, because it is saved at once.
+3. A finding with no possible action, for example a required field that the page cannot correct, does not block the save. It shows *No action here*.
+4. The override of the whole member check or document check stays possible without a decision on each finding.
+5. The API checks the same rule for the batch save (`POST /api/cases/:id/corrections/batch`). Every failed check and every member finding that the case offers must be in `items` or in a new list `askCustomer`. Otherwise the API answers with the findings that are still open.
+6. Known limit: only the console checks the unsure values. Their Mark OK is saved at once and uses the confidence data, so the batch save cannot see it. A direct API call can therefore skip an unsure value.
+
+### 4.9 Ask the customer
+
+1. A failed document finding has a third button, *Ask the customer*, next to Mark OK and Revise. It means that the AI was right: the document is missing or unclear, and the customer must send it.
+2. Its decision card shows the sentence that the customer gets, in the approved wording of the check. The reason is required. Quick reasons: "The document is not attached." and "The document is not clear enough to read."
+3. On Save, each *Ask the customer* is stored on the case history (who, when, reason) and as learning data (the AI was right to fail the check).
+4. After the save, the case is checked again (the review lane, `REVIEW_LANE_PRD.md`). Then:
+
+   | Result of the new check | What happens |
+   |---|---|
+   | Only *Ask the customer* findings are still failed | The request goes out at once, as *Send the request to the customer* does today: the customer email, or for an API case with the customer email off, the draft for ULINK and the team email. The claim then goes to IAS as suspended and waits for the customer. |
+   | A revised value fixed one of those findings | That finding is not asked for |
+   | Nothing is failed any more | No request. The case goes on as complete |
+   | A new failed or unsure finding appears | No request. The case goes back to the review queue with only the new finding |
+
+5. A new upload from the customer is a new start. Earlier *Ask the customer* decisions do not apply to it.
+6. The decisions are stored on the case as corrections of a new kind `ask`, so the document check can read them. Today `correctionHold` (`ai-feedback/corrections.js`) holds every case with missing documents after a person corrected items. With this change, it releases the request when the `ask` decisions cover every failed finding, and holds only otherwise.
+
+### 4.10 The reviewer's own request lines on the review page
+
+1. The review page gets the reviewer checklist box under the findings: *Add your own request line*, the same lines as on the case page (`ReviewerChecklistPanel.tsx`, `case-requests`). The lines are saved with the same Save as the decisions.
+2. The open reviewer lines and the *Ask the customer* findings go into one request. The draft lists each finding in its approved wording, then each open reviewer line. The customer gets one email.
+3. Reviewer lines are never in an automatic customer email, as today. They are in the draft for ULINK to send.
+4. After a save with *Ask the customer* or new reviewer lines, the open reviewer lines do not hold the case again (`requestHold`). They go into the same request, and the case goes on as suspended.
+
 ## 5. API and data
 
 1. No new table, migration or `.env` value.
@@ -155,5 +190,6 @@ The owner approves one phase at a time. Each phase ends with these steps: the `u
 |---|---|---|
 | A. API | Minimum reason of 10 characters for corrections and overrides, one constant. `riskIfOk` text for each check in the catalog, for the owner's review. Tests | Done, awaiting review (2026-10-27). The confirm API also needs the reason |
 | B. Console: findings | *What to do* line, `Button` small size, action rows, decision card with quick reasons, finding badges, save bar and dialog (`FindingsPanel.tsx`, `InlineCorrection.tsx`, `correctionDraft.ts`) | Done, awaiting review (2026-10-27). The no-reason *Right* link on passed lines is removed |
-| C. Console: override | The override panel uses the same card and quick reasons | Not started. The 10-character rule and its hint are already in (phase B review fix) |
-| D. Docs | `OPERATIONS.md`, `CLAIM_FLOW_END_TO_END.md`, the change log | Not started |
+| C. Every finding decided | 4.8 to 4.10: the save rule in the console and the API, *Ask the customer* (kind `ask`, the `correctionHold` change, the request after the check), reviewer lines on the review page with one save. The override panel gets the same card and quick reasons (4.7; its 10-character rule is already in). Tests | Done (2026-10-27). A later save with no Ask the customer drops the old decision. The reviewer's open lines are not offered for Ask the customer |
+| D. Other review panels | The claim preparation panel (`PreparationReviewPanel.tsx`) and the benefit panel (`BenefitReviewPanel.tsx`) get the same buttons and decision card (Q3) | Not started |
+| E. Docs | Shared with the review lane PRD, phase D: `OPERATIONS.md`, `CLAIM_FLOW_END_TO_END.md`, the change log, and a one-page reviewer guide (`docs/imp/CR/SYSTEM_5/REVIEWER_GUIDE.md`) | Not started |

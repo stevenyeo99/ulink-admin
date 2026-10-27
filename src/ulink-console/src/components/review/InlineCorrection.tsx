@@ -14,12 +14,14 @@ const inputClass =
  *
  * done: the card is folded to one line (the reviewer clicked Done); Change opens it again.
  */
-export function InlineCorrection({ draft, onChange, onUndo, risk, done, onDone }: {
+export function InlineCorrection({ draft, onChange, onUndo, risk, customerText, done, onDone }: {
   draft: CorrectionDraft;
   onChange: (draft: CorrectionDraft) => void;
   onUndo: () => void;
   /** Risk if you mark it OK (AI checklist catalog riskIfOk): shown for Mark OK, Bypass and Let it go on. */
   risk?: string | null;
+  /** Ask the customer: the sentence the customer gets (the check's approved wording). */
+  customerText?: string | null;
   done: boolean;
   onDone: (done: boolean) => void;
 }) {
@@ -33,7 +35,7 @@ export function InlineCorrection({ draft, onChange, onUndo, risk, done, onDone }
     return (
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-ulink-teal/30 bg-ulink-teal/5 px-3 py-2 text-sm">
         <span className="font-semibold text-ulink-teal-dark">{DRAFT_STATE[action]}, not saved</span>
-        {option.kind === 'value' && <span className="text-slate-700">→ "{draft.value.trim()}"</span>}
+        {option.kind === 'value' && !draft.ask && <span className="text-slate-700">→ "{draft.value.trim()}"</span>}
         <span className="min-w-0 flex-1 truncate text-slate-600" title={draft.reason}>Reason: {draft.reason.trim()}</span>
         <Button size="sm" variant="ghost" onClick={() => onDone(false)}>Change</Button>
         <Button size="sm" variant="ghost" onClick={onUndo}>Undo</Button>
@@ -44,7 +46,13 @@ export function InlineCorrection({ draft, onChange, onUndo, risk, done, onDone }
   return (
     <div className="mt-2 rounded-lg border border-ulink-orange/40 bg-ulink-orange/5 p-3">
       <p className="mb-2 text-sm font-semibold text-slate-800">{action}: {option.label}</p>
-      {option.kind === 'value' && (
+      {draft.ask && (
+        <p className="mb-2 rounded-lg bg-white/70 p-2 text-sm text-slate-700">
+          <span className="font-semibold">The customer is asked: </span>{customerText ?? option.label}
+          <span className="mt-1 block text-xs text-slate-500">Sent after the case is checked again, if this is still missing.</span>
+        </p>
+      )}
+      {option.kind === 'value' && !draft.ask && (
         <div className="mb-2 grid gap-2 sm:grid-cols-2">
           <div>
             <span className="mb-1 block text-xs font-medium text-slate-600">The AI read</span>

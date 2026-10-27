@@ -237,8 +237,21 @@ function recheckFrom(item, currentStatus) {
 // After a person corrected items on a case, missing documents wait for that person — they send the request themselves
 // ("Send the request to the customer"); a correction never emails the customer on its own. [] when nothing to hold.
 function correctionHold(result, fields) {
-  return !result.passed && (fields?.corrections || []).length ? ['a person corrected items on this case and sends the request'] : [];
+  return !result.passed && (fields?.corrections || []).length && !askCovers(result, fields) ? ['a person corrected items on this case and sends the request'] : [];
 }
+
+// "Ask the customer" (SYSTEM_5 review actions 4.9, owner 2026-10-27): failed document lines that a reviewer decided must
+// come from the customer, stored on the fields as askCustomer { codes, by, at } with the save. A new reading of the
+// documents (the customer's upload) replaces the fields, so the decision lasts until then.
+const failedCodes = (result) => [...new Set((result?.checklist || []).filter((l) => l.passed === false && l.code && l.code !== 'PERSON_REQUEST').map((l) => l.code))];
+// The decision covers every failed line of this check: the request goes out with no person (no hold, whatever the switch).
+function askCovers(result, fields) {
+  const asked = new Set(fields?.askCustomer?.codes || []);
+  return asked.size > 0 && !result.passed && failedCodes(result).every((code) => asked.has(code));
+}
+// A save with Ask the customer or new reviewer lines: the open reviewer lines go to the customer with the request, they
+// do not hold the case for a person again (4.10).
+const requestsReleased = (fields) => Boolean(fields?.askCustomer);
 
 // A reviewer's reason for a correction or an override (SYSTEM_5 review actions, owner 2026-10-27): at least 10
 // characters, so "ok" is refused. The console checks the same number.
@@ -246,4 +259,4 @@ const MIN_REASON_LENGTH = 10;
 const REASON_TOO_SHORT = `Write a reason of at least ${MIN_REASON_LENGTH} characters.`;
 const reasonLongEnough = (reason) => typeof reason === 'string' && reason.trim().length >= MIN_REASON_LENGTH;
 
-module.exports = { MIN_REASON_LENGTH, REASON_TOO_SHORT, reasonLongEnough, NOT_VERDICT_ITEMS, WRONG_STEP_LABELS, EXCEPTION_STEPS, recheckFrom, correctionHold, correctionOptions, validateCorrection, aiOriginal, applyCorrection, applyVerdicts, correctionText };
+module.exports = { failedCodes, askCovers, requestsReleased, MIN_REASON_LENGTH, REASON_TOO_SHORT, reasonLongEnough, NOT_VERDICT_ITEMS, WRONG_STEP_LABELS, EXCEPTION_STEPS, recheckFrom, correctionHold, correctionOptions, validateCorrection, aiOriginal, applyCorrection, applyVerdicts, correctionText };

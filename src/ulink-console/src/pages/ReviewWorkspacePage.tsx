@@ -183,6 +183,9 @@ export function ReviewWorkspacePage() {
             onPendingChange={setPendingCorrections}
             onSaved={setSaved}
             saveBelow={atPreparationStop}
+            status={caseRecord.currentStatus}
+            requestsAllowed={requests.allowed}
+            openRequestLines={requests.open.map((r) => r.text)}
           />
           <CaseRetryPanel key={`retry-${id}`} caseId={id} retry={retry} />
           {isSuperAdmin() && <BenefitReviewPanel key={`benefit-${id}`} caseRecord={caseRecord} corrections={pendingCorrections} onSaved={setSaved} />}
