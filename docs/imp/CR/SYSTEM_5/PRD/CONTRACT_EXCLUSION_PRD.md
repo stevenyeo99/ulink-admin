@@ -111,6 +111,6 @@ The owner approves one phase at a time. Each phase ends with the `ulink-api` tes
 
 | Phase | Content | Needs first | Status |
 |---|---|---|---|
-| A. Backend | `POSSIBLE_EXCLUSION` becomes a member finding that holds the case (both flows). AI answer saved and reused while the text is unchanged. *Does not apply* and *Applies, let it go on* through the existing correction (`wrongStep` check or exception), covering the clause and the text. STP rule (4.5). The summary line with the confidence and the decision. The AI checklist card | Owner approves this PRD, Q4 and Q5 (both decided 2026-10-27) | Done, awaiting review (2026-10-27). Not for release without B: the console's Mark OK sends "does not apply" only |
-| B. Console | The member review panel offers the two answers for this finding. The finding shows the clause, the confidence and the reason | A done | Not started |
+| A. Backend | `POSSIBLE_EXCLUSION` becomes a member finding that holds the case (both flows). AI answer saved and reused while the text is unchanged. *Does not apply* and *Applies, let it go on* through the existing correction (`wrongStep` check or exception), covering the clause and the text. STP rule (4.5). The summary line with the confidence and the decision. The AI checklist card | Owner approves this PRD, Q4 and Q5 (both decided 2026-10-27) | Done, awaiting review (2026-10-27). Release together with B |
+| B. Console | The member review panel offers the two answers for this finding. The finding shows the clause, the confidence and the reason | A done | Done, awaiting review (2026-10-27) |
 | C. Docs | `OPERATIONS.md`, `CLAIM_FLOW_END_TO_END.md`, the API flowchart and its published page, the AI checklist user guide, the change log | B done | Not started |

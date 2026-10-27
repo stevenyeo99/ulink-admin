@@ -1,5 +1,5 @@
 import type { WrongStep } from '../../types/case';
-import { draftProblem, type CorrectionDraft } from '../../lib/correctionDraft';
+import { CONTRACT_EXCLUSION_ITEM, CONTRACT_EXCLUSION_STEPS, draftProblem, type CorrectionDraft } from '../../lib/correctionDraft';
 
 const WRONG_STEPS: Record<WrongStep, string> = {
   reading: 'The page was misread',
@@ -23,11 +23,18 @@ export function InlineCorrection({ draft, onChange, onCancel }: { draft: Correct
   const { option, passed } = draft;
   const set = (patch: Partial<CorrectionDraft>) => onChange({ ...draft, ...patch });
   const problem = draftProblem(draft);
+  // A policy contract exclusion: only its two answers (SYSTEM_5 contract exclusion).
+  const contract = option.item === CONTRACT_EXCLUSION_ITEM;
+  const steps = contract
+    ? Object.entries(CONTRACT_EXCLUSION_STEPS)
+    : Object.entries(WRONG_STEPS).filter(([id]) => draft.option.kind === 'verdict' || VALUE_STEPS.includes(id as WrongStep));
 
   return (
     <div className="mt-2 rounded-lg border border-ulink-orange/30 bg-ulink-orange/5 p-3">
       <div className="grid gap-2 sm:grid-cols-2">
-        {option.kind === 'verdict' ? (
+        {contract ? (
+          <p className="text-sm text-slate-700 sm:col-span-2">Your answer on this policy contract exclusion:</p>
+        ) : option.kind === 'verdict' ? (
           <p className="text-sm text-slate-700 sm:col-span-2">
             Set this check to <span className="font-semibold">{passed ? 'passed' : 'failed'}</span>
             {passed ? '.' : ' — the customer is asked for it in its approved wording.'}
@@ -53,9 +60,9 @@ export function InlineCorrection({ draft, onChange, onCancel }: { draft: Correct
           </label>
         )}
         <label className="block">
-          <span className="mb-1 block text-xs font-medium text-slate-600">What went wrong?</span>
+          <span className="mb-1 block text-xs font-medium text-slate-600">{contract ? 'Does the clause apply?' : 'What went wrong?'}</span>
           <select value={draft.wrongStep} onChange={(e) => set({ wrongStep: e.target.value as WrongStep })} className={inputClass}>
-            {Object.entries(WRONG_STEPS).filter(([id]) => draft.option.kind === 'verdict' || VALUE_STEPS.includes(id as WrongStep)).map(([id, label]) => (
+            {steps.map(([id, label]) => (
               <option key={id} value={id}>{label}</option>
             ))}
           </select>

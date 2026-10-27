@@ -4,10 +4,10 @@ import clsx from 'clsx';
 import { ChevronDown, FileText } from 'lucide-react';
 import { ConfidenceBadge } from '../common/ConfidenceBadge';
 import { useConfidenceThreshold } from '../../hooks/useConfidenceThreshold';
-import type { AssessmentLine, ChecklistItem, CorrectionOption, FieldRead } from '../../types/case';
+import type { AssessmentLine, ChecklistItem, CorrectionOption, FieldRead, WrongStep } from '../../types/case';
 import { pageRef, type PageRef, type ViewFile } from '../../lib/caseFiles';
 import { InlineCorrection } from './InlineCorrection';
-import { draftItem, draftLine, draftProblem, newDraft, type CorrectionDraft, type PendingCorrections } from '../../lib/correctionDraft';
+import { CONTRACT_EXCLUSION_ITEM, draftItem, draftLine, draftProblem, newDraft, type CorrectionDraft, type PendingCorrections } from '../../lib/correctionDraft';
 import { createCorrections } from '../../api/casesApi';
 import { Button } from '../common/Button';
 
@@ -154,7 +154,7 @@ export function FindingsPanel({
   // Changes not saved yet, by where they were opened ("finding key", "finding key|item" or the option item): several at
   // once, saved together with "Save all and check again" (owner, 2026-10-20 — not one finding per pipeline run).
   const [drafts, setDrafts] = useState<Record<string, CorrectionDraft>>({});
-  const openDraft = (key: string, option: CorrectionOption, passed?: boolean) => setDrafts((d) => ({ ...d, [key]: newDraft(option, passed) }));
+  const openDraft = (key: string, option: CorrectionOption, passed?: boolean, wrongStep?: WrongStep) => setDrafts((d) => ({ ...d, [key]: newDraft(option, passed, wrongStep) }));
   const closeDraft = (key: string) => setDrafts(({ [key]: _closed, ...rest }) => rest);
   // One draft per value or check: a value offered in two places (a finding and a rule check's ✎ Edit) opens once.
   const hasDraft = (option: CorrectionOption) => Object.values(drafts).some((d) => d.option.kind === option.kind && d.option.item === option.item);
@@ -300,10 +300,17 @@ export function FindingsPanel({
               <li key={o.item} className="py-2 text-sm">
                 <span className="font-medium text-slate-800">{o.label}</span>
                 {o.note && <p className="mt-0.5 text-xs text-slate-500">{o.note}</p>}
-                {canCorrect && !hasDraft(o) && (
+                {canCorrect && !hasDraft(o) && (o.item === CONTRACT_EXCLUSION_ITEM ? (
+                  // A policy contract exclusion (SYSTEM_5): the reviewer reads the clause, the confidence and the AI's
+                  // reason above, then answers — both with a reason.
+                  <div className="mt-1 flex flex-wrap gap-3 text-xs">
+                    <button onClick={() => openDraft(o.item, o, true, 'check')} className="text-ulink-orange-dark hover:underline">Does not apply</button>
+                    <button onClick={() => openDraft(o.item, o, true, 'exception')} className="text-ulink-orange-dark hover:underline">Let it go on (no STP)</button>
+                  </div>
+                ) : (
                   // A short balance (SYSTEM_5 member balance): the only action is a bypass with a reason — the same mark OK.
                   <button onClick={() => openDraft(o.item, o, true)} className="mt-1 text-xs text-ulink-orange-dark hover:underline">{['member:balance', 'member:exclusion'].includes(o.item) ? 'Bypass' : 'Mark OK'}</button>
-                )}
+                ))}
                 {draftForm(o.item)}
               </li>
             ))}
