@@ -222,6 +222,8 @@ A claim goes STP only if **all** hold (console **STP settings**):
    remark ("Vit C - 10,000 MMK is not covered due to supplement.") and the amount, and that voucher's IAS item gets
    `scma_oid_man_rej_code_1` = `MAN_REJ_CODE_T180`, `man_rej_amt_1`, `man_rej_remark_1` (no amount read → no set;
    JD3 enters it). The claimed amount is not changed.
+7. **no check that can stop a case was switched off** when this case was checked (*Admin → AI checklist*). The rule
+   reads the case's own *Turned off* lines, so a switch changed later does not change the result.
 
 Every block is written as the reason (e.g. "IP is not allowed for STP. (email case rules)"). A rule change applies to
 claims prepared after it. STP → `isValidation=Y, isCSR=Y` in IAS and the settlement report; not STP → JD3.
@@ -264,6 +266,7 @@ See 2.5–2.6. Normal wait 15–30 minutes; flagged after 2 hours; always keeps 
 | Non-STP claim in IAS | **Approvals** page + JD3 email | JD3 approves in IAS |
 | STP rules and switches | **STP settings** (super admin) | Limits, never-STP diagnoses, switch #1, vitamins |
 | Pipelines, AI checks and alerts | **System settings** (super admin) | Which cases the system works on, mailbox, API customer email, threshold, switches #2 and #3, AI learning, overdue and pipeline alerts |
+| Which checks run | **Admin → AI checklist** (super admin) | Read every check in plain words. Switch a check off or on with a reason (not the five locked checks). The case then shows the line as *Turned off* with who, when and why |
 
 Every manual action needs a comment, kept in the case history with the person: override / confirm (finding +
 reason), *Send the request to the customer* ("What did you check?"), *Reset* ("Why?"). Every override is recorded in
@@ -346,6 +349,7 @@ Team emails go to `INTERNAL_REVIEW_EMAIL` (+ the route's CC), start with "(ULINK
 | Never-STP diagnoses | Console → STP settings | `R69` | ICD-10 codes or prefixes that never go STP |
 | Switch #1 · #2 / #3 | Console → STP settings · System settings | Off | Human checks when the AI is unsure (4.5) |
 | Vitamins / supplements: a person approves | Console → STP settings | On | A voucher with them → no STP, JD3 approves (4.4) |
+| AI checklist switches | Console → Admin → AI checklist | All on | Off: the check is skipped (an AI comparison is not asked) and shows *Turned off* on the case, never a pass. A check that can stop a case and is off → no STP (4.4). Five checks are locked on |
 | Overdue after (working days) | Console → System settings | 2 | A review-queue case a person must act on, waiting longer (Mon–Fri since it entered its status), is marked red *Overdue* (ULINK to set — Q20) |
 | The AI learns from trusted corrections | Console → System settings | On | Recognition gets up to 5 trusted reviewer notes from past claims of the same hospital — lessons only, never past values (2.2) |
 | Voucher dated before or after the visit by more than (days) | Console → System settings | 30 | *Values read look valid* marks that voucher date unsure (most likely misread) — an *AI unsure* point; the invoice-date check and switch #2 decide, as before, whether the customer is asked |

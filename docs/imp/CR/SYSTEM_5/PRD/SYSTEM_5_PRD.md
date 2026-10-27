@@ -175,6 +175,6 @@ The owner approves one phase at a time. Each phase ends with the `ulink-api` tes
 |---|---|---|---|
 | A. Read-only list | Catalog file, coverage test, `GET /api/ai-checklist`, console page with the columns in 4.2 (no switches) | Owner approves this PRD | Done, awaiting review (2026-10-26) |
 | B. Switches | Tables, migration and `PUT` endpoint. The member check and the document check skip switched-off checks. *Turned off* on the checklist and the assessment summary. Console switches with a reason | A done, Q1 to Q4 | Done, awaiting review (2026-10-26) |
-| C. Docs | `OPERATIONS.md` and the API flowchart updated, a short user guide for the page | B done | Not started |
+| C. Docs | `OPERATIONS.md` and the API flowchart updated, a short user guide for the page | B done | Done, awaiting review (2026-10-27): `OPERATIONS.md`, `CLAIM_FLOW_END_TO_END.md`, the API flowchart, `AI_CHECKLIST_USER_GUIDE.md` |
 
 Phase A alone already answers the first goal: the owner and ULINK can see what the system checks today.

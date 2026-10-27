@@ -2,7 +2,7 @@
 
 This chart shows how an API case moves from the IAS claim list to the IAS revision. It shows the pipeline jobs in order, the stops where a person decides, and the emails that go out. The source is `src/ulink-api/modules/pipeline/service.js` (`API_STEPS`) and the input and output statuses of each `api-*` job.
 
-Last checked against the code: 2026-10-26. Published copy: https://claude.ai/artifact/6wQz6VycRj8e3TgdbvYWWg (private, republish it from this file after each change).
+Last checked against the code: 2026-10-27. Published copy: https://claude.ai/artifact/6wQz6VycRj8e3TgdbvYWWg (private, republish it from this file after each change).
 
 Image: [API_CASE_FLOWCHART.svg](API_CASE_FLOWCHART.svg). A Claude Code hook renders it from the chart below after each save of this file (`.claude/hooks/render-api-flowchart.sh`). If you edit the file outside Claude Code, run `.claude/hooks/render-api-flowchart.sh --all`.
 
@@ -93,8 +93,9 @@ flowchart TD
 
 - A case-page upload is possible at `API_NO_DOCUMENTS`, `API_CLAIM_SUSPENDED`, `API_DOCUMENTS_REVIEW` and `API_DOCUMENTS_UNSURE`. The case goes to `API_UPLOAD_RECEIVED`, and the AI reads it again at once. Console upload then sends the files to the IAS console before the revision.
 - An STP claim waits at `API_AWAITING_CSR` until IAS has the settlement report. Claim STP checks every run.
-- Claim preparation decides STP, and STP never stops the revision. A never-STP diagnosis (ULINK's chronic list, R69), vitamins, an amount over the limit or an open review point sends the claim as non-STP. JD3 then approves it in IAS.
+- Claim preparation decides STP, and STP never stops the revision. A never-STP diagnosis (ULINK's chronic list, R69), vitamins, an amount over the limit or an open review point sends the claim as non-STP. A check that can stop a case and was switched off does the same. JD3 then approves it in IAS.
 - Missing documents never stop the revision. The revision goes with `isSuspense=Y`, and a suspended claim is never STP. The next revision with complete documents sends `isSuspense=N`, and IAS lifts the suspense.
 - When `apiSendMissingDocumentsEmail` is on, the customer gets the missing-documents email (no images, or documents missing and the AI sure). When it is off, the customer gets no missing-documents email. ULINK emails the customer from the draft on the case page, and the team gets an email instead.
 - A correction sends the case back to the document check. A correction of a value that the member check compares with IAS sends it back to the member check. The claim preparation choices of a person stay for the next run.
+- A super admin can switch a check off on *Admin → AI checklist* (with a reason). The member check and the document check skip it in both flows, and the case shows the line as *Turned off*, never a pass. A switched-off check adds no stop and sends no email. Five checks are locked on: member found, coverage active, bank details, member balance, voucher attached.
 - When a job fails because IAS, the console or LM Studio does not answer, the case keeps its status. The next pipeline run tries again.
