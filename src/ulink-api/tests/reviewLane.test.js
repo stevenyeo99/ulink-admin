@@ -33,9 +33,30 @@ it('every API status either leaves the lane or is read by a lane job, except the
   expect(leavesLane('API_READY_FOR_DOCUMENT_CHECKING')).toBe(false);
 });
 
-it('only API cases are marked, with who decided', () => {
+it('both flows are marked, with who decided', () => {
   expect(markFor({ source: 'API' }, 'Thin Zar (tz)')).toEqual({ reviewPendingAt: expect.any(Date), reviewPendingBy: 'Thin Zar (tz)' });
-  expect(markFor({ source: 'EMAIL' }, 'Thin Zar (tz)')).toEqual({});
+  expect(markFor({ source: 'EMAIL' }, 'Thin Zar (tz)')).toEqual({ reviewPendingAt: expect.any(Date), reviewPendingBy: 'Thin Zar (tz)' });
+});
+
+it('email flow: every status leaves the lane or is read by an email lane job, except intake and the reading of new mail', () => {
+  // The input statuses of the email lane jobs (lane.js LANES.EMAIL.jobs).
+  const inputs = new Set(['RECOGNIZED', 'MEMBER_REVIEW_REQUIRED', 'BENEFIT_REVIEW', 'READY_FOR_DOCUMENT_CHECKING', 'MEMBER_VERIFIED', 'DOCUMENTS_UPLOADED', 'CLAIM_PAYLOAD_PREPARED']);
+  const stuck = Object.keys(CASE_STATUSES).filter((s) => !s.startsWith('API_') && !leavesLane(s) && !inputs.has(s));
+  expect(stuck).toEqual(['EMAIL_RECEIVED', 'ATTACHMENTS_STORED', 'READY_FOR_DOCUMENT_READING']);
+  expect(leavesLane('CONSOLE_BARCODE_PENDING')).toBe(true);
+});
+
+it('the case model clears the marker on any status update that leaves the lane (every job of both flows)', () => {
+  let hook;
+  const define = () => ({ addHook: (name, fn) => { if (name === 'beforeBulkUpdate') hook = fn; } });
+  require('../db/models/case')({ define }, new Proxy({}, { get: () => () => ({}) }));
+  const run = (attributes) => { const options = { attributes: { ...attributes }, fields: Object.keys(attributes) }; hook(options); return options; };
+  expect(run({ currentStatus: 'DOCUMENTS_REVIEW' })).toEqual({ attributes: { currentStatus: 'DOCUMENTS_REVIEW', reviewPendingAt: null, reviewPendingBy: null }, fields: ['currentStatus', 'reviewPendingAt', 'reviewPendingBy'] });
+  expect(run({ currentStatus: 'MEMBER_VERIFIED' }).attributes).toEqual({ currentStatus: 'MEMBER_VERIFIED' });
+  // A person's save that ends at a wait (a request to the customer) is not marked: nothing in the lane would move it.
+  expect(run({ currentStatus: 'INCOMPLETE', reviewPendingAt: 'now' }).attributes.reviewPendingAt).toBeNull();
+  // On its way, it keeps the marker the save set.
+  expect(run({ currentStatus: 'READY_FOR_DOCUMENT_CHECKING', reviewPendingAt: 'now' }).attributes.reviewPendingAt).toBe('now');
 });
 
 it('the existing pipeline takes unmarked cases; the review lane marked ones, the asked ones first', async () => {

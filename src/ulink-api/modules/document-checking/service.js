@@ -1,3 +1,4 @@
+const { laneWhere, laneOrder } = require('../review-lane/marker');
 const { sequelize, Case, CaseEvent, AiFeedback } = require('../../db/models');
 const config = require('../../config');
 const { evaluateDocumentChecks, evaluateJudgmentDependentChecks, vitaminCheck, documentListCheck, benefitTypeCheck, documentDatesCheck, formatCheck, fieldsReadCheck } = require('./checklist');
@@ -299,11 +300,12 @@ async function persistOutcome(caseRecord, rawOutcome) {
   });
 }
 
-async function run() {
+// lane: 'new' (the existing pipeline) or 'review' (the review lane, SYSTEM_5): which cases this run takes.
+async function run({ lane = 'new', first = [] } = {}) {
   const cases = await Case.findAll({
-    where: { currentStatus: 'READY_FOR_DOCUMENT_CHECKING' },
+    where: { ...laneWhere(lane), currentStatus: 'READY_FOR_DOCUMENT_CHECKING' },
     limit: config.documentChecking.batchLimit,
-    order: [['createdAt', 'ASC']],
+    order: laneOrder(lane, first, [['createdAt', 'ASC']]),
   });
 
   const results = [];

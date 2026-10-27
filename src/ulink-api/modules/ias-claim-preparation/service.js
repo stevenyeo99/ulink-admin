@@ -1,3 +1,4 @@
+const { laneWhere, laneOrder } = require('../review-lane/marker');
 const { sequelize, Case, ClaimRoute, CaseEvent } = require('../../db/models');
 const config = require('../../config');
 const { pickDiagnosis } = require('./diagnosisPicker');
@@ -263,16 +264,17 @@ async function recheckHeldBalances() {
   }
 }
 
-async function run() {
-  await recheckHeldBalances();
+// lane: 'new' (the existing pipeline) or 'review' (the review lane, SYSTEM_5): which cases this run takes.
+async function run({ lane = 'new', first = [] } = {}) {
+  if (lane !== 'review') await recheckHeldBalances(); // the existing pipeline's work, not the review lane's
   // Reads DOCUMENTS_UPLOADED, not MEMBER_VERIFIED, as of 2026-09-15 — console-upload
   // (modules/console-upload/service.js) now sits between document-checking and this job, so
   // the barcode it generates (Case.consoleBarcode) is guaranteed to exist before
   // payloadBuilder.js needs it. See modules/pipeline/service.js's STEPS order.
   const cases = await Case.findAll({
-    where: { currentStatus: 'DOCUMENTS_UPLOADED' },
+    where: { ...laneWhere(lane), currentStatus: 'DOCUMENTS_UPLOADED' },
     limit: config.iasClaimPreparation.batchLimit,
-    order: [['createdAt', 'ASC']],
+    order: laneOrder(lane, first, [['createdAt', 'ASC']]),
   });
 
   const results = [];

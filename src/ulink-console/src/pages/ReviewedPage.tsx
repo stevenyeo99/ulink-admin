@@ -38,8 +38,8 @@ export function ReviewedPage() {
   const canRun = isSuperAdmin();
 
   const items = data?.items ?? EMPTY;
-  // Only API cases have a review lane so far: an email case cannot be run here.
-  const runnable = (i: ReviewedItem) => canRun && i.source === 'API';
+  // Both flows have a review lane (API and email): every listed case can run here.
+  const runnable = (_: ReviewedItem) => canRun;
   const chosen = items.filter((i) => selected.has(i.id) && runnable(i)).map((i) => i.id);
 
   const run = useMutation({

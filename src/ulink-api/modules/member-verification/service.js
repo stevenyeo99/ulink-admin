@@ -1,3 +1,4 @@
+const { laneWhere, laneOrder } = require('../review-lane/marker');
 const { sequelize, Sequelize, Case, CaseEvent } = require('../../db/models');
 const config = require('../../config');
 const { getMemberInfo } = require('./iasClient');
@@ -180,7 +181,8 @@ async function persistOutcome(caseRecord, outcome) {
   });
 }
 
-async function run() {
+// lane: 'new' (the existing pipeline) or 'review' (the review lane, SYSTEM_5): which cases this run takes.
+async function run({ lane = 'new', first = [] } = {}) {
   // Includes MEMBER_REVIEW_REQUIRED alongside RECOGNIZED — "recovery": a case that only
   // failed because of stale/lagging IAS data (or a since-corrected record) gets
   // re-evaluated on a later run instead of staying stuck until someone manually resets it
@@ -192,9 +194,9 @@ async function run() {
   const cases = await Case.findAll({
     // BENEFIT_REVIEW too (SYSTEM_5 member balance phase C): still waiting while holdUnsureBenefit is on, on its way once
     // it is off; the saved head picks are reused, so no AI call.
-    where: { currentStatus: { [Sequelize.Op.in]: ['RECOGNIZED', 'MEMBER_REVIEW_REQUIRED', 'BENEFIT_REVIEW'] } },
+    where: { ...laneWhere(lane), currentStatus: { [Sequelize.Op.in]: ['RECOGNIZED', 'MEMBER_REVIEW_REQUIRED', 'BENEFIT_REVIEW'] } },
     limit: config.memberVerification.batchLimit,
-    order: [['updatedAt', 'ASC']],
+    order: laneOrder(lane, first, [['updatedAt', 'ASC']]),
   });
 
   const results = [];

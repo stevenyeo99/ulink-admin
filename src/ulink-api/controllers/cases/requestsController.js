@@ -109,7 +109,7 @@ async function requestInformation(req, res) {
   if (!moved) return changed(res);
 
   await endClaim(caseRecord.id, req.user.username); // the holder decided the case — their own claim ends (SYSTEM_4 E4-22)
-  if (caseRecord.source === 'API') reviewLane().triggerReviewLane(); // SYSTEM_5 review lane: processed at once
+  reviewLane().triggerReviewLane(caseRecord.source); // SYSTEM_5 review lane: processed at once
   logger.info('Information requested', { caseId: caseRecord.id, added: added.length, removed: removed.length, username: req.user.username });
   return res.json({ caseId: caseRecord.id, previousStatus: prevStatus, currentStatus: target });
 }

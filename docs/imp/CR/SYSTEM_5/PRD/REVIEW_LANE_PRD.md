@@ -63,7 +63,7 @@ Non-goals:
    | Stops for a person (`needs_review`, `failed`) | For example `API_MEMBER_REVIEW_REQUIRED`, `API_DOCUMENTS_REVIEW`, `API_PREPARATION_REVIEW`, `API_CLAIM_REVISION_FAILED` |
    | Waits for the customer (`waiting_customer`) | `API_NO_DOCUMENTS`, `API_CLAIM_SUSPENDED` |
    | Ends (`done`) | `API_CLAIM_REVISED`, `API_CSR_SENT` |
-   | Waits for an outside system (three statuses of the `in_progress` group) | `API_CONSOLE_BARCODE_PENDING`, `API_AWAITING_CSR`, and for older cases `API_DOCUMENTS_UPLOADED` |
+   | Waits for an outside system (statuses of the `in_progress` group) | `API_CONSOLE_BARCODE_PENDING`, `API_AWAITING_CSR`, for older cases `API_DOCUMENTS_UPLOADED`, and in the email flow `CONSOLE_BARCODE_PENDING` |
 
    After that, lane 1 handles the case as today, for example console watch, barcodes and the settlement report.
 4. A test makes sure that each status of both flows is in a group of the table. It also makes sure that every status that lane 2 can reach clears the marker or is an input status of a lane 2 job.
@@ -160,6 +160,6 @@ The owner approves one phase at a time. Each phase ends with these steps: the `u
 | Phase | Content | Status |
 |---|---|---|
 | A. API lane | Migrations, marker set and clear, lane 1 filter, API review pipeline with its locks, Save trigger, run again flag, stale lock, refusal while marked, review queue rule, tests | Done, awaiting review (2026-10-27). The migration must still run on dev (DNS failed on 2026-10-27). Email cases are not marked yet (phase B) |
-| B. Email lane | The email review pipeline, with the same rules | Not started |
+| B. Email lane | The email review pipeline, with the same rules | Done (2026-10-27). One hook on the case model clears the marker for every job of both flows. Migration `20261027120000-email-review-lane` (run on dev) |
 | C. Reviewed page | Sidebar item, page, endpoints, manual runs, page after Save, banner, polling, health alert | Done (2026-10-27). Run now and Run selected for API cases only, until phase B |
 | D. Server and docs | Retry crons in `CRONTAB_SETUP.md`, `OPERATIONS.md`, `CLAIM_FLOW_END_TO_END.md`, the API flowchart and its published page, the change log. Done together with the review actions PRD, phase E (with the reviewer guide) | Not started |

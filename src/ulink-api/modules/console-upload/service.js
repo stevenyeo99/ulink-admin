@@ -1,3 +1,4 @@
+const { laneWhere, laneOrder } = require('../review-lane/marker');
 const fs = require('fs');
 const path = require('path');
 const { sequelize, Case, CaseEvent } = require('../../db/models');
@@ -222,11 +223,12 @@ async function runByApi(caseRecord) {
   });
 }
 
-async function run() {
+// lane: 'new' (the existing pipeline) or 'review' (the review lane, SYSTEM_5): which cases this run takes.
+async function run({ lane = 'new', first = [] } = {}) {
   const cases = await Case.findAll({
-    where: { currentStatus: 'MEMBER_VERIFIED', recognizedType: AYAS_REIMBURSEMENT_ROUTE },
+    where: { ...laneWhere(lane), currentStatus: 'MEMBER_VERIFIED', recognizedType: AYAS_REIMBURSEMENT_ROUTE },
     limit: config.consoleUpload.batchLimit,
-    order: [['createdAt', 'ASC']],
+    order: laneOrder(lane, first, [['createdAt', 'ASC']]),
   });
 
   const results = [];

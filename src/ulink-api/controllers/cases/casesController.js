@@ -608,7 +608,7 @@ async function overrideCase(req, res) {
   }
 
   await endClaim(caseRecord.id, req.user.username); // the holder decided the case — their own claim ends (SYSTEM_4 E4-22)
-  if (caseRecord.source === 'API') reviewLane().triggerReviewLane(); // SYSTEM_5 review lane: processed at once
+  reviewLane().triggerReviewLane(caseRecord.source); // SYSTEM_5 review lane: processed at once
   logger.info('Case manually overridden', { caseId: caseRecord.id, prevStatus, targetStatus, finding, username: req.user.username });
   res.json({ caseId: caseRecord.id, previousStatus: prevStatus, currentStatus: targetStatus });
 }
@@ -723,7 +723,7 @@ async function releaseMissingDocuments(req, res) {
   });
   if (!moved) return res.status(409).json({ error: { message: 'The case changed while you were reviewing it. Reload the page and check again.', status: 409 } });
   logger.info('Missing-documents email released', { caseId: caseRecord.id, username: req.user.username });
-  if (caseRecord.source === 'API') reviewLane().triggerReviewLane(); // SYSTEM_5 review lane: processed at once
+  reviewLane().triggerReviewLane(caseRecord.source); // SYSTEM_5 review lane: processed at once
   res.json({ caseId: caseRecord.id, currentStatus: 'API_INCOMPLETE' });
 }
 
@@ -747,7 +747,7 @@ async function uploadCaseDocuments(req, res) {
   const operator = req.user.name ? `${req.user.name} (${req.user.username})` : req.user.username;
   try {
     const result = await uploadDocuments(caseRecord, files, { operator, username: req.user.username, comment });
-    if (caseRecord.source === 'API') reviewLane().triggerReviewLane(); // SYSTEM_5 review lane: processed at once
+    reviewLane().triggerReviewLane(caseRecord.source); // SYSTEM_5 review lane: processed at once
     logger.info('Documents uploaded on the case page', { caseId: caseRecord.id, files: result.files, username: req.user.username });
     return res.json({ caseId: caseRecord.id, currentStatus: result.status, files: result.files });
   } catch (error) {

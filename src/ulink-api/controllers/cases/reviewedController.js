@@ -23,17 +23,20 @@ async function getReviewed(req, res) {
   });
   const ids = cases.map((c) => c.id);
   const since = cases.length ? new Date(Math.min(...cases.map((c) => new Date(c.reviewPendingAt).getTime())) - 5000) : new Date();
-  const { REVIEW_JOBS, PIPELINE, LOCK, STALE_MS } = reviewLane();
-  const [events, steps, readings, lastRound, lock] = await Promise.all([
+  const { REVIEW_JOBS, PIPELINE, LANES, STALE_MS } = reviewLane();
+  const [events, steps, readings, lastRound, apiLock, emailLock] = await Promise.all([
     ids.length ? CaseEvent.findAll({ where: { caseId: ids, reasonCode: DECISIONS, createdAt: { [Op.gte]: since } }, order: [['createdAt', 'DESC']] }) : [],
     ids.length ? ApiCaseStep.findAll({ where: { caseId: ids, job: REVIEW_JOBS, updatedAt: { [Op.gte]: since } }, order: [['updatedAt', 'DESC']] }) : [],
     // The claimant of an API case is on its latest reading (a correction adds a new one).
     ids.length ? ApiCaseStep.findAll({ where: { caseId: ids, job: 'api-claim-recognition', status: 'DONE' }, attributes: ['caseId', 'output', 'createdAt'], order: [['createdAt', 'DESC']] }) : [],
     PipelineRun.findOne({ where: { pipeline: PIPELINE }, order: [['startedAt', 'DESC']] }),
-    JobLock.findByPk(LOCK),
+    JobLock.findByPk(LANES.API.lock),
+    JobLock.findByPk(LANES.EMAIL.lock),
   ]);
   // A lock left by a stopped API is not a running round (the next trigger takes it over).
-  const running = Boolean(lock?.running && lock.startedAt && Date.now() - new Date(lock.startedAt).getTime() <= STALE_MS);
+  const live = (lock) => Boolean(lock?.running && lock.startedAt && Date.now() - new Date(lock.startedAt).getTime() <= STALE_MS);
+  const runningIn = { API: live(apiLock), EMAIL: live(emailLock) };
+  const running = runningIn.API;
 
   const now = Date.now();
   const items = cases.map((c) => {
@@ -47,7 +50,8 @@ async function getReviewed(req, res) {
       statusLabel: CASE_STATUSES[c.currentStatus]?.label ?? c.currentStatus,
       decidedAt: c.reviewPendingAt, decidedBy: c.reviewPendingBy, decision: decision?.message ?? null,
       waitingMinutes, highlighted: waitingMinutes >= HIGHLIGHT_MINUTES,
-      lastRound: running ? { state: 'running' }
+      // Email jobs keep no steps of their own: the round state only.
+      lastRound: runningIn[c.source] ? { state: 'running' }
         : !step ? { state: 'waiting' }
           : step.status === 'FAILED' ? { state: 'failed', job: step.job, error: step.error }
             : { state: 'waiting', job: step.job },
@@ -67,15 +71,22 @@ async function runReviewed(req, res) {
   }
   const unique = [...new Set(ids)];
   const cases = await Case.findAll({ where: { id: unique }, attributes: ['id', 'source', 'currentStatus', 'reviewPendingAt', 'claimNo'] });
-  const notMarked = unique.filter((id) => !cases.some((c) => c.id === id && c.source === 'API' && c.reviewPendingAt));
+  const notMarked = unique.filter((id) => !cases.some((c) => c.id === id && c.reviewPendingAt));
   if (notMarked.length) {
     return res.status(400).json({ error: { message: `Only cases being checked again after a decision can run here. Not one of them: ${notMarked.length} case(s).`, status: 400, notMarked } });
   }
   const operator = req.user.name ? `${req.user.name} (${req.user.username})` : req.user.username;
-  const result = await reviewLane().runReviewLane({ first: unique });
+  // Each flow's lane, its cases first.
+  const results = {};
+  for (const source of ['API', 'EMAIL']) {
+    const mine = cases.filter((c) => c.source === source).map((c) => c.id);
+    if (mine.length) results[source] = await reviewLane().runReviewLane({ source, first: mine });
+  }
+  const ran = cases.filter((c) => results[c.source]?.started || results[c.source]?.queued);
+  const result = { started: Object.values(results).some((r) => r.started), queued: Object.values(results).some((r) => r.queued), skipped: Object.values(results).every((r) => r.skipped) ? 'source_disabled' : undefined };
   // Logged only when the lane runs them (now, or first in the next round).
-  if (result.started || result.queued) {
-    await CaseEvent.bulkCreate(cases.map((c) => ({
+  if (ran.length) {
+    await CaseEvent.bulkCreate(ran.map((c) => ({
       caseId: c.id, blockName: 'case-review', prevStatus: c.currentStatus, newStatus: c.currentStatus, reasonCode: 'REVIEW_RUN_AGAIN',
       message: `Run again by ${operator} (review lane).`,
     })));

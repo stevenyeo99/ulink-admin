@@ -141,7 +141,7 @@ async function choosePreparation(req, res) {
   if (!moved) return res.status(409).json({ error: { message: 'The case changed while you were reviewing it. Reload the page and check again.', status: 409 } });
   if (recheck) return res.json({ caseId: caseRecord.id, currentStatus: STATUS });
   await endClaim(caseRecord.id, req.user.username); // the holder decided the case — their own claim ends (SYSTEM_4 E4-22)
-  if (caseRecord.source === 'API') reviewLane().triggerReviewLane(); // SYSTEM_5 review lane: processed at once
+  reviewLane().triggerReviewLane(caseRecord.source); // SYSTEM_5 review lane: processed at once
   logger.info('Claim preparation decided by a person', { caseId: caseRecord.id, diagnosis: diagnosis?.diagCode ?? null, vouchers: sent.length, rejections: sentRejections.length, username: req.user.username });
   return res.json({ caseId: caseRecord.id, currentStatus: NEXT });
 }

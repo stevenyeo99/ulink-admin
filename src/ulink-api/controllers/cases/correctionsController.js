@@ -211,8 +211,8 @@ async function saveCorrections(req, res, items, { askCustomer = [], requestLines
 
     // Only if nothing moved the case meanwhile (same guard as override).
     const [count] = await Case.update(
-      // An API case goes to the review lane (SYSTEM_5): it is processed at once, apart from new cases.
-      caseRecord.source === 'API' ? { currentStatus: newStatus, ...markFor(caseRecord, operator) } : { currentStatus: newStatus, extractedFields },
+      // The case goes to its flow's review lane (SYSTEM_5): processed at once, apart from new cases.
+      caseRecord.source === 'API' ? { currentStatus: newStatus, ...markFor(caseRecord, operator) } : { currentStatus: newStatus, extractedFields, ...markFor(caseRecord, operator) },
       { where: { id: caseRecord.id, currentStatus: prevStatus }, transaction }
     );
     if (count !== 1) throw Object.assign(new Error('moved'), { moved: true });
@@ -251,7 +251,7 @@ async function saveCorrections(req, res, items, { askCustomer = [], requestLines
   }
 
   await endClaim(caseRecord.id, req.user.username); // the holder decided the case — their own claim ends (SYSTEM_4 E4-22)
-  if (caseRecord.source === 'API') reviewLane().triggerReviewLane();
+  reviewLane().triggerReviewLane(caseRecord.source);
   logger.info('Case items corrected', { caseId: caseRecord.id, items: checked.map((c) => c.option.item), askCustomer: askCustomer.map((a) => a.item), requestLines: added.length, username: req.user.username });
   return res.json({ caseId: caseRecord.id, previousStatus: prevStatus, currentStatus: newStatus, correction: rows[0] ?? null, corrections: rows });
 }

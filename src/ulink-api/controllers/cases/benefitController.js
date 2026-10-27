@@ -81,7 +81,8 @@ async function chooseBenefit(req, res) {
   const moved = await sequelize.transaction(async (transaction) => {
     // Email: the choices go over the picks on the case; API: a step the member check reads over its last picks.
     // Saved with corrections (recheck): the corrections move and mark the case, not this choice.
-    const update = caseRecord.source === 'API' ? { currentStatus: next, ...(recheck ? {} : markFor(caseRecord, by)) } : { currentStatus: next, memberVerifyResult: withChosenPicks(result, picks) };
+    const mark = recheck ? {} : markFor(caseRecord, by);
+    const update = caseRecord.source === 'API' ? { currentStatus: next, ...mark } : { currentStatus: next, memberVerifyResult: withChosenPicks(result, picks), ...mark };
     const [count] = await Case.update(update, { where: { id: caseRecord.id, currentStatus: status }, transaction });
     if (count !== 1) return false;
     if (caseRecord.source === 'API') {
@@ -100,7 +101,7 @@ async function chooseBenefit(req, res) {
   if (!moved) return res.status(409).json({ error: { message: 'The case changed while you were reviewing it. Reload the page and check again.', status: 409 } });
   if (recheck) return res.json({ caseId: caseRecord.id, currentStatus: status });
   await endClaim(caseRecord.id, req.user.username); // the holder decided the case — their own claim ends (SYSTEM_4 E4-22)
-  if (caseRecord.source === 'API') reviewLane().triggerReviewLane(); // SYSTEM_5 review lane: processed at once
+  reviewLane().triggerReviewLane(caseRecord.source); // SYSTEM_5 review lane: processed at once
   logger.info('Benefit chosen by a person', { caseId: caseRecord.id, vouchers: picks.length, username: req.user.username });
   return res.json({ caseId: caseRecord.id, currentStatus: next });
 }

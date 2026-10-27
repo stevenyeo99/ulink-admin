@@ -1,3 +1,4 @@
+const { laneWhere, laneOrder } = require('../review-lane/marker');
 const { sequelize, Case, CaseEvent } = require('../../db/models');
 const config = require('../../config');
 const { submitClaim } = require('./iasClaimClient');
@@ -121,11 +122,12 @@ async function persistOutcome(caseRecord, outcome) {
   });
 }
 
-async function run() {
+// lane: 'new' (the existing pipeline) or 'review' (the review lane, SYSTEM_5): which cases this run takes.
+async function run({ lane = 'new', first = [] } = {}) {
   const cases = await Case.findAll({
-    where: { currentStatus: 'CLAIM_PAYLOAD_PREPARED' },
+    where: { ...laneWhere(lane), currentStatus: 'CLAIM_PAYLOAD_PREPARED' },
     limit: config.iasClaimCreation.batchLimit,
-    order: [['createdAt', 'ASC']],
+    order: laneOrder(lane, first, [['createdAt', 'ASC']]),
   });
 
   const results = [];

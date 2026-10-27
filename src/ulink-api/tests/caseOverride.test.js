@@ -58,7 +58,8 @@ describe('POST /api/cases/:id/override', () => {
 
     expect(status).toBe(200);
     expect(body).toEqual({ caseId: 'c1', previousStatus: 'INCOMPLETE', currentStatus: 'MEMBER_VERIFIED' });
-    expect(Case.update).toHaveBeenCalledWith({ currentStatus: 'MEMBER_VERIFIED' }, { where: { id: 'c1', currentStatus: 'INCOMPLETE' }, transaction: 'tx' });
+    // Marked for the email review lane (SYSTEM_5): processed at once.
+    expect(Case.update).toHaveBeenCalledWith({ currentStatus: 'MEMBER_VERIFIED', reviewPendingAt: expect.any(Date), reviewPendingBy: 'Ulink (ulink)' }, { where: { id: 'c1', currentStatus: 'INCOMPLETE' }, transaction: 'tx' });
     const { message, reasonCode } = CaseEvent.create.mock.calls[0][0];
     expect(reasonCode).toBe('MANUAL_OVERRIDE');
     expect(message).toContain('Overridden by Ulink (ulink) — The AI misread the documents: Record is legible on page 3.');

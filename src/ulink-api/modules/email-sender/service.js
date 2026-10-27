@@ -131,11 +131,14 @@ async function sendTask(task) {
   });
 }
 
-async function run({ taskTypes } = {}) {
+// caseIds (the review lane): only the emails of these cases.
+async function run({ taskTypes, caseIds = null } = {}) {
+  if (caseIds && !caseIds.length) return { processed: 0, errors: [] };
   const tasks = await EmailTask.findAll({
     where: {
       status: 'PENDING',
       ...(taskTypes ? { taskType: { [Sequelize.Op.in]: taskTypes } } : {}),
+      ...(caseIds ? { caseId: caseIds } : {}),
     },
     limit: config.emailSender.batchLimit,
     order: [['createdAt', 'ASC']],

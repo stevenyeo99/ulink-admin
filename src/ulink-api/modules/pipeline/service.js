@@ -177,7 +177,10 @@ async function executeSteps(pipelineRun, onlySteps = null) {
     let sequence = 0;
     const steps = PIPELINES[pipelineRun.pipeline].filter(([blockName]) => !onlySteps || onlySteps.includes(blockName));
     for (const [blockName, service] of steps) {
-      await runStep(pipelineRun.id, blockName, service, sequence);
+      // Every email sender step shares one lock with the email review lane's sender (SYSTEM_5): a task is never sent
+      // by two senders at once (a task is only marked SENT after it went out).
+      const lockName = blockName.startsWith('email-sender') ? 'email-sender' : blockName;
+      await runStep(pipelineRun.id, blockName, service, sequence, { lockName });
       sequence += 1;
     }
 

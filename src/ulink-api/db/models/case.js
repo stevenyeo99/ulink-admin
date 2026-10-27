@@ -1,3 +1,5 @@
+const { leavesLane } = require('../../modules/review-lane/marker');
+
 module.exports = (sequelize, DataTypes) => {
   const Case = sequelize.define(
     'Case',
@@ -27,6 +29,17 @@ module.exports = (sequelize, DataTypes) => {
     },
     { tableName: 'ulink_cases' }
   );
+
+  // A status update that takes the case out of the review lane (its next stop, wait or end) also clears the marker
+  // (SYSTEM_5 review lane 4.1.3): one rule for every job of both flows. Also when the update sets the marker: a person's
+  // action that ends at a stop or a wait (a request to the customer) leaves nothing for the lane to do.
+  Case.addHook('beforeBulkUpdate', (options) => {
+    const values = options.attributes;
+    if (typeof values?.currentStatus !== 'string' || !leavesLane(values.currentStatus)) return;
+    values.reviewPendingAt = null;
+    values.reviewPendingBy = null;
+    if (Array.isArray(options.fields)) options.fields.push(...['reviewPendingAt', 'reviewPendingBy'].filter((f) => !options.fields.includes(f)));
+  });
 
   Case.associate = (models) => {
     Case.hasMany(models.EmailThread, { foreignKey: 'caseId' });
