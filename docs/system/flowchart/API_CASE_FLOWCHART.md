@@ -70,6 +70,9 @@ flowchart TD
   AW --> J[10 · Claim STP<br/>downloads the settlement report]:::job
   J --> CSR([API_CSR_SENT]):::done
   J -.-> E8[/Customer: settlement report/]:::mail
+  classDef lane fill:#e6f4f4,stroke:#2f8f8f,color:#1d2430
+  MV & BR & BL & DU & DR & PR -.->|a person's decision| RL[[Review lane<br/>the same jobs, decided cases only<br/>runs at once, retry cron every 3 min]]:::lane
+  RL -.->|until the next stop, wait or end| D
 ```
 
 ## Where a person decides
@@ -97,5 +100,6 @@ flowchart TD
 - Missing documents never stop the revision. The revision goes with `isSuspense=Y`, and a suspended claim is never STP. The next revision with complete documents sends `isSuspense=N`, and IAS lifts the suspense.
 - When `apiSendMissingDocumentsEmail` is on, the customer gets the missing-documents email (no images, or documents missing and the AI sure). When it is off, the customer gets no missing-documents email. ULINK emails the customer from the draft on the case page, and the team gets an email instead.
 - A correction sends the case back to the document check. A correction of a value that the member check compares with IAS sends it back to the member check. A correction of the diagnosis or the treatment does the same. The claim preparation choices of a person stay for the next run.
+- A person's decision at a stop (Mark OK, Revise, Ask the customer, override, a choice, an upload) marks the case. The API review lane (`api-review-pipeline`) then runs the same jobs at once, on marked cases only. The existing pipeline skips them. The case shows on the *Reviewed* page, not in the Review queue, and is read-only until its next stop, wait or end. After 30 minutes the existing pipeline takes it back. On the review page, every failed or unsure finding needs a decision with a reason before the save.
 - A super admin can switch a check off on *Admin → AI checklist* (with a reason). The member check and the document check skip it in both flows, and the case shows the line as *Turned off*, never a pass. A switched-off check adds no stop and sends no email. Four checks are locked on: member found, coverage active, member balance, voucher attached. A bank difference from IAS is a warning only: the case goes on, and STP stays possible, because the IAS claim pays to the IAS account.
 - When a job fails because IAS, the console or LM Studio does not answer, the case keeps its status. The next pipeline run tries again.

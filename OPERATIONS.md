@@ -40,6 +40,13 @@ Every `.env` key is documented in `.env.example`. Secrets live only in `.env`.
 | API pipeline, all steps | `POST /api/jobs/api-pipeline/run` (console → Pipeline → API) |
 | One step only | Same endpoint with body `{ "steps": ["<step name>"] }`, or the step's own `POST /api/jobs/<job>/run` |
 | Past runs | `GET /api/jobs/pipeline/runs`, `GET /api/jobs/pipeline/runs/:id` (same under `api-pipeline`) |
+| Review lanes (decided cases) | `POST /api/jobs/review-pipeline/run` (email), `POST /api/jobs/api-review-pipeline/run` (API). A person's save starts its lane. Cron retries every 3 minutes (`docs/deployment/CRONTAB_SETUP.md`) |
+| Run decided cases now | Console → **Reviewed** → *Run now* or *Run selected* (super admin, at most 20) |
+
+A case a person decided (Mark OK, Revise, Ask the customer, override, a benefit or claim preparation choice, an upload)
+is marked and goes to its flow's review lane. The lane runs the same jobs, but only on marked cases, so a decided case
+does not wait behind new cases. The existing pipelines skip marked cases. The marker is cleared at the case's next stop,
+wait or end. A case still marked after 30 minutes goes back to the existing pipeline, and the API log names it.
 
 Schedule both orchestrators with cron (API pipeline: every 30 minutes; email pipeline: as often as mail should be
 picked up). Job endpoints are open to cron; everything else needs a console login.
@@ -75,6 +82,9 @@ switch is the quick way to stop one environment reading a mailbox it shares with
 | *Needs manual reading* | AI not confident about the claim type, its reading didn't fit the form, or "Documents too long for the AI" (the claim's text exceeds the model's context) | Look at the documents; reset once fixed, or handle manually |
 | *Member check issue* | Mismatch with IAS (every problem listed), or *Balance not enough* for a voucher (`member:balance`) | Fix IAS (the case re-checks every run) or *Override and continue*. A short balance: *Bypass* with a reason (the claim then needs approval, never STP). |
 | *Balance changed before the claim* | The member balance dropped while the case waited for its documents (checked again just before the claim) | *Bypass* with a reason (the only action here); the claim is then prepared and needs approval, never STP. It goes on by itself if the balance becomes enough |
+| A decided case is not in the Review queue | It is on the **Reviewed** page: the review lane checks it again (SYSTEM_5) | Wait, or *Run now* there. It comes back to the Review queue only if the new check finds new points |
+| A row on the **Reviewed** page is red | The case waited more than 15 minutes after the decision. The last round may show *Failed* with the error | Fix the cause (for example IAS down), then *Run now*. After 30 minutes the existing pipeline takes the case |
+| *Review and save* stays off on the review page | Not every failed or unsure finding has a decision yet | Use *Go to the next one*: decide each with Mark OK, Revise or Ask the customer |
 | A checklist line shows *Turned off* | A super admin switched that check off on *Admin → AI checklist* (the line names who, when and why) | Switch it on again there with a reason; it applies to cases checked from then on. While a check that can stop a case is off, no claim goes STP |
 | *Member check issue* with *Possible exclusion in IAS* | The AI judged by meaning that the claim may fall under a member or policy exclusion IAS holds (`member:exclusion`), or was not sure. Each line names the level (member or policy) and the event | Read the event in IAS against the claim. *Bypass* with a reason (the only action; the claim then needs approval, never STP), or ask staff to remove an out-of-date exclusion in IAS (the case re-checks every run). Old member exclusions, such as a termination with no year, keep stopping cases until removed |
 | *Member check issue* with *Possible policy contract exclusion* | The AI found a policy contract clause that may apply to the diagnosis or treatment (`member:contract_exclusion`). The line shows the clause, the AI's confidence and its reason | Read the clause against the claim. *Does not apply* with a reason (the claim can still go STP), or *Let it go on (no STP)* with a reason (the claim then needs approval). A corrected diagnosis or treatment is checked again |

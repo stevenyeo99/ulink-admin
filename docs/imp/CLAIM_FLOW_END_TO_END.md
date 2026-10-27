@@ -278,6 +278,17 @@ See 2.5–2.6. Normal wait 15–30 minutes; flagged after 2 hours; always keeps 
 | Pipelines, AI checks and alerts | **System settings** (super admin) | Which cases the system works on, mailbox, API customer email, threshold, switches #2 and #3, AI learning, overdue and pipeline alerts |
 | Which checks run | **Admin → AI checklist** (super admin) | Read every check in plain words. Switch a check off or on with a reason (not the four locked checks). The case then shows the line as *Turned off* with who, when and why |
 
+On the review page (SYSTEM_5, `docs/imp/CR/SYSTEM_5/PRD/REVIEW_ACTIONS_PRD.md`), each failed or unsure finding is a card
+with *Needs your decision*, *What to do* (what it checks, what you can do, the risk if you mark it OK) and the buttons
+*Mark OK*, *Revise*, *Ask the customer* (a failed document finding) and *View page*. Every decision needs a reason of
+at least 10 characters. A quick reason fills it. *Review and save* stays off until every finding has a decision, so the
+case does not come back with a finding left open. *Ask the customer* means the document really is missing: after the
+check, the request goes out at once with the reviewer's own request lines, and the claim goes to IAS as suspended.
+
+After the save, the case goes to its flow's review lane (SYSTEM_5, `docs/imp/CR/SYSTEM_5/PRD/REVIEW_LANE_PRD.md`). It
+runs at once, apart from new cases, and the case moves from the Review queue to the **Reviewed** page until its next
+stop, wait or end. Meanwhile the case is read-only, and the review page shows where it is.
+
 Every manual action needs a comment, kept in the case history with the person: override / confirm (finding +
 reason), *Send the request to the customer* ("What did you check?"), *Reset* ("Why?"). Every override is recorded in
 the case history with the person, the finding and the reason; the overridden points
@@ -387,6 +398,7 @@ Team emails go to `INTERNAL_REVIEW_EMAIL` (+ the route's CC), start with "(ULINK
 | **Technical** (network, timeout, server error) | Case stays where it is; retried on the next run | IAS or console timeout |
 | **Normal wait** | Case stays; checked every run; not an error | Barcode not ready, settlement report not ready, member record fixed later |
 | **Business answer** | Case goes to a *needs review* status with the reason; **not** retried automatically | IAS rejects the claim, upload refused, case number unclear |
+| **Decided case, lane failed** | The review lane's retry cron tries again every 3 minutes. After 30 minutes the existing pipeline takes the case | IAS down while a reviewer's decision is processed |
 | **Waiting for the customer** | Case waits; a reply with documents restarts it | Documents incomplete |
 | **Stuck** | *Reset* on the case page reprocesses it from reading (refused once it has an IAS claim number) | A case processed with wrong data |
 
