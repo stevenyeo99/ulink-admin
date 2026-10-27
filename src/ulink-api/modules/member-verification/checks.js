@@ -97,7 +97,8 @@ function checkCoverageActive(plan, treatmentDateYYYYMMDD) {
 // a reason. member:contract_exclusion (SYSTEM_5 contract exclusion): marked as not applying (wrongStep check) or let go on
 // as an exception — the correction's wrongStep is kept on the accepted finding, for the STP rule.
 const MEMBER_ITEM_LABELS = { 'member:dob': 'Member check: date of birth', 'member:bank': 'Member check: bank details', 'member:policy': 'Member check: policy number', 'member:balance': 'Member check: balance', 'member:exclusion': 'Member check: exclusion in IAS', 'member:contract_exclusion': 'Member check: policy contract exclusion' };
-const ACCEPTABLE_MEMBER_ITEMS = new Set(Object.keys(MEMBER_ITEM_LABELS));
+// Not member:bank: a bank difference is a warning that never holds the case (SYSTEM_5 bank check), so nothing to mark OK.
+const ACCEPTABLE_MEMBER_ITEMS = new Set(Object.keys(MEMBER_ITEM_LABELS).filter((item) => item !== 'member:bank'));
 
 // extraIssues: findings from outside this record's fields, listed after its own (member-verification/memberBalance.js's
 // member:balance) — set aside by a person's mark OK the same way.
@@ -169,6 +170,7 @@ function evaluate(extractedFields, iasResponse, extraIssues = [], off = new Map(
       reason: `Claimant DOB "${extractedFields.claimant?.claimant_dob}" does not match IAS record DOB "${readableDate(iasDateToYYYYMMDD(member.DOB)) ?? member.DOB}".`,
     });
   }
+  let bankWarning = null;
   if (hard.bankNameMatch === false || hard.bankAccountNameMatch === false || hard.bankAccountNumberMatch === false) {
     const mismatches = [];
     if (hard.bankNameMatch === false) {
@@ -180,7 +182,9 @@ function evaluate(extractedFields, iasResponse, extraIssues = [], off = new Map(
     if (hard.bankAccountNumberMatch === false) {
       mismatches.push(`account number ("${extractedFields.bank?.bank_account_number}" vs IAS "${member.CL_PAY_ACCT_NO}")`);
     }
-    issues.push({ item: 'member:bank', reasonCode: 'BANK_DETAILS_MISMATCH', reason: `Bank details do not match IAS record: ${mismatches.join('; ')}.` });
+    // A warning, not a finding (SYSTEM_5 bank check, owner 2026-10-27): the IAS claim pays to the IAS account
+    // (payloadBuilder.js), so a difference does not change the payment — the case goes on and STP stays possible.
+    if (!off.has('member:bank')) bankWarning = { code: 'member:bank', reason: `Bank details on the claim form differ from IAS: ${mismatches.join('; ')}. The IAS claim pays to the IAS account.` };
   }
   if (hard.policyNoMatch === false) {
     issues.push({
@@ -219,10 +223,11 @@ function evaluate(extractedFields, iasResponse, extraIssues = [], off = new Map(
       reason: open.length === 1 ? open[0].reason : open.map((issue, i) => `${i + 1}. ${issue.reason}`).join(' '),
       issues: open,
       ...(accepted.length ? { accepted } : {}),
+      ...(bankWarning ? { bankWarning } : {}),
     };
   }
 
-  return { outcome: 'MEMBER_VERIFIED', reasonCode: null, checks, reason: null, ...(accepted.length ? { accepted } : {}) };
+  return { outcome: 'MEMBER_VERIFIED', reasonCode: null, checks, reason: null, ...(accepted.length ? { accepted } : {}), ...(bankWarning ? { bankWarning } : {}) };
 }
 
 module.exports = { evaluate, ACCEPTABLE_MEMBER_ITEMS, MEMBER_ITEM_LABELS };

@@ -39,25 +39,26 @@ describe('bankAccountNameMatch honorific tolerance', () => {
   it('still fails a genuinely different payee name', () => {
     const result = evaluate(baseFields('Nay Thiha Aung'), baseIasResponse('Thiha'));
     expect(result.checks.hard.bankAccountNameMatch).toBe(false);
-    expect(result.outcome).toBe('MEMBER_REVIEW_REQUIRED');
-    expect(result.reasonCode).toBe('BANK_DETAILS_MISMATCH');
+    // A warning only (SYSTEM_5 bank check): the case goes on.
+    expect(result.outcome).toBe('MEMBER_VERIFIED');
+    expect(result.bankWarning.reason).toMatch(/account name/);
   });
 });
 
 // Enhancement A2 (2026-09-29): every failed check is reported, not only the first.
 describe('reports every problem', () => {
-  it('lists a DOB and a bank mismatch together; the first stays the reasonCode', () => {
-    const fields = { ...baseFields('Nay Thiha Aung'), claimant: { claimant_dob: '1991-01-01' } };
+  it('lists a DOB and a policy mismatch together; the first stays the reasonCode', () => {
+    const fields = { ...baseFields('Thiha'), claimant: { claimant_dob: '1991-01-01' }, policy: { policy_no: 'OTHER' } };
     const result = evaluate(fields, baseIasResponse('Thiha'));
     expect(result.reasonCode).toBe('MEMBER_DETAILS_MISMATCH');
-    expect(result.issues.map((i) => i.reasonCode)).toEqual(['MEMBER_DETAILS_MISMATCH', 'BANK_DETAILS_MISMATCH']);
-    expect(result.reason).toMatch(/^1\. Claimant DOB .* 2\. Bank details do not match IAS record: account name/);
+    expect(result.issues.map((i) => i.item)).toEqual(['member:dob', 'member:policy']);
+    expect(result.reason).toMatch(/^1\. Claimant DOB .* 2\. Policy number "OTHER" does not match/);
   });
 
   it('keeps the single-problem reason unnumbered', () => {
-    const result = evaluate(baseFields('Nay Thiha Aung'), baseIasResponse('Thiha'));
+    const result = evaluate({ ...baseFields('Thiha'), policy: { policy_no: 'OTHER' } }, baseIasResponse('Thiha'));
     expect(result.issues).toHaveLength(1);
-    expect(result.reason).toMatch(/^Bank details do not match/);
+    expect(result.reason).toMatch(/^Policy number "OTHER" does not match/);
   });
 });
 

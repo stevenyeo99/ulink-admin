@@ -11,7 +11,7 @@ const { switchedOff, offNote } = require('../ai-checklist/switches');
 const { CHECKS } = require('../ai-checklist/catalog');
 
 // A member check's comparison in checks.hard (a switched-off check's is dropped, so it never reads as a match).
-const HARD_CHECK_OF = { 'member:dob': 'dobMatch', 'member:policy': 'policyNoMatch' };
+const HARD_CHECK_OF = { 'member:dob': ['dobMatch'], 'member:policy': ['policyNoMatch'], 'member:bank': ['bankNameMatch', 'bankAccountNameMatch', 'bankAccountNumberMatch'] };
 const { queueDedupedTask } = require('../shared/emailTaskQueue');
 const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment-summary/summary');
 const { caseBasics } = require('../assessment-summary/journey');
@@ -86,7 +86,7 @@ async function checkCase(caseRecord) {
   if (exclusions) result.exclusions = { checked: exclusions.checked, note: exclusions.note, fingerprint: exclusions.fingerprint, events: exclusions.events };
   const memberOff = [...off].filter(([code]) => CHECKS.find((c) => c.code === code)?.section === 'member');
   if (memberOff.length) result.turnedOff = memberOff.map(([code, row]) => ({ code, note: offNote(row) }));
-  for (const [code] of memberOff) if (HARD_CHECK_OF[code] && result.checks?.hard) delete result.checks.hard[HARD_CHECK_OF[code]];
+  for (const [code] of memberOff) for (const key of HARD_CHECK_OF[code] || []) if (result.checks?.hard) delete result.checks.hard[key];
   if (holdUnsure && result.outcome === 'MEMBER_VERIFIED') {
     result.outcome = 'BENEFIT_REVIEW';
     result.reasonCode = 'BENEFIT_UNSURE';
@@ -99,17 +99,19 @@ async function checkCase(caseRecord) {
   else if (previousPicks) result.balance = { checked: false, note: 'IAS did not find the member.', picks: previousPicks, lines: [] };
 
   // The flags: the contract exclusion — while it holds the case too, so the clause, the confidence and the policyholder
-  // notes stay on the case after a whole-check override — and, on a verified member, the benefit-eligibility warning
-  // (SOP §6.4). checkBenefitEligibility is free (no LLM), gated here for the same noise-reduction reason as the exclusion.
+  // notes stay on the case after a whole-check override — the bank warning (bank details differ from IAS, SYSTEM_5 bank
+  // check: never a stop, never a review point), and, on a verified member, the benefit-eligibility warning (SOP §6.4). checkBenefitEligibility is free (no LLM), gated here for the same noise-reduction reason as the exclusion.
   if (result.outcome === 'MEMBER_VERIFIED') {
     const eligibilityFlag = off.has('BENEFIT_NOT_ELIGIBLE') ? null : checkBenefitEligibility(extractedFields, iasResponse.payload?.memberPlans);
     result.flags = [
       ...(contract?.flag ? [contract.flag] : []),
+      ...(result.bankWarning ? [result.bankWarning] : []),
       ...(eligibilityFlag ? [eligibilityFlag] : []),
     ];
   } else {
-    result.flags = contract?.flag ? [contract.flag] : [];
+    result.flags = [...(contract?.flag ? [contract.flag] : []), ...(result.bankWarning ? [result.bankWarning] : [])];
   }
+  delete result.bankWarning;
 
   // SOP §6.5 (available benefit balance): the IAS remaining balance per voucher, result.balance above (SYSTEM_5 member
   // balance) — it replaced the plan's filed limits (benefitLimits), which were never a remaining balance.

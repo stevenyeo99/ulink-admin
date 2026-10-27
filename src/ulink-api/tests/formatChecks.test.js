@@ -27,7 +27,7 @@ beforeEach(async () => { Setting.findAll.mockResolvedValue([]); await getSetting
 
 it('passes good values and says what it checked', () => {
   expect(formatCheck(fields(), TODAY)).toMatchObject({
-    code: 'VALUE_FORMAT', passed: true, confidence: null, problems: [], reason: 'Checked: NRC / passport, dates, amounts.',
+    code: 'VALUE_FORMAT', passed: true, confidence: null, problems: [], reason: 'Checked: NRC / passport, dates, amounts, bank account number.',
   });
 });
 

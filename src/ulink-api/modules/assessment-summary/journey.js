@@ -43,10 +43,10 @@ function buildCaseJourney(fields = {}, lines = []) {
   const member = find('Member check');
   if (member) steps.push(step('Member check', member.result, `${member.why || ''}${handled(member)}`.trim()));
 
-  // Advisory warnings from the member check (possible policy exclusion, benefit not on the plan): they
-  // don't stop the case, but JD3 should weigh them — so the path says so.
-  for (const warning of lines.filter((l) => l.decision === 'Policy contract exclusion' || l.decision === 'Benefit eligibility')) {
-    steps.push(step('Policy check', warning.result, `${warning.brief || warning.why}${handled(warning)}`));
+  // Advisory warnings from the member check (possible policy exclusion, benefit not on the plan, bank details that
+  // differ from IAS): they don't stop the case, but JD3 should weigh them — so the path says so.
+  for (const warning of lines.filter((l) => ['Policy contract exclusion', 'Benefit eligibility', 'Bank details'].includes(l.decision))) {
+    steps.push(step(warning.decision === 'Bank details' ? 'Bank check' : 'Policy check', warning.result, `${warning.brief || warning.why}${handled(warning)}`));
   }
 
   // The reviewer checklist's open lines keep the documents incomplete too (SYSTEM_4 E4-29).

@@ -212,9 +212,16 @@ function memberLines(memberVerifyResult) {
     lines.push(line({ decision: 'Member checks turned off', result: 'Not run', status: 'not_checked', why: memberVerifyResult.turnedOff.map((t) => `${t.code}: ${t.note}`).join('; '), verified: VERIFIED.RULE }));
   }
 
-  // Flags on a verified member: benefit eligibility (rule), and the policy contract exclusion (AI) with the person's
+  // Flags from the member check: bank details that differ from IAS (warning, also on a held case), benefit eligibility
+  // (rule, verified member only), and the policy contract exclusion (AI) with the person's
   // decision — a match holds the case at member review until a person decides (SYSTEM_5 contract exclusion).
   for (const flag of flags || []) {
+    // Bank details differ from IAS (SYSTEM_5 bank check): a warning only — the IAS claim pays to the IAS account, so it is
+    // not a review point and never blocks STP.
+    if (flag.code === 'member:bank') {
+      lines.push(line({ decision: 'Bank details', result: 'Differ from IAS', status: 'issue', why: flag.reason, verified: VERIFIED.CROSS_CHECK, brief: 'A warning only: the IAS claim pays to the IAS account.' }));
+      continue;
+    }
     const byAi = flag.confidence != null;
     const exclusion = flag.code === 'POSSIBLE_EXCLUSION';
     // An exclusion shows the clause's own words and what in the claim matched, so a reviewer can judge it.

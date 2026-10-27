@@ -73,7 +73,7 @@ it('an unsure value is an "AI unsure" review point naming the value and its page
 it('voucher lines that do not add up to the voucher total are a format problem', () => {
   expect(formatCheck(fields({ voucher: { line_total: 37500 } }), '2026-10-15').problems)
     .toEqual(['Voucher 1 lines add up to 37,500, but its total reads 32,500']);
-  expect(formatCheck(fields(), '2026-10-15')).toMatchObject({ problems: [], reason: 'Checked: NRC / passport, dates, amounts, voucher lines.' });
+  expect(formatCheck(fields(), '2026-10-15')).toMatchObject({ problems: [], reason: 'Checked: NRC / passport, dates, amounts, bank account number, voucher lines.' });
   expect(formatCheck(fields({ voucher: { line_total: null } }), '2026-10-15').problems).toEqual([]);
 });
 

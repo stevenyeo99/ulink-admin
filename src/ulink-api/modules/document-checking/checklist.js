@@ -1134,6 +1134,18 @@ function formatCheck(fields, today = todayInIasTimezone()) {
       about('claim.total_claim_amount');
     }
   }
+  // The bank account number (SYSTEM_5 bank check, owner 2026-10-27): digits only once spaces and dashes are removed —
+  // Latin or Burmese digits. ponytail: no length rule yet; add the length for each bank once ULINK gives it.
+  // A blank or dash-only value is a missing number (MISSING_BANK_INFO), not a misread one.
+  const account = fields.bank?.bank_account_number;
+  const accountDigits = String(account ?? '').replace(/[\s-]+/g, '');
+  if (accountDigits) {
+    checked.push('bank account number');
+    if (!/^[0-9၀-၉]+$/.test(accountDigits)) {
+      problems.push(`Account number "${account}" is not digits only`);
+      about('bank.bank_account_number');
+    }
+  }
   // A zero / negative subtotal is a refund slip (checkVoucherAmountMismatch) — fine; only a non-number is wrong.
   (fields.invoices?.items || []).forEach((item, i) => {
     if (item.subtotal != null && !isAmount(item.subtotal)) {

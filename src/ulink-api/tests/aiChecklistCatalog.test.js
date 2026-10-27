@@ -36,7 +36,9 @@ it('every member finding has a catalog entry', () => {
     memberPlans: [{ EFF_DATE: '01012020', EXP_DATE: '12312020' }],
   } };
   const found = evaluate(fields, ias).issues.map((i) => (i.item === 'member:coverage' ? i.reasonCode : i.item));
-  expect(found).toEqual(expect.arrayContaining(['COVERAGE_NOT_ACTIVE', 'member:dob', 'member:bank', 'member:policy']));
+  expect(found).toEqual(expect.arrayContaining(['COVERAGE_NOT_ACTIVE', 'member:dob', 'member:policy']));
+  // A bank difference is a warning flag, not a finding (SYSTEM_5 bank check) — its code has a catalog entry too.
+  expect(codes.has(evaluate(fields, ias).bankWarning.code)).toBe(true);
   expect([evaluate(fields, null).reasonCode, ...found].filter((code) => !codes.has(code))).toEqual([]);
 });
 
@@ -77,5 +79,5 @@ it('each check sits in a known section, with what happens when it fails', () => 
   expect(byCode.INVOICE_NAME_INCONSISTENT.ifFails).toContain('The patient name on the invoice is not consistent');
   expect(byCode.TREATMENT_DATE_INCONSISTENT.ifFails).toContain('The treatment date is not consistent');
   expect(byCode.MISSING_MANDATORY_FIELD.ifFails).toContain('for example: "Please provide the missing account number."');
-  expect(byCode['member:bank'].ifFails).toContain('The customer is not emailed');
+  expect(byCode['member:dob'].ifFails).toContain('The customer is not emailed');
 });
