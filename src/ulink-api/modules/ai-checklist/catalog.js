@@ -128,6 +128,39 @@ const CHECKS = [
     onFail: 'The value is marked unsure for a person. If the System settings hold switches are on, the case waits for a person.' },
 ];
 
+// Risk if you mark it OK (SYSTEM_5 review actions, owner 2026-10-27): shown on the review page next to each finding and in
+// the decision card, so a reviewer knows what a Mark OK, a bypass or a "let it go on" can cost. Every check that can stop a
+// case or warn has one (tests/reviewReasons.test.js). Wording for the owner's review.
+const RISK_IF_OK = {
+  MEMBER_NOT_FOUND: 'IAS has no member for this NRC / passport and date, so no IAS claim can be made. Correct the NRC / passport or the treatment date instead.',
+  COVERAGE_NOT_ACTIVE: 'The claim may be paid for a treatment outside the coverage period.',
+  'member:dob': 'The claim may be for another person, or the IAS record may be wrong. If IAS is wrong, fix IAS.',
+  'member:policy': 'The claim may go to the wrong policy.',
+  'member:bank': 'Low: the IAS claim pays to the IAS account. If the customer gave a new account, IAS must be updated.',
+  'member:balance': 'The claim may pay more than the member has left. A bypassed claim never goes STP, and the approver decides.',
+  'member:exclusion': 'The claim may be paid for something that IAS excludes for this member or policy. A bypassed claim never goes STP.',
+  POSSIBLE_EXCLUSION: '"Does not apply" keeps STP possible: if the clause does apply, an excluded condition may be paid automatically. "Let it go on" never goes STP.',
+  BENEFIT_NOT_ELIGIBLE: "The claim may be for a benefit that the member's plan does not cover.",
+  MISSING_MANDATORY_FIELD: 'The IAS claim may go with a value missing, and the customer is not asked for it.',
+  INCOMPLETE_CLAIM_FORM: "The diagnosis and the benefit are picked without the customer's description.",
+  MISSING_VOUCHER: 'No voucher proves the claimed amount.',
+  UNCLEAR_VOUCHER: 'An amount or a date may be misread, and the wrong amount may be paid.',
+  INCORRECT_VOUCHER: 'The voucher may not come from a real clinic or doctor.',
+  MISSING_VOUCHER_BREAKDOWN: 'Medicines that are not covered, such as vitamins, may be paid.',
+  VOUCHER_AMOUNT_MISMATCH: 'The claim may pay an amount that the vouchers do not prove.',
+  INVOICE_NAME_INCONSISTENT: 'The voucher may be for another patient.',
+  INVOICE_DATE_INCONSISTENT: 'The voucher may be for another visit than the medical record shows.',
+  NO_MEDICAL_REPORT: 'No doctor confirms the diagnosis.',
+  INCOMPLETE_MEDICAL_REPORT: 'The diagnosis may be read wrong, and the wrong diagnosis code may go to IAS.',
+  EYE_TEST_SLIP_UNDATED: 'The eye test may be outside the coverage period.',
+  TREATMENT_DATE_INCONSISTENT: 'The coverage and the balance may be checked on the wrong date.',
+  PATIENT_NAME_INCONSISTENT: 'The medical record may be for another patient.',
+  HOSPITAL_NAME_INCONSISTENT: 'The claim may be for a visit at another hospital than the documents show. IAS gets the medical record hospital.',
+  MISSING_BANK_INFO: 'Low: the IAS claim pays to the IAS account. Make sure that IAS has an account for the member.',
+  DELEGATION_LETTER_REQUIRED: "Another person may claim the money without the member's written consent.",
+  DELEGATION_PAYEE_INCONSISTENT: 'The letter may authorize another person than the account holder.',
+};
+
 // What happens when the check fails. A document check's customer sentence is the checklist's own issue text.
 function ifFails(check) {
   if (check.effect === 'off') return null;
@@ -162,6 +195,7 @@ const CATALOG = CHECKS.map(({ fields, onFail, ...check }) => ({
   usesAi: false, locked: false, ...check,
   group: SECTIONS.find((s) => s.key === check.section).group,
   ifFails: ifFails({ ...check, onFail }),
+  riskIfOk: RISK_IF_OK[check.code] ?? null,
   reviewerCan: reviewerActions({ ...check, fields }),
 }));
 
@@ -169,4 +203,4 @@ function catalog() {
   return { sections: SECTIONS, checks: CATALOG };
 }
 
-module.exports = { CHECKS, SECTIONS, catalog };
+module.exports = { CHECKS, SECTIONS, RISK_IF_OK, catalog };

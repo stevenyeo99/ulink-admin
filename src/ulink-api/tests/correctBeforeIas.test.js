@@ -38,7 +38,7 @@ it('the voucher type is corrected from a fixed list, and claim preparation then 
   const type = options.find((o) => o.item === 'invoices.items.0.voucher_type');
   expect(type).toMatchObject({ type: 'choice', current: 'consultation', choices: ['consultation', 'pharmacy', 'lab', 'optical', 'other'] });
   expect(validateCorrection({ kind: 'value', item: type.item, value: 'optical', reason: 'an optical shop receipt', wrongStep: 'reading' }, options).corrected).toBe('optical');
-  expect(validateCorrection({ kind: 'value', item: type.item, value: 'glasses', reason: 'x x x', wrongStep: 'reading' }, options).error).toMatch(/choose one of/);
+  expect(validateCorrection({ kind: 'value', item: type.item, value: 'glasses', reason: 'checked against page 3', wrongStep: 'reading' }, options).error).toMatch(/choose one of/);
   expect(correct(fields(), type, 'optical').invoices.items[0].voucher_type).toBe('optical');
   // Not the type of patient: free text ("optical care") the member check compares with IAS as written.
   expect(options.some((o) => o.item === 'claim.type_of_patient')).toBe(false);

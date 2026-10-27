@@ -11,6 +11,8 @@ export interface AiCheckSection {
 
 export interface AiCheck {
   code: string;
+  /** The member finding it raises, when that differs from the code (the policy contract exclusion). */
+  item?: string;
   /** The paper it looks at (AiCheckSection.key), in the order the system runs. */
   section: string;
   group: 'member' | 'document';
@@ -28,6 +30,8 @@ export interface AiCheck {
   ifFails: string | null;
   /** What a person can do about it on a case (from the correction panel's rules). */
   reviewerCan: string[];
+  /** The risk of marking it OK (SYSTEM_5 review actions); null for an information line or a check that is off. */
+  riskIfOk: string | null;
   /** Its switch (phase B): on unless a super admin switched it off. */
   enabled: boolean;
   /** Can be switched: not locked, not an information line, not off in the code. */

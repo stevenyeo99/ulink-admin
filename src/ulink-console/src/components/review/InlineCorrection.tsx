@@ -1,45 +1,55 @@
-import type { WrongStep } from '../../types/case';
-import { CONTRACT_EXCLUSION_ITEM, CONTRACT_EXCLUSION_STEPS, draftProblem, type CorrectionDraft } from '../../lib/correctionDraft';
-
-const WRONG_STEPS: Record<WrongStep, string> = {
-  reading: 'The page was misread',
-  mapping: 'Read right, but put in the wrong field',
-  check: "The check's decision was wrong",
-  ias_outdated: 'IAS record is out of date',
-  exception: 'AI was right, accepted as an exception',
-};
-// For a changed value: only a misread or a wrong field (the API refuses the exceptions there).
-const VALUE_STEPS: WrongStep[] = ['reading', 'mapping'];
+import { AlertTriangle } from 'lucide-react';
+import clsx from 'clsx';
+import { CONTRACT_EXCLUSION_ITEM, DRAFT_STATE, defaultWrongStep, draftAction, draftProblem, quickReasons, type CorrectionDraft } from '../../lib/correctionDraft';
+import { Button } from '../common/Button';
 
 const inputClass =
   'w-full rounded-lg border border-slate-900/10 bg-white px-2.5 py-1.5 text-sm text-slate-800 outline-none focus:border-ulink-orange focus:ring-2 focus:ring-ulink-orange/20';
 
 /**
- * Correct one finding where the reviewer sees it (SYSTEM_4 E4-12, in the review workspace). A draft: nothing is saved
- * here — the panel saves every open change at once ("Save all and check again", FindingsPanel). A reason is required —
- * it is the audit trail and the AI's learning data.
+ * The decision card (SYSTEM_5 review actions, docs/imp/CR/SYSTEM_5/PRD/REVIEW_ACTIONS_PRD.md 4.2): one finding's Mark OK,
+ * Revise, Bypass or contract answer, where the reviewer sees it. A draft: nothing is saved here — the panel saves every
+ * decision at once (FindingsPanel). A reason is required — it is the audit trail and the AI's learning data. A quick
+ * reason fills the reason box and sets what went wrong; the reviewer can add to it.
+ *
+ * done: the card is folded to one line (the reviewer clicked Done); Change opens it again.
  */
-export function InlineCorrection({ draft, onChange, onCancel }: { draft: CorrectionDraft; onChange: (draft: CorrectionDraft) => void; onCancel: () => void }) {
-  const { option, passed } = draft;
+export function InlineCorrection({ draft, onChange, onUndo, risk, done, onDone }: {
+  draft: CorrectionDraft;
+  onChange: (draft: CorrectionDraft) => void;
+  onUndo: () => void;
+  /** Risk if you mark it OK (AI checklist catalog riskIfOk): shown for Mark OK, Bypass and Let it go on. */
+  risk?: string | null;
+  done: boolean;
+  onDone: (done: boolean) => void;
+}) {
+  const { option } = draft;
   const set = (patch: Partial<CorrectionDraft>) => onChange({ ...draft, ...patch });
   const problem = draftProblem(draft);
-  // A policy contract exclusion: only its two answers (SYSTEM_5 contract exclusion).
-  const contract = option.item === CONTRACT_EXCLUSION_ITEM;
-  const steps = contract
-    ? Object.entries(CONTRACT_EXCLUSION_STEPS)
-    : Object.entries(WRONG_STEPS).filter(([id]) => draft.option.kind === 'verdict' || VALUE_STEPS.includes(id as WrongStep));
+  const action = draftAction(draft);
+  const showRisk = risk && ['Mark OK', 'Bypass', 'Let it go on', 'Does not apply'].includes(action);
+
+  if (done && !problem) {
+    return (
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-ulink-teal/30 bg-ulink-teal/5 px-3 py-2 text-sm">
+        <span className="font-semibold text-ulink-teal-dark">{DRAFT_STATE[action]}, not saved</span>
+        {option.kind === 'value' && <span className="text-slate-700">→ "{draft.value.trim()}"</span>}
+        <span className="min-w-0 flex-1 truncate text-slate-600" title={draft.reason}>Reason: {draft.reason.trim()}</span>
+        <Button size="sm" variant="ghost" onClick={() => onDone(false)}>Change</Button>
+        <Button size="sm" variant="ghost" onClick={onUndo}>Undo</Button>
+      </div>
+    );
+  }
 
   return (
-    <div className="mt-2 rounded-lg border border-ulink-orange/30 bg-ulink-orange/5 p-3">
-      <div className="grid gap-2 sm:grid-cols-2">
-        {contract ? (
-          <p className="text-sm text-slate-700 sm:col-span-2">Your answer on this policy contract exclusion:</p>
-        ) : option.kind === 'verdict' ? (
-          <p className="text-sm text-slate-700 sm:col-span-2">
-            Set this check to <span className="font-semibold">{passed ? 'passed' : 'failed'}</span>
-            {passed ? '.' : ' — the customer is asked for it in its approved wording.'}
-          </p>
-        ) : (
+    <div className="mt-2 rounded-lg border border-ulink-orange/40 bg-ulink-orange/5 p-3">
+      <p className="mb-2 text-sm font-semibold text-slate-800">{action}: {option.label}</p>
+      {option.kind === 'value' && (
+        <div className="mb-2 grid gap-2 sm:grid-cols-2">
+          <div>
+            <span className="mb-1 block text-xs font-medium text-slate-600">The AI read</span>
+            <p className="rounded-lg bg-white/70 px-2.5 py-1.5 text-sm text-slate-700">{option.current == null ? '(nothing)' : String(option.current)}</p>
+          </div>
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-slate-600">Correct value</span>
             {option.type === 'choice' ? (
@@ -58,30 +68,52 @@ export function InlineCorrection({ draft, onChange, onCancel }: { draft: Correct
               />
             )}
           </label>
-        )}
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-slate-600">{contract ? 'Does the clause apply?' : 'What went wrong?'}</span>
-          <select value={draft.wrongStep} onChange={(e) => set({ wrongStep: e.target.value as WrongStep })} className={inputClass}>
-            {steps.map(([id, label]) => (
-              <option key={id} value={id}>{label}</option>
-            ))}
-          </select>
-        </label>
-        <label className="block sm:col-span-2">
-          <span className="mb-1 block text-xs font-medium text-slate-600">Reason</span>
-          <textarea
-            value={draft.reason}
-            onChange={(e) => set({ reason: e.target.value })}
-            rows={2}
-            placeholder="e.g. The receipt on page 3 shows 14 Aug; the AI read the 4 as a 7."
-            className={inputClass}
-            autoFocus={option.kind === 'verdict'}
-          />
-        </label>
+        </div>
+      )}
+      {showRisk && (
+        <p className="mb-2 flex gap-2 rounded-lg bg-amber-50 p-2 text-sm text-amber-800">
+          <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+          <span><span className="font-semibold">Risk if you mark it OK:</span> {risk}</span>
+        </p>
+      )}
+      <p className="mb-1 text-xs font-medium text-slate-600">Why? Pick a reason, or write your own</p>
+      <div className="mb-2 flex flex-wrap gap-2">
+        {quickReasons(draft).map((q) => (
+          <button
+            key={q.text}
+            type="button"
+            onClick={() => set({ reason: q.text, wrongStep: q.wrongStep })}
+            aria-pressed={draft.reason === q.text}
+            className={clsx(
+              'rounded-full border px-3 py-1 text-left text-[13px] transition-colors',
+              draft.reason === q.text ? 'border-ulink-orange bg-ulink-orange/10 text-slate-900' : 'border-slate-900/15 bg-white text-slate-700 hover:border-ulink-orange/60'
+            )}
+          >
+            {q.text}
+          </button>
+        ))}
       </div>
-      <div className="mt-2 flex items-center gap-3">
-        <span className={problem ? 'text-xs text-amber-700' : 'text-xs text-ulink-teal-dark'}>{problem ?? 'Ready — saved with the other changes'}</span>
-        <button onClick={onCancel} className="text-xs text-slate-500 hover:underline">Cancel</button>
+      <label className="block">
+        <span className="mb-1 block text-xs font-medium text-slate-600">Reason (required)</span>
+        <textarea
+          value={draft.reason}
+          onChange={(e) => {
+            // The step follows the quick reason still in the text; none left → the default (PRD 4.2.5). A contract
+            // answer keeps the step of the button the reviewer clicked.
+            const quick = quickReasons(draft).find((q) => e.target.value.includes(q.text));
+            const keep = option.item === CONTRACT_EXCLUSION_ITEM;
+            set({ reason: e.target.value, wrongStep: keep ? draft.wrongStep : quick?.wrongStep ?? defaultWrongStep(option) });
+          }}
+          rows={2}
+          placeholder="e.g. The receipt on page 3 shows 14 Aug. The AI read the 4 as a 7."
+          className={inputClass}
+          autoFocus={option.kind === 'verdict'}
+        />
+      </label>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <Button size="sm" disabled={!!problem} onClick={() => onDone(true)}>Done</Button>
+        <Button size="sm" variant="ghost" onClick={onUndo}>Cancel</Button>
+        <span className={problem ? 'text-xs text-amber-700' : 'text-xs text-ulink-teal-dark'}>{problem ?? 'Ready. It is saved with the other decisions.'}</span>
       </div>
     </div>
   );

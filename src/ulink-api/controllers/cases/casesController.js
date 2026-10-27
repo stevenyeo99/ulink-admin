@@ -20,6 +20,7 @@ const { withEditItems } = require('../../modules/document-checking/checklist');
 const { retryOptions, consoleUploadReasonOf } = require('../../modules/case-retry/retry');
 const { uploadDocuments, UploadRefused } = require('../../modules/case-upload/upload');
 const { correctionsInfo } = require('./correctionsController');
+const { reasonLongEnough, REASON_TOO_SHORT } = require('../../modules/ai-feedback/corrections');
 const { claimView, activeClaims, endClaim } = require('../../modules/case-claim/claim');
 const { workingDaysSince } = require('../../modules/shared/workingDays');
 const { getSettings, lastReadSettings } = require('../../modules/settings/settings');
@@ -532,8 +533,8 @@ async function overrideCase(req, res) {
   const { reason, finding } = req.body || {};
   const operator = req.user.name ? `${req.user.name} (${req.user.username})` : req.user.username;
 
-  if (typeof reason !== 'string' || reason.trim() === '') {
-    return res.status(400).json({ error: { message: 'Write a reason for the override.', status: 400 } });
+  if (!reasonLongEnough(reason)) {
+    return res.status(400).json({ error: { message: REASON_TOO_SHORT, status: 400 } });
   }
   if (!OVERRIDE_FINDINGS[finding]) {
     return res.status(400).json({ error: { message: `Pick why the check was wrong: ${Object.keys(OVERRIDE_FINDINGS).join(', ')}`, status: 400 } });

@@ -5,6 +5,7 @@ import { AlertTriangle } from 'lucide-react';
 import { overrideCase, releaseMissingDocuments } from '../../api/casesApi';
 import { getStpSettings } from '../../api/stpSettingsApi';
 import { Button } from '../common/Button';
+import { reasonProblem } from '../../lib/correctionDraft';
 import type { AssessmentSummary, CaseDetail, CaseOverrideInfo } from '../../types/case';
 
 /**
@@ -58,7 +59,9 @@ export function CaseOverridePanel({
   // A bank mismatch is a payment risk even when another problem was found first.
   const memberResult = caseRecord.memberVerifyResult;
   const paymentRisk = [memberResult?.reasonCode, ...(memberResult?.issues ?? []).map((i) => i.reasonCode)].includes('BANK_DETAILS_MISMATCH');
-  const canSubmit = finding !== '' && reason.trim() !== '' && !mutation.isPending;
+  // The API refuses a reason under 10 characters (SYSTEM_5 review actions): say so before the confirm dialog.
+  const reasonShort = reasonProblem(reason);
+  const canSubmit = finding !== '' && !reasonShort && !mutation.isPending;
   const missing = caseRecord.documentCheckResult?.issues ?? [];
 
   return (
@@ -97,6 +100,7 @@ export function CaseOverridePanel({
           className="w-full rounded-lg border border-slate-900/10 px-3 py-2 text-sm outline-none focus:border-ulink-orange focus:ring-2 focus:ring-ulink-orange/20"
         />
       </label>
+      {reason.trim() !== '' && reasonShort && <p className="-mt-2 mb-3 text-xs text-amber-700">{reasonShort}</p>}
 
       <AlertDialog.Root open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialog.Trigger asChild>

@@ -99,7 +99,7 @@ function validateCorrection(body, options) {
   if (option.item === 'member:contract_exclusion' && !['check', 'exception'].includes(body.wrongStep)) {
     return { error: "A policy contract exclusion either does not apply (the check's decision was wrong) or goes on as an exception." };
   }
-  if (typeof body.reason !== 'string' || body.reason.trim().length < 3) return { error: 'Add a comment: why the AI was wrong.' };
+  if (!reasonLongEnough(body.reason)) return { error: REASON_TOO_SHORT };
 
   if (option.kind === 'verdict') {
     if (typeof body.passed !== 'boolean') return { error: 'Say whether the check passes or fails.' };
@@ -240,4 +240,10 @@ function correctionHold(result, fields) {
   return !result.passed && (fields?.corrections || []).length ? ['a person corrected items on this case and sends the request'] : [];
 }
 
-module.exports = { NOT_VERDICT_ITEMS, WRONG_STEP_LABELS, EXCEPTION_STEPS, recheckFrom, correctionHold, correctionOptions, validateCorrection, aiOriginal, applyCorrection, applyVerdicts, correctionText };
+// A reviewer's reason for a correction or an override (SYSTEM_5 review actions, owner 2026-10-27): at least 10
+// characters, so "ok" is refused. The console checks the same number.
+const MIN_REASON_LENGTH = 10;
+const REASON_TOO_SHORT = `Write a reason of at least ${MIN_REASON_LENGTH} characters.`;
+const reasonLongEnough = (reason) => typeof reason === 'string' && reason.trim().length >= MIN_REASON_LENGTH;
+
+module.exports = { MIN_REASON_LENGTH, REASON_TOO_SHORT, reasonLongEnough, NOT_VERDICT_ITEMS, WRONG_STEP_LABELS, EXCEPTION_STEPS, recheckFrom, correctionHold, correctionOptions, validateCorrection, aiOriginal, applyCorrection, applyVerdicts, correctionText };

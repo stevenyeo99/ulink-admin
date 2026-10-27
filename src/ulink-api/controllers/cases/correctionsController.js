@@ -1,7 +1,7 @@
 const { sequelize, Case, CaseEvent, ApiCaseStep, AiFeedback } = require('../../db/models');
 const { apiCaseView } = require('../../modules/api-pipeline/caseView');
 const { OVERRIDE_TARGETS } = require('../../modules/case-override/override');
-const { correctionOptions, validateCorrection, aiOriginal, applyCorrection, correctionText, recheckFrom } = require('../../modules/ai-feedback/corrections');
+const { correctionOptions, validateCorrection, aiOriginal, applyCorrection, correctionText, recheckFrom, reasonLongEnough, REASON_TOO_SHORT } = require('../../modules/ai-feedback/corrections');
 const logger = require('../../utils/logger');
 
 // Per-item correction (SYSTEM_4 E4-12, E4-15 step 1). Allowed where a whole-check override is (a member or document
@@ -192,6 +192,8 @@ async function createConfirmation(req, res) {
     .find((o) => o.kind === req.body?.kind && o.item === req.body?.item);
   if (!option || option.item.startsWith('member:')) return res.status(400).json({ error: { message: 'Pick a value or check of this case.', status: 400 } });
   if (option.current == null) return res.status(400).json({ error: { message: `${option.label}: the AI read nothing to confirm.`, status: 400 } });
+  // Mark OK on an unsure value needs a reason, as every review action does (SYSTEM_5 review actions, owner 2026-10-27).
+  if (!reasonLongEnough(req.body?.reason)) return res.status(400).json({ error: { message: REASON_TOO_SHORT, status: 400 } });
 
   // A value a person corrected is no longer the AI's: confirming it would count a wrong AI read as right. Agreeing with
   // a correction is "Mark trusted".
@@ -204,7 +206,7 @@ async function createConfirmation(req, res) {
   const existing = mine.find(same);
   if (existing) return res.json({ confirmation: existing });
 
-  const reason = typeof req.body?.reason === 'string' && req.body.reason.trim() ? req.body.reason.trim() : 'Checked against the document';
+  const reason = req.body.reason.trim();
   let row;
   try {
     row = await AiFeedback.create({

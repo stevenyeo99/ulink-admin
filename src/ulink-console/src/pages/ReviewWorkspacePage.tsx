@@ -90,16 +90,19 @@ export function ReviewWorkspacePage() {
   const confirmed = new Map(corrections.list
     .filter((c) => c.kind === 'confirm' && c.createdBy === me && kindOf(c.item))
     .map((c) => [`${kindOf(c.item)}:${c.item}`, c.correctedValue]));
-  const confirm = async (keys: string[]) => {
+  // true when every item was saved: the panel keeps the reviewer's reason otherwise.
+  const confirm = async (keys: string[], reason?: string) => {
     setConfirming(true);
     setConfirmError(null);
     try {
       for (const key of keys) {
         const [kind, ...rest] = key.split(':');
-        await confirmFinding(id, kind as 'value' | 'verdict', rest.join(':'));
+        await confirmFinding(id, kind as 'value' | 'verdict', rest.join(':'), reason);
       }
+      return true;
     } catch (error) {
-      setConfirmError(`Couldn't record "Right": ${(error as Error).message}`);
+      setConfirmError(`Couldn't record "Mark OK": ${(error as Error).message}`);
+      return false;
     } finally {
       setConfirming(false);
       queryClient.invalidateQueries({ queryKey: ['case', id] });

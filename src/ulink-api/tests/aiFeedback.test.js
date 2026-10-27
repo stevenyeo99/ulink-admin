@@ -63,13 +63,13 @@ describe('what can be corrected', () => {
     const options = correctionOptions(fields(), evaluateDocumentChecks(fields()));
     const ok = { kind: 'value', item: 'claim.total_claim_amount', value: '35,000', reason: 'receipt says 35,000', wrongStep: 'reading' };
     expect(validateCorrection(ok, options)).toMatchObject({ corrected: 35000 });
-    expect(validateCorrection({ ...ok, reason: '' }, options).error).toMatch('comment');
+    expect(validateCorrection({ ...ok, reason: '' }, options).error).toMatch('at least 10 characters');
     expect(validateCorrection({ ...ok, wrongStep: 'guess' }, options).error).toMatch('what went wrong');
     expect(validateCorrection({ ...ok, value: 'abc' }, options).error).toMatch('enter an amount');
     expect(validateCorrection({ ...ok, value: 32500 }, options).error).toMatch('already');
     expect(validateCorrection({ ...ok, item: 'invoices.items.0.date', value: '2026-02-30' }, options).error).toMatch('YYYY-MM-DD');
     expect(validateCorrection({ ...ok, item: 'claimant.phone_number' }, options).error).toMatch('can be corrected');
-    expect(validateCorrection({ kind: 'verdict', item: 'INCORRECT_VOUCHER', passed: false, reason: 'x x', wrongStep: 'check' }, options).error).toMatch('already fails');
+    expect(validateCorrection({ kind: 'verdict', item: 'INCORRECT_VOUCHER', passed: false, reason: 'checked against page 3', wrongStep: 'check' }, options).error).toMatch('already fails');
   });
 });
 
@@ -264,6 +264,7 @@ describe('code review 2026-10-15', () => {
 describe('POST /api/cases/:id/confirmations — "✓ Right" (E5b)', () => {
   const { createConfirmation } = require('../controllers/cases/correctionsController');
   const user = { username: 'ulink', name: 'Ulink', role: 'super_admin' };
+  const R = 'Checked against page 1: the AI read it right.';
   const send = async (body, caseRow) => {
     Case.findByPk.mockResolvedValue({ ...caseRow, toJSON: () => caseRow });
     const res = { status: jest.fn(() => res), json: jest.fn() };
@@ -274,11 +275,11 @@ describe('POST /api/cases/:id/confirmations — "✓ Right" (E5b)', () => {
 
   it('records the value, the AI\'s confidence and page — and changes nothing on the case, even a decided one', async () => {
     AiFeedback.findAll.mockResolvedValue([]);
-    const { status } = await send({ kind: 'value', item: 'claimant.claimant_nrc_passport' }, row());
+    const { status } = await send({ kind: 'value', item: 'claimant.claimant_nrc_passport', reason: R }, row());
     expect(status).toBe(200);
     expect(AiFeedback.create).toHaveBeenCalledWith(expect.objectContaining({
       kind: 'confirm', item: 'claimant.claimant_nrc_passport', aiValue: '12/DAGAYA(N)08144', correctedValue: '12/DAGAYA(N)08144',
-      aiConfidence: 0.55, page: 'claim.pdf - page 1', wrongStep: null, reason: 'Checked against the document', createdBy: 'ulink',
+      aiConfidence: 0.55, page: 'claim.pdf - page 1', wrongStep: null, reason: R, createdBy: 'ulink',
     }));
     expect(Case.update).not.toHaveBeenCalled();
     expect(CaseEvent.create).not.toHaveBeenCalled();
@@ -286,7 +287,7 @@ describe('POST /api/cases/:id/confirmations — "✓ Right" (E5b)', () => {
 
   it('a verdict too; a second click is the same answer, not a new row', async () => {
     AiFeedback.findAll.mockResolvedValue([{ id: 'f8', correctedValue: false }, { id: 'f9', correctedValue: true }]);
-    const { body } = await send({ kind: 'verdict', item: 'MISSING_BANK_INFO' }, row());
+    const { body } = await send({ kind: 'verdict', item: 'MISSING_BANK_INFO', reason: R }, row());
     expect(body.confirmation.id).toBe('f9');
     expect(AiFeedback.create).not.toHaveBeenCalled();
   });
@@ -300,7 +301,7 @@ describe('POST /api/cases/:id/confirmations — "✓ Right" (E5b)', () => {
   it('refuses a value a person corrected (that is "Mark trusted"), and trusting a confirmation', async () => {
     AiFeedback.findAll.mockResolvedValue([]);
     const corrected = { ...fields(), corrections: [{ item: 'claimant.claimant_nrc_passport', kind: 'value' }] };
-    const { status, body } = await send({ kind: 'value', item: 'claimant.claimant_nrc_passport' }, row({ extractedFields: corrected }));
+    const { status, body } = await send({ kind: 'value', item: 'claimant.claimant_nrc_passport', reason: R }, row({ extractedFields: corrected }));
     expect(status).toBe(400);
     expect(body.error.message).toMatch('mark that correction trusted');
 
@@ -313,9 +314,19 @@ describe('POST /api/cases/:id/confirmations — "✓ Right" (E5b)', () => {
   it('two clicks at once: the unique index keeps one, and both get it', async () => {
     AiFeedback.findAll.mockResolvedValueOnce([]).mockResolvedValueOnce([{ id: 'f7', correctedValue: '12/DAGAYA(N)08144' }]);
     AiFeedback.create.mockRejectedValueOnce(Object.assign(new Error('dup'), { name: 'SequelizeUniqueConstraintError' }));
-    const { status, body } = await send({ kind: 'value', item: 'claimant.claimant_nrc_passport' }, row());
+    const { status, body } = await send({ kind: 'value', item: 'claimant.claimant_nrc_passport', reason: R }, row());
     expect(status).toBe(200);
     expect(body.confirmation.id).toBe('f7');
+  });
+
+  it('refuses a Mark OK with no reason or a reason under 10 characters (SYSTEM_5 review actions)', async () => {
+    AiFeedback.findAll.mockResolvedValue([]);
+    for (const reason of [undefined, 'ok']) {
+      const { status, body } = await send({ kind: 'value', item: 'claimant.claimant_nrc_passport', reason }, row());
+      expect(status).toBe(400);
+      expect(body.error.message).toBe('Write a reason of at least 10 characters.');
+    }
+    expect(AiFeedback.create).not.toHaveBeenCalled();
   });
 });
 

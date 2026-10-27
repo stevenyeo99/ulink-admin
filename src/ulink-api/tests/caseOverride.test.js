@@ -96,10 +96,10 @@ describe('POST /api/cases/:id/override', () => {
 
   it('refuses a member not found in IAS, and a case that moved while it was being reviewed', async () => {
     const notFound = { ...emailCase, currentStatus: 'MEMBER_REVIEW_REQUIRED', memberVerifyResult: { reasonCode: 'MEMBER_NOT_FOUND' } };
-    expect((await call({ reason: 'x', finding: 'OTHER' }, notFound)).status).toBe(400);
+    expect((await call({ reason: 'checked against page 3', finding: 'OTHER' }, notFound)).status).toBe(400);
 
     Case.update.mockResolvedValueOnce([0]);
-    const moved = await call({ reason: 'x', finding: 'OTHER' }, emailCase);
+    const moved = await call({ reason: 'checked against page 3', finding: 'OTHER' }, emailCase);
     expect(moved.status).toBe(409);
     expect(CaseEvent.create).not.toHaveBeenCalled();
   });
