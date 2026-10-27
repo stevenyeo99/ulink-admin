@@ -79,12 +79,13 @@ ias-claim-preparation → ias-claim-creation → *email: JD3 / IAS rejection* �
 |---|---|
 | **Reads** | `RECOGNIZED`, and `MEMBER_REVIEW_REQUIRED` again every run (so a fixed IAS record clears it by itself) |
 | **Does** | Looks the member up in IAS by **NRC/passport + treatment date**. Compares: coverage active on the treatment date, date of birth, bank name, account holder, account number, policy number. **Every** problem is listed; the first one is the case's reason code. If the member passes: **policy contract exclusion check** (AI compares diagnosis/treatment with the policy contract's exclusion clauses) and **benefit eligibility** (is the treatment type on the member's plan). |
+| **Contract exclusion** | A clause the AI judges to apply (confidence 0.5 or more, also a clause that only limits the amount) is a member problem, **`member:contract_exclusion`** (reason code `POSSIBLE_EXCLUSION`), with the clause, the confidence and the AI's reason. A person answers with a reason: **Does not apply** (the AI was wrong, STP stays possible) or **Let it go on** (an exception, never STP). The answer covers that clause and that text: a corrected diagnosis or treatment is judged again. The AI answer is reused while the text is unchanged. A member check overridden before this check ran: never STP (SYSTEM_5 contract exclusion, both flows) |
 | **Balance** | Once IAS knows the member: the AI picks each voucher's **benefit head** (kept and reused while the voucher is unchanged), then IAS `get_member_limit_balance` gives the remaining balance. Each voucher is compared with the lowest balance of every limit that covers it (head, type, combined head, combined type); vouchers that share a limit are added up. A short voucher is one more member problem, **`member:balance`** (*Balance not enough*). Its only action is **Bypass** with a reason, and a bypassed claim never goes STP. An unsure head (no head, or a confidence at or below the threshold) stops the case at **`BENEFIT_REVIEW`** *Choose the benefit* when the `holdUnsureBenefit` switch is on: a person chooses the head (and can correct a misread voucher amount), and the member check runs again. With the switch off, that voucher is checked at benefit type level. Claim preparation reuses the member check's head for each unchanged voucher. If IAS gives no balance, nothing is stopped; an IAS error retries next run (SYSTEM_5 member balance, both flows) |
 | **Exclusions** | IAS `get_member_policy_events` gives the member's and the policy period's exclusion events (the period that covers the treatment). Events dated after the treatment do not count. The AI judges by meaning (no date reasoning on the free text) whether the claim falls under each event. A likely match or an unsure answer is a member problem, **`member:exclusion`** (*Possible exclusion in IAS*), with the level (member or policy) per event. Its only action is **Bypass** with a reason, and the claim then never goes STP; nor does a claim whose exclusions could not be checked. The AI answer is reused while the events and the claim are unchanged (SYSTEM_5 member exclusion, both flows) |
 | **Decided by** | Rule (comparisons, balance); **AI** (exclusion checks, name judgments, benefit head) |
 | **Status** | `READY_FOR_DOCUMENT_CHECKING` *Checking documents* · `MEMBER_REVIEW_REQUIRED` *Member check issue* · `BENEFIT_REVIEW` *Choose the benefit* |
 | **Emails** | Member check issue → **internal** "Member verification hold" (every problem + required action + AI assessment). Never to the customer. |
-| **Warnings, not stops** | A possible policy contract exclusion or a benefit not on the plan is a **warning for JD3** — the case continues. The case page shows the clause's own words and the AI's reason. |
+| **Warnings, not stops** | A benefit not on the plan is a **warning for JD3**, and the case continues. |
 | **Human** | *Override and continue* (reason + finding, recorded under the reviewer's name). Not possible when the member isn't in IAS at all. |
 
 ### 2.4 Document check — `document-checking`
@@ -222,7 +223,9 @@ A claim goes STP only if **all** hold (console **STP settings**):
    remark ("Vit C - 10,000 MMK is not covered due to supplement.") and the amount, and that voucher's IAS item gets
    `scma_oid_man_rej_code_1` = `MAN_REJ_CODE_T180`, `man_rej_amt_1`, `man_rej_remark_1` (no amount read → no set;
    JD3 enters it). The claimed amount is not changed.
-7. **no check that can stop a case was switched off** when this case was checked (*Admin → AI checklist*). The rule
+7. **no policy contract exclusion let go on by a person**, and none left unchecked because the member check was
+   overridden first (*Does not apply* keeps STP possible);
+8. **no check that can stop a case was switched off** when this case was checked (*Admin → AI checklist*). The rule
    reads the case's own *Turned off* lines, so a switch changed later does not change the result.
 
 Every block is written as the reason (e.g. "IP is not allowed for STP. (email case rules)"). A rule change applies to
