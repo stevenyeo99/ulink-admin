@@ -220,6 +220,9 @@ describe('code review 2026-10-15', () => {
     // A voucher amount or type: the member balance uses it (SYSTEM_5 member balance phase C) — from the member check.
     expect(recheckFrom('invoices.items.0.subtotal', 'INCOMPLETE')).toMatchObject({ EMAIL: 'RECOGNIZED', API: 'API_RECOGNIZED' });
     expect(recheckFrom('invoices.items.0.date', 'INCOMPLETE')).toMatchObject({ EMAIL: 'READY_FOR_DOCUMENT_CHECKING' });
+    // The diagnosis or treatment: both exclusion checks of the member check judge it — from the member check.
+    expect(recheckFrom('medical.detail_of_illness_injury', 'INCOMPLETE')).toMatchObject({ EMAIL: 'RECOGNIZED', API: 'API_RECOGNIZED' });
+    expect(recheckFrom('medical.full_description_of_treatment', 'API_DOCUMENTS_REVIEW')).toMatchObject({ API: 'API_RECOGNIZED' });
     expect(recheckFrom('INCORRECT_VOUCHER', 'API_DOCUMENTS_UNSURE')).toMatchObject({ API: 'API_READY_FOR_DOCUMENT_CHECKING' });
     expect(recheckFrom('INCORRECT_VOUCHER', 'MEMBER_REVIEW_REQUIRED')).toMatchObject({ EMAIL: 'RECOGNIZED' });
   });

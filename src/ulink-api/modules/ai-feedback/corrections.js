@@ -28,11 +28,13 @@ const EXCEPTION_STEPS = ['ias_outdated', 'exception'];
 const NOT_VERDICT_ITEMS = new Set(['MISSING_MANDATORY_FIELD', 'VALUE_FORMAT', 'FIELDS_READ', 'VITAMIN_OR_SUPPLEMENT', 'PERSON_REQUEST', 'DOCUMENT_LIST', 'BENEFIT_TYPE', 'DOCUMENT_DATES']);
 
 const AMOUNT_FIELDS = new Set(['claim.total_claim_amount']);
-// What the member check compares with IAS (member-verification): a correction of one of these is checked again from
-// the member check; anything else from the document check, so a person's member override stays in force.
+// What the member check compares with IAS (member-verification), and the diagnosis and treatment its two exclusion
+// checks judge (IAS events and the policy contract clauses): a correction of one of these is checked again from the
+// member check; anything else from the document check, so a person's member override stays in force.
 const MEMBER_CHECK_FIELDS = new Set([
   'claimant.claimant_name', 'claimant.claimant_nrc_passport', 'claimant.claimant_dob', 'policy.policy_no',
   'claim.appointment_date', 'claim.accident_date', 'bank.bank_name', 'bank.bank_account_name', 'bank.bank_account_number',
+  'medical.detail_of_illness_injury', 'medical.full_description_of_treatment',
 ]);
 // The voucher types the AI reads — keep in line with extract-fields.md (voucher_type) and its schema enum.
 const VOUCHER_TYPES = ['consultation', 'pharmacy', 'lab', 'optical', 'other'];
