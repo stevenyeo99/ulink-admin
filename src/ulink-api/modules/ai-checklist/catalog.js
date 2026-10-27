@@ -49,9 +49,9 @@ const CHECKS = [
     does: "Picks each voucher's benefit head, then compares each voucher amount with the member's remaining balance in IAS: the head, its benefit type and any combined limit, whichever is lowest. Vouchers that share a limit are added up." },
   { code: 'member:exclusion', section: 'member', question: 'Is the claim under a member or policy exclusion in IAS?', label: MEMBER_ITEM_LABELS['member:exclusion'], effect: 'stops', usesAi: true,
     does: "Reads the exclusions IAS holds for this member and this policy period, and judges by meaning whether the claim falls under one. Only exclusions dated on or before the treatment count. A likely match or an unsure answer stops the case for a person. Each line says whether the exclusion is at member or policy level." },
-  { code: 'POSSIBLE_EXCLUSION', section: 'member', question: 'Could the diagnosis be excluded by the policy contract?', label: 'Possible policy contract exclusion', effect: 'warning', usesAi: true,
-    does: 'Compares the diagnosis with the exclusion clauses of the policy contract (not the member or policy exclusions in IAS). A possible match is flagged for the approver (JD3), never rejected.',
-    onFail: 'The case goes on, and the approver (JD3) sees the warning. If the System settings switch for review points is on, the claim does not go STP.' },
+  // item: the member finding it raises (SYSTEM_5 contract exclusion), whose reason code is this check's code.
+  { code: 'POSSIBLE_EXCLUSION', item: 'member:contract_exclusion', section: 'member', question: 'Could the diagnosis be excluded by the policy contract?', label: 'Possible policy contract exclusion', effect: 'stops', usesAi: true,
+    does: 'Compares the diagnosis and the treatment with the exclusion clauses of the policy contract (not the member or policy exclusions in IAS). A possible match, with the AI\'s confidence and reason, waits for a person. It is never a rejection.' },
   { code: 'BENEFIT_NOT_ELIGIBLE', section: 'member', question: "Is the benefit type in the member's plan?", label: 'Benefit not eligible', effect: 'warning',
     does: "The claim's benefit type must be one of the benefit types in the member's IAS plan." },
 
@@ -144,10 +144,12 @@ function reviewerActions(check) {
   // Same rule as correctionOptions: a document line is a verdict unless NOT_VERDICT_ITEMS lists it. A check that is off
   // never has a pass or fail, so it is never offered.
   const isVerdict = check.section === 'member'
-    ? ACCEPTABLE_MEMBER_ITEMS.has(check.code)
+    ? ACCEPTABLE_MEMBER_ITEMS.has(check.item ?? check.code)
     : check.effect !== 'off' && !NOT_VERDICT_ITEMS.has(check.code);
   // The balance and exclusion findings' only action is a bypass with a reason (SYSTEM_5) — the same mark OK.
   if (isVerdict) actions.push(['member:balance', 'member:exclusion'].includes(check.code) ? 'Bypass (with a reason)' : 'Mark passed');
+  // A policy contract exclusion that applies can also go on as an exception (SYSTEM_5 contract exclusion).
+  if (isVerdict && check.item === 'member:contract_exclusion') actions.push('Let it go on (with a reason, no STP)');
   if (isVerdict && check.section !== 'member' && ISSUES[check.code]) actions.push('Mark failed');
   const fields = (check.fields || []).map((key) => FIELD_LABELS[key] || VOUCHER_FIELDS[key]).filter(Boolean);
   if (fields.length) actions.push(`Correct: ${fields.join(', ')}`);

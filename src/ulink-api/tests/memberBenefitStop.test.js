@@ -2,7 +2,7 @@
 // (holdUnsureBenefit, both flows) — after member problems, before the balance is judged.
 jest.mock('../modules/ias-claim-preparation/benefitPicker', () => ({ pickBenefit: jest.fn() }));
 jest.mock('../modules/member-verification/iasClient', () => ({ getMemberLimitBalance: jest.fn(), getMemberInfo: jest.fn(), getMemberPolicyEvents: jest.fn(async () => ({ success: true, payload: { memberEvents: [], policyEvents: [] } })) }));
-jest.mock('../modules/member-verification/exclusionFlags', () => ({ checkExclusions: jest.fn(async () => []) }));
+jest.mock('../modules/member-verification/exclusionFlags', () => ({ checkExclusions: jest.fn(async () => null) }));
 // No check switched off (AI checklist switches) — no database here.
 jest.mock('../modules/ai-checklist/switches', () => ({ switchedOff: jest.fn(async () => new Map()), offNote: jest.fn() }));
 jest.mock('../modules/ias-claim-preparation/medicalTranslation', () => ({ toEnglishMedicalText: jest.fn(async (t) => ({ ...t, translation: null })) }));

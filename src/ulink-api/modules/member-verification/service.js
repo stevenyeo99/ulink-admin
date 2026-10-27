@@ -70,7 +70,19 @@ async function checkCase(caseRecord) {
     ? await checkMemberExclusions(extractedFields, iasResponse, caseRecord.memberVerifyResult?.exclusions)
     : null;
   const extra = [issue, exclusions?.issue].filter(Boolean);
-  const result = evaluate(extractedFields, iasResponse, extra, off);
+  let result = evaluate(extractedFields, iasResponse, extra, off);
+  // The policy contract exclusion (SOP §6.3; SYSTEM_5 contract exclusion, owner 2026-10-27): only once the other member
+  // checks pass — a case still failing on e.g. a DOB mismatch is checked again on a later run anyway. A match is one more
+  // member finding (member:contract_exclusion) that holds the case for a person. The AI answer is reused while the text
+  // is unchanged, and kept while the check does not run, so a case at member review is not judged again every run.
+  // No contractExclusion on the case: the check never ran (claim preparation keeps an overridden case from STP then).
+  const previousContract = caseRecord.memberVerifyResult?.contractExclusion;
+  const contractRuns = result.outcome === 'MEMBER_VERIFIED' && !off.has('POSSIBLE_EXCLUSION');
+  const contract = contractRuns ? await checkExclusions(extractedFields, caseRecord.recognizedType, previousContract) : null;
+  if (contract?.issue) result = evaluate(extractedFields, iasResponse, [...extra, contract.issue], off);
+  // Ran with nothing to judge (no diagnosis or treatment text): nothing is kept. Not run: the last answer is kept.
+  const contractExclusion = contractRuns ? (contract ? { fingerprint: contract.fingerprint, flag: contract.flag } : { fingerprint: null, flag: null }) : previousContract;
+  if (contractExclusion) result.contractExclusion = contractExclusion;
   if (exclusions) result.exclusions = { checked: exclusions.checked, note: exclusions.note, fingerprint: exclusions.fingerprint, events: exclusions.events };
   const memberOff = [...off].filter(([code]) => CHECKS.find((c) => c.code === code)?.section === 'member');
   if (memberOff.length) result.turnedOff = memberOff.map(([code, row]) => ({ code, note: offNote(row) }));
@@ -86,20 +98,17 @@ async function checkCase(caseRecord) {
   }
   else if (previousPicks) result.balance = { checked: false, note: 'IAS did not find the member.', picks: previousPicks, lines: [] };
 
-  // Only run the exclusion-possibility check (SOP §6.3) and benefit-eligibility check (SOP
-  // §6.4) once the hard member/policy checks already pass — a case still failing on e.g. a
-  // DOB mismatch will be re-evaluated on a later run anyway (see run()'s retry loop), so
-  // spending these now would surface a result JD3 won't see until the case clears those
-  // first. checkBenefitEligibility itself is free (no LLM), gated here for the same
-  // noise-reduction reason as exclusions, not cost.
+  // The flags: the contract exclusion — while it holds the case too, so the clause, the confidence and the policyholder
+  // notes stay on the case after a whole-check override — and, on a verified member, the benefit-eligibility warning
+  // (SOP §6.4). checkBenefitEligibility is free (no LLM), gated here for the same noise-reduction reason as the exclusion.
   if (result.outcome === 'MEMBER_VERIFIED') {
     const eligibilityFlag = off.has('BENEFIT_NOT_ELIGIBLE') ? null : checkBenefitEligibility(extractedFields, iasResponse.payload?.memberPlans);
     result.flags = [
-      ...(off.has('POSSIBLE_EXCLUSION') ? [] : await checkExclusions(extractedFields, caseRecord.recognizedType)),
+      ...(contract?.flag ? [contract.flag] : []),
       ...(eligibilityFlag ? [eligibilityFlag] : []),
     ];
   } else {
-    result.flags = [];
+    result.flags = contract?.flag ? [contract.flag] : [];
   }
 
   // SOP §6.5 (available benefit balance): the IAS remaining balance per voucher, result.balance above (SYSTEM_5 member

@@ -94,6 +94,11 @@ function validateCorrection(body, options) {
   // A short IAS balance or an exclusion in IAS is a business decision, not an AI mistake (SYSTEM_5).
   if (option.item === 'member:balance' && body.wrongStep !== 'exception') return { error: 'A short balance is bypassed as an exception.' };
   if (option.item === 'member:exclusion' && body.wrongStep !== 'exception') return { error: 'An exclusion in IAS is bypassed as an exception.' };
+  // A policy contract exclusion (SYSTEM_5 contract exclusion): the AI was wrong (it does not apply, STP stays possible), or
+  // it applies and the case goes on as an exception (never STP).
+  if (option.item === 'member:contract_exclusion' && !['check', 'exception'].includes(body.wrongStep)) {
+    return { error: "A policy contract exclusion either does not apply (the check's decision was wrong) or goes on as an exception." };
+  }
   if (typeof body.reason !== 'string' || body.reason.trim().length < 3) return { error: 'Add a comment: why the AI was wrong.' };
 
   if (option.kind === 'verdict') {

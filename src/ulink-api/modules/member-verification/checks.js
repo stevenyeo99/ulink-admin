@@ -94,8 +94,9 @@ function checkCoverageActive(plan, treatmentDateYYYYMMDD) {
 
 // The member findings a person may mark OK one by one (not coverage — see evaluate).
 // member:balance / member:exclusion (SYSTEM_5): the only action on them is this mark OK — the review page's "Bypass", with
-// a reason.
-const MEMBER_ITEM_LABELS = { 'member:dob': 'Member check: date of birth', 'member:bank': 'Member check: bank details', 'member:policy': 'Member check: policy number', 'member:balance': 'Member check: balance', 'member:exclusion': 'Member check: exclusion in IAS' };
+// a reason. member:contract_exclusion (SYSTEM_5 contract exclusion): marked as not applying (wrongStep check) or let go on
+// as an exception — the correction's wrongStep is kept on the accepted finding, for the STP rule.
+const MEMBER_ITEM_LABELS = { 'member:dob': 'Member check: date of birth', 'member:bank': 'Member check: bank details', 'member:policy': 'Member check: policy number', 'member:balance': 'Member check: balance', 'member:exclusion': 'Member check: exclusion in IAS', 'member:contract_exclusion': 'Member check: policy contract exclusion' };
 const ACCEPTABLE_MEMBER_ITEMS = new Set(Object.keys(MEMBER_ITEM_LABELS));
 
 // extraIssues: findings from outside this record's fields, listed after its own (member-verification/memberBalance.js's
@@ -207,7 +208,7 @@ function evaluate(extractedFields, iasResponse, extraIssues = [], off = new Map(
     ? issue.coverKeys.every((key) => bypassedKeys(issue.item).includes(key))
     : marked.get(issue.item).covers === issue.reason);
   const accepted = issues.filter(isMarked)
-    .map((issue) => ({ ...issue, by: marked.get(issue.item).by ?? 'a person', acceptedReason: marked.get(issue.item).reason ?? '' }));
+    .map((issue) => ({ ...issue, by: marked.get(issue.item).by ?? 'a person', acceptedReason: marked.get(issue.item).reason ?? '', wrongStep: marked.get(issue.item).wrongStep ?? null }));
   const open = issues.filter((issue) => !isMarked(issue));
 
   if (open.length > 0) {

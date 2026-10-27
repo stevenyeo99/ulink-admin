@@ -20,7 +20,8 @@ function feedbackRow(f) {
     at: f.createdAt,
     caseId: f.caseId,
     type: confirm ? 'Confirmed right'
-      : f.item?.startsWith('member:') ? 'Member finding accepted (not AI)'
+      // A policy contract exclusion marked as not applying is the AI's mistake (SYSTEM_5 contract exclusion).
+      : f.item?.startsWith('member:') && !(f.item === 'member:contract_exclusion' && f.wrongStep === 'check') ? 'Member finding accepted (not AI)'
         : EXCEPTION_STEPS.includes(f.wrongStep) ? 'Accepted as an exception (not AI)' : 'Correction',
     item: f.label,
     aiFinding: shown(f.aiValue),

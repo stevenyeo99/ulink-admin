@@ -48,7 +48,7 @@ it('a switched-off member check is dropped from the findings', () => {
 
 it("STP reads the case's own record: what was turned off when it was checked, only checks that could stop a case", () => {
   const { caseChecksOff } = require('../modules/ai-checklist/switches');
-  const member = { turnedOff: [{ code: 'member:dob' }, { code: 'POSSIBLE_EXCLUSION' }] };
+  const member = { turnedOff: [{ code: 'member:dob' }, { code: 'BENEFIT_NOT_ELIGIBLE' }] };
   const documents = { checklist: [{ code: 'UNCLEAR_VOUCHER', turnedOff: true }, { code: 'MISSING_VOUCHER', passed: true }] };
   expect(caseChecksOff(member, documents)).toEqual(['member:dob', 'UNCLEAR_VOUCHER']);
   expect(caseChecksOff(null, null)).toEqual([]);
@@ -63,7 +63,7 @@ it('the summary names a turned-off document check, never "nothing to compare"', 
 it('no STP while a check that can stop a case is off; a warning switched off does not block', () => {
   const config = { rules: [{ caseSource: 'EMAIL', benefitType: 'OP', currency: 'MMK', stpAllowed: true, amountLimit: 1000000 }], blockedDiagnoses: [] };
   const input = { source: 'EMAIL', currency: 'MMK', lines: [{ benefitType: 'OP', subtotal: 1000 }], diagCode: 'J06.9' };
-  const off = new Map([['UNCLEAR_VOUCHER', row('UNCLEAR_VOUCHER', false)], ['POSSIBLE_EXCLUSION', row('POSSIBLE_EXCLUSION', false)]]);
+  const off = new Map([['UNCLEAR_VOUCHER', row('UNCLEAR_VOUCHER', false)], ['BENEFIT_NOT_ELIGIBLE', row('BENEFIT_NOT_ELIGIBLE', false)]]);
   expect(offStopping(off)).toEqual(['UNCLEAR_VOUCHER']);
   expect(evaluateStp(config, { ...input, checksOff: offStopping(off) })).toMatchObject({ isStp: false, reasons: ['A check is switched off (UNCLEAR_VOUCHER) — a person approves.'] });
   expect(evaluateStp(config, input).isStp).toBe(true);

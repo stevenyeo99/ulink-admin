@@ -110,6 +110,7 @@ const REASON_CODE_TO_SOP_ACTION = {
   BANK_DETAILS_MISMATCH: 'Hold payment-related verification and clarify required bank information.',
   BALANCE_NOT_ENOUGH: 'Check the member balance in IAS; bypass with a reason to go on (the claim then needs approval, never STP).',
   POSSIBLE_MEMBER_EXCLUSION: 'Check the member and policy exclusions in IAS against the claim; bypass with a reason to go on (the claim then needs approval, never STP).',
+  POSSIBLE_EXCLUSION: 'Read the policy contract clause against the claim: mark it as not applying (the claim can still go STP), or let the case go on with a reason (the claim then needs approval, never STP).',
 };
 
 function renderMemberVerifyIssue(payload) {

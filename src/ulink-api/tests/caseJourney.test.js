@@ -41,8 +41,8 @@ it('puts the journey first in the email text', () => {
   expect(text).toContain('IAS — Rejected: Claim already exists');
 });
 
-// A possible policy exclusion is a warning, not a stop: the path and the assessment show the clause's
-// own words and what in the claim matched, so a reviewer can judge it (2026-09-29).
+// A possible policy contract exclusion with no person decision (a case checked before it held the case): the path and
+// the assessment show the clause's own words and what in the claim matched, so a reviewer can judge it (2026-09-29).
 it('explains a possible exclusion with the clause wording and the AI reason', () => {
   const flag = { code: 'POSSIBLE_EXCLUSION', clauseRef: '6.22', confidence: 0.85, clauseText: 'Weight loss or weight problems.', reason: 'Treatment is Tirzepatide with BMI 30.2.' };
   const summary = buildAssessmentSummary({ createdAt: '2026-09-29T01:00:00Z', currentStatus: 'READY_FOR_DOCUMENT_CHECKING', memberVerifyResult: { ...verified, flags: [flag] } });
@@ -50,11 +50,11 @@ it('explains a possible exclusion with the clause wording and the AI reason', ()
   const exclusion = summary.lines.find((l) => l.decision === 'Policy contract exclusion');
   expect(exclusion).toMatchObject({
     result: 'Possible contract exclusion (clause 6.22)',
-    why: 'Clause 6.22: "Weight loss or weight problems". AI: Treatment is Tirzepatide with BMI 30.2. Only a warning for JD3 — the case is not stopped.',
+    why: 'Clause 6.22: "Weight loss or weight problems". AI: Treatment is Tirzepatide with BMI 30.2. A warning for JD3.',
     review: { check: 'Read clause 6.22 and decide whether it applies to this claim.' },
   });
   expect(summary.journey.find((s) => s.stage === 'Policy check'))
-    .toEqual({ stage: 'Policy check', result: 'Possible contract exclusion (clause 6.22)', why: 'Treatment is Tirzepatide with BMI 30.2. A warning for JD3, not a stop.' });
+    .toEqual({ stage: 'Policy check', result: 'Possible contract exclusion (clause 6.22)', why: 'Treatment is Tirzepatide with BMI 30.2. A warning for JD3.' });
 
   // A flag stored before the clause text was kept: the wording comes from the policy clause list.
   const older = buildAssessmentSummary({ memberVerifyResult: { ...verified, flags: [{ code: 'POSSIBLE_EXCLUSION', clauseRef: '6.22', confidence: 0.85 }] } });

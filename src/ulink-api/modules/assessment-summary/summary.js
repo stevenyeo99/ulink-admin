@@ -52,6 +52,7 @@ const MEMBER_REVIEW = {
   BANK_DETAILS_MISMATCH: REVIEW.DATA_MISMATCH,
   BALANCE_NOT_ENOUGH: REVIEW.RULE_HOLD,
   POSSIBLE_MEMBER_EXCLUSION: REVIEW.RULE_HOLD,
+  POSSIBLE_EXCLUSION: REVIEW.RULE_HOLD,
 };
 
 const MEMBER_CHECK_LABELS = {
@@ -211,31 +212,41 @@ function memberLines(memberVerifyResult) {
     lines.push(line({ decision: 'Member checks turned off', result: 'Not run', status: 'not_checked', why: memberVerifyResult.turnedOff.map((t) => `${t.code}: ${t.note}`).join('; '), verified: VERIFIED.RULE }));
   }
 
-  // Advisory flags on a verified member: benefit eligibility (rule) and possible policy exclusion (AI).
+  // Flags on a verified member: benefit eligibility (rule), and the policy contract exclusion (AI) with the person's
+  // decision — a match holds the case at member review until a person decides (SYSTEM_5 contract exclusion).
   for (const flag of flags || []) {
     const byAi = flag.confidence != null;
     const exclusion = flag.code === 'POSSIBLE_EXCLUSION';
     // An exclusion shows the clause's own words and what in the claim matched, so a reviewer can judge it.
     const clauseText = exclusion ? flag.clauseText || CLAUSE_TEXT[flag.clauseRef] : null;
+    // The person's answer: does not apply (the AI was wrong) or let go on (an exception). None on a case checked before
+    // the match held the case (then it was a warning for JD3).
+    const decided = exclusion ? accepted.find((a) => a.item === 'member:contract_exclusion') : null;
+    const notApplying = decided?.wrongStep === 'check';
     lines.push(line({
       decision: exclusion ? 'Policy contract exclusion' : 'Benefit eligibility',
-      result: exclusion ? `Possible contract exclusion${flag.clauseRef ? ` (clause ${flag.clauseRef})` : ''}` : flag.code,
-      status: 'issue',
+      result: !exclusion ? flag.code
+        : notApplying ? 'Does not apply (a person checked)'
+          : decided ? 'Let go on by a person'
+            : `Possible contract exclusion${flag.clauseRef ? ` (clause ${flag.clauseRef})` : ''}`,
+      status: notApplying ? 'ok' : 'issue',
       why: exclusion
         ? [
           clauseText ? `Clause ${flag.clauseRef}: "${clauseText.replace(/\.$/, '')}".` : `Clause ${flag.clauseRef}.`,
+          flag.severity === 'cap' ? 'The clause limits the amount.' : null,
           flag.reason ? `AI: ${flag.reason}` : null,
-          'Only a warning for JD3 — the case is not stopped.',
+          decided ? `${decided.by}: ${decided.acceptedReason}.${notApplying ? '' : ' The claim needs approval (never STP).'}` : 'A warning for JD3.',
         ].filter(Boolean).join(' ')
         : flag.reason || flag.desc || null,
       confidence: formatConfidence(flag.confidence),
       verified: byAi ? VERIFIED.AI : VERIFIED.RULE,
+      // A person already decided: nothing left to review (a let-through is kept from STP by claim preparation).
       review: exclusion
-        ? { ...REVIEW.RULE_HOLD, mightBeWrong: ['AI judgment'], check: `Read clause ${flag.clauseRef} and decide whether it applies to this claim.` }
+        ? (decided ? null : { ...REVIEW.RULE_HOLD, mightBeWrong: ['AI judgment'], check: `Read clause ${flag.clauseRef} and decide whether it applies to this claim.` })
         : byAi ? { ...REVIEW.RULE_HOLD, mightBeWrong: ['AI judgment'] } : REVIEW.RULE_HOLD,
       // Short form for "why the case went this way": the AI's reason, else the start of the clause.
       brief: exclusion
-        ? `${flag.reason || (clauseText ? `"${clauseText.length > 110 ? `${clauseText.slice(0, 110).trimEnd()}…` : clauseText}"` : `Clause ${flag.clauseRef}.`)} A warning for JD3, not a stop.`
+        ? `${flag.reason || (clauseText ? `"${clauseText.length > 110 ? `${clauseText.slice(0, 110).trimEnd()}…` : clauseText}"` : `Clause ${flag.clauseRef}.`)} ${notApplying ? 'A person found that it does not apply.' : decided ? 'A person let it go on.' : 'A warning for JD3.'}`
         : null,
     }));
   }

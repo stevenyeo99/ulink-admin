@@ -20,7 +20,7 @@ const amount = (n) => Number(n).toLocaleString('en-US');
  *
  * Returns { isStp, source, currency, diagCode, benefits: [{ benefitType, total, allowed, limit }], reasons }.
  */
-function evaluateStp({ rules, blockedDiagnoses, blockOnReviewPoints = false, blockVitamins = false }, { source, currency, lines, diagCode, openReviewPoints = [], vitaminVouchers = [], balanceBypassed = false, checksOff = [], exclusionLetThrough = false }) {
+function evaluateStp({ rules, blockedDiagnoses, blockOnReviewPoints = false, blockVitamins = false }, { source, currency, lines, diagCode, openReviewPoints = [], vitaminVouchers = [], balanceBypassed = false, checksOff = [], exclusionLetThrough = false, contractExclusionLetThrough = false }) {
   const reasons = [];
   const totals = new Map();
   for (const { benefitType, subtotal } of lines) {
@@ -57,6 +57,10 @@ function evaluateStp({ rules, blockedDiagnoses, blockOnReviewPoints = false, blo
 
   // A possible exclusion in IAS a person let through at member review (SYSTEM_5 member exclusion): a person approves.
   if (exclusionLetThrough) reasons.push('A possible member or policy exclusion in IAS was let through by a person, or the exclusions could not be checked — a person approves.');
+
+  // A possible policy contract exclusion a person let go on, or not checked because the member check was overridden
+  // first (SYSTEM_5 contract exclusion): a person approves.
+  if (contractExclusionLetThrough) reasons.push('A possible policy contract exclusion was let go on by a person, or was not checked — a person approves.');
 
   // A check that can stop a case is switched off (AI checklist, SYSTEM_5 phase B, Q2): a person approves.
   if (checksOff.length) reasons.push(`A check is switched off (${checksOff.join(', ')}) — a person approves.`);

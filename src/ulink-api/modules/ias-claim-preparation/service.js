@@ -162,6 +162,12 @@ async function checkCase(caseRecord) {
     // A possible exclusion in IAS bypassed (accepted) or let through by an override (still in issues): never STP.
     exclusionLetThrough: [...(caseFields.memberVerifyResult?.accepted || []), ...(caseFields.memberVerifyResult?.issues || [])].some((finding) => finding.item === 'member:exclusion')
       || caseFields.memberVerifyResult?.exclusions?.checked === false, // could not be checked: a person approves
+    // A policy contract exclusion let go on as an exception (accepted, not as "does not apply") or by a whole-check
+    // override (still in issues): never STP (SYSTEM_5 contract exclusion). "Does not apply" keeps STP possible.
+    // A member check overridden before the contract check ever ran (no contractExclusion): not checked, never STP.
+    contractExclusionLetThrough: [...(caseFields.memberVerifyResult?.accepted || []).filter((finding) => finding.wrongStep !== 'check'), ...(caseFields.memberVerifyResult?.issues || [])]
+      .some((finding) => finding.item === 'member:contract_exclusion')
+      || Boolean(caseFields.memberVerifyResult?.issues?.length && !caseFields.memberVerifyResult?.contractExclusion),
     // The checks that could stop a case and were switched off when this case was checked (AI checklist, Q2).
     checksOff: caseChecksOff(caseFields.memberVerifyResult, caseFields.documentCheckResult),
     balanceBypassed: Boolean(balanceCheck.issue) || !balanceCheck.checked
