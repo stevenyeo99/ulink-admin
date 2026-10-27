@@ -115,7 +115,9 @@ function withTimeout(promise, ms, blockName) {
  * held, or the service isn't set up here (notConfiguredReason), the step is SKIPPED, not
  * FAILED — that's expected/healthy, not an error.
  */
-async function runStep(pipelineRunId, blockName, service, sequence) {
+// lockName: the job lock to take (default blockName); null takes none — the review lane, whose own lane lock already
+// keeps its rounds apart and whose cases lane 1 never takes (SYSTEM_5 review lane).
+async function runStep(pipelineRunId, blockName, service, sequence, { lockName = blockName } = {}) {
   const step = await PipelineRunStep.create({
     pipelineRunId,
     blockName,
@@ -131,7 +133,7 @@ async function runStep(pipelineRunId, blockName, service, sequence) {
     return;
   }
 
-  const acquired = await jobLock.acquire(blockName);
+  const acquired = lockName === null || (await jobLock.acquire(lockName));
   if (!acquired) {
     await step.update({ status: 'SKIPPED', skipReason: 'already_running', finishedAt: new Date() });
     return;
@@ -150,7 +152,7 @@ async function runStep(pipelineRunId, blockName, service, sequence) {
     // decoupled via Case.currentStatus and idempotent, so one step failing doesn't
     // invalidate the rest; aborting would just delay unrelated work.
   } finally {
-    await jobLock.release(blockName);
+    if (lockName !== null) await jobLock.release(lockName);
   }
 }
 
@@ -203,4 +205,4 @@ function stepNames(pipeline) {
   return PIPELINES[pipeline].map(([blockName]) => blockName);
 }
 
-module.exports = { run, startRun, executeSteps, stepNames, STEPS, API_STEPS, PIPELINES };
+module.exports = { run, startRun, executeSteps, stepNames, runStep, STEPS, API_STEPS, PIPELINES };

@@ -48,10 +48,12 @@ function recipientFor(email) {
 }
 
 // DONE steps asking for an email that api-email-sender hasn't handled yet, oldest first.
-async function pendingRequests() {
+// caseIds (the review lane): only the emails of these cases.
+async function pendingRequests(caseIds = null) {
   return ApiCaseStep.findAll({
     where: {
       status: 'DONE',
+      ...(caseIds ? { caseId: caseIds } : {}),
       job: SOURCE_JOBS,
       [Sequelize.Op.and]: [
         Sequelize.literal(`jsonb_typeof("ApiCaseStep"."output"->'email') = 'object'`),
@@ -176,9 +178,10 @@ async function send(request) {
   return 'sent';
 }
 
-async function run() {
+async function run({ caseIds = null } = {}) {
   const summary = { sent: 0, skipped: 0, errors: [] };
-  for (const request of await pendingRequests()) {
+  if (caseIds && !caseIds.length) return summary;
+  for (const request of await pendingRequests(caseIds)) {
     try {
       summary[await send(request)] += 1;
     } catch (error) {

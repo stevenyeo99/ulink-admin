@@ -20,6 +20,10 @@ module.exports = (sequelize, DataTypes) => {
       // lets an API case hold API_* statuses (docs/imp/day1/api-case-workflow.md section 3).
       source: { type: DataTypes.STRING, allowNull: false, defaultValue: 'EMAIL' },
       tpaCaseNumber: { type: DataTypes.TEXT, allowNull: true },
+      // SYSTEM_5 review lane: set when a person decided the case, cleared at its next stop, wait or end
+      // (modules/review-lane). While set, only the review lane processes the case.
+      reviewPendingAt: { type: DataTypes.DATE, allowNull: true },
+      reviewPendingBy: { type: DataTypes.TEXT, allowNull: true },
     },
     { tableName: 'ulink_cases' }
   );

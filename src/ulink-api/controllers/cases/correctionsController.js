@@ -3,6 +3,9 @@ const { apiCaseView } = require('../../modules/api-pipeline/caseView');
 const { OVERRIDE_TARGETS } = require('../../modules/case-override/override');
 const { correctionOptions, validateCorrection, aiOriginal, applyCorrection, correctionText, recheckFrom, reasonLongEnough, REASON_TOO_SHORT, failedCodes } = require('../../modules/ai-feedback/corrections');
 const { REQUEST_FROM, MAX_LINES, validateLines, openRequests } = require('../../modules/case-requests/requests');
+const { endClaim } = require('../../modules/case-claim/claim');
+const { markFor, BEING_CHECKED } = require('../../modules/review-lane/marker');
+const reviewLane = () => require('../../modules/review-lane/lane'); // at call time: the lane loads every job module
 const logger = require('../../utils/logger');
 
 // Per-item correction (SYSTEM_4 E4-12, E4-15 step 1). Allowed where a whole-check override is (a member or document
@@ -93,6 +96,7 @@ function undecided(fields, options, items, askCustomer) {
 async function saveCorrections(req, res, items, { askCustomer = [], requestLines = [] } = {}) {
   const caseRecord = await Case.findByPk(req.params.id);
   if (!caseRecord) return res.status(404).json({ error: { message: `Case ${req.params.id} not found`, status: 404 } });
+  if (caseRecord.reviewPendingAt) return res.status(409).json({ error: { message: BEING_CHECKED, status: 409 } });
   if (!CORRECTABLE_STATUSES.includes(caseRecord.currentStatus)) {
     return res.status(400).json({ error: { message: 'Corrections are made while a member or document finding holds the case, or while it waits for the customer.', status: 400 } });
   }
@@ -206,7 +210,8 @@ async function saveCorrections(req, res, items, { askCustomer = [], requestLines
 
     // Only if nothing moved the case meanwhile (same guard as override).
     const [count] = await Case.update(
-      caseRecord.source === 'API' ? { currentStatus: newStatus } : { currentStatus: newStatus, extractedFields },
+      // An API case goes to the review lane (SYSTEM_5): it is processed at once, apart from new cases.
+      caseRecord.source === 'API' ? { currentStatus: newStatus, ...markFor(caseRecord, operator) } : { currentStatus: newStatus, extractedFields },
       { where: { id: caseRecord.id, currentStatus: prevStatus }, transaction }
     );
     if (count !== 1) throw Object.assign(new Error('moved'), { moved: true });
@@ -244,6 +249,8 @@ async function saveCorrections(req, res, items, { askCustomer = [], requestLines
     return res.status(409).json({ error: { message: 'The case changed while you were reviewing it. Reload the page and check again.', status: 409 } });
   }
 
+  await endClaim(caseRecord.id, req.user.username); // the holder decided the case — their own claim ends (SYSTEM_4 E4-22)
+  if (caseRecord.source === 'API') reviewLane().triggerReviewLane();
   logger.info('Case items corrected', { caseId: caseRecord.id, items: checked.map((c) => c.option.item), askCustomer: askCustomer.map((a) => a.item), requestLines: added.length, username: req.user.username });
   return res.json({ caseId: caseRecord.id, previousStatus: prevStatus, currentStatus: newStatus, correction: rows[0] ?? null, corrections: rows });
 }

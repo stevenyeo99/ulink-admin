@@ -1,3 +1,4 @@
+const { markFor } = require('../review-lane/marker');
 const crypto = require('crypto');
 const { sequelize, Case, CaseEvent, CaseDocument, ApiCaseStep } = require('../../db/models');
 const config = require('../../config');
@@ -56,7 +57,8 @@ async function uploadDocuments(caseRecord, files, { operator, username, comment 
   const names = files.map((f) => f.filename);
   const prevStatus = caseRecord.currentStatus;
   await sequelize.transaction(async (transaction) => {
-    const [moved] = await Case.update({ currentStatus: 'API_UPLOAD_RECEIVED' }, { where: { id: caseRecord.id, currentStatus: UPLOADABLE_STATUSES }, transaction });
+    // A person's upload goes to the review lane (SYSTEM_5): read at once, apart from new cases.
+    const [moved] = await Case.update({ currentStatus: 'API_UPLOAD_RECEIVED', ...markFor(caseRecord, operator) }, { where: { id: caseRecord.id, currentStatus: UPLOADABLE_STATUSES }, transaction });
     if (moved !== 1) throw new UploadRefused('The case moved on while you were uploading; reload the page and try again.', 409);
     const document = await CaseDocument.create({
       caseId: caseRecord.id, origin: 'UPLOAD', barcodeId: null, originalFilename: filename,

@@ -5,6 +5,8 @@ module.exports = (sequelize, DataTypes) => {
       blockName: { type: DataTypes.STRING, primaryKey: true },
       running: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
       startedAt: { type: DataTypes.DATE, allowNull: true },
+      // A trigger came while this run was busy (the review lane): the run does one more round (modules/review-lane).
+      rerunRequestedAt: { type: DataTypes.DATE, allowNull: true },
     },
     { tableName: 'ulink_job_locks', timestamps: false }
   );

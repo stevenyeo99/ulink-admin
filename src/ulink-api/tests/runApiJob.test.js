@@ -63,7 +63,7 @@ it("passes the named jobs' latest output as input, and records DONE with the sta
 
 it('only selects API cases at the input status', async () => {
   await runApiJob(job(jest.fn()));
-  expect(models.Case.findAll.mock.calls[0][0].where).toEqual({ source: 'API', currentStatus: 'API_A_DONE' });
+  expect(models.Case.findAll.mock.calls[0][0].where).toEqual({ source: 'API', currentStatus: 'API_A_DONE' , reviewPendingAt: null });
 });
 
 it('records WAITING without moving the case, and updates that row on the next wait', async () => {

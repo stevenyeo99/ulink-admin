@@ -82,4 +82,4 @@ const job = {
   process: processCase,
 };
 
-module.exports = { run: () => runApiJob(job), job };
+module.exports = { run: (options) => runApiJob(job, options), job };

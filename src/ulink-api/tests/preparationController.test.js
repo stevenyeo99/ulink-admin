@@ -58,7 +58,8 @@ it('saves the choices with the AI picks beside them and sends the case back to c
   const { status } = await send({ diagCode: 'K05.1', benefits: [{ voucher: 0, benefitType: 'DT', benefitHead: 'SCP' }] });
 
   expect(status).toBe(200);
-  expect(Case.update).toHaveBeenCalledWith({ currentStatus: 'API_READY_FOR_CLAIM_PREPARATION' }, expect.objectContaining({ where: { id: 'c1', currentStatus: 'API_PREPARATION_REVIEW' } }));
+  // The review lane (SYSTEM_5): a person's decision marks the case.
+  expect(Case.update).toHaveBeenCalledWith({ currentStatus: 'API_READY_FOR_CLAIM_PREPARATION', reviewPendingAt: expect.any(Date), reviewPendingBy: 'Ulink (ulink)' }, expect.objectContaining({ where: { id: 'c1', currentStatus: 'API_PREPARATION_REVIEW' } }));
   const { output } = ApiCaseStep.create.mock.calls[0][0];
   expect(output.diagnosis).toMatchObject({ diagCode: 'K05.1', text: 'Diagnosis/illness: Toothache', aiPick: { pick: { diagCode: 'R69' } } });
   expect(output.benefits).toEqual([expect.objectContaining({

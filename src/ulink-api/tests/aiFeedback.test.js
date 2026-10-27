@@ -2,6 +2,8 @@
 // the correction is stored for learning (ulink_ai_feedback), written into the case's fields, and the case is checked
 // again (several corrections: saved together, one check). Models are mocked.
 
+jest.mock('../modules/case-claim/claim', () => ({ endClaim: jest.fn() }));
+jest.mock('../modules/review-lane/lane', () => ({ triggerReviewLane: jest.fn() }));
 jest.mock('../db/models', () => ({
   sequelize: { transaction: jest.fn(async (fn) => fn('tx')) },
   Case: { findByPk: jest.fn(), update: jest.fn(async () => [1]) },
@@ -155,7 +157,7 @@ describe('POST /api/cases/:id/corrections', () => {
     const askCustomer = failedCodes(checkStep.output.documentCheckResult).map((item) => ({ item, reason: 'Not attached by the customer' }));
     const { status } = await send(createCorrections, { body: { items: [body], askCustomer } });
     expect(status).toBe(200);
-    expect(Case.update.mock.calls[0][0]).toEqual({ currentStatus: 'API_READY_FOR_DOCUMENT_CHECKING' });
+    expect(Case.update.mock.calls[0][0]).toEqual({ currentStatus: 'API_READY_FOR_DOCUMENT_CHECKING', reviewPendingAt: expect.any(Date), reviewPendingBy: 'Ulink (ulink)' });
     const step = ApiCaseStep.create.mock.calls[0][0];
     expect(step).toMatchObject({ job: 'api-claim-recognition', status: 'DONE', output: { recognizedType: 'ayas_member_claim' } });
     expect(step.output.extractedFields.invoices.items[0].date).toBe('2026-08-14');
@@ -220,6 +222,19 @@ describe('POST /api/cases/:id/corrections', () => {
       // One failed line not asked for: still held for the person.
       expect(correctionHold(result, { ...corrected, askCustomer: { codes: failed().slice(1) } })).toHaveLength(1);
     });
+  });
+
+  it('review lane (SYSTEM_5): an API save marks the case for the lane; a marked case refuses a new decision', async () => {
+    const aiStep = { job: 'api-claim-recognition', status: 'DONE', createdAt: 1, output: { recognizedType: 'ayas_member_claim', extractedFields: fields() } };
+    ApiCaseStep.findAll.mockResolvedValue([aiStep]);
+    Case.findByPk.mockResolvedValue(emailCase({ source: 'API', currentStatus: 'API_CLAIM_SUSPENDED', extractedFields: null, documentCheckResult: null }));
+    expect((await send(createCorrection, { body })).status).toBe(200);
+    expect(Case.update.mock.calls.at(-1)[0]).toMatchObject({ reviewPendingAt: expect.any(Date), reviewPendingBy: 'Ulink (ulink)' });
+
+    Case.findByPk.mockResolvedValue(emailCase({ reviewPendingAt: new Date() }));
+    const { status, body: res } = await send(createCorrection, { body });
+    expect(status).toBe(409);
+    expect(res.error.message).toBe('This case is being checked again after a decision. Wait until it finishes.');
   });
 
   it('refuses a case not held by a finding, an invalid correction, and a case that moved meanwhile', async () => {

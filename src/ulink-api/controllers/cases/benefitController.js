@@ -5,6 +5,8 @@ const { pickBasis, withChosenPicks } = require('../../modules/member-verificatio
 const { apiCaseView } = require('../../modules/api-pipeline/caseView');
 const { requiredComment } = require('./casesController');
 const { endClaim } = require('../../modules/case-claim/claim');
+const { markFor, BEING_CHECKED } = require('../../modules/review-lane/marker');
+const reviewLane = () => require('../../modules/review-lane/lane'); // at call time: the lane loads every job module
 const logger = require('../../utils/logger');
 
 // "Choose the benefit" (SYSTEM_5 member balance phase C, docs/imp/CR/SYSTEM_5/PRD/MEMBER_BALANCE_PRD.md 4.6): the member
@@ -36,6 +38,7 @@ async function chooseBenefit(req, res) {
   if (comment === null) return undefined;
   const caseRecord = await Case.findByPk(req.params.id);
   if (!caseRecord) return res.status(404).json({ error: { message: `Case ${req.params.id} not found`, status: 404 } });
+  if (caseRecord.reviewPendingAt) return res.status(409).json({ error: { message: BEING_CHECKED, status: 409 } });
   const status = caseRecord.currentStatus;
   if (!STATUSES[status]) return bad(res, 'This case is not waiting for a benefit choice.');
 
@@ -77,7 +80,8 @@ async function chooseBenefit(req, res) {
   const now = new Date();
   const moved = await sequelize.transaction(async (transaction) => {
     // Email: the choices go over the picks on the case; API: a step the member check reads over its last picks.
-    const update = caseRecord.source === 'API' ? { currentStatus: next } : { currentStatus: next, memberVerifyResult: withChosenPicks(result, picks) };
+    // Saved with corrections (recheck): the corrections move and mark the case, not this choice.
+    const update = caseRecord.source === 'API' ? { currentStatus: next, ...(recheck ? {} : markFor(caseRecord, by)) } : { currentStatus: next, memberVerifyResult: withChosenPicks(result, picks) };
     const [count] = await Case.update(update, { where: { id: caseRecord.id, currentStatus: status }, transaction });
     if (count !== 1) return false;
     if (caseRecord.source === 'API') {
@@ -96,6 +100,7 @@ async function chooseBenefit(req, res) {
   if (!moved) return res.status(409).json({ error: { message: 'The case changed while you were reviewing it. Reload the page and check again.', status: 409 } });
   if (recheck) return res.json({ caseId: caseRecord.id, currentStatus: status });
   await endClaim(caseRecord.id, req.user.username); // the holder decided the case — their own claim ends (SYSTEM_4 E4-22)
+  if (caseRecord.source === 'API') reviewLane().triggerReviewLane(); // SYSTEM_5 review lane: processed at once
   logger.info('Benefit chosen by a person', { caseId: caseRecord.id, vouchers: picks.length, username: req.user.username });
   return res.json({ caseId: caseRecord.id, currentStatus: next });
 }

@@ -14,6 +14,8 @@ const { CASE_STATUSES, MODULES, GROUPS, codesInGroup, OUTCOMES, outcomeOf } = re
 const KNOWN_STATUSES = Object.keys(CASE_STATUSES);
 const { getStorageAdapter } = require('../../storage');
 const { resetOneCase } = require('../dev/casesController');
+const { markFor, BEING_CHECKED } = require('../../modules/review-lane/marker');
+const reviewLane = () => require('../../modules/review-lane/lane'); // at call time: the lane loads every job module
 const logger = require('../../utils/logger');
 const { releaseMissingDocumentsEmail } = require('../../modules/document-checking/service');
 const { withEditItems } = require('../../modules/document-checking/checklist');
@@ -177,7 +179,8 @@ async function getNextCase(req, res) {
 // The review queue, oldest first, each with its reason and who is reviewing it (modules/review-queue/queue.js).
 async function reviewQueueItems(source) {
   const cases = await Case.findAll({
-    where: { currentStatus: QUEUE_CANDIDATE_STATUSES, ...(source ? { source } : {}) },
+    // A case a person decided is being checked again (SYSTEM_5 review lane): not in the queue until it stops again.
+    where: { currentStatus: QUEUE_CANDIDATE_STATUSES, reviewPendingAt: null, ...(source ? { source } : {}) },
     order: [['updatedAt', 'ASC']],
     limit: QUEUE_SCAN_LIMIT,
   });
@@ -544,6 +547,7 @@ async function overrideCase(req, res) {
   if (!caseRecord) {
     return res.status(404).json({ error: { message: `Case ${req.params.id} not found`, status: 404 } });
   }
+  if (caseRecord.reviewPendingAt) return res.status(409).json({ error: { message: BEING_CHECKED, status: 409 } });
   const fields = caseRecord.source === 'API'
     ? apiCaseView(await ApiCaseStep.findAll({ where: { caseId: caseRecord.id } }))
     : caseRecord;
@@ -565,7 +569,7 @@ async function overrideCase(req, res) {
   const moved = await sequelize.transaction(async (transaction) => {
     // Only if nothing moved the case meanwhile (e.g. a re-check just passed it).
     const [count] = await Case.update(
-      { currentStatus: targetStatus },
+      { currentStatus: targetStatus, ...markFor(caseRecord, operator) },
       { where: { id: caseRecord.id, currentStatus: prevStatus }, transaction }
     );
     if (count !== 1) return false;
@@ -601,6 +605,7 @@ async function overrideCase(req, res) {
   }
 
   await endClaim(caseRecord.id, req.user.username); // the holder decided the case — their own claim ends (SYSTEM_4 E4-22)
+  if (caseRecord.source === 'API') reviewLane().triggerReviewLane(); // SYSTEM_5 review lane: processed at once
   logger.info('Case manually overridden', { caseId: caseRecord.id, prevStatus, targetStatus, finding, username: req.user.username });
   res.json({ caseId: caseRecord.id, previousStatus: prevStatus, currentStatus: targetStatus });
 }
@@ -657,7 +662,8 @@ async function retryCase(req, res) {
   const operator = req.user.name ? `${req.user.name} (${req.user.username})` : req.user.username;
   const prevStatus = caseRecord.currentStatus;
   const moved = await sequelize.transaction(async (transaction) => {
-    const [count] = await Case.update({ currentStatus: action.target }, { where: { id: caseRecord.id, currentStatus: prevStatus }, transaction });
+    // A retry goes to the existing pipeline, so a marker left on the case (SYSTEM_5 review lane) is cleared.
+    const [count] = await Case.update({ currentStatus: action.target, reviewPendingAt: null, reviewPendingBy: null }, { where: { id: caseRecord.id, currentStatus: prevStatus }, transaction });
     if (count !== 1) return false;
     await CaseEvent.create({
       caseId: caseRecord.id, blockName: BLOCK_NAME, prevStatus, newStatus: action.target, reasonCode: 'MANUAL_RETRY',
@@ -684,6 +690,7 @@ async function releaseMissingDocuments(req, res) {
   const caseRecord = await Case.findByPk(req.params.id);
   if (!caseRecord) return res.status(404).json({ error: { message: `Case ${req.params.id} not found`, status: 404 } });
   const notHeld = () => res.status(400).json({ error: { message: 'This case is not waiting for a check before the customer is emailed.', status: 400 } });
+  if (caseRecord.reviewPendingAt) return res.status(409).json({ error: { message: BEING_CHECKED, status: 409 } });
 
   if (caseRecord.source !== 'API') {
     if (caseRecord.currentStatus !== 'DOCUMENTS_REVIEW') return notHeld();
@@ -705,7 +712,7 @@ async function releaseMissingDocuments(req, res) {
   if (!heldEmail) return res.status(409).json({ error: { message: 'No held email found for this case.', status: 409 } });
   const now = new Date();
   const moved = await sequelize.transaction(async (transaction) => {
-    const [count] = await Case.update({ currentStatus: 'API_INCOMPLETE' }, { where: { id: caseRecord.id, currentStatus: 'API_DOCUMENTS_REVIEW' }, transaction });
+    const [count] = await Case.update({ currentStatus: 'API_INCOMPLETE', ...markFor(caseRecord, operator) }, { where: { id: caseRecord.id, currentStatus: 'API_DOCUMENTS_REVIEW' }, transaction });
     if (count !== 1) return false;
     await CaseEvent.create({ caseId: caseRecord.id, blockName: BLOCK_NAME, prevStatus: 'API_DOCUMENTS_REVIEW', newStatus: 'API_INCOMPLETE', reasonCode: 'MISSING_DOCUMENTS_RELEASED', message: `${released} — comment: ${comment}` }, { transaction });
     await ApiCaseStep.create({ caseId: caseRecord.id, job: 'case-review', status: 'DONE', input: { username: req.user.username, action: 'release-missing-documents', comment }, output: { email: heldEmail }, startedAt: now, finishedAt: now }, { transaction });
@@ -713,6 +720,7 @@ async function releaseMissingDocuments(req, res) {
   });
   if (!moved) return res.status(409).json({ error: { message: 'The case changed while you were reviewing it. Reload the page and check again.', status: 409 } });
   logger.info('Missing-documents email released', { caseId: caseRecord.id, username: req.user.username });
+  if (caseRecord.source === 'API') reviewLane().triggerReviewLane(); // SYSTEM_5 review lane: processed at once
   res.json({ caseId: caseRecord.id, currentStatus: 'API_INCOMPLETE' });
 }
 
@@ -732,9 +740,11 @@ async function uploadCaseDocuments(req, res) {
   }));
   const caseRecord = await Case.findByPk(req.params.id);
   if (!caseRecord) return res.status(404).json({ error: { message: `Case ${req.params.id} not found`, status: 404 } });
+  if (caseRecord.reviewPendingAt) return res.status(409).json({ error: { message: BEING_CHECKED, status: 409 } });
   const operator = req.user.name ? `${req.user.name} (${req.user.username})` : req.user.username;
   try {
     const result = await uploadDocuments(caseRecord, files, { operator, username: req.user.username, comment });
+    if (caseRecord.source === 'API') reviewLane().triggerReviewLane(); // SYSTEM_5 review lane: processed at once
     logger.info('Documents uploaded on the case page', { caseId: caseRecord.id, files: result.files, username: req.user.username });
     return res.json({ caseId: caseRecord.id, currentStatus: result.status, files: result.files });
   } catch (error) {

@@ -18,6 +18,7 @@ const usersRouter = require('./routes/users');
 const jobsRouter = require('./routes/jobs');
 const pipelineRouter = require('./routes/jobs/pipeline');
 const apiPipelineRouter = require('./routes/jobs/apiPipeline');
+const apiReviewPipelineRouter = require('./routes/jobs/apiReviewPipeline');
 const casesRouter = require('./routes/cases');
 const stpSettingsRouter = require('./routes/stpSettings');
 const llmCallsRouter = require('./routes/llmCalls');
@@ -72,6 +73,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/jobs', jobsRouter);
 app.use('/api/jobs/pipeline', pipelineRouter);
 app.use('/api/jobs/api-pipeline', apiPipelineRouter);
+app.use('/api/jobs/api-review-pipeline', apiReviewPipelineRouter);
 // Everything else needs a logged-in console user; admin-only actions check the role too.
 app.use('/api/users', requireAuth, requireRole('super_admin'), usersRouter);
 app.use('/api/cases', requireAuth, casesRouter);

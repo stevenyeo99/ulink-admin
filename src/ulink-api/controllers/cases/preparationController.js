@@ -4,6 +4,8 @@ const { uniqueBenefitCandidates } = require('../../modules/shared/iasBenefits');
 const { voucherKey, sameVoucher, sameDiagnosis, diagnosisSource } = require('../../modules/ias-claim-preparation/preparationReview');
 const { requiredComment } = require('./casesController');
 const { endClaim } = require('../../modules/case-claim/claim');
+const { markFor, BEING_CHECKED } = require('../../modules/review-lane/marker');
+const reviewLane = () => require('../../modules/review-lane/lane'); // at call time: the lane loads every job module
 const logger = require('../../utils/logger');
 
 // A person decides what the AI wasn't sure of in claim preparation (owner, 2026-10-20): an API case stops at
@@ -32,6 +34,7 @@ async function choosePreparation(req, res) {
   if (comment === null) return undefined;
   const caseRecord = await Case.findByPk(req.params.id);
   if (!caseRecord) return res.status(404).json({ error: { message: `Case ${req.params.id} not found`, status: 404 } });
+  if (caseRecord.reviewPendingAt) return res.status(409).json({ error: { message: BEING_CHECKED, status: 409 } });
   if (caseRecord.source !== 'API' || caseRecord.currentStatus !== STATUS) return bad(res, 'This case is not waiting for the claim preparation check.');
 
   const steps = await ApiCaseStep.findAll({ where: { caseId: caseRecord.id }, order: [['createdAt', 'ASC']] });
@@ -122,7 +125,8 @@ async function choosePreparation(req, res) {
   const next = recheck ? STATUS : NEXT;
   const now = new Date();
   const moved = await sequelize.transaction(async (transaction) => {
-    const [count] = await Case.update({ currentStatus: next }, { where: { id: caseRecord.id, currentStatus: STATUS }, transaction });
+    // Saved with corrections (recheck): the corrections move and mark the case, not this choice.
+    const [count] = await Case.update({ currentStatus: next, ...(recheck ? {} : markFor(caseRecord, by)) }, { where: { id: caseRecord.id, currentStatus: STATUS }, transaction });
     if (count !== 1) return false;
     await ApiCaseStep.create({
       caseId: caseRecord.id, job: BLOCK_NAME, status: 'DONE', input: null,
@@ -137,6 +141,7 @@ async function choosePreparation(req, res) {
   if (!moved) return res.status(409).json({ error: { message: 'The case changed while you were reviewing it. Reload the page and check again.', status: 409 } });
   if (recheck) return res.json({ caseId: caseRecord.id, currentStatus: STATUS });
   await endClaim(caseRecord.id, req.user.username); // the holder decided the case — their own claim ends (SYSTEM_4 E4-22)
+  if (caseRecord.source === 'API') reviewLane().triggerReviewLane(); // SYSTEM_5 review lane: processed at once
   logger.info('Claim preparation decided by a person', { caseId: caseRecord.id, diagnosis: diagnosis?.diagCode ?? null, vouchers: sent.length, rejections: sentRejections.length, username: req.user.username });
   return res.json({ caseId: caseRecord.id, currentStatus: NEXT });
 }

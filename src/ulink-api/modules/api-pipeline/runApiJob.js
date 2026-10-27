@@ -1,4 +1,6 @@
+const { Op, literal } = require('sequelize');
 const { sequelize, Case, CaseEvent, ApiCaseStep } = require('../../db/models');
+const { leavesLane } = require('../review-lane/marker');
 const { forCase } = require('../llm-calls/log');
 
 /**
@@ -40,7 +42,8 @@ async function recordDone(caseRecord, job, { input, output, nextStatus, message,
   const prevStatus = caseRecord.currentStatus;
   await sequelize.transaction(async (transaction) => {
     const [moved] = await Case.update(
-      { currentStatus: nextStatus },
+      // A case leaving the review lane (its next stop, wait or end) is no longer marked (REVIEW_LANE_PRD 4.1.3).
+      { currentStatus: nextStatus, ...(leavesLane(nextStatus) ? { reviewPendingAt: null, reviewPendingBy: null } : {}) },
       { where: { id: caseRecord.id, source: 'API', currentStatus: prevStatus }, transaction }
     );
     if (moved !== 1) throw new Error(`Case left ${prevStatus} while ${job.name} was running`);
@@ -55,13 +58,19 @@ async function recordDone(caseRecord, job, { input, output, nextStatus, message,
   });
 }
 
-async function runApiJob(job) {
+// lane: 'new' (the existing pipeline) takes only unmarked cases; 'review' (the review lane, REVIEW_LANE_PRD 4.3) only
+// cases a person decided — first: those a person asked to run now, then the oldest decision.
+async function runApiJob(job, { lane = 'new', first = [] } = {}) {
+  const review = lane === 'review';
+  const ids = first.filter((id) => /^[0-9a-f-]{36}$/i.test(id));
   const cases = await Case.findAll({
-    where: { source: 'API', currentStatus: job.inputStatus },
+    where: { source: 'API', currentStatus: job.inputStatus, reviewPendingAt: review ? { [Op.ne]: null } : null },
     limit: job.batchLimit,
     // Oldest untouched first, so cases re-checked every run (a waiting status among several
     // inputStatus values) can't starve new ones.
-    order: [['updatedAt', 'ASC']],
+    order: review
+      ? [...(ids.length ? [[literal(`"Case"."id" IN (${ids.map((id) => `'${id}'`).join(',')})`), 'DESC']] : []), ['reviewPendingAt', 'ASC']]
+      : [['updatedAt', 'ASC']],
   });
 
   const summary = { processed: 0, waiting: 0, errors: [] };

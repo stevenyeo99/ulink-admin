@@ -123,4 +123,4 @@ const job = {
   process: processCase,
 };
 
-module.exports = { run: () => runApiJob(job), job, emailFor };
+module.exports = { run: (options) => runApiJob(job, options), job, emailFor };

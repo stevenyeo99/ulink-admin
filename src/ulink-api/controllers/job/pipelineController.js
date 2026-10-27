@@ -105,7 +105,18 @@ function createPipelineController(pipeline, lockName) {
   return { runPipeline, releasePipeline, listRuns, getRun };
 }
 
+// The API review lane (SYSTEM_5, modules/review-lane/lane.js): its runs, release and history as any pipeline; its own
+// run, which never refuses a trigger — a busy lane runs once more.
+const reviewLane = () => require('../../modules/review-lane/lane');
+const apiReviewPipeline = {
+  ...createPipelineController('API_REVIEW', 'api-review-pipeline'),
+  async runPipeline(req, res) {
+    res.json({ block: 'api-review-pipeline', ...(await reviewLane().runReviewLane()) });
+  },
+};
+
 module.exports = {
   ...createPipelineController('EMAIL', 'pipeline'),
   apiPipeline: createPipelineController('API', 'api-pipeline'),
+  apiReviewPipeline,
 };

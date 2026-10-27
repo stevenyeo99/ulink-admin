@@ -7,6 +7,8 @@ const { emailFor } = require('../../modules/api-document-checking/service');
 const { buildAssessmentSummary, assessmentSummaryText } = require('../../modules/assessment-summary/summary');
 const { requiredComment } = require('./casesController');
 const { endClaim } = require('../../modules/case-claim/claim');
+const { markFor, BEING_CHECKED } = require('../../modules/review-lane/marker');
+const reviewLane = () => require('../../modules/review-lane/lane'); // at call time: the lane loads every job module
 const logger = require('../../utils/logger');
 
 const BLOCK_NAME = 'case-review';
@@ -30,6 +32,7 @@ async function requestInformation(req, res) {
 
   const caseRecord = await Case.findByPk(req.params.id);
   if (!caseRecord) return res.status(404).json({ error: { message: `Case ${req.params.id} not found`, status: 404 } });
+  if (caseRecord.reviewPendingAt) return res.status(409).json({ error: { message: BEING_CHECKED, status: 409 } });
   const prevStatus = caseRecord.currentStatus;
   const target = REQUEST_FROM[prevStatus];
   if (!target) {
@@ -55,7 +58,7 @@ async function requestInformation(req, res) {
 
   const STALE = new Error('lines changed');
   const moved = await sequelize.transaction(async (transaction) => {
-    const [count] = await Case.update({ currentStatus: target }, { where: { id: caseRecord.id, currentStatus: prevStatus }, transaction });
+    const [count] = await Case.update({ currentStatus: target, ...markFor(caseRecord, operatorOf(req.user)) }, { where: { id: caseRecord.id, currentStatus: prevStatus }, transaction });
     if (count !== 1) return false;
     // Only the change: unchanged lines keep their author and date.
     // A line closed meanwhile (e.g. marked done): roll back, the person reloads.
@@ -106,6 +109,7 @@ async function requestInformation(req, res) {
   if (!moved) return changed(res);
 
   await endClaim(caseRecord.id, req.user.username); // the holder decided the case — their own claim ends (SYSTEM_4 E4-22)
+  if (caseRecord.source === 'API') reviewLane().triggerReviewLane(); // SYSTEM_5 review lane: processed at once
   logger.info('Information requested', { caseId: caseRecord.id, added: added.length, removed: removed.length, username: req.user.username });
   return res.json({ caseId: caseRecord.id, previousStatus: prevStatus, currentStatus: target });
 }

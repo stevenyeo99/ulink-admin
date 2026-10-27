@@ -147,4 +147,4 @@ const job = {
   process: processCase,
 };
 
-module.exports = { run: () => runApiJob(job), job, barcodeFields, apiFlags };
+module.exports = { run: (options) => runApiJob(job, options), job, barcodeFields, apiFlags };

@@ -56,7 +56,8 @@ async function resetOneCase(caseId, to, { source = 'dev tool', comment = null } 
 
   const clearedFields = RESET_FIELDS[to];
   const previousStatus = caseRecord.currentStatus;
-  const updates = { currentStatus: to };
+  // A reset case starts again in the existing pipeline: not marked for the review lane (SYSTEM_5).
+  const updates = { currentStatus: to, reviewPendingAt: null, reviewPendingBy: null };
   for (const field of clearedFields) updates[field] = null;
 
   await Case.update(updates, { where: { id: caseId } });
