@@ -4,6 +4,8 @@ import { Wallet } from 'lucide-react';
 import { chooseBenefit, createCorrections } from '../../api/casesApi';
 import type { PendingCorrections } from '../../lib/correctionDraft';
 import { Button } from '../common/Button';
+import { QuickReasons } from '../review/QuickReasons';
+import { reasonProblem } from '../../lib/correctionDraft';
 import type { BenefitCandidate, CaseDetail } from '../../types/case';
 
 const selectClass =
@@ -93,8 +95,10 @@ export function BenefitReviewPanel({ caseRecord, corrections, onSaved }: { caseR
         {typeof claimed === 'number' && claimed !== vouchersTotal ? ' They do not match: the document check will ask about it unless a misread amount is corrected.' : ''}
         {' '}A misread voucher amount: correct it with ✎ Edit on the review page, and it is saved with this.
       </p>
+      <p className="mb-1 text-xs font-medium text-slate-600">Why these? Pick a reason, or write your own</p>
+      <QuickReasons reasons={['The voucher shows this benefit head.', 'The same benefit as the other voucher.']} value={comment} onPick={setComment} />
       <label className="mb-3 block text-sm">
-        <span className="mb-1 block text-slate-600">Comment (required)</span>
+        <span className="mb-1 block text-slate-600">Reason (required)</span>
         <textarea className={selectClass} rows={2} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Why these heads" />
       </label>
       {fixes.length > 0 && (
@@ -102,7 +106,7 @@ export function BenefitReviewPanel({ caseRecord, corrections, onSaved }: { caseR
       )}
       {missing.length > 0 && <p className="mb-2 text-xs text-amber-700">Choose the head of {missing.join(', ')}.</p>}
       {save.isError && <p className="mb-2 text-xs text-red-600">{(save.error as Error).message}</p>}
-      <Button disabled={missing.length > 0 || comment.trim().length < 3 || (corrections?.notReady ?? 0) > 0 || save.isPending} onClick={() => save.mutate()}>
+      <Button disabled={missing.length > 0 || !!reasonProblem(comment) || (corrections?.notReady ?? 0) > 0 || save.isPending} onClick={() => save.mutate()}>
         {save.isPending ? 'Saving…' : fixes.length ? 'Save all and check again' : 'Save and check the balance'}
       </Button>
     </section>

@@ -6,6 +6,7 @@ const { apiCaseView } = require('../../modules/api-pipeline/caseView');
 const { requiredComment } = require('./casesController');
 const { endClaim } = require('../../modules/case-claim/claim');
 const { markFor, BEING_CHECKED } = require('../../modules/review-lane/marker');
+const { MIN_REASON_LENGTH } = require('../../modules/ai-feedback/corrections');
 const reviewLane = () => require('../../modules/review-lane/lane'); // at call time: the lane loads every job module
 const logger = require('../../utils/logger');
 
@@ -34,7 +35,7 @@ async function memberFields(caseRecord) {
  * the member check.
  */
 async function chooseBenefit(req, res) {
-  const comment = requiredComment(req, res, 'you chose these');
+  const comment = requiredComment(req, res, 'you chose these', { min: MIN_REASON_LENGTH });
   if (comment === null) return undefined;
   const caseRecord = await Case.findByPk(req.params.id);
   if (!caseRecord) return res.status(404).json({ error: { message: `Case ${req.params.id} not found`, status: 404 } });

@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Stethoscope } from 'lucide-react';
+import { Pencil, Stethoscope } from 'lucide-react';
 import { choosePreparation, createCorrections, searchDiagnosis, suggestDiagnosis } from '../../api/casesApi';
 import type { PendingCorrections } from '../../lib/correctionDraft';
 import { Button } from '../common/Button';
+import { QuickReasons } from '../review/QuickReasons';
+import { reasonProblem } from '../../lib/correctionDraft';
 import type { BenefitCandidate, CaseDetail, DiagnosisCandidate } from '../../types/case';
 
 const selectClass =
@@ -151,16 +153,16 @@ export function PreparationReviewPanel({ caseRecord, corrections, onSaved }: { c
             </select>
           </div>
         ) : null}
-        <div className="mt-1 flex flex-wrap gap-3 text-xs">
+        <div className="mt-2 flex flex-wrap gap-2">
           {!c && (
-            <button onClick={() => setChoice(i, { type: ai?.benefitType ?? '', head: ai?.benefitHead ?? '' })} className="text-ulink-orange-dark hover:underline">
-              {flagged.includes(i) ? 'Choose' : 'Change'}
-            </button>
+            <Button size="sm" variant="ghost" aria-label={`${flagged.includes(i) ? 'Choose' : 'Change'} the benefit of voucher ${i + 1}`} onClick={() => setChoice(i, { type: ai?.benefitType ?? '', head: ai?.benefitHead ?? '' })} className="border border-ulink-orange bg-white text-ulink-orange-dark shadow-none hover:bg-ulink-orange/10">
+              <Pencil size={14} /> {flagged.includes(i) ? 'Choose' : 'Change'}
+            </Button>
           )}
           {firstChosen && (
-            <button onClick={() => setChoice(i, firstChosen[1])} className="text-ulink-orange-dark hover:underline">Same as voucher {Number(firstChosen[0]) + 1}</button>
+            <Button size="sm" variant="ghost" onClick={() => setChoice(i, firstChosen[1])} className="border border-ulink-orange bg-white text-ulink-orange-dark shadow-none hover:bg-ulink-orange/10">Same as voucher {Number(firstChosen[0]) + 1}</Button>
           )}
-          {c && !flagged.includes(i) && <button onClick={() => setChoice(i, null)} className="text-slate-500 hover:underline">Keep the AI's</button>}
+          {c && !flagged.includes(i) && <Button size="sm" variant="ghost" onClick={() => setChoice(i, null)} className="border border-slate-300 text-slate-600 shadow-none">Keep the AI's</Button>}
         </div>
       </li>
     );
@@ -177,7 +179,7 @@ export function PreparationReviewPanel({ caseRecord, corrections, onSaved }: { c
       {!changeDiagnosis ? (
         <p className="mt-1 text-sm text-slate-700">
           {named(aiCode?.diagCode, aiCode?.diagDesc)}{percent(diagnosis?.confidence)}{' '}
-          <button onClick={() => setChangeDiagnosis(true)} className="text-xs text-ulink-orange-dark hover:underline">Change</button>
+          <Button size="sm" variant="ghost" aria-label="Change the diagnosis code" onClick={() => setChangeDiagnosis(true)} className="border border-ulink-orange bg-white text-ulink-orange-dark shadow-none hover:bg-ulink-orange/10"><Pencil size={14} /> Change</Button>
         </p>
       ) : (
         <>
@@ -215,7 +217,7 @@ export function PreparationReviewPanel({ caseRecord, corrections, onSaved }: { c
           {suggest.isError && <p className="mt-1 text-sm text-red-600">{(suggest.error as Error).message}</p>}
           {search.isError && <p className="mt-2 text-sm text-red-600">{(search.error as Error).message}</p>}
           {!review.diagnosis && (
-            <button onClick={() => { setCode(''); setChangeDiagnosis(false); }} className="mt-1 text-xs text-slate-500 hover:underline">Keep the AI's code</button>
+            <Button size="sm" variant="ghost" onClick={() => { setCode(''); setChangeDiagnosis(false); }} className="mt-2 border border-slate-300 text-slate-600 shadow-none">Keep the AI's code</Button>
           )}
         </>
       )}
@@ -277,21 +279,23 @@ export function PreparationReviewPanel({ caseRecord, corrections, onSaved }: { c
                     </div>
                   )}
                   {r?.removed && <p className="mt-0.5 text-xs text-slate-500">No rejection on this voucher.</p>}
-                  <div className="mt-1 flex flex-wrap gap-3 text-xs">
+                  <div className="mt-2 flex flex-wrap gap-2">
                     {(!r || r.removed) && (
-                      <button
+                      <Button
+                        size="sm"
+                        variant="ghost"
                         onClick={() => setRejection(i, { amount: sent?.vitamin_exclude_amount != null ? String(sent.vitamin_exclude_amount) : '', remark: sent?.vitamin_remark ?? '', removed: false })}
-                        className="text-ulink-orange-dark hover:underline"
+                        className="border border-ulink-orange bg-white text-ulink-orange-dark shadow-none hover:bg-ulink-orange/10"
                       >
-                        Edit
-                      </button>
+                        <Pencil size={14} /> Edit
+                      </Button>
                     )}
                     {/* Added on a voucher with no rejection: Remove takes the row away; otherwise No rejection is a decision. */}
                     {!r?.removed && (sent || flaggedRejections.includes(i)) && (
-                      <button onClick={() => setRejection(i, { amount: '', remark: '', removed: true })} className="text-ulink-orange-dark hover:underline">No rejection</button>
+                      <Button size="sm" variant="ghost" onClick={() => setRejection(i, { amount: '', remark: '', removed: true })} className="border border-ulink-orange bg-white text-ulink-orange-dark shadow-none hover:bg-ulink-orange/10">No rejection</Button>
                     )}
                     {r && !flaggedRejections.includes(i) && (
-                      <button onClick={() => setRejection(i, null)} className="text-slate-500 hover:underline">{sent ? 'Keep as it was' : 'Remove'}</button>
+                      <Button size="sm" variant="ghost" onClick={() => setRejection(i, null)} className="border border-slate-300 text-slate-600 shadow-none">{sent ? 'Keep as it was' : 'Remove'}</Button>
                     )}
                   </div>
                 </li>
@@ -312,8 +316,14 @@ export function PreparationReviewPanel({ caseRecord, corrections, onSaved }: { c
         </>
       )}
 
-      <label className="mt-4 block">
-        <span className="mb-1 block text-sm font-medium text-slate-700">Comment — why these</span>
+      <p className="mb-1 mt-4 text-xs font-medium text-slate-600">Why these? Pick a reason, or write your own</p>
+      <QuickReasons
+        reasons={['The medical record supports this diagnosis.', 'The voucher shows this benefit.', 'The voucher lists a vitamin or supplement.']}
+        value={comment}
+        onPick={setComment}
+      />
+      <label className="block">
+        <span className="mb-1 block text-sm font-medium text-slate-700">Reason (required)</span>
         <textarea
           value={comment}
           onChange={(e) => setComment(e.target.value)}
@@ -338,14 +348,14 @@ export function PreparationReviewPanel({ caseRecord, corrections, onSaved }: { c
               check{changed ? ', then the revision is prepared with these choices' : ' and comes back here'}.
             </p>
             <Button
-              disabled={(corrections?.notReady ?? 0) > 0 || (changed && (missing.length > 0 || comment.trim().length < 3)) || save.isPending}
+              disabled={(corrections?.notReady ?? 0) > 0 || (changed && (missing.length > 0 || !!reasonProblem(comment))) || save.isPending}
               onClick={() => save.mutate()}
             >
               {save.isPending ? 'Saving…' : 'Save all and check again'}
             </Button>
           </>
         ) : (
-          <Button disabled={missing.length > 0 || !changed || comment.trim().length < 3 || save.isPending} onClick={() => save.mutate()}>
+          <Button disabled={missing.length > 0 || !changed || !!reasonProblem(comment) || save.isPending} onClick={() => save.mutate()}>
             {save.isPending ? 'Saving…' : 'Save and prepare the revision'}
           </Button>
         )}

@@ -615,10 +615,11 @@ async function overrideCase(req, res) {
 
 // Every manual action on a case says why (SYSTEM_4 E4-11) — the comment goes into the case history. Answers 400 and
 // returns null when it is missing or too short; why: what the comment should explain.
-function requiredComment(req, res, why) {
+// min: the benefit and claim preparation choices need a reviewer's reason of 10 characters (SYSTEM_5 review actions).
+function requiredComment(req, res, why, { min = 3 } = {}) {
   const comment = typeof req.body?.comment === 'string' ? req.body.comment.trim() : '';
-  if (comment.length >= 3) return comment;
-  res.status(400).json({ error: { message: `Add a comment: why ${why}.`, status: 400 } });
+  if (comment.length >= min) return comment;
+  res.status(400).json({ error: { message: min > 3 ? `Write a reason of at least ${min} characters: why ${why}.` : `Add a comment: why ${why}.`, status: 400 } });
   return null;
 }
 
