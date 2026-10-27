@@ -92,7 +92,7 @@ ias-claim-preparation → ias-claim-creation → *email: JD3 / IAS rejection* �
 | | |
 |---|---|
 | **Reads** | `READY_FOR_DOCUMENT_CHECKING` |
-| **Does** | Checklist over the extracted fields: claim form complete, mandatory fields, medical report present and legible, voucher(s) present, clear, correct, with breakdown, voucher total = claimed amount (refund / cash-return slips — zero or negative amounts — are left out of the total), bank information, and consistency across documents (patient name, hospital, dates, diagnosis vs treatment; delegation letter when someone else is paid). **Values read look valid**: NRC / passport shape, dates real and not in the future, birth not after treatment, amounts, bank account number (digits only once spaces and dashes are removed) — a failure is *AI unsure* (likely misread: a review point, switch #3 holds), never a missing-document issue. Every check records why it passed or failed. **How sure the AI was** of the values it read (claim form, bank, amounts, dates, each voucher): a check that relied on an unsure value is unsure too; *Key values read clearly* lists them all (case page *What the AI read*: value, confidence, why, page) — an unsure value is an *AI unsure* point. |
+| **Does** | Checklist over the extracted fields: claim form complete, mandatory fields, medical report present and legible, voucher(s) present, clear, correct, with breakdown, voucher total = claimed amount (refund / cash-return slips — zero or negative amounts — are left out of the total), bank information, and consistency across documents (patient name, hospital — see 4.2, dates, diagnosis vs treatment; delegation letter when someone else is paid). **Values read look valid**: NRC / passport shape, dates real and not in the future, birth not after treatment, amounts, bank account number (digits only once spaces and dashes are removed) — a failure is *AI unsure* (likely misread: a review point, switch #3 holds), never a missing-document issue. Every check records why it passed or failed. **How sure the AI was** of the values it read (claim form, bank, amounts, dates, each voucher): a check that relied on an unsure value is unsure too; *Key values read clearly* lists them all (case page *What the AI read*: value, confidence, why, page) — an unsure value is an *AI unsure* point. |
 | **Decided by** | Rule, plus **AI** judgments (e.g. names written differently, medical record legible) |
 | **Status** | `MEMBER_VERIFIED` *Checks passed* · `INCOMPLETE` *Documents incomplete* · `DOCUMENTS_REVIEW` *Check before emailing customer* (switch #2, below) · `DOCUMENTS_UNSURE` *Check the AI's documents finding* (switch #3, below — or a reviewer's own line still open, whatever the switch) |
 | **Emails** | *Incomplete:* to the **customer** a numbered list of what is missing, in the approved wording only (from 2026-10-19 — the reasons stay for the team); to the **team** "Documents incomplete" (the list + why the case went this way). Once per list of missing items. |
@@ -203,6 +203,12 @@ is listed with both values (dates shown as YYYY-MM-DD). Order of the main reason
 ### 4.2 Document check
 Missing or unclear items become the customer's numbered list. Items are **rules** over what the AI read, except the
 judgments (legibility, names written differently, delegation) which are **AI** with a confidence.
+
+Hospital or clinic name (SYSTEM_5, both flows): the AI reads the hospital on each voucher, from its letterhead or
+stamp only. The medical record hospital is compared with each voucher hospital. Pharmacy and optical receipts are left
+out, because they can come from another shop. If they agree, the check passes, even when the claim form names another
+hospital. The reason then says so, and IAS gets the medical record name as `ProviderName`. If no voucher has a
+hospital name, the claim form is compared with the medical record.
 
 ### 4.3 Diagnosis and benefit
 - Burmese diagnosis/treatment → translated to clinical English (marked *AI translated*); the IAS payload keeps the

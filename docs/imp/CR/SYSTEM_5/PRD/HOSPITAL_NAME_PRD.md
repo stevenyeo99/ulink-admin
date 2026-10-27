@@ -40,4 +40,4 @@ One migration adds `hospital_or_clinic_name` to each voucher in the claim schema
 | Phase | Content | Status |
 |---|---|---|
 | A. Backend | Migration, extraction prompt, voucher merge, hospital rule, IAS `ProviderName`, AI checklist card, tests | Done, awaiting review (2026-10-27). Migration run on dev |
-| B. Docs | `OPERATIONS.md`, `CLAIM_FLOW_END_TO_END.md`, the change log | Not started |
+| B. Docs | `OPERATIONS.md`, `CLAIM_FLOW_END_TO_END.md`, the SYSTEM_5 PRD check list, the change log | Done, awaiting review (2026-10-27) |

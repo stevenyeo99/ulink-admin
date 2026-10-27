@@ -70,6 +70,7 @@ switch is the quick way to stop one environment reading a mailbox it shares with
 
 | Symptom | Likely cause | Action |
 |---|---|---|
+| The claim form names another hospital, but the hospital check passed | The medical record and the vouchers name the same hospital. The line reason says so (SYSTEM_5 hospital name) | Nothing. IAS gets the medical record hospital |
 | Stuck at *Waiting to be read* / any system status | Pipeline not running, step failing, or lock left by a crash | Check the latest run; fix the error; release the lock |
 | *Needs manual reading* | AI not confident about the claim type, its reading didn't fit the form, or "Documents too long for the AI" (the claim's text exceeds the model's context) | Look at the documents; reset once fixed, or handle manually |
 | *Member check issue* | Mismatch with IAS (every problem listed), or *Balance not enough* for a voucher (`member:balance`) | Fix IAS (the case re-checks every run) or *Override and continue*. A short balance: *Bypass* with a reason (the claim then needs approval, never STP). |

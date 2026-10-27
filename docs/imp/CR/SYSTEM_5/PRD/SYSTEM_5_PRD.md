@@ -107,7 +107,7 @@ Document check, AI comparisons (`modules/document-checking/service.js`, `runJudg
 | `DELEGATION_LETTER_REQUIRED` | The bank account holder is the claimant, or a delegation letter is attached (not on a claim for a child) | Stops the case | Mark passed or failed |
 | `DELEGATION_PAYEE_INCONSISTENT` | The delegation letter payee matches the account holder | Stops the case | Mark passed |
 | `PATIENT_NAME_INCONSISTENT` | The claimant name matches the medical record | Stops the case | Mark passed |
-| `HOSPITAL_NAME_INCONSISTENT` | The hospital name matches the medical record | Stops the case | Mark passed |
+| `HOSPITAL_NAME_INCONSISTENT` | The medical record hospital matches each voucher hospital, or the claim form hospital when no voucher names one (since 2026-10-27, `HOSPITAL_NAME_PRD.md`) | Stops the case | Mark passed |
 | `INVOICE_NAME_INCONSISTENT` | The claimant name matches each voucher (not on a claim for a child) | Stops the case | Mark passed |
 | `PROVIDER_NAME_INCONSISTENT` | The doctor name matches the medical record | Off in the code (false mismatches) | Mark passed |
 | `DIAGNOSIS_TREATMENT_INCONSISTENT` | The medical record supports the diagnosis | Off in the code (false mismatches) | Mark passed |
