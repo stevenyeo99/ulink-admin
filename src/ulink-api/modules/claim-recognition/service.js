@@ -309,9 +309,9 @@ function lessSureEvidence(a, b) {
 }
 
 // Every name the reads of one voucher gave, when they differ — so a merge never drops a name.
-function mergedPatientNames(a, b) {
-  const names = [...new Set([a, b].flatMap((item) => item.patient_names_read || [item.patient_name]).filter((name) => typeof name === 'string' && name.trim()))];
-  return names.length > 1 ? { patient_names_read: names } : {};
+function mergedNames(a, b, field, readField) {
+  const names = [...new Set([a, b].flatMap((item) => item[readField] || [item[field]]).filter((name) => typeof name === 'string' && name.trim()))];
+  return names.length > 1 ? { [readField]: names } : {};
 }
 
 // Every field listed on purpose — a new voucher field must decide here which read wins.
@@ -341,7 +341,10 @@ function mergeInvoiceItemPair(a, b) {
     // of one voucher would count its amount twice), so when the two reads differ every name read is kept in
     // patient_names_read and the name check compares each one.
     ...('patient_name' in a || 'patient_name' in b ? { patient_name: a.patient_name ?? b.patient_name ?? null } : {}),
-    ...mergedPatientNames(a, b),
+    ...mergedNames(a, b, 'patient_name', 'patient_names_read'),
+    // SYSTEM_5 hospital name (owner 2026-10-27): read by document-checking's HOSPITAL_NAME_INCONSISTENT, kept the same way.
+    ...('hospital_or_clinic_name' in a || 'hospital_or_clinic_name' in b ? { hospital_or_clinic_name: a.hospital_or_clinic_name ?? b.hospital_or_clinic_name ?? null } : {}),
+    ...mergedNames(a, b, 'hospital_or_clinic_name', 'hospital_names_read'),
     legible: preferAffirmative(a.legible, b.legible),
     has_itemized_breakdown: preferAffirmative(a.has_itemized_breakdown, b.has_itemized_breakdown),
     has_vitamin_or_supplement: hasVitamin,

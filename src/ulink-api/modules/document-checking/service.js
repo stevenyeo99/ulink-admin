@@ -55,7 +55,7 @@ async function runJudgments(fields, off = new Map()) {
     off.has('DELEGATION_LETTER_REQUIRED') ? null : entityMatch(fields.claimant?.claimant_name, fields.bank?.bank_account_name),
     off.has('DELEGATION_PAYEE_INCONSISTENT') ? null : entityMatch(fields.delegation_letter?.authorized_payee_name, fields.bank?.bank_account_name),
     off.has('PATIENT_NAME_INCONSISTENT') ? null : entityMatch(fields.claimant?.claimant_name, fields.medical_record?.patient_name),
-    off.has('HOSPITAL_NAME_INCONSISTENT') ? null : entityMatch(fields.medical?.hospital_or_clinic_name, fields.medical_record?.hospital_or_clinic_name),
+    off.has('HOSPITAL_NAME_INCONSISTENT') ? null : judgeHospitalNames(fields),
     off.has('INVOICE_NAME_INCONSISTENT') ? null : judgeInvoiceNames(fields),
   ]);
   const providerName = null;
@@ -71,19 +71,31 @@ async function runJudgments(fields, off = new Map()) {
 async function judgeInvoiceNames(fields, match = entityMatch) {
   const claimant = fields.claimant?.claimant_name;
   if (!claimant || fields.claimant?.is_claim_for_child === true) return null;
-  // Grouped with capitals and spaces ignored: "ZAYAR TUN" and "Zayar  Tun" are one name, one call. The first spelling read is the one compared.
-  const byName = new Map();
   // patient_names_read: every name two reads of one voucher gave (claim-recognition mergeInvoiceItemPair).
+  return judgeVoucherNames(claimant, voucherNames(fields, 'patient_name', 'patient_names_read'), match);
+}
+
+const normName = (name) => String(name).trim().toLowerCase().replace(/\s+/g, ' ');
+
+// Each different name read on the vouchers, with the vouchers that carry it. Grouped with capitals and spaces ignored:
+// "ZAYAR TUN" and "Zayar  Tun" are one name, one call. The first spelling read is the one compared.
+function voucherNames(fields, field, readField) {
+  const byName = new Map();
   (fields.invoices?.items || []).forEach((item, i) => {
-    for (const read of item?.patient_names_read || [item?.patient_name]) {
+    for (const read of item?.[readField] || [item?.[field]]) {
       const name = typeof read === 'string' ? read.trim() : '';
       if (!name) continue;
-      const key = name.toLowerCase().replace(/\s+/g, ' ');
+      const key = normName(name);
       const group = byName.get(key) || { name, vouchers: [] };
       if (!group.vouchers.includes(i + 1)) byName.set(key, { ...group, vouchers: [...group.vouchers, i + 1] });
     }
   });
-  const results = (await Promise.all([...byName.values()].map(async ({ name, vouchers }) => ({ vouchers, judgment: await match(claimant, name) }))))
+  return [...byName.values()];
+}
+
+// One entityMatch per voucher name against `anchor`. Any mismatch fails, naming its voucher(s). Null when nothing was judged.
+async function judgeVoucherNames(anchor, names, match) {
+  const results = (await Promise.all(names.map(async ({ name, vouchers }) => ({ vouchers, judgment: await match(anchor, name) }))))
     .filter((r) => r.judgment);
   if (!results.length) return null;
   const failed = results.filter((r) => r.judgment.consistent === false);
@@ -93,6 +105,36 @@ async function judgeInvoiceNames(fields, match = entityMatch) {
     confidence: Math.min(...shown.map((r) => r.judgment.confidence ?? 1)),
     reason: shown.map((r) => `Voucher ${r.vouchers.join(', ')}: ${r.judgment.reason}`).join(' '),
   };
+}
+
+/**
+ * The hospital or clinic name (SYSTEM_5 hospital name, owner 2026-10-27): the medical record and the invoices come from
+ * the hospital, the claim form from the customer. So the medical record is compared with each voucher's hospital, and
+ * when they agree the check passes even if the claim form names another hospital (the reason says so; IAS takes the
+ * medical record name, payloadBuilder.js). No hospital on any voucher: the claim form against the medical record, as
+ * before. No hospital on the medical record: the claim form against the vouchers.
+ */
+async function judgeHospitalNames(fields, match = entityMatch) {
+  const named = (value) => (typeof value === 'string' && value.trim() ? value : null);
+  const form = named(fields.medical?.hospital_or_clinic_name);
+  const record = named(fields.medical_record?.hospital_or_clinic_name);
+  const formVsRecord = () => (form && record ? match(form, record) : null);
+  // A pharmacy or optical receipt can come from another shop than the hospital (medicine bought outside, glasses bought
+  // after the eye test elsewhere), so only the other vouchers count.
+  const items = (fields.invoices?.items || []).map((item) => (['pharmacy', 'optical'].includes(item?.voucher_type) ? {} : item));
+  const names = voucherNames({ invoices: { items } }, 'hospital_or_clinic_name', 'hospital_names_read');
+  const anchor = record || form;
+  if (!names.length || !anchor) return formVsRecord();
+  // The same name once capitals and spaces are ignored needs no AI call.
+  const same = (a, b) => (normName(a) === normName(b) ? { consistent: true, confidence: 1, reason: 'Same name.' } : match(a, b));
+  const result = await judgeVoucherNames(anchor, names, same);
+  // Every AI answer too unsure to use: the claim form against the medical record, as before.
+  if (!result) return formVsRecord();
+  const source = record ? 'medical record' : 'claim form';
+  if (!result.consistent) return { ...result, reason: `The ${source} names "${anchor}". ${result.reason}` };
+  const vouchers = names.flatMap((n) => n.vouchers).sort((x, y) => x - y);
+  const formNote = record && form && normName(form) !== normName(record) ? ` The claim form names "${form}".` : '';
+  return { ...result, reason: `The ${source} and voucher ${vouchers.join(', ')} name the same hospital ("${anchor}").${formNote} The ${source} name is used for IAS. ${result.reason}` };
 }
 
 /**
@@ -284,4 +326,4 @@ async function releaseMissingDocumentsEmail(caseRecord, operator, comment = null
   });
 }
 
-module.exports = { run, checkCase, judgeInvoiceNames, persistOutcome, releaseMissingDocumentsEmail, issuesDedupeKey, missingDocumentItems, queueMissingDocumentsEmail, queueDocumentsIncompleteEmail };
+module.exports = { run, checkCase, judgeInvoiceNames, judgeHospitalNames, persistOutcome, releaseMissingDocumentsEmail, issuesDedupeKey, missingDocumentItems, queueMissingDocumentsEmail, queueDocumentsIncompleteEmail };

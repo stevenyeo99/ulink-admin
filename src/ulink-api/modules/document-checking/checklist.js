@@ -264,7 +264,7 @@ const IDENTITY_FLAG_DESCRIPTIONS = {
   DELEGATION_PAYEE_INCONSISTENT: "The delegation letter's named payee does not appear to match the bank account holder name.",
   PATIENT_NAME_INCONSISTENT: 'The claimant name on the claim form does not appear to match the patient name on the medical record.',
   PROVIDER_NAME_INCONSISTENT: 'The doctor name on the claim form does not appear to match the doctor name on the medical record.',
-  HOSPITAL_NAME_INCONSISTENT: 'The hospital/clinic name on the claim form does not appear to match the hospital/clinic name on the medical record.',
+  HOSPITAL_NAME_INCONSISTENT: 'The hospital/clinic name does not appear to match across the documents (medical record, invoice, claim form).',
   DIAGNOSIS_TREATMENT_INCONSISTENT: "The medical record does not appear to support the claim form's stated diagnosis/treatment.",
   INVOICE_NAME_INCONSISTENT: 'The claimant name on the claim form does not appear to match the patient name on the invoice.',
 };
@@ -405,7 +405,7 @@ const IDENTITY_FLAG_ISSUES = {
   DELEGATION_PAYEE_INCONSISTENT: 'The delegation letter payee does not match the bank account holder. Please provide clarification or an updated delegation letter.',
   PATIENT_NAME_INCONSISTENT: 'The patient name is not consistent between the claim form and medical record. Please provide clarification or supporting documentation.',
   PROVIDER_NAME_INCONSISTENT: 'The doctor name is not consistent between the claim form and medical record. Please provide clarification or supporting documentation.',
-  HOSPITAL_NAME_INCONSISTENT: 'The hospital or clinic name is not consistent between the claim form and medical record. Please provide clarification or supporting documentation.',
+  HOSPITAL_NAME_INCONSISTENT: 'The hospital or clinic name is not consistent across the documents (medical record, invoice or claim form). Please provide clarification or supporting documentation.',
   DIAGNOSIS_TREATMENT_INCONSISTENT: 'The medical record does not clearly support the diagnosis or treatment stated on the claim form. Please provide clarification or supporting documentation.',
   INVOICE_NAME_INCONSISTENT: 'The patient name on the invoice is not consistent with the claimant name on the claim form. Please provide clarification or supporting documentation.',
 };

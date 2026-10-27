@@ -82,7 +82,8 @@ function buildPayload({ extractedFields, iasMemberInfoResponse, route, diagnosis
     SymptomDate: isoToMMDDYYYY(claim.accident_date),
     TreatmentCountry: treatmentCountry,
     ProviderCode: null,
-    ProviderName: medical.hospital_or_clinic_name ?? null,
+    // The medical record's hospital (SYSTEM_5 hospital name, owner 2026-10-27): it comes from the hospital, the claim form from the customer.
+    ProviderName: extractedFields.medical_record?.hospital_or_clinic_name?.trim() || medical.hospital_or_clinic_name || null,
     InvoiceID: 'NIL',
     BenefitType: benefit?.benefitType ?? null,
     BenefitHead: benefit?.benefitHead ?? null,

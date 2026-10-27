@@ -95,7 +95,7 @@ const CHECKS = [
   { code: 'PATIENT_NAME_INCONSISTENT', section: 'medicalRecord', question: 'Is the claimant the patient on the medical record?', label: D('PATIENT_NAME_INCONSISTENT'), effect: 'stops', usesAi: true,
     does: 'Compares the claimant name on the claim form with the patient name on the medical record.', fields: ['claimant.claimant_name'] },
   { code: 'HOSPITAL_NAME_INCONSISTENT', section: 'medicalRecord', question: 'Is it the same hospital or clinic?', label: D('HOSPITAL_NAME_INCONSISTENT'), effect: 'stops', usesAi: true,
-    does: 'Compares the hospital or clinic on the claim form with the one on the medical record.', fields: ['medical.hospital_or_clinic_name'] },
+    does: 'Compares the hospital or clinic on the medical record with the one on each voucher (not a pharmacy or optical receipt, which can come from another shop). If they agree, it passes, even when the claim form names another hospital, and IAS gets the medical record name. If no voucher has a hospital name, it compares the claim form with the medical record.', fields: ['medical.hospital_or_clinic_name'] },
   { code: 'PROVIDER_NAME_INCONSISTENT', section: 'medicalRecord', question: 'Is it the same doctor?', label: D('PROVIDER_NAME_INCONSISTENT'), effect: 'off', usesAi: true,
     does: 'Would compare the doctor name on the claim form with the medical record. Off in the code because it flagged real, complete claims.' },
   { code: 'DIAGNOSIS_TREATMENT_INCONSISTENT', section: 'medicalRecord', question: 'Does the medical record support the diagnosis?', label: D('DIAGNOSIS_TREATMENT_INCONSISTENT'), effect: 'off', usesAi: true,
