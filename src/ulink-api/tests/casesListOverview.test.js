@@ -53,6 +53,25 @@ it('sorts by an allowed column only, newest first by default', async () => {
   expect(lastQuery().order[0]).toEqual(['updatedAt', 'DESC']);
 });
 
+it('by default hides cases the pipeline is still moving, but shows them once stuck (SYSTEM_6 item 3)', async () => {
+  const old = new Date(Date.now() - 120 * 60000);
+  Case.findAndCountAll.mockResolvedValueOnce({
+    rows: [{ id: 'a', currentStatus: 'API_MATERIALS_DOWNLOADED', source: 'API', updatedAt: old }],
+    count: 1,
+  });
+  const { body } = await call(listCases, {});
+  const [stopped, ...stuck] = lastQuery().where[Op.and][0][Op.or];
+  expect(stopped.currentStatus[Op.notIn]).toContain('API_MATERIALS_DOWNLOADED');
+  expect(stopped.currentStatus[Op.notIn]).not.toContain('API_AWAITING_CSR'); // waits for an outside system: shown
+  expect(stuck.map((s) => s.source)).toEqual(['EMAIL', 'API']);
+  expect(body.cases[0].summary).toMatch(/^Stuck/);
+
+  await call(listCases, { group: 'in_progress' });
+  expect(lastQuery().where[Op.and]).toBeUndefined();
+  await call(listCases, { q: 'AYA' });
+  expect(lastQuery().where[Op.and]).toBeUndefined();
+});
+
 it('rejects an unknown group or module', async () => {
   expect((await call(listCases, { group: 'x' })).status).toBe(400);
   expect((await call(listCases, { module: 'x' })).status).toBe(400);

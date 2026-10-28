@@ -14,7 +14,7 @@ const { CASE_STATUSES, MODULES, GROUPS, codesInGroup, OUTCOMES, outcomeOf } = re
 const KNOWN_STATUSES = Object.keys(CASE_STATUSES);
 const { getStorageAdapter } = require('../../storage');
 const { resetOneCase } = require('../dev/casesController');
-const { markFor, BEING_CHECKED } = require('../../modules/review-lane/marker');
+const { markFor, BEING_CHECKED, OUTSIDE_WAITS } = require('../../modules/review-lane/marker');
 const reviewLane = () => require('../../modules/review-lane/lane'); // at call time: the lane loads every job module
 const logger = require('../../utils/logger');
 const { releaseMissingDocumentsEmail } = require('../../modules/document-checking/service');
@@ -333,10 +333,26 @@ async function listCases(req, res) {
   if (codes) where.currentStatus = codes;
   if (source) where.source = source;
 
+  // No group, status or search chosen (SYSTEM_6 item 3): only cases that stopped — for a person, the customer, an
+  // outside system, or at the end. A case the pipeline is still moving is hidden until it stops, unless it did not
+  // move for longer than the pipeline-stale setting: a job that fails every run leaves the case where it is.
+  const q = req.query.q ? String(req.query.q).trim() : '';
+  const moving = codesInGroup('in_progress').filter((c) => !OUTSIDE_WAITS.has(c));
+  const { pipelineStaleMinutesEmail, pipelineStaleMinutesApi } = await getSettings();
+  const staleSince = (caseSource) => new Date(Date.now() - (caseSource === 'EMAIL' ? pipelineStaleMinutesEmail : pipelineStaleMinutesApi) * 60000);
+  const isStuck = (row) => moving.includes(row.currentStatus) && new Date(row.updatedAt) < staleSince(row.source);
+  if (!group && !statuses && !q) {
+    where[Op.and] = [{
+      [Op.or]: [
+        { currentStatus: { [Op.notIn]: moving } },
+        ...CASE_SOURCES.map((s) => ({ currentStatus: moving, source: s, updatedAt: { [Op.lt]: staleSince(s) } })),
+      ],
+    }];
+  }
+
   // ?q= — free-text search over the identifiers people have in hand: claim no., TPA case number,
   // case id, and the claimant name and NRC / passport the AI read — on the case row for email
   // cases, in the recognition step for API cases (modules/api-pipeline/caseView.js).
-  const q = req.query.q ? String(req.query.q).trim() : '';
   if (q) {
     const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
     const claimant = (json) => [`${json}->'claimant'->>'claimant_name'`, `${json}->'claimant'->>'claimant_nrc_passport'`];
@@ -368,7 +384,7 @@ async function listCases(req, res) {
     recognizedType: row.recognizedType,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
-    summary: summarize(row),
+    summary: isStuck(row) ? 'Stuck: no progress since the last update. Check the pipeline, or reset the case.' : summarize(row),
   }));
 
   res.json({ cases, total: count, limit, offset });

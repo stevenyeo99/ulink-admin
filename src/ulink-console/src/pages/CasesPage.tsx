@@ -113,7 +113,8 @@ export function CasesPage() {
       </div>
 
       <div className="mb-4 flex w-fit flex-wrap items-center gap-1 rounded-full bg-slate-100/80 p-1">
-        {[{ id: '', label: 'All' }, ...(catalog?.groups ?? [])].map((g) => (
+        {/* Stopped: the API's default list, every case except those the pipeline is still moving (and not stuck). */}
+        {[{ id: '', label: 'Stopped' }, ...(catalog?.groups ?? [])].map((g) => (
           <button
             key={g.id || 'all'}
             onClick={() => update({ group: g.id })}
@@ -141,7 +142,7 @@ export function CasesPage() {
         onPageChange={(next) => update({ page: next > 0 ? String(next) : '' }, true)}
         isLoading={isLoading || isFetching}
         isError={isError}
-        emptyText={filtered ? 'No cases match these filters. Clear the search or pick "All".' : 'No cases yet. New claims appear here once the pipeline takes them in.'}
+        emptyText={filtered ? 'No cases match these filters. Clear the search or pick "Stopped".' : 'No stopped cases. Cases the pipeline is still moving are under "In progress".'}
       />
     </div>
   );
