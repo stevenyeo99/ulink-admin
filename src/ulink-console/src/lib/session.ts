@@ -1,5 +1,6 @@
-// The logged-in console user, kept in sessionStorage: it survives a page reload, and is gone when the
-// tab closes (decided 2026-09-28). The token itself expires after 8 hours on the server.
+// The logged-in console user, kept in localStorage: shared by every tab, so a case link from an email
+// opens without a new login (SYSTEM_6 item 1, replaces the 2026-09-28 sessionStorage decision). The
+// token itself expires after 8 hours on the server.
 
 export interface SessionUser {
   id: string;
@@ -17,7 +18,7 @@ const KEY = 'ulink-console-session';
 
 export function getSession(): Session | null {
   try {
-    const raw = sessionStorage.getItem(KEY);
+    const raw = localStorage.getItem(KEY);
     return raw ? (JSON.parse(raw) as Session) : null;
   } catch {
     return null;
@@ -26,7 +27,7 @@ export function getSession(): Session | null {
 
 export function saveSession(session: Session): void {
   try {
-    sessionStorage.setItem(KEY, JSON.stringify(session));
+    localStorage.setItem(KEY, JSON.stringify(session));
   } catch {
     // Storage blocked (private mode etc.): the user stays logged in until the page reloads.
   }
@@ -34,7 +35,7 @@ export function saveSession(session: Session): void {
 
 export function clearSession(): void {
   try {
-    sessionStorage.removeItem(KEY);
+    localStorage.removeItem(KEY);
   } catch {
     // Nothing stored to clear.
   }
