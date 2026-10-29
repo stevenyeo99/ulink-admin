@@ -14,7 +14,7 @@ jest.mock('../db/models', () => {
 
 const { Op } = require('sequelize');
 const { Case } = require('../db/models');
-const { listCases, getOverview, getApprovals } = require('../controllers/cases/casesController');
+const { listCases, getOverview, getApprovals, getReviewQueue } = require('../controllers/cases/casesController');
 
 const call = async (handler, query) => {
   const res = { status: jest.fn(() => res), json: jest.fn() };
@@ -133,4 +133,31 @@ it('lists non-STP claims waiting for JD3, with the review points JD3 should look
   expect(body.total).toBe(1);
   expect(body.items[0]).toMatchObject({ id: 'c1', claimNo: '26' });
   expect(body.items[0].reviewPoints).toEqual(["Diagnosis code: Check the AI's result against the documents."]);
+});
+
+it('the review queue and approvals search every waiting case on the server, and say when more wait than are loaded', async () => {
+  // Search: the same conditions as the Cases page, added to each list's own filter.
+  Case.findAll.mockResolvedValue([]);
+  await call(getReviewQueue, { q: 'Aung' });
+  const queueWhere = Case.findAll.mock.calls.at(-1)[0].where;
+  expect(queueWhere.reviewPendingAt).toBeNull();
+  expect(queueWhere[Op.and][0][Op.or]).toHaveLength(6);
+  expect(queueWhere[Op.and][0][Op.or][0]).toEqual({ claimNo: { [Op.iLike]: '%Aung%' } });
+
+  await call(getApprovals, { q: 'Aung' });
+  const approvalsWhere = Case.findAll.mock.calls.at(-1)[0].where;
+  expect(approvalsWhere[Op.or]).toHaveLength(2); // the approvals filter itself is unchanged
+  expect(approvalsWhere[Op.and][0][Op.or]).toHaveLength(6);
+
+  // No search: no extra condition; all loaded, so nothing to say.
+  const { body } = await call(getApprovals, {});
+  expect(Case.findAll.mock.calls.at(-1)[0].where[Op.and]).toBeUndefined();
+  expect(body.capped).toBeNull();
+  expect(Case.count).not.toHaveBeenCalled();
+
+  // A full page of 500: the true number waiting, from one count with the same filter.
+  Case.findAll.mockResolvedValue(Array.from({ length: 500 }, (_, i) => ({ id: `c${i}`, source: 'API', currentStatus: 'API_CLAIM_REVISED' })));
+  Case.count.mockResolvedValue(812);
+  const full = await call(getApprovals, {});
+  expect(full.body.capped).toEqual({ at: 500, of: 812 });
 });

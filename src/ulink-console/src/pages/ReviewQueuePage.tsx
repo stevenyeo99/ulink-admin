@@ -7,8 +7,7 @@ import { pickView, sourceOf, viewParam, useEnabledSources } from '../hooks/useSo
 import { DataTable } from '../components/common/DataTable';
 import type { ReviewQueueItem } from '../types/case';
 import { getSession } from '../lib/session';
-import { ClaimSearch } from '../components/common/ClaimSearch';
-import { matchesClaim } from '../lib/claimSearch';
+import { CappedNote, ClaimSearch } from '../components/common/ClaimSearch';
 
 const PAGE_SIZE = 25;
 const EMPTY: ReviewQueueItem[] = [];
@@ -25,7 +24,7 @@ export function ReviewQueuePage() {
   const reason = params.get('reason') ?? '';
   const q = params.get('q') ?? '';
   const page = Math.max(0, Number(params.get('page')) || 0);
-  const { data, isLoading, isFetching, isError } = useReviewQueue(sourceOf(source));
+  const { data, isLoading, isFetching, isError } = useReviewQueue(sourceOf(source), q);
 
   const update = (patch: Record<string, string>) => {
     const next = new URLSearchParams(params);
@@ -41,7 +40,7 @@ export function ReviewQueuePage() {
   // "My cases" (?reason=mine): the cases I am reviewing (SYSTEM_4 E4-22).
   const me = getSession()?.user.username;
   const mine = all.filter((i) => i.claim?.username === me);
-  const items = (reason === 'mine' ? mine : reason ? all.filter((i) => i.reason === reason) : all).filter((i) => matchesClaim(i, q));
+  const items = reason === 'mine' ? mine : reason ? all.filter((i) => i.reason === reason) : all;
   const reasons = Object.entries(data?.counts ?? {}).filter(([, n]) => n > 0);
 
   const columns = reviewColumns(source);
@@ -72,6 +71,7 @@ export function ReviewQueuePage() {
 
       <div className="mb-3">
         <ClaimSearch value={q} onChange={(text) => update({ q: text })} />
+        <CappedNote capped={data?.capped} what="open cases" />
       </div>
 
       <DataTable

@@ -6,8 +6,7 @@ import { pickView, sourceOf, viewParam, useEnabledSources } from '../hooks/useSo
 import { DataTable, type Column } from '../components/common/DataTable';
 import { WaitingCell } from '../components/common/WaitingCell';
 import type { ApprovalItem } from '../types/case';
-import { ClaimSearch } from '../components/common/ClaimSearch';
-import { matchesClaim } from '../lib/claimSearch';
+import { CappedNote, ClaimSearch } from '../components/common/ClaimSearch';
 
 const PAGE_SIZE = 25;
 const EMPTY: ApprovalItem[] = [];
@@ -22,9 +21,9 @@ export function ApprovalsPage() {
   const [params, setParams] = useSearchParams();
   const source = pickView(params.get('source'), useEnabledSources());
   const page = Math.max(0, Number(params.get('page')) || 0);
-  const { data, isLoading, isFetching, isError } = useApprovals(sourceOf(source));
   const q = params.get('q') ?? '';
-  const items = (data?.items ?? EMPTY).filter((i) => matchesClaim(i, q));
+  const { data, isLoading, isFetching, isError } = useApprovals(sourceOf(source), q);
+  const items = data?.items ?? EMPTY;
   // A new search starts on the first page.
   const search = (text: string) => {
     const nextParams = new URLSearchParams(params);
@@ -78,6 +77,7 @@ export function ApprovalsPage() {
       </p>
       <div className="mb-3">
         <ClaimSearch value={q} onChange={search} />
+        <CappedNote capped={data?.capped} what="claims" />
       </div>
       <DataTable
         columns={columns}

@@ -523,10 +523,17 @@ export interface ReviewQueueItem {
   pointCount: number;
 }
 
+/** More cases wait than a page loads (oldest first): searched on the server, so a search still finds the others. */
+export interface Capped {
+  at: number;
+  of: number;
+}
+
 export interface ReviewQueueResponse {
   items: ReviewQueueItem[];
   counts: Record<string, number>;
   total: number;
+  capped: Capped | null;
 }
 
 // GET /api/cases/approvals — non-STP claims waiting for JD3 to approve in IAS.
@@ -549,6 +556,7 @@ export interface ApprovalItem {
 export interface ApprovalsResponse {
   items: ApprovalItem[];
   total: number;
+  capped: Capped | null;
 }
 
 // The Reviewed page (SYSTEM_5 review lane, ulink-api controllers/cases/reviewedController.js): a case a person decided

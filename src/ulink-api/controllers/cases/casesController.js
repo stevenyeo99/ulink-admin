@@ -111,17 +111,15 @@ async function getApprovals(req, res) {
   if (source && !CASE_SOURCES.includes(source)) {
     return res.status(400).json({ error: { message: `Unknown source filter: ${req.query.source}. Must be one of: ${CASE_SOURCES.join(', ')}`, status: 400 } });
   }
-  const cases = await Case.findAll({
-    where: {
-      [Op.or]: [
-        { currentStatus: 'CLAIM_CREATED', isStp: { [Op.not]: true } },
-        { currentStatus: 'API_CLAIM_REVISED' },
-      ],
-      ...(source ? { source } : {}),
-    },
-    order: [['updatedAt', 'ASC']],
-    limit: QUEUE_SCAN_LIMIT,
-  });
+  const where = {
+    [Op.or]: [
+      { currentStatus: 'CLAIM_CREATED', isStp: { [Op.not]: true } },
+      { currentStatus: 'API_CLAIM_REVISED' },
+    ],
+    ...(source ? { source } : {}),
+    ...withSearch(searchOf(req)),
+  };
+  const cases = await Case.findAll({ where, order: [['updatedAt', 'ASC']], limit: QUEUE_SCAN_LIMIT });
   const fieldsOf = await assessmentFieldsLoader(cases);
   const items = cases.map((c) => {
     const { reviewPoints } = buildAssessmentSummary(fieldsOf(c));
@@ -129,7 +127,32 @@ async function getApprovals(req, res) {
     return { ...listRow(c), reviewPoints: points.map((p) => `${p.decision}: ${p.check}`) };
   });
   await withClaims(items);
-  res.json({ items, total: items.length });
+  res.json({ items, total: items.length, capped: cases.length === QUEUE_SCAN_LIMIT ? await capOf(where) : null });
+}
+
+// ?q= — free-text search over the identifiers people have in hand: claim no., TPA case number, case id, and the
+// claimant name and NRC / passport the AI read — on the case row for email cases, in the recognition step for API
+// cases (modules/api-pipeline/caseView.js). One rule for the Cases page, the Review queue and Approvals: any of
+// these conditions (Op.or).
+function searchConditions(q) {
+  const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  const claimant = (json) => [`${json}->'claimant'->>'claimant_name'`, `${json}->'claimant'->>'claimant_nrc_passport'`];
+  const quoted = sequelize.escape(like);
+  return [
+    { claimNo: { [Op.iLike]: like } },
+    { tpaCaseNumber: { [Op.iLike]: like } },
+    sqlWhere(cast(col('Case.id'), 'text'), { [Op.iLike]: like }),
+    ...claimant(`"Case"."extracted_fields"`).map((path) => sqlWhere(literal(path), { [Op.iLike]: like })),
+    literal(`EXISTS (SELECT 1 FROM ulink_api_case_steps s WHERE s.case_id = "Case"."id" AND s.job = 'api-claim-recognition'`
+      + ` AND (${claimant(`s.output->'extractedFields'`).map((path) => `${path} ILIKE ${quoted}`).join(' OR ')}))`),
+  ];
+}
+const searchOf = (req) => (req.query.q ? String(req.query.q).trim() : '');
+const withSearch = (q) => (q ? { [Op.and]: [{ [Op.or]: searchConditions(q) }] } : {});
+// More cases match than a queue page loads: how many, so the page can say so. Null when all are loaded.
+async function capOf(where) {
+  const of = await Case.count({ where });
+  return of > QUEUE_SCAN_LIMIT ? { at: QUEUE_SCAN_LIMIT, of } : null;
 }
 
 // Statuses a queued case can be at: every open one, plus the IAS rejections (queue.js decides).
@@ -150,9 +173,9 @@ async function getReviewQueue(req, res) {
   if (source && !CASE_SOURCES.includes(source)) {
     return res.status(400).json({ error: { message: `Unknown source filter: ${req.query.source}. Must be one of: ${CASE_SOURCES.join(', ')}`, status: 400 } });
   }
-  const items = await reviewQueueItems(source);
+  const { items, capped } = await reviewQueueItems(source, searchOf(req));
   const counts = Object.fromEntries(REASON_ORDER.map((r) => [r, items.filter((i) => i.reason === r).length]));
-  res.json({ items, counts, total: items.length });
+  res.json({ items, counts, total: items.length, capped });
 }
 
 /**
@@ -169,7 +192,7 @@ async function getNextCase(req, res) {
   const after = req.query.after ? String(req.query.after) : null;
   // ponytail: rebuilds the whole queue (as GET /review-queue does) for one id; stop at the first match once the
   // queue runs into hundreds of open cases.
-  const items = await reviewQueueItems(source);
+  const { items } = await reviewQueueItems(source);
   const at = items.findIndex((i) => i.id === after);
   const ordered = at >= 0 ? [...items.slice(at + 1), ...items.slice(0, at)] : items;
   const next = ordered.find((i) => !i.claim || i.claim.username === req.user.username);
@@ -177,13 +200,13 @@ async function getNextCase(req, res) {
 }
 
 // The review queue, oldest first, each with its reason and who is reviewing it (modules/review-queue/queue.js).
-async function reviewQueueItems(source) {
-  const cases = await Case.findAll({
-    // A case a person decided is being checked again (SYSTEM_5 review lane): not in the queue until it stops again.
-    where: { currentStatus: QUEUE_CANDIDATE_STATUSES, reviewPendingAt: null, ...(source ? { source } : {}) },
-    order: [['updatedAt', 'ASC']],
-    limit: QUEUE_SCAN_LIMIT,
-  });
+// q: only the cases the search finds. capped: more open cases than were looked at (their count, not the queue's —
+// which of them belong in the queue is only known from their assessment).
+async function reviewQueueItems(source, q = '') {
+  // A case a person decided is being checked again (SYSTEM_5 review lane): not in the queue until it stops again.
+  const where = { currentStatus: QUEUE_CANDIDATE_STATUSES, reviewPendingAt: null, ...(source ? { source } : {}), ...withSearch(q) };
+  const cases = await Case.findAll({ where, order: [['updatedAt', 'ASC']], limit: QUEUE_SCAN_LIMIT });
+  const capped = cases.length === QUEUE_SCAN_LIMIT ? await capOf(where) : null;
 
   const fieldsOf = await assessmentFieldsLoader(cases);
   // The cases' history, read once: the checks a person already overrode (email and API alike) and when each case
@@ -205,7 +228,7 @@ async function reviewQueueItems(source) {
   }
   await withClaims(items);
   withWaiting(items, events);
-  return items;
+  return { items, capped };
 }
 
 /**
@@ -336,7 +359,7 @@ async function listCases(req, res) {
   // No group, status or search chosen (SYSTEM_6 item 3): only cases that stopped — for a person, the customer, an
   // outside system, or at the end. A case the pipeline is still moving is hidden until it stops, unless it did not
   // move for longer than the pipeline-stale setting: a job that fails every run leaves the case where it is.
-  const q = req.query.q ? String(req.query.q).trim() : '';
+  const q = searchOf(req);
   const moving = codesInGroup('in_progress').filter((c) => !OUTSIDE_WAITS.has(c));
   const { pipelineStaleMinutesEmail, pipelineStaleMinutesApi } = await getSettings();
   const staleSince = (caseSource) => new Date(Date.now() - (caseSource === 'EMAIL' ? pipelineStaleMinutesEmail : pipelineStaleMinutesApi) * 60000);
@@ -350,22 +373,7 @@ async function listCases(req, res) {
     }];
   }
 
-  // ?q= — free-text search over the identifiers people have in hand: claim no., TPA case number,
-  // case id, and the claimant name and NRC / passport the AI read — on the case row for email
-  // cases, in the recognition step for API cases (modules/api-pipeline/caseView.js).
-  if (q) {
-    const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
-    const claimant = (json) => [`${json}->'claimant'->>'claimant_name'`, `${json}->'claimant'->>'claimant_nrc_passport'`];
-    const quoted = sequelize.escape(like);
-    where[Op.or] = [
-      { claimNo: { [Op.iLike]: like } },
-      { tpaCaseNumber: { [Op.iLike]: like } },
-      sqlWhere(cast(col('Case.id'), 'text'), { [Op.iLike]: like }),
-      ...claimant(`"Case"."extracted_fields"`).map((path) => sqlWhere(literal(path), { [Op.iLike]: like })),
-      literal(`EXISTS (SELECT 1 FROM ulink_api_case_steps s WHERE s.case_id = "Case"."id" AND s.job = 'api-claim-recognition'`
-        + ` AND (${claimant(`s.output->'extractedFields'`).map((path) => `${path} ILIKE ${quoted}`).join(' OR ')}))`),
-    ];
-  }
+  if (q) where[Op.or] = searchConditions(q);
 
   const { rows, count } = await Case.findAndCountAll({
     where,

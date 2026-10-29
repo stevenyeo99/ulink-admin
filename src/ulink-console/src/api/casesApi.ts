@@ -11,8 +11,14 @@ export function listCases(query: CaseListQuery = {}): Promise<ListCasesResponse>
   return request<ListCasesResponse>(`/api/cases${qs ? `?${qs}` : ''}`);
 }
 
-export function getReviewQueue(source?: Source): Promise<ReviewQueueResponse> {
-  return request<ReviewQueueResponse>(`/api/cases/review-queue${source ? `?source=${source}` : ''}`);
+// The waiting-list endpoints' query: ?source= and ?q= (searched on the server, so every waiting case is found).
+const listQuery = (source?: Source, q?: string) => {
+  const qs = new URLSearchParams({ ...(source ? { source } : {}), ...(q ? { q } : {}) }).toString();
+  return qs ? `?${qs}` : '';
+};
+
+export function getReviewQueue(source?: Source, q?: string): Promise<ReviewQueueResponse> {
+  return request<ReviewQueueResponse>(`/api/cases/review-queue${listQuery(source, q)}`);
 }
 
 // The Reviewed page (SYSTEM_5 review lane): cases a person decided that the review lane is checking again.
@@ -25,8 +31,8 @@ export function runReviewed(caseIds: string[]): Promise<{ started: boolean; queu
   return request(`/api/cases/reviewed/run`, { method: 'POST', body: JSON.stringify({ caseIds }) });
 }
 
-export function getApprovals(source?: Source): Promise<ApprovalsResponse> {
-  return request<ApprovalsResponse>(`/api/cases/approvals${source ? `?source=${source}` : ''}`);
+export function getApprovals(source?: Source, q?: string): Promise<ApprovalsResponse> {
+  return request<ApprovalsResponse>(`/api/cases/approvals${listQuery(source, q)}`);
 }
 
 export function getCaseOverview(source?: Source): Promise<CaseOverview> {
