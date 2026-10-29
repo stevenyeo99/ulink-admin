@@ -27,8 +27,8 @@ flowchart TD
   B --> C[3 · Claim recognition<br/>AI reads every page]:::job
   UP[Case-page upload<br/>API_UPLOAD_RECEIVED]:::job -->|read again at once| C
   C -->|too long / unreadable| MR{{API_MANUAL_REVIEW}}:::stop
-  C --> D[4 · Member verification<br/>member, policy, bank vs IAS<br/>AI head per voucher + IAS balance<br/>IAS exclusions judged by meaning<br/>policy contract exclusion]:::job
-  D -->|mismatch / balance not enough /<br/>possible exclusion| MV{{API_MEMBER_REVIEW_REQUIRED<br/>rechecked every run}}:::stop
+  C --> D[4 · Member verification<br/>member, policy, bank vs IAS<br/>account number length per bank<br/>AI head per voucher + IAS balance<br/>IAS exclusions judged by meaning<br/>policy contract exclusion]:::job
+  D -->|mismatch / account number length /<br/>balance not enough / possible exclusion| MV{{API_MEMBER_REVIEW_REQUIRED<br/>rechecked every run}}:::stop
   MV -.-> E3[/Team: member verification hold/]:::mail
   MV -->|override / IAS fixed / Mark OK or Bypass| E
   D -->|AI unsure of a voucher's head| BR{{API_BENEFIT_REVIEW}}:::stop
@@ -83,7 +83,7 @@ flowchart TD
 | `API_MANUAL_REVIEW` | The documents are too long for the AI, or its answer did not match the claim schema. | Handle the claim by hand. | None |
 | `API_BENEFIT_REVIEW` | The AI was not sure of a voucher's benefit head (switch `holdUnsureBenefit`). | Choose the head from the member's plan on the *Choose the benefit* panel, and correct a misread amount. The member check runs again and checks the balance. | None |
 | `API_BALANCE_REVIEW` | The member balance dropped while the case waited for its documents: a voucher no longer fits. | Bypass with a reason (the only action). The revision is then prepared and never goes STP. Asked again every run: goes on by itself once the balance is enough. | None |
-| `API_MEMBER_REVIEW_REQUIRED` | Member or policy details differ from IAS, or the IAS balance is not enough for a voucher (`member:balance`), or the claim may fall under a member or policy exclusion in IAS (`member:exclusion`) or a policy contract clause (`member:contract_exclusion`). | A bank difference is a warning only and never holds the case. Fix IAS (rechecked every run), Mark OK, correct a value, or override. A short balance or a possible exclusion in IAS: Bypass with a reason only, and the claim then never goes STP. A contract exclusion: *Does not apply* (STP stays possible) or *Let it go on* (never STP). | None |
+| `API_MEMBER_REVIEW_REQUIRED` | Member or policy details differ from IAS, or the IAS balance is not enough for a voucher (`member:balance`), or the claim may fall under a member or policy exclusion in IAS (`member:exclusion`) or a policy contract clause (`member:contract_exclusion`), or the account number on the claim form has the wrong number of digits for its bank (`member:bank_number`: AYA 11, CB 16, KBZ 17, YOMA 15, UAB 15 or 16). | A bank difference is a warning only and never holds the case. Fix IAS (rechecked every run), Mark OK, correct a value, or override. A short balance or a possible exclusion in IAS: Bypass with a reason only, and the claim then never goes STP. A contract exclusion: *Does not apply* (STP stays possible) or *Let it go on* (never STP). An account number length: Mark OK when the number is right, or correct it (checked again). | None |
 | `API_DOCUMENTS_UNSURE` | The documents are complete, but the AI was unsure of an item. A reviewer's open request line also holds the case here, even when the switch is off. | Use the `Confirm and continue` button, or correct a value. | `holdUnsureDocumentPass` |
 | `API_DOCUMENTS_REVIEW` | Documents are missing and the AI was unsure, or a person corrected items. | Documents are missing: continue (suspended revision). Documents are fine: override. Or correct a value. | `holdUnsureMissingDocsEmail` |
 | `API_CONSOLE_UPLOAD_FAILED` | Case-page uploads did not reach the IAS console. | Retry from the case page. | None |

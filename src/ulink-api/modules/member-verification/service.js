@@ -102,17 +102,21 @@ async function checkCase(caseRecord) {
   // The flags: the contract exclusion — while it holds the case too, so the clause, the confidence and the policyholder
   // notes stay on the case after a whole-check override — the bank warning (bank details differ from IAS, SYSTEM_5 bank
   // check: never a stop, never a review point), and, on a verified member, the benefit-eligibility warning (SOP §6.4). checkBenefitEligibility is free (no LLM), gated here for the same noise-reduction reason as the exclusion.
+  // The bank notes — the warning, and the account number length not checked for a bank ULINK gave no length for — on a
+  // held case too.
+  const bankFlags = [result.bankWarning, result.bankNote].filter(Boolean);
   if (result.outcome === 'MEMBER_VERIFIED') {
     const eligibilityFlag = off.has('BENEFIT_NOT_ELIGIBLE') ? null : checkBenefitEligibility(extractedFields, iasResponse.payload?.memberPlans);
     result.flags = [
       ...(contract?.flag ? [contract.flag] : []),
-      ...(result.bankWarning ? [result.bankWarning] : []),
+      ...bankFlags,
       ...(eligibilityFlag ? [eligibilityFlag] : []),
     ];
   } else {
-    result.flags = [...(contract?.flag ? [contract.flag] : []), ...(result.bankWarning ? [result.bankWarning] : [])];
+    result.flags = [...(contract?.flag ? [contract.flag] : []), ...bankFlags];
   }
   delete result.bankWarning;
+  delete result.bankNote;
 
   // SOP §6.5 (available benefit balance): the IAS remaining balance per voucher, result.balance above (SYSTEM_5 member
   // balance) — it replaced the plan's filed limits (benefitLimits), which were never a remaining balance.

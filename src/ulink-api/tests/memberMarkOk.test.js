@@ -10,7 +10,7 @@ const fields = (corrections = []) => ({
   claim: { accident_date: null, appointment_date: '2026-09-01' },
   claimant: { claimant_dob: '1990-01-01' },
   policy: { policy_no: 'POL2' },
-  bank: { bank_name: 'AYA', bank_account_name: 'Thiha', bank_account_number: '1234567890' },
+  bank: { bank_name: 'AYA', bank_account_name: 'Thiha', bank_account_number: '12345678901' },
   corrections,
 });
 const ias = {

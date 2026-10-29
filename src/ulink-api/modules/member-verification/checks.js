@@ -49,6 +49,31 @@ function compareBankName(extractedValue, iasValue) {
   return a === b || a.includes(b) || b.includes(a);
 }
 
+// Account number length for each bank (owner, 2026-10-29, docs/imp/CR/SYSTEM_6/BANK_NO_CHECKING.md), on the bank name
+// and number the AI read from the claim form — not IAS. A wrong number is a failed payment, so it holds the case for a
+// person: Mark OK (the number is right) or correct it (checked again). Found by its short or full English name: "AYA",
+// "AYA bank", "Ayeyarwady Bank". A
+// bank not listed, no name, or a number that is not digits only (the document check's format check): not checked.
+// Digits after spaces and dashes are removed; Burmese digits count. A new bank or length: one line.
+const BANK_ACCOUNT_DIGITS = [
+  { bank: 'AYA Bank', match: /\b(AYA|Ayeyarwadd?y)\b/i, digits: [11] },
+  { bank: 'CB Bank', match: /\b(CB|Co-?operative)\b/i, digits: [16] },
+  { bank: 'KBZ Bank', match: /\b(KBZ|Kanbawzar?)\b/i, digits: [17] },
+  { bank: 'YOMA Bank', match: /\bYOMA\b/i, digits: [15] },
+  { bank: 'UAB Bank', match: /\b(UAB|United Amara)\b/i, digits: [15, 16] },
+];
+
+// The number's length against its bank: { problem } (a finding's reason) when it does not fit, { unlisted } (a note, no
+// stop: owner 2026-10-29) when the bank is not in ULINK's list, else null — no name, no number, or not digits only.
+function bankNumberLength(bankName, accountNumber) {
+  const digits = String(accountNumber ?? '').replace(/[\s-]+/g, '');
+  if (!bankName || !/^[0-9\u1040-\u1049]+$/.test(digits)) return null;
+  const rule = BANK_ACCOUNT_DIGITS.find((b) => b.match.test(bankName));
+  if (!rule) return { unlisted: `Account number length not checked: "${bankName}" is not in ULINK's list of banks.` };
+  if (rule.digits.includes(digits.length)) return null;
+  return { problem: `Account number "${accountNumber}" has ${digits.length} digits, but ${rule.bank} account numbers have ${rule.digits.join(' or ')}.` };
+}
+
 // Burmese and generic English honorific prefixes that legitimately vary between what a
 // customer writes and IAS's own stored name (e.g. "U Thiha" vs IAS's own "Thiha" — same
 // account holder), stripped as a single leading token before comparing account-holder
@@ -96,7 +121,7 @@ function checkCoverageActive(plan, treatmentDateYYYYMMDD) {
 // member:balance / member:exclusion (SYSTEM_5): the only action on them is this mark OK — the review page's "Bypass", with
 // a reason. member:contract_exclusion (SYSTEM_5 contract exclusion): marked as not applying (wrongStep check) or let go on
 // as an exception — the correction's wrongStep is kept on the accepted finding, for the STP rule.
-const MEMBER_ITEM_LABELS = { 'member:dob': 'Member check: date of birth', 'member:bank': 'Member check: bank details', 'member:policy': 'Member check: policy number', 'member:balance': 'Member check: balance', 'member:exclusion': 'Member check: exclusion in IAS', 'member:contract_exclusion': 'Member check: policy contract exclusion' };
+const MEMBER_ITEM_LABELS = { 'member:dob': 'Member check: date of birth', 'member:bank': 'Member check: bank details', 'member:bank_number': 'Member check: bank account number', 'member:policy': 'Member check: policy number', 'member:balance': 'Member check: balance', 'member:exclusion': 'Member check: exclusion in IAS', 'member:contract_exclusion': 'Member check: policy contract exclusion' };
 // Not member:bank: a bank difference is a warning that never holds the case (SYSTEM_5 bank check), so nothing to mark OK.
 const ACCEPTABLE_MEMBER_ITEMS = new Set(Object.keys(MEMBER_ITEM_LABELS).filter((item) => item !== 'member:bank'));
 
@@ -186,6 +211,10 @@ function evaluate(extractedFields, iasResponse, extraIssues = [], off = new Map(
     // (payloadBuilder.js), so a difference does not change the payment — the case goes on and STP stays possible.
     if (!off.has('member:bank')) bankWarning = { code: 'member:bank', reason: `Bank details on the claim form differ from IAS: ${mismatches.join('; ')}. The IAS claim pays to the IAS account.` };
   }
+  const bankNumber = bankNumberLength(extractedFields.bank?.bank_name, extractedFields.bank?.bank_account_number);
+  if (bankNumber?.problem) issues.push({ item: 'member:bank_number', reasonCode: 'BANK_DETAILS_MISMATCH', reason: bankNumber.problem });
+  // A bank ULINK gave no length for: shown on the case page as not checked, so it is never read as a pass.
+  const bankNote = bankNumber?.unlisted && !off.has('member:bank_number') ? { code: 'member:bank_number', reason: bankNumber.unlisted } : null;
   if (hard.policyNoMatch === false) {
     issues.push({
       item: 'member:policy',
@@ -224,10 +253,11 @@ function evaluate(extractedFields, iasResponse, extraIssues = [], off = new Map(
       issues: open,
       ...(accepted.length ? { accepted } : {}),
       ...(bankWarning ? { bankWarning } : {}),
+      ...(bankNote ? { bankNote } : {}),
     };
   }
 
-  return { outcome: 'MEMBER_VERIFIED', reasonCode: null, checks, reason: null, ...(accepted.length ? { accepted } : {}), ...(bankWarning ? { bankWarning } : {}) };
+  return { outcome: 'MEMBER_VERIFIED', reasonCode: null, checks, reason: null, ...(accepted.length ? { accepted } : {}), ...(bankWarning ? { bankWarning } : {}), ...(bankNote ? { bankNote } : {}) };
 }
 
 module.exports = { evaluate, ACCEPTABLE_MEMBER_ITEMS, MEMBER_ITEM_LABELS };

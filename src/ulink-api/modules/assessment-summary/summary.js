@@ -222,6 +222,11 @@ function memberLines(memberVerifyResult) {
       lines.push(line({ decision: 'Bank details', result: 'Differ from IAS', status: 'issue', why: flag.reason, verified: VERIFIED.CROSS_CHECK, brief: 'A warning only: the IAS claim pays to the IAS account.' }));
       continue;
     }
+    // The bank is not in ULINK's list of account number lengths: not checked, never a pass, never a review point.
+    if (flag.code === 'member:bank_number') {
+      lines.push(line({ decision: 'Account number length', result: 'Not checked', status: 'not_checked', why: flag.reason, verified: VERIFIED.RULE }));
+      continue;
+    }
     const byAi = flag.confidence != null;
     const exclusion = flag.code === 'POSSIBLE_EXCLUSION';
     // An exclusion shows the clause's own words and what in the claim matched, so a reviewer can judge it.
