@@ -57,6 +57,7 @@ Size: S ≤ ½ day · M ≈ 1–2 days · L > 2 days.
 |---|---|---|
 | D1 | Accuracy report: how often each AI decision is corrected, per confidence band | B5 running for a while |
 | D2 | STP rule on AI confidence | D1 |
+| D3 | Reviewer request lines at `API_CLAIM_SUSPENDED` (SYSTEM_6 item 4, enhancement 4). Today a reviewer who finds a new item after the suspended revision cannot record it. If the AI's own items then pass, the next revision lifts the suspense without that item. Build: one entry `API_CLAIM_SUSPENDED: 'API_CLAIM_SUSPENDED'` in `REQUEST_FROM` (`modules/case-requests/requests.js`), the same stay path as `API_PREPARATION_REVIEW`. Decide first: send the team email again on save, or the reviewer contacts the customer | UAT reviewers say they need to add a request after the claim is suspended |
 
 ## Scaling up (see DESIGN.md §7)
 
