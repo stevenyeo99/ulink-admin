@@ -5,9 +5,10 @@
 
 const unsure = (confidence, threshold) => typeof confidence === 'number' && confidence <= threshold;
 
-// The default code (R69), or the pick at or below the threshold. A code a person chose is decided.
+// The default code (R69), or the pick at or below the threshold. A code a person chose is decided, and so is a code a
+// ULINK rule set from the benefit (diagnosisRules.js, rule.set).
 function diagnosisUnsure(diagnosis, threshold) {
-  if (!diagnosis || diagnosis.chosen) return false;
+  if (!diagnosis || diagnosis.chosen || diagnosis.rule?.set) return false;
   return Boolean(diagnosis.defaulted) || unsure(diagnosis.confidence, threshold);
 }
 

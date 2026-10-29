@@ -470,6 +470,9 @@ function preparationLines(claimPrepMeta, isStp) {
         why: [`Chosen by ${diagnosis.chosen.by}: ${diagnosis.chosen.comment}`, translated].filter(Boolean).join(' '),
         verified: VERIFIED.PERSON,
       }));
+    } else if (diagnosis.rule?.set) {
+      // Set from the claim's benefit by a ULINK rule (diagnosisRules.js): decided, no AI.
+      lines.push(line({ decision: 'Diagnosis code', result: code, status: 'ok', why: diagnosis.reason, verified: VERIFIED.RULE }));
     } else lines.push(line({
       decision: 'Diagnosis code',
       result: diagnosis.defaulted ? `${code} (default)` : code,

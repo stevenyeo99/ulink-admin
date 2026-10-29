@@ -1,7 +1,9 @@
 const { laneWhere, laneOrder } = require('../review-lane/marker');
 const { sequelize, Case, ClaimRoute, CaseEvent } = require('../../db/models');
 const config = require('../../config');
-const { pickDiagnosis } = require('./diagnosisPicker');
+const { pickDiagnosis, pickRuledDiagnosis } = require('./diagnosisPicker');
+const { diagnosisRule } = require('./diagnosisRules');
+const { lastReadSettings } = require('../settings/settings');
 const { pickBenefit } = require('./benefitPicker');
 const { voucherKey, sameVoucher, diagnosisSource, sameDiagnosis } = require('./preparationReview');
 const { savedHead, recheckBalance, heldBalanceEnough } = require('../member-verification/memberBalance');
@@ -60,9 +62,6 @@ async function checkCase(caseRecord) {
   const chosen = choice && { by: choice.by, comment: choice.comment };
   const source = diagnosisSource(medical);
   const chosenDiagnosis = choice?.diagnosis && sameDiagnosis(choice.diagnosis, { source, text: diagnosisText || null }) ? choice.diagnosis : null;
-  const diagnosisPick = chosenDiagnosis
-    ? { ...chosenDiagnosis.aiPick, pick: { diagCode: chosenDiagnosis.diagCode, diagDesc: chosenDiagnosis.diagDesc }, defaulted: false, chosen }
-    : await pickDiagnosis(diagnosisText, { searchText: illnessText });
   const chosenBenefit = (i, item) => (choice?.benefits || []).find((b) => b.voucher === i && sameVoucher(b.key, voucherKey(item)));
   // A person's manual rejection (vitamins / supplements) on a voucher: theirs, on any voucher, while it is the same.
   const chosenRejection = (i, item) => (choice?.rejections || []).find((r) => r.voucher === i && sameVoucher(r.key, voucherKey(item)));
@@ -122,6 +121,14 @@ async function checkCase(caseRecord) {
     lines.push({ subtotal: extractedFields.claim?.total_claim_amount, benefit: benefitPick.pick });
     lineMeta.push({ voucherType: null, subtotal: extractedFields.claim?.total_claim_amount ?? null, ...benefitPick });
   }
+
+  // The diagnosis, after the benefits (owner, 2026-10-29): a person's choice; else the code a ULINK rule gives the
+  // claim's benefit (dental Z01.2, vision Z46.0, … — diagnosisRules.js); else the AI's pick from the ICD-10 search.
+  const rule = chosenDiagnosis ? null : diagnosisRule(lineMeta, lastReadSettings().aiConfidenceThreshold);
+  const benefits = lineMeta.map((line) => line.pick && `${line.pick.benefitType}/${line.pick.benefitHead ?? ''}`).filter(Boolean);
+  const diagnosisPick = chosenDiagnosis
+    ? { ...chosenDiagnosis.aiPick, pick: { diagCode: chosenDiagnosis.diagCode, diagDesc: chosenDiagnosis.diagDesc }, defaulted: false, chosen }
+    : (rule && await pickRuledDiagnosis(rule, diagnosisText, { benefits })) || await pickDiagnosis(diagnosisText, { searchText: illnessText });
 
   // Internal-only diagnostic record of *why* each pick landed where it did — confidence
   // score plus the candidate list the LLM was actually shown — never merged into `payload`,

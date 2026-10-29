@@ -50,7 +50,7 @@ flowchart TD
   G -->|overdue| CB{{API_CONSOLE_BARCODE_MISSING<br/>checked again every run}}:::stop
   CB -->|barcode arrives| H
   F -->|no uploads| H
-  G --> H[8 · Claim preparation<br/>ICD-10, benefit, rejections, STP, suspense]:::job
+  G --> H[8 · Claim preparation<br/>benefit, then ICD-10 (ULINK rule or AI),<br/>rejections, STP, suspense]:::job
   H -->|AI unsure of diagnosis,<br/>benefit or vitamins| PR{{API_PREPARATION_REVIEW}}:::stop
   H -->|balance dropped while waiting<br/>new shortage| BL{{API_BALANCE_REVIEW}}:::stop
   BL -->|Bypass with a reason,<br/>or balance enough again| H
@@ -96,6 +96,7 @@ flowchart TD
 
 - A case-page upload is possible at `API_NO_DOCUMENTS`, `API_CLAIM_SUSPENDED`, `API_DOCUMENTS_REVIEW` and `API_DOCUMENTS_UNSURE`. The case goes to `API_UPLOAD_RECEIVED`, and the AI reads it again at once. Console upload then sends the files to the IAS console before the revision.
 - A person can add their own request lines (reviewer checklist) at `API_DOCUMENTS_REVIEW` and `API_DOCUMENTS_UNSURE`, where the case then waits for documents, and at `API_PREPARATION_REVIEW`, where the case stays. An open line counts as a missing document: the revision goes with `isSuspense=Y`, never STP, and the team email lists the line. The lines are never in the customer's email.
+- Claim preparation picks the benefits first, then the diagnosis. A person's choice wins. Otherwise a decided benefit sets the code by a ULINK rule (`ias-claim-preparation/diagnosisRules.js`): DT Z01.2, VS Z46.0, OP/VACC Z24, IP/MAT Z34, with no AI and no stop. MAT/NDEL lets the AI pick only O80 or O82, and an unsure pick stops at `API_PREPARATION_REVIEW`. Any other claim gets the AI's pick from the ICD-10 search. The same rule applies to email cases.
 - An STP claim waits at `API_AWAITING_CSR` until IAS has the settlement report. Claim STP checks every run.
 - Claim preparation decides STP, and STP never stops the revision. A never-STP diagnosis (ULINK's chronic list, R69), vitamins, an amount over the limit or an open review point sends the claim as non-STP. A check that can stop a case and was switched off does the same. JD3 then approves it in IAS.
 - Missing documents never stop the revision. The revision goes with `isSuspense=Y`, and a suspended claim is never STP. The next revision with complete documents sends `isSuspense=N`, and IAS lifts the suspense.

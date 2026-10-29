@@ -14,6 +14,9 @@ Rules:
   not as a diagnosis. A procedure or service name alone is not enough to invent a disease.
 - When the diagnosis/illness text is generic and the treatment only names a procedure, return
   null rather than guessing the condition that might have led to that procedure.
+- When the input says "ULINK rule", the candidates are the only codes allowed for this kind of care: pick one of them
+  by the rule's hint, even when the clinical context is short, or return null with a low confidence when the hint
+  cannot decide.
 - `confidence`: your own honest 0.0–1.0 estimate that the picked candidate is actually
   correct — not just the least-bad of the set. Prefer a low confidence (or `null`) over
   forcing a pick you don't actually believe in.

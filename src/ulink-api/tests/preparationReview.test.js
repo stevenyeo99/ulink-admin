@@ -5,7 +5,7 @@ jest.mock('../db/models', () => ({
   ClaimRoute: { findOne: jest.fn().mockResolvedValue(null) },
   CaseEvent: { findAll: jest.fn().mockResolvedValue([]) },
 }));
-jest.mock('../modules/ias-claim-preparation/diagnosisPicker', () => ({ pickDiagnosis: jest.fn() }));
+jest.mock('../modules/ias-claim-preparation/diagnosisPicker', () => ({ pickDiagnosis: jest.fn(), pickRuledDiagnosis: jest.fn() }));
 jest.mock('../modules/ias-claim-preparation/benefitPicker', () => ({
   pickBenefit: jest.fn().mockResolvedValue({ pick: { benefitType: 'DT', benefitHead: 'SCP' }, confidence: 0.9, reason: 'dental' }),
 }));
@@ -15,7 +15,8 @@ jest.mock('../modules/ias-claim-preparation/medicalTranslation', () => ({
 jest.mock('../modules/ias-claim-preparation/stpEligibility', () => ({ stpDecision: jest.fn().mockResolvedValue({ isStp: false, reasons: [] }) }));
 jest.mock('../modules/ias-claim-preparation/aiSummaryRemark', () => ({ aiSummaryRemark: jest.fn(() => 'remark') }));
 
-const { pickDiagnosis } = require('../modules/ias-claim-preparation/diagnosisPicker');
+const { pickDiagnosis, pickRuledDiagnosis } = require('../modules/ias-claim-preparation/diagnosisPicker');
+const { diagnosisUnsure } = require('../modules/ias-claim-preparation/preparationReview');
 const { pickBenefit } = require('../modules/ias-claim-preparation/benefitPicker');
 const { checkCase } = require('../modules/ias-claim-preparation/service');
 const { buildAssessmentSummary } = require('../modules/assessment-summary/summary');
@@ -151,5 +152,43 @@ describe('manual rejections (vitamins / supplements)', () => {
     expect(reviewNeeded(prepared.claimPrepMeta, settings)).toBeNull();
     const line = buildAssessmentSummary({ source: 'API', claimPrepMeta: prepared.claimPrepMeta }).lines.find((l) => l.decision === 'Manual rejection (voucher 1)');
     expect(line).toMatchObject({ result: '6,000 MMK', verified: 'Corrected by a person' });
+  });
+});
+
+describe('diagnosis rule from the benefit (owner, 2026-10-29)', () => {
+  const noChoice = { ...caseRecord, preparationChoice: null };
+  const dental = { pick: { diagCode: 'Z01.2', diagDesc: 'Dental examination' }, defaulted: false, confidence: null, reason: 'Set from the benefit Dental (ULINK rule).', candidates: [], rule: { label: 'Dental', codes: ['Z01.2'], set: true } };
+
+  it('a dental claim gets the rule code, not the AI search, and the code does not stop the case', async () => {
+    pickRuledDiagnosis.mockResolvedValue(dental);
+    const prepared = await checkCase(noChoice);
+
+    expect(pickRuledDiagnosis).toHaveBeenCalledWith(expect.objectContaining({ label: 'Dental' }), expect.any(String), { benefits: ['DT/SCP'] });
+    expect(pickDiagnosis).not.toHaveBeenCalled();
+    expect(prepared.payload.Items[0]).toMatchObject({ DiagnosisCode: 'Z01.2' });
+    expect(diagnosisUnsure(prepared.claimPrepMeta.diagnosis, 0.7)).toBe(false);
+    const line = buildAssessmentSummary({ ...noChoice, claimPrepMeta: prepared.claimPrepMeta }).lines.find((l) => l.decision === 'Diagnosis code');
+    expect(line).toMatchObject({ status: 'ok', verified: 'Rule', why: 'Set from the benefit Dental (ULINK rule).' });
+  });
+
+  it("a person's code wins over the rule", async () => {
+    const prepared = await checkCase(caseRecord);
+    expect(pickRuledDiagnosis).not.toHaveBeenCalled();
+    expect(prepared.payload.Items[0]).toMatchObject({ DiagnosisCode: 'K05.1' });
+  });
+
+  it('an unsure benefit sets no code: the AI picks as for any claim', async () => {
+    pickBenefit.mockResolvedValueOnce({ pick: { benefitType: 'DT', benefitHead: 'SCP' }, confidence: 0.3, reason: 'maybe dental' });
+    pickDiagnosis.mockResolvedValue({ pick: { diagCode: 'K02.9', diagDesc: 'Dental caries' }, defaulted: false, confidence: 0.9, candidates: [] });
+    await checkCase(noChoice);
+    expect(pickRuledDiagnosis).not.toHaveBeenCalled();
+    expect(pickDiagnosis).toHaveBeenCalled();
+  });
+
+  it('the rule code missing from the IAS list: the AI picks as for any claim', async () => {
+    pickRuledDiagnosis.mockResolvedValue(null);
+    pickDiagnosis.mockResolvedValue({ pick: { diagCode: 'K02.9', diagDesc: 'Dental caries' }, defaulted: false, confidence: 0.9, candidates: [] });
+    const prepared = await checkCase(noChoice);
+    expect(prepared.payload.Items[0]).toMatchObject({ DiagnosisCode: 'K02.9' });
   });
 });

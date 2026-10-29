@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { synthesizeJson } = require('../claim-recognition/llmClient');
-const { findCandidates } = require('../icd10/lookup');
+const { findCandidates, findByCode } = require('../icd10/lookup');
 
 const SYSTEM_PROMPT = fs.readFileSync(path.join(__dirname, 'prompts', 'diagnosis-pick.md'), 'utf8');
 
@@ -53,12 +53,16 @@ async function pickDiagnosis(freeText, { searchText } = {}) {
 
   const candidates = await findCandidates(searchText?.trim() || freeText, { topK: 5 });
   if (candidates.length === 0) return { pick: DEFAULT_DIAGNOSIS, defaulted: true, confidence: null, reason: null, candidates: [] };
+  return askAi(freeText, candidates, ['Candidates (nearest by vector similarity, not guaranteed correct):']);
+}
 
+// The AI's pick among the candidates; heading: the lines before the list (what the list is).
+async function askAi(freeText, candidates, heading) {
   const userText = [
-    `Clinical context:\n${freeText}`,
+    `Clinical context:\n${freeText || '(none)'}`,
     '',
-    'Candidates (nearest by vector similarity, not guaranteed correct):',
-    ...candidates.map((c) => `- ${c.diagCode}: ${c.diagDesc} (similarity=${c.similarity.toFixed(3)})`),
+    ...heading,
+    ...candidates.map((c) => `- ${c.diagCode}: ${c.diagDesc}${c.similarity != null ? ` (similarity=${c.similarity.toFixed(3)})` : ''}`),
   ].join('\n');
 
   const result = await synthesizeJson({ systemPrompt: SYSTEM_PROMPT, userText, jsonSchema: SCHEMA });
@@ -73,4 +77,26 @@ async function pickDiagnosis(freeText, { searchText } = {}) {
   };
 }
 
-module.exports = { pickDiagnosis, DEFAULT_DIAGNOSIS };
+/**
+ * The diagnosis for a claim under a ULINK rule (diagnosisRules.js): its code from the IAS list, set without the AI
+ * (rule.set: decided, no stop); with several codes, the AI picks only among them, given the rule's hint and the claim's
+ * benefits. A code missing from the IAS list is left out; none left: null, and the caller picks as for any claim.
+ * benefits: the claim's "TYPE/HEAD" per voucher (an operation room voucher is evidence of a caesarean).
+ */
+async function pickRuledDiagnosis(rule, freeText, { benefits = [] } = {}) {
+  const candidates = (await Promise.all(rule.codes.map((code) => findByCode(code)))).filter(Boolean);
+  if (candidates.length === 0) return null;
+  const ruled = { label: rule.label, codes: rule.codes };
+  if (rule.codes.length === 1) {
+    const [{ diagCode, diagDesc }] = candidates;
+    return { pick: { diagCode, diagDesc }, defaulted: false, confidence: null, reason: `Set from the benefit ${rule.label} (ULINK rule).`, candidates, rule: { ...ruled, set: true } };
+  }
+  const result = await askAi(freeText, candidates, [
+    `Benefits on this claim: ${benefits.join(', ') || '(none)'}`,
+    '',
+    `ULINK rule for ${rule.label}: pick only one of these codes. ${rule.hint || ''}`.trim(),
+  ]);
+  return { ...result, rule: ruled };
+}
+
+module.exports = { pickDiagnosis, pickRuledDiagnosis, DEFAULT_DIAGNOSIS };
