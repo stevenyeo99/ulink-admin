@@ -17,7 +17,8 @@ const REFRESH = ['case', 'cases', 'review-queue', 'cases-overview', 'approvals',
  * AI and the rules). One row per line: open lines with *Done* (the documents arrived) and *Remove*; new rows with ×.
  * *Save and request* sends only the change; the case waits for documents and the team contacts the customer — the
  * lines are never in the customer's email. Below it, the email draft with both checklists, to copy. Everyone else
- * (and a case with nothing to edit) sees the draft alone.
+ * (and a case with nothing to edit) sees the draft alone. Where the case stays (requests.stays, the API decides which
+ * stops): *Save lines* — the case does not move, and its revision goes to IAS with suspense.
  */
 export function ReviewerChecklistPanel({ caseId, requests }: { caseId: string; requests: RequestsInfo }) {
   const queryClient = useQueryClient();
@@ -52,6 +53,7 @@ export function ReviewerChecklistPanel({ caseId, requests }: { caseId: string; r
         <p className="mb-3 mt-1 text-sm text-slate-600">
           Your own lines for this case — what the system checklist doesn't cover. The AI can't check them: a person marks
           each one done. They are never in the customer's email; the team is emailed to contact the customer.
+          {requests.stays && ' The case stays here: your lines keep the claim suspended in IAS until each one is marked done.'}
         </p>
 
         {requests.open.length > 0 && (
@@ -112,8 +114,8 @@ export function ReviewerChecklistPanel({ caseId, requests }: { caseId: string; r
               <span className="mb-1 block text-sm font-medium text-slate-700">Comment</span>
               <input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Why this is needed" className={inputClass} />
             </label>
-            <Button onClick={() => save.mutate()} disabled={!changedSomething || !lines.length || lines.length > MAX_LINES || comment.trim().length < 3 || save.isPending}>
-              {save.isPending ? 'Saving…' : 'Save and request'}
+            <Button onClick={() => save.mutate()} disabled={!changedSomething || (!lines.length && !requests.stays) || lines.length > MAX_LINES || comment.trim().length < 3 || save.isPending}>
+              {save.isPending ? 'Saving…' : requests.stays ? 'Save lines' : 'Save and request'}
             </Button>
             {save.isError && <p className="mt-3 text-sm text-red-600">{(save.error as Error).message}</p>}
           </>

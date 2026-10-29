@@ -216,7 +216,8 @@ export function ReviewWorkspacePage() {
             onSaved={setSaved}
             saveBelow={atPreparationStop}
             status={caseRecord.currentStatus}
-            requestsAllowed={requests.allowed}
+            // The review page's save moves the case back to the document check; where it stays, lines are added on the case page.
+            requestsAllowed={requests.allowed && !requests.stays}
             openRequestLines={requests.open.map((r) => r.text)}
           />
           <CaseRetryPanel key={`retry-${id}`} caseId={id} retry={retry} />

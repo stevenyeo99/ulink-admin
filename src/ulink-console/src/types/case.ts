@@ -392,8 +392,10 @@ export interface RetryInfo {
 
 // A reviewer's own checklist lines on this case (SYSTEM_4 E4-28, ulink-api modules/case-requests/requests.js).
 export interface RequestsInfo {
-  /** The case is at a documents review status: a request can be made now. */
+  /** The case is at a status where a request can be made now. */
   allowed: boolean;
+  /** Saving keeps the case at its status (the claim preparation stop); otherwise it moves to wait for documents. */
+  stays: boolean;
   /** Lines still open — the AI can't check them; a person confirms them. */
   open: { id: string; text: string; by: string; at: string }[];
 }

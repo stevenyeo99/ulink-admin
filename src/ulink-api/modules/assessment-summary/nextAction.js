@@ -63,9 +63,10 @@ function nextAction(fields = {}, summary = null, events = []) {
         .filter(Boolean).join(' and ') || 'the claim preparation';
       // Missing documents never stop an API case (owner, 2026-10-29): say the documents are incomplete, the revision goes
       // as suspended, and who asks the customer — or the reviewer reads "documents are done" and misses the email.
-      if (!missing) return act(`Step 2 of 2: the documents are done. Check ${what} before the revision goes to IAS.`);
+      const more = ' If the customer must send more, add your own lines on the case page.';
+      if (!missing) return act(`Step 2 of 2: the documents are done. Check ${what} before the revision goes to IAS.${more}`);
       const ask = lastReadSettings().apiSendMissingDocumentsEmail ? 'The customer is emailed for them.' : 'ULINK emails the customer for them.';
-      return act(`Step 2 of 2: check ${what} before the revision goes to IAS. The documents are incomplete (${missing}), so the claim goes to IAS as suspended. ${ask}`);
+      return act(`Step 2 of 2: check ${what} before the revision goes to IAS. The documents are incomplete (${missing}), so the claim goes to IAS as suspended. ${ask}${more}`);
     }
     case 'MANUAL_REVIEW':
     case 'API_MANUAL_REVIEW':

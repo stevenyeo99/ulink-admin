@@ -1,6 +1,6 @@
 const { sequelize, Case, CaseEvent, ApiCaseStep, CaseRequest } = require('../../db/models');
 const { apiCaseView } = require('../../modules/api-pipeline/caseView');
-const { REQUEST_FROM, MAX_LINES, validateLines, openRequests, withRequests, requestedDedupeKey, closeRequests, refreshRequestLine } = require('../../modules/case-requests/requests');
+const { REQUEST_FROM, staysAt, MAX_LINES, validateLines, openRequests, withRequests, requestedDedupeKey, closeRequests, refreshRequestLine } = require('../../modules/case-requests/requests');
 const { emailDraft } = require('../../modules/case-requests/emailDraft');
 const { queueMissingDocumentsEmail, queueDocumentsIncompleteEmail } = require('../../modules/document-checking/service');
 const { emailFor } = require('../../modules/api-document-checking/service');
@@ -21,7 +21,9 @@ const changed = (res) => res.status(409).json({ error: { message: 'The case chan
  * closed as *removed*, the rest kept with their author and date; at least one line stays open. From the documents
  * review statuses (REQUEST_FROM) the case goes to its flow's waiting-for-documents path, and the team is emailed to
  * contact the customer about the open lines — they are never in the customer's email. The AI's own missing items go
- * to the customer as usual (held ones from a *Check before emailing* status too). Super admin.
+ * to the customer as usual (held ones from a *Check before emailing* status too). Where the case stays
+ * (API_PREPARATION_REVIEW): only the lines and their copy on the check result change; the suspended revision after the
+ * person's decision there emails the team. Super admin.
  */
 async function requestInformation(req, res) {
   const comment = requiredComment(req, res, 'you are asking for this');
@@ -36,8 +38,9 @@ async function requestInformation(req, res) {
   const prevStatus = caseRecord.currentStatus;
   const target = REQUEST_FROM[prevStatus];
   if (!target) {
-    return res.status(400).json({ error: { message: 'More information can be requested only while the documents wait for a person to check them.', status: 400 } });
+    return res.status(400).json({ error: { message: 'More information can be requested only while the documents or the claim preparation wait for a person.', status: 400 } });
   }
+  const stays = staysAt(prevStatus);
 
   const before = await openRequests(caseRecord.id);
   const removed = before.filter((r) => removeIds.includes(r.id));
@@ -46,7 +49,7 @@ async function requestInformation(req, res) {
   if (removed.length !== removeIds.length) return changed(res);
   const openAfter = before.length - removed.length + added.length;
   if (!added.length && !removed.length) return res.status(400).json({ error: { message: 'Nothing changed: add a line or remove one.', status: 400 } });
-  if (openAfter === 0) return res.status(400).json({ error: { message: 'Every line would be removed. To let the case continue, confirm the documents instead.', status: 400 } });
+  if (openAfter === 0 && !stays) return res.status(400).json({ error: { message: 'Every line would be removed. To let the case continue, confirm the documents instead.', status: 400 } });
   if (openAfter > MAX_LINES) return res.status(400).json({ error: { message: `At most ${MAX_LINES} open lines.`, status: 400 } });
 
   const operator = operatorOf(req.user);
@@ -58,7 +61,8 @@ async function requestInformation(req, res) {
 
   const STALE = new Error('lines changed');
   const moved = await sequelize.transaction(async (transaction) => {
-    const [count] = await Case.update({ currentStatus: target, ...markFor(caseRecord, operatorOf(req.user)) }, { where: { id: caseRecord.id, currentStatus: prevStatus }, transaction });
+    // Where the case stays, the update only guards that it is still there: not marked for the review lane.
+    const [count] = await Case.update({ currentStatus: target, ...(stays ? {} : markFor(caseRecord, operator)) }, { where: { id: caseRecord.id, currentStatus: prevStatus }, transaction });
     if (count !== 1) return false;
     // Only the change: unchanged lines keep their author and date.
     // A line closed meanwhile (e.g. marked done): roll back, the person reloads.
@@ -70,8 +74,12 @@ async function requestInformation(req, res) {
     const change = [added.length ? `added: ${added.join('; ')}` : null, removed.length ? `removed: ${removed.map((r) => r.text).join('; ')}` : null].filter(Boolean).join(' — ');
     await CaseEvent.create({
       caseId: caseRecord.id, blockName: BLOCK_NAME, prevStatus, newStatus: target, reasonCode: 'INFORMATION_REQUESTED',
-      message: `Information requested by ${operator} (${change}); open: ${lines.join('; ')} — comment: ${comment}`,
+      message: `Information requested by ${operator} (${change}); open: ${lines.length ? lines.join('; ') : 'none'} — comment: ${comment}`,
     }, { transaction });
+    if (stays) {
+      await refreshRequestLine(caseRecord, transaction);
+      return true;
+    }
 
     if (!isApi) {
       await Case.update({ documentCheckResult: result }, { where: { id: caseRecord.id }, transaction });
@@ -108,8 +116,10 @@ async function requestInformation(req, res) {
   }).catch((err) => { if (err === STALE) return false; throw err; });
   if (!moved) return changed(res);
 
-  await endClaim(caseRecord.id, req.user.username); // the holder decided the case — their own claim ends (SYSTEM_4 E4-22)
-  reviewLane().triggerReviewLane(caseRecord.source); // SYSTEM_5 review lane: processed at once
+  if (!stays) {
+    await endClaim(caseRecord.id, req.user.username); // the holder decided the case — their own claim ends (SYSTEM_4 E4-22)
+    reviewLane().triggerReviewLane(caseRecord.source); // SYSTEM_5 review lane: processed at once
+  }
   logger.info('Information requested', { caseId: caseRecord.id, added: added.length, removed: removed.length, username: req.user.username });
   return res.json({ caseId: caseRecord.id, previousStatus: prevStatus, currentStatus: target });
 }

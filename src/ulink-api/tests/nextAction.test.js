@@ -76,12 +76,12 @@ it('documents review: names why the case waits and what is missing; with the API
 
 it('preparation review: says the documents are done, or names what is missing, that the claim goes suspended and who asks', async () => {
   const fields = { currentStatus: 'API_PREPARATION_REVIEW', claimPrepMeta: { review: { diagnosis: true, vouchers: [] } } };
-  expect(nextAction(fields).text).toBe('Step 2 of 2: the documents are done. Check the diagnosis code before the revision goes to IAS.');
+  expect(nextAction(fields).text).toBe('Step 2 of 2: the documents are done. Check the diagnosis code before the revision goes to IAS. If the customer must send more, add your own lines on the case page.');
 
   const incomplete = { ...fields, documentCheckResult: { issues: ['Need to fill treatment date in the eye test record'] } };
   const said = 'Step 2 of 2: check the diagnosis code before the revision goes to IAS. The documents are incomplete (Need to fill treatment date in the eye test record), so the claim goes to IAS as suspended.';
-  expect(nextAction(incomplete).text).toBe(`${said} The customer is emailed for them.`);
+  expect(nextAction(incomplete).text).toBe(`${said} The customer is emailed for them. If the customer must send more, add your own lines on the case page.`);
   Setting.findAll.mockResolvedValue([{ key: 'apiSendMissingDocumentsEmail', value: false }]);
   await getSettings();
-  expect(nextAction(incomplete).text).toBe(`${said} ULINK emails the customer for them.`);
+  expect(nextAction(incomplete).text).toBe(`${said} ULINK emails the customer for them. If the customer must send more, add your own lines on the case page.`);
 });

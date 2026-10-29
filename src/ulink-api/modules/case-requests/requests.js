@@ -14,14 +14,18 @@
 const { Op } = require('sequelize');
 const { Case, ApiCaseStep, CaseRequest } = require('../../db/models');
 
-// Where a person can ask (the documents review statuses) and where the case goes: the flow's waiting-for-documents
-// path. API: the IAS revision with suspense. A case the AI passes surely does not stop for a person (switch #3 does).
+// Where a person can ask and where the case goes. The documents review statuses: the flow's waiting-for-documents
+// path (API: the IAS revision with suspense). A case the AI passes surely does not stop for a person (switch #3 does).
+// The same status: the case stays — the lines are saved, and claim preparation counts them as missing documents, so
+// the revision goes with suspense and never STP (SYSTEM_6 item 4, owner 2026-10-29). Another stop: one line here.
 const REQUEST_FROM = {
   DOCUMENTS_REVIEW: 'INCOMPLETE',
   DOCUMENTS_UNSURE: 'INCOMPLETE',
   API_DOCUMENTS_REVIEW: 'API_INCOMPLETE',
   API_DOCUMENTS_UNSURE: 'API_INCOMPLETE',
+  API_PREPARATION_REVIEW: 'API_PREPARATION_REVIEW',
 };
+const staysAt = (status) => REQUEST_FROM[status] === status;
 
 const MAX_LINES = 10;
 const MAX_CHARS = 300;
@@ -103,11 +107,13 @@ async function refreshRequestLine(caseRecord, transaction) {
   }, { transaction });
 }
 
-// For the case page: whether a request can be made now, and the open lines (the form starts from them).
+// For the case page: whether a request can be made now, whether the case stays where it is, and the open lines (the
+// form starts from them).
 async function requestsInfo(caseRecord) {
   const open = await openRequests(caseRecord.id);
+  const status = caseRecord.currentStatus;
   // Not while the review lane checks the case again after a decision (SYSTEM_5).
-  return { allowed: Boolean(REQUEST_FROM[caseRecord.currentStatus]) && !caseRecord.reviewPendingAt, open: open.map(shownRequest) };
+  return { allowed: Boolean(REQUEST_FROM[status]) && !caseRecord.reviewPendingAt, stays: staysAt(status), open: open.map(shownRequest) };
 }
 
-module.exports = { REQUEST_FROM, requestsInfo, closeRequests, refreshRequestLine, CODE, MAX_LINES, MAX_CHARS, validateLines, openRequests, requestLine, withRequests, requestedLines, requestHold, requestedDedupeKey };
+module.exports = { REQUEST_FROM, staysAt, requestsInfo, closeRequests, refreshRequestLine, CODE, MAX_LINES, MAX_CHARS, validateLines, openRequests, requestLine, withRequests, requestedLines, requestHold, requestedDedupeKey };

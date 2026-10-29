@@ -7,7 +7,7 @@ jest.mock('../db/models', () => ({
   Case: { findByPk: jest.fn(), update: jest.fn(async () => [1]) },
   CaseEvent: { create: jest.fn(), findAll: jest.fn(async () => []) },
   CaseRequest: { findAll: jest.fn(async () => []), update: jest.fn(async () => [1]), bulkCreate: jest.fn() },
-  ApiCaseStep: { findAll: jest.fn(async () => []), create: jest.fn() },
+  ApiCaseStep: { findAll: jest.fn(async () => []), findOne: jest.fn(), create: jest.fn() },
   CaseClaim: { destroy: jest.fn() },
   Setting: { findAll: jest.fn(async () => []) },
 }));
@@ -99,6 +99,31 @@ describe('POST /api/cases/:id/request-information', () => {
     const tasks = queueDedupedTask.mock.calls.map((c) => c[1]);
     expect(tasks.find((t) => t.taskType === 'MISSING_DOCUMENTS').payload.issues.join()).not.toContain(LINE);
     expect(tasks.find((t) => t.taskType === 'DOCUMENTS_INCOMPLETE').payload.requested).toEqual([LINE]);
+  });
+
+  it('API case at the claim preparation stop: the line is saved, the case stays, the copy on the check result is refreshed', async () => {
+    const atPreparation = { id: 'c1', source: 'API', claimNo: 'CL1', currentStatus: 'API_PREPARATION_REVIEW', toJSON: () => ({ id: 'c1', source: 'API', claimNo: 'CL1' }) };
+    const lastCheck = { job: 'api-document-checking', status: 'DONE', createdAt: '2026-10-16T01:00:00Z', output: { outcome: 'INCOMPLETE', documentCheckResult: failed, checkedAt: 'T' } };
+    Case.findByPk.mockResolvedValue(atPreparation);
+    ApiCaseStep.findAll.mockResolvedValue([lastCheck]);
+    ApiCaseStep.findOne.mockResolvedValue(lastCheck);
+    CaseRequest.findAll.mockResolvedValueOnce([]).mockResolvedValue(open);
+    const r = res();
+    await requestInformation(req({ add: [LINE], comment: 'eye test record has no date' }), r);
+
+    expect(r.json).toHaveBeenCalledWith({ caseId: 'c1', previousStatus: 'API_PREPARATION_REVIEW', currentStatus: 'API_PREPARATION_REVIEW' });
+    expect(Case.update.mock.calls[0][0]).toEqual({ currentStatus: 'API_PREPARATION_REVIEW' }); // not marked for the review lane
+    const [copy, ...rest] = ApiCaseStep.create.mock.calls.map((c) => c[0]);
+    expect(rest).toEqual([]); // no new check outcome and no team email: the suspended revision sends it
+    expect(copy).toMatchObject({ job: 'api-document-checking', input: { reviewerChecklist: true }, output: { outcome: 'INCOMPLETE', email: null } });
+    expect(copy.output.documentCheckResult.checklist).toEqual([expect.objectContaining({ code: 'PERSON_REQUEST' })]);
+
+    // Removing the last line is allowed here: there is no confirm to let the case go on.
+    jest.clearAllMocks();
+    CaseRequest.findAll.mockResolvedValue(open);
+    const r2 = res();
+    await requestInformation(req({ remove: ['r1'], comment: 'date found on page 2' }), r2);
+    expect(r2.json).toHaveBeenCalledWith(expect.objectContaining({ currentStatus: 'API_PREPARATION_REVIEW' }));
   });
 
   it('refused away from the documents review statuses, without lines, or without a comment', async () => {

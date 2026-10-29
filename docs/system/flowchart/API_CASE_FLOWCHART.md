@@ -2,7 +2,7 @@
 
 This chart shows how an API case moves from the IAS claim list to the IAS revision. It shows the pipeline jobs in order, the stops where a person decides, and the emails that go out. The source is `src/ulink-api/modules/pipeline/service.js` (`API_STEPS`) and the input and output statuses of each `api-*` job.
 
-Last checked against the code: 2026-10-27. Published copy: https://claude.ai/artifact/6wQz6VycRj8e3TgdbvYWWg (private, republish it from this file after each change).
+Last checked against the code: 2026-10-29. Published copy: https://claude.ai/artifact/6wQz6VycRj8e3TgdbvYWWg (private, republish it from this file after each change).
 
 Image: [API_CASE_FLOWCHART.svg](API_CASE_FLOWCHART.svg). A Claude Code hook renders it from the chart below after each save of this file (`.claude/hooks/render-api-flowchart.sh`). If you edit the file outside Claude Code, run `.claude/hooks/render-api-flowchart.sh --all`.
 
@@ -89,12 +89,13 @@ flowchart TD
 | `API_CONSOLE_UPLOAD_FAILED` | Case-page uploads did not reach the IAS console. | Retry from the case page. | None |
 | `API_CONSOLE_BARCODE_MISSING` | Case-page uploads got no barcode in time. | Nothing to click: the barcode job checks again every run and continues when the barcode arrives. If it stays, look in the IAS console. | None |
 | `API_UPLOAD_NOT_IN_CONSOLE` | Older cases only: an upload from the case page did not appear in the IAS console in time. | Look in the IAS console. Console watch keeps checking every run. | None |
-| `API_PREPARATION_REVIEW` | The AI was unsure of the diagnosis code, a voucher's benefit, or its vitamins. | Choose. With corrections, one save sends both, and the case is checked again first. | `holdUnsureDiagnosis`, `holdUnsureBenefit`, `holdUnsureVitamin` |
+| `API_PREPARATION_REVIEW` | The AI was unsure of the diagnosis code, a voucher's benefit, or its vitamins. | Choose. With corrections, one save sends both, and the case is checked again first. Add your own request lines on the case page: the case stays here, and the revision then goes with `isSuspense=Y`. | `holdUnsureDiagnosis`, `holdUnsureBenefit`, `holdUnsureVitamin` |
 | `API_CLAIM_REVISION_FAILED` | IAS refused the revision. | Retry from the case page. | None |
 
 ## Rules that are easy to miss
 
 - A case-page upload is possible at `API_NO_DOCUMENTS`, `API_CLAIM_SUSPENDED`, `API_DOCUMENTS_REVIEW` and `API_DOCUMENTS_UNSURE`. The case goes to `API_UPLOAD_RECEIVED`, and the AI reads it again at once. Console upload then sends the files to the IAS console before the revision.
+- A person can add their own request lines (reviewer checklist) at `API_DOCUMENTS_REVIEW` and `API_DOCUMENTS_UNSURE`, where the case then waits for documents, and at `API_PREPARATION_REVIEW`, where the case stays. An open line counts as a missing document: the revision goes with `isSuspense=Y`, never STP, and the team email lists the line. The lines are never in the customer's email.
 - An STP claim waits at `API_AWAITING_CSR` until IAS has the settlement report. Claim STP checks every run.
 - Claim preparation decides STP, and STP never stops the revision. A never-STP diagnosis (ULINK's chronic list, R69), vitamins, an amount over the limit or an open review point sends the claim as non-STP. A check that can stop a case and was switched off does the same. JD3 then approves it in IAS.
 - Missing documents never stop the revision. The revision goes with `isSuspense=Y`, and a suspended claim is never STP. The next revision with complete documents sends `isSuspense=N`, and IAS lifts the suspense.
