@@ -415,7 +415,7 @@ export function FindingsPanel({
           {f.value != null && <span className="text-slate-700">"{f.value}"</span>}
           {f.confidence != null && <ConfidenceBadge confidence={f.confidence} failed={f.passed === false} />}
         </div>
-        <ReasonText text={f.why} />
+        <ReasonText text={f.why} plain />
         <div className="mt-1 flex flex-wrap gap-3 text-xs">
           {ref ? (
             <button onClick={() => onOpenPage(ref)} className="inline-flex items-center gap-1 text-ulink-teal-dark hover:underline">

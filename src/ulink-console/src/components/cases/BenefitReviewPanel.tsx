@@ -4,6 +4,7 @@ import { Wallet } from 'lucide-react';
 import { chooseBenefit, createCorrections } from '../../api/casesApi';
 import type { PendingCorrections } from '../../lib/correctionDraft';
 import { Button } from '../common/Button';
+import { ReasonText } from '../common/ReasonText';
 import { QuickReasons } from '../review/QuickReasons';
 import { reasonProblem } from '../../lib/correctionDraft';
 import type { BenefitCandidate, CaseDetail } from '../../types/case';
@@ -74,8 +75,8 @@ export function BenefitReviewPanel({ caseRecord, corrections, onSaved }: { caseR
               </div>
               <p className="mb-2 text-xs text-slate-500">
                 AI: {pick?.benefitHead ? `${pick.benefitType} / ${pick.benefitHead}${percent(pick.confidence)}` : `not sure${percent(pick?.confidence)}`}
-                {pick?.reason ? ` — ${pick.reason}` : ''}
               </p>
+              <ReasonText text={pick?.reason} label="AI reasoning" className="mb-2" />
               <div className="grid gap-2 sm:grid-cols-2">
                 <select aria-label={`Voucher ${i + 1} benefit type`} className={selectClass} value={c.type} onChange={(e) => setChoice(i, { type: e.target.value, head: '' })}>
                   <option value="">Benefit type…</option>

@@ -44,7 +44,7 @@ export function CaseJourneyPanel({ summary }: { summary: AssessmentSummary | und
               <span className={clsx('font-medium', isNow ? 'text-ulink-orange-dark' : 'text-slate-700')}>{step.stage}</span>
               <div className="min-w-0 text-slate-700">
                 <span className="font-medium">{step.result}</span>
-                <ReasonText text={step.why} />
+                <ReasonText text={step.why} plain />
               </div>
             </li>
           );

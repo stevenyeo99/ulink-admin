@@ -4,6 +4,7 @@ import { Pencil, Stethoscope } from 'lucide-react';
 import { choosePreparation, createCorrections, searchDiagnosis, suggestDiagnosis } from '../../api/casesApi';
 import type { PendingCorrections } from '../../lib/correctionDraft';
 import { Button } from '../common/Button';
+import { ReasonText } from '../common/ReasonText';
 import { QuickReasons } from '../review/QuickReasons';
 import { reasonProblem } from '../../lib/correctionDraft';
 import type { BenefitCandidate, CaseDetail, DiagnosisCandidate } from '../../types/case';
@@ -140,7 +141,7 @@ export function PreparationReviewPanel({ caseRecord, corrections, onSaved }: { c
           {line.subtotal != null ? ` · ${line.subtotal.toLocaleString('en-US')}` : ''}
           <span className="text-slate-500"> — AI: {aiName}{percent(line.confidence)}</span>
         </p>
-        {line.reason && <p className="mt-0.5 text-xs text-slate-500">AI: {line.reason}</p>}
+        <ReasonText text={line.reason} label="AI reasoning" />
         {c ? (
           <div className="mt-2 grid gap-2 sm:grid-cols-2">
             <select value={c.type} onChange={(e) => setChoice(i, { type: e.target.value, head: '' })} className={selectClass}>
@@ -185,8 +186,9 @@ export function PreparationReviewPanel({ caseRecord, corrections, onSaved }: { c
         <>
           <p className="mt-1 text-sm text-slate-600">
             The AI read “{diagnosis?.text || 'no diagnosis text'}” and {diagnosis?.defaulted ? 'found no confident match, so it used' : 'picked'}{' '}
-            <span className="font-mono">{aiCode?.diagCode ?? 'none'}</span>{aiCode?.diagDesc ? ` (${aiCode.diagDesc}${diagnosis?.defaulted ? ', the default code' : ''})` : ''}{percent(diagnosis?.confidence)}.{diagnosis?.reason ? ` AI: ${diagnosis.reason}` : ''}
+            <span className="font-mono">{aiCode?.diagCode ?? 'none'}</span>{aiCode?.diagDesc ? ` (${aiCode.diagDesc}${diagnosis?.defaulted ? ', the default code' : ''})` : ''}{percent(diagnosis?.confidence)}.
           </p>
+          <ReasonText text={diagnosis?.reason} label="AI reasoning" />
           <fieldset className="mt-2 space-y-1">
             {codes.map((c) => (
               <label key={c.diagCode} className="flex items-start gap-2 text-sm text-slate-700">
