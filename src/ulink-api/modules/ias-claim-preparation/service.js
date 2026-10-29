@@ -73,6 +73,7 @@ async function checkCase(caseRecord) {
     claimBenefitType: extractedFields.claim?.claim_benefit_type,
     illnessDescription: illnessText,
     treatmentDescription: treatmentText,
+    fields: extractedFields,
   };
 
   // One line per real voucher (extractedFields.invoices.items — each with its own subtotal

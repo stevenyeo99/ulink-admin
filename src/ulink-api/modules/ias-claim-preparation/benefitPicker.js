@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { synthesizeJson } = require('../claim-recognition/llmClient');
 const { uniqueBenefitCandidates } = require('../shared/iasBenefits');
+const { benefitTypeCheck } = require('../document-checking/checklist');
 
 const SYSTEM_PROMPT = fs.readFileSync(path.join(__dirname, 'prompts', 'benefit-pick.md'), 'utf8');
 
@@ -29,9 +30,13 @@ const CONFIDENCE_THRESHOLD = 0.5;
  * Called once per invoice-item line (not once per case) — `voucherType` (from that specific
  * voucher's own extractedFields.invoices.items[].voucher_type) is the strongest signal when
  * present; the other fields are case-level fallback context for when it's null/"other".
+ *
+ * `fields` (the case's extractedFields, owner 2026-10-29): what the documents found point to — the document check's own
+ * benefit type rule (checklist.js benefitTypeCheck), e.g. "OP Outpatient (vaccination) — Vaccination record, page 3" —
+ * so a vaccination gets the plan's vaccination head (OP/VACC) rather than a medicine or visit head.
  */
 async function pickBenefit(
-  { typeOfPatient, claimBenefitType, illnessDescription, treatmentDescription, voucherType },
+  { typeOfPatient, claimBenefitType, illnessDescription, treatmentDescription, voucherType, fields },
   memberPlansRaw
 ) {
   const candidates = uniqueBenefitCandidates(memberPlansRaw);
@@ -43,6 +48,7 @@ async function pickBenefit(
     `Claim benefit type (as submitted): ${claimBenefitType || 'unknown'}`,
     `Illness/injury description: ${illnessDescription || '(none)'}`,
     `Treatment description: ${treatmentDescription || '(none)'}`,
+    `The documents found point to: ${(fields && benefitTypeCheck(fields)?.note) || '(no document list)'}`,
     '',
     "Candidates valid for this member's own plan:",
     ...candidates.map((c) => `- type=${c.type} (${c.typeDesc}), head=${c.head || '(none)'} (${c.headDesc || '(none)'})`),

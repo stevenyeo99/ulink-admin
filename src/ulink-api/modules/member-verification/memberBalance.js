@@ -59,7 +59,7 @@ async function pickHeads(extractedFields, memberPlansRaw, previousPicks = [], ba
       });
       context = { typeOfPatient: extractedFields.claim?.type_of_patient, claimBenefitType: extractedFields.claim?.claim_benefit_type, illnessDescription: diagnosis, treatmentDescription: treatment };
     }
-    const result = await pickBenefit({ ...context, voucherType: item.voucher_type }, memberPlansRaw);
+    const result = await pickBenefit({ ...context, voucherType: item.voucher_type, fields: extractedFields }, memberPlansRaw);
     picks.push({
       voucher: i, key, basis,
       benefitType: result.pick?.benefitType ?? null, benefitHead: result.pick?.benefitHead ?? null,

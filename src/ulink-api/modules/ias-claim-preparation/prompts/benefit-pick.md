@@ -21,6 +21,12 @@ Rules:
   always map to a benefit type meaning "Outpatient" (commonly coded "OP"), an inpatient
   claim to "Inpatient" ("IP"), etc. — but the exact head depends on what was actually
   described, not just the type.
+- Vaccination / immunisation: when this voucher or the claim is for a vaccine or an injection to prevent a disease
+  (a vaccination record among the documents found, a vaccine name on the voucher, a doctor's letter recommending a
+  vaccination), and the list has a vaccination head (e.g. `OP` / `VACC`), pick that head — not a prescribed-medicine
+  or office-visit head, even when the voucher reads as pharmacy or consultation. A voucher on the same claim that is
+  clearly for something else (a separate doctor's visit, other medicine) keeps its own head. When the list has no
+  vaccination head, judge as usual.
 - If nothing in the list plausibly fits, return `benefitType: null, benefitHead: null`.
 - `confidence`: your own honest 0.0–1.0 estimate. Prefer a low confidence (or `null`) over
   forcing a pick you don't actually believe in.
