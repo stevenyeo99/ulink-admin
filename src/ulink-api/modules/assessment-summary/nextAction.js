@@ -28,6 +28,8 @@ function lastMessage(fields, events = []) {
 }
 
 const act = (text, who = TEAM) => ({ text, who, act: true });
+// API cases stop twice for a person: the documents (step 1), then the claim preparation (step 2). Email cases have no step 2.
+const step1 = (status) => (status.startsWith('API_') ? 'Step 1 of 2: documents. ' : '');
 const wait = (text, who = null) => ({ text, who, act: false });
 
 function nextAction(fields = {}, summary = null, events = []) {
@@ -49,17 +51,21 @@ function nextAction(fields = {}, summary = null, events = []) {
       const why = heldFor ? `The case waits for you (${heldFor})` : 'The AI is unsure a document is missing';
       const ulinkEmails = status === 'API_DOCUMENTS_REVIEW' && !lastReadSettings().apiSendMissingDocumentsEmail;
       const go = ulinkEmails ? 'continue (ULINK emails the customer)' : 'send the request to the customer';
-      return act(`${why}. Missing: ${missing || points || 'see the review points'}. Check the documents: if they are missing, ${go}; if they are fine, override.`);
+      return act(`${step1(status)}${why}. Missing: ${missing || points || 'see the review points'}. Check the documents: if they are missing, ${go}; if they are fine, override.`);
     }
     case 'DOCUMENTS_UNSURE':
     case 'API_DOCUMENTS_UNSURE':
-      return act(`The documents passed, but the AI was unsure about: ${points || 'see the review points'}. Check them against the documents, then Confirm and continue.`);
+      return act(`${step1(status)}The documents passed, but the AI was unsure about: ${points || 'see the review points'}. Check them against the documents, then Confirm and continue.`);
     case 'API_PREPARATION_REVIEW': {
       // Step 2 of 2 (owner, 2026-10-20): after the documents, so a reviewer who just fixed the checklist sees why it stopped again.
       const review = fields.claimPrepMeta?.review;
       const what = [review?.diagnosis && 'the diagnosis code', review?.vouchers?.length && `the benefit of voucher ${review.vouchers.map((i) => i + 1).join(', ')}`]
         .filter(Boolean).join(' and ') || 'the claim preparation';
-      return act(`Step 2 of 2: the documents are done. Check ${what} before the revision goes to IAS.`);
+      // Missing documents never stop an API case (owner, 2026-10-29): say the documents are incomplete, the revision goes
+      // as suspended, and who asks the customer — or the reviewer reads "documents are done" and misses the email.
+      if (!missing) return act(`Step 2 of 2: the documents are done. Check ${what} before the revision goes to IAS.`);
+      const ask = lastReadSettings().apiSendMissingDocumentsEmail ? 'The customer is emailed for them.' : 'ULINK emails the customer for them.';
+      return act(`Step 2 of 2: check ${what} before the revision goes to IAS. The documents are incomplete (${missing}), so the claim goes to IAS as suspended. ${ask}`);
     }
     case 'MANUAL_REVIEW':
     case 'API_MANUAL_REVIEW':
@@ -80,11 +86,10 @@ function nextAction(fields = {}, summary = null, events = []) {
       const what = status === 'API_NO_DOCUMENTS' ? 'no claim documents were received' : missing || 'the missing documents';
       // Missing-documents email switched off (SYSTEM_4 E4-03): nobody emailed the customer — ULINK has to.
       // Documents the customer sends can be uploaded on the case page (SYSTEM_4 E4-04).
+      const suspended = status === 'API_CLAIM_SUSPENDED' ? ' Missing documents do not stop the claim: it waits in IAS as suspended until they come.' : '';
       const upload = ' When the documents come in, upload them on this page.';
-      if (!lastReadSettings().apiSendMissingDocumentsEmail) {
-        return act(`ULINK contacts the customer: ${what}.${status === 'API_CLAIM_SUSPENDED' ? ' The claim is suspended in IAS.' : ''}${upload}`);
-      }
-      return wait(`Waiting for the customer: ${what}.${status === 'API_CLAIM_SUSPENDED' ? ' The claim is suspended in IAS.' : ''}${upload}`, 'Customer');
+      if (!lastReadSettings().apiSendMissingDocumentsEmail) return act(`ULINK contacts the customer: ${what}.${suspended}${upload}`);
+      return wait(`Waiting for the customer: ${what}.${suspended}${upload}`, 'Customer');
     }
     case 'API_DOCUMENTS_UPLOADED':
       return wait('Nothing to do — the uploaded documents get a barcode in the IAS console (usually 15–30 minutes), then the case is checked again.');

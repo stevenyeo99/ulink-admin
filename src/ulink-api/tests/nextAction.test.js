@@ -16,7 +16,7 @@ beforeEach(async () => { Setting.findAll.mockResolvedValue([]); await getSetting
 it('names the unsure points with their confidence for a passed-but-unsure case', () => {
   const next = nextAction({ currentStatus: 'API_DOCUMENTS_UNSURE' }, summaryWith(point('Patient name', '0.62'), { decision: 'Voucher present', review: null }));
   expect(next).toEqual({
-    text: 'The documents passed, but the AI was unsure about: Patient name (62%). Check them against the documents, then Confirm and continue.',
+    text: 'Step 1 of 2: documents. The documents passed, but the AI was unsure about: Patient name (62%). Check them against the documents, then Confirm and continue.',
     who: 'Claims team',
     act: true,
   });
@@ -38,11 +38,11 @@ it("uses the job's own words for manual reading and IAS refusals", () => {
 
 it('waits for the customer — or tells ULINK to contact them when the missing-documents email is off', async () => {
   const fields = { currentStatus: 'API_CLAIM_SUSPENDED', documentCheckResult: { issues: ['No medical report'] } };
-  expect(nextAction(fields)).toEqual({ text: 'Waiting for the customer: No medical report. The claim is suspended in IAS. When the documents come in, upload them on this page.', who: 'Customer', act: false });
+  expect(nextAction(fields)).toEqual({ text: 'Waiting for the customer: No medical report. Missing documents do not stop the claim: it waits in IAS as suspended until they come. When the documents come in, upload them on this page.', who: 'Customer', act: false });
 
   Setting.findAll.mockResolvedValue([{ key: 'apiSendMissingDocumentsEmail', value: false }]);
   await getSettings();
-  expect(nextAction(fields)).toEqual({ text: 'ULINK contacts the customer: No medical report. The claim is suspended in IAS. When the documents come in, upload them on this page.', who: 'Claims team', act: true });
+  expect(nextAction(fields)).toEqual({ text: 'ULINK contacts the customer: No medical report. Missing documents do not stop the claim: it waits in IAS as suspended until they come. When the documents come in, upload them on this page.', who: 'Claims team', act: true });
   expect(nextAction({ currentStatus: 'API_NO_DOCUMENTS' }).text).toBe('ULINK contacts the customer: no claim documents were received. When the documents come in, upload them on this page.');
 });
 
@@ -68,8 +68,20 @@ it('documents review: names why the case waits and what is missing; with the API
     documentsHeldFor: ['a person corrected items on this case and sends the request'],
     documentCheckResult: { issues: ['Need to fill treatment date in the eye test record'] },
   };
-  expect(nextAction(fields).text).toBe('The case waits for you (a person corrected items on this case and sends the request). Missing: Need to fill treatment date in the eye test record. Check the documents: if they are missing, continue (ULINK emails the customer); if they are fine, override.');
+  expect(nextAction(fields).text).toBe('Step 1 of 2: documents. The case waits for you (a person corrected items on this case and sends the request). Missing: Need to fill treatment date in the eye test record. Check the documents: if they are missing, continue (ULINK emails the customer); if they are fine, override.');
   // Email case, nothing stored about why: the old reason, and the customer is emailed.
   expect(nextAction({ currentStatus: 'DOCUMENTS_REVIEW', documentCheckResult: { issues: ['No Medical Report(s)'] } }).text)
     .toBe('The AI is unsure a document is missing. Missing: No Medical Report(s). Check the documents: if they are missing, send the request to the customer; if they are fine, override.');
+});
+
+it('preparation review: says the documents are done, or names what is missing, that the claim goes suspended and who asks', async () => {
+  const fields = { currentStatus: 'API_PREPARATION_REVIEW', claimPrepMeta: { review: { diagnosis: true, vouchers: [] } } };
+  expect(nextAction(fields).text).toBe('Step 2 of 2: the documents are done. Check the diagnosis code before the revision goes to IAS.');
+
+  const incomplete = { ...fields, documentCheckResult: { issues: ['Need to fill treatment date in the eye test record'] } };
+  const said = 'Step 2 of 2: check the diagnosis code before the revision goes to IAS. The documents are incomplete (Need to fill treatment date in the eye test record), so the claim goes to IAS as suspended.';
+  expect(nextAction(incomplete).text).toBe(`${said} The customer is emailed for them.`);
+  Setting.findAll.mockResolvedValue([{ key: 'apiSendMissingDocumentsEmail', value: false }]);
+  await getSettings();
+  expect(nextAction(incomplete).text).toBe(`${said} ULINK emails the customer for them.`);
 });
