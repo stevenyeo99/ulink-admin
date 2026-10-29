@@ -18,13 +18,13 @@ const { Case, ApiCaseStep } = require('../db/models');
 const { getCase } = require('../controllers/cases/casesController');
 const { apiCaseView } = require('../modules/api-pipeline/caseView');
 
-const step = (job, output, createdAt, status = 'DONE') => ({ job, status, output, createdAt: new Date(createdAt) });
+const step = (job, output, createdAt, status = 'DONE', input = null) => ({ job, status, output, input, createdAt: new Date(createdAt) });
 
 describe('apiCaseView', () => {
   it("maps each job's latest DONE output to the case fields the page reads", () => {
     const view = apiCaseView([
-      step('api-claim-recognition', { recognizedType: 'ayas_member_claim', extractedFields: { v: 1 } }, '2026-09-24T01:00Z'),
-      step('api-claim-recognition', { recognizedType: 'ayas_member_claim', extractedFields: { v: 2 } }, '2026-09-24T03:00Z'),
+      step('api-claim-recognition', { recognizedType: 'ayas_member_claim', extractedFields: { v: 1 } }, '2026-09-24T00:30Z'),
+      step('api-claim-recognition', { recognizedType: 'ayas_member_claim', extractedFields: { v: 2 } }, '2026-09-24T01:00Z'),
       step('api-claim-recognition', null, '2026-09-24T04:00Z', 'FAILED'), // a later failure doesn't hide the last result
       step('api-member-verification', { memberVerifyResult: { m: 1 }, iasMemberInfoResponse: { i: 1 } }, '2026-09-24T02:00Z'),
       step('api-document-checking', { documentCheckResult: { issues: [] } }, '2026-09-24T02:00Z'),
@@ -42,6 +42,33 @@ describe('apiCaseView', () => {
       isStp: false,
       iasClaimResult: { success: true },
     });
+  });
+
+  it('hides the last claim preparation and revision once the case is sent back before claim preparation', () => {
+    const prepared = [
+      step('api-claim-recognition', { extractedFields: { v: 1 } }, '2026-09-24T01:00Z'),
+      step('api-member-verification', { memberVerifyResult: { m: 1 } }, '2026-09-24T01:10Z'),
+      step('api-document-checking', { documentCheckResult: { issues: ['x'] } }, '2026-09-24T01:20Z'),
+      step('api-claim-preparation', { payload: { isSuspense: 'Y' }, claimPrepMeta: { lines: [] }, isStp: false }, '2026-09-24T01:30Z'),
+      step('api-claim-revision', { response: { success: true } }, '2026-09-24T01:40Z'),
+    ];
+    const prepKeys = ['iasClaimPayload', 'claimPrepMeta', 'isStp', 'iasClaimResult'];
+    expect(Object.keys(apiCaseView(prepared))).toEqual(expect.arrayContaining(prepKeys));
+
+    // The reviewer lines' copy on the check result (claim preparation stop) is not a new check: still shown.
+    const copy = step('api-document-checking', { documentCheckResult: { issues: ['x'] } }, '2026-09-24T02:00Z', 'DONE', { reviewerChecklist: true });
+    expect(Object.keys(apiCaseView([...prepared, copy]))).toEqual(expect.arrayContaining(prepKeys));
+
+    // New documents read again (or a correction checked again): back before claim preparation, the old pass is hidden.
+    const back = apiCaseView([...prepared, step('api-document-checking', { documentCheckResult: { issues: [] } }, '2026-09-24T03:00Z')]);
+    for (const key of prepKeys) expect(back).not.toHaveProperty(key);
+    expect(back.documentCheckResult).toEqual({ issues: [] });
+
+    // Claim preparation runs again: shown again.
+    const again = apiCaseView([...prepared, step('api-document-checking', { documentCheckResult: { issues: [] } }, '2026-09-24T03:00Z'),
+      step('api-claim-preparation', { payload: { isSuspense: 'N' }, claimPrepMeta: { lines: [] }, isStp: true }, '2026-09-24T03:10Z')]);
+    expect(again).toMatchObject({ iasClaimPayload: { isSuspense: 'N' }, isStp: true });
+    expect(again).not.toHaveProperty('iasClaimResult'); // the old revision stays hidden until the next one
   });
 
   it('adds nothing for jobs that have not produced output yet', () => {

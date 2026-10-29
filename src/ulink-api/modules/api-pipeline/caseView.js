@@ -19,15 +19,29 @@ const FIELDS = {
   iasClaimResult: ['api-claim-revision', (o) => o.response],
 };
 
-// steps: the case's ApiCaseStep rows (any order). Returns only the fields some job has produced.
+// A case sent back before claim preparation (a correction, an upload, new console documents) keeps its old claim
+// preparation and revision steps. They describe the last pass, not the case now, so they are shown only when newer
+// than the last run of every job before claim preparation (SYSTEM_6 item 4, owner 2026-10-29). A person's choices
+// are their own step (preparation-review) and stay. A job that joins the pipeline before claim preparation: one entry.
+const BEFORE_PREPARATION = ['api-claim-recognition', 'api-member-verification', 'api-document-checking'];
+const PREPARED = new Set(['api-claim-preparation', 'api-claim-revision']);
+// The copy of the reviewer lines on the document check result (case-requests refreshRequestLine) is not a new check.
+const isRun = (step) => !step.input?.reviewerChecklist;
+
+// steps: the case's ApiCaseStep rows (any order). Returns only the fields some job has produced and that are current.
 function apiCaseView(steps) {
-  const latestDone = new Map();
+  const latestDone = new Map(); // job → { output, at }
+  const lastRun = new Map(); // job → time of its last real run
   for (const step of [...steps].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))) {
-    if (step.status === 'DONE' && step.output) latestDone.set(step.job, step.output);
+    if (step.status !== 'DONE' || !step.output) continue;
+    const at = new Date(step.createdAt);
+    latestDone.set(step.job, { output: step.output, at });
+    if (isRun(step)) lastRun.set(step.job, at);
   }
+  const current = (job) => !PREPARED.has(job) || BEFORE_PREPARATION.every((before) => !(lastRun.get(before) > latestDone.get(job).at));
   const view = {};
   for (const [field, [job, pick]] of Object.entries(FIELDS)) {
-    const output = latestDone.get(job);
+    const output = latestDone.has(job) && current(job) ? latestDone.get(job).output : undefined;
     const value = output && pick(output);
     if (value !== undefined) view[field] = value;
   }
