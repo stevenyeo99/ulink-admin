@@ -10,7 +10,7 @@ import { isSuperAdmin } from '../lib/session';
 import type { Source } from '../types/pipeline';
 
 // IAS benefit type codes (benefit_type_code on the member's plan) — the type each claim line is submitted with.
-const BENEFIT_LABELS: Record<string, string> = { IP: 'Inpatient', OP: 'Outpatient', DT: 'Dental', VS: 'Vision' };
+const BENEFIT_LABELS: Record<string, string> = { IP: 'Inpatient', OP: 'Outpatient', DT: 'Dental', VS: 'Vision', MAT: 'Maternity' };
 const SOURCE_LABEL: Record<Source, string> = { EMAIL: 'Email', API: 'API' };
 
 type View = 'stp' | 'system';
