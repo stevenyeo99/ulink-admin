@@ -2,6 +2,7 @@ import { AlertTriangle, CheckCircle2, Route } from 'lucide-react';
 import clsx from 'clsx';
 import type { AssessmentLine, AssessmentOverride, AssessmentSummary } from '../../types/case';
 import { ConfidenceBadge } from '../common/ConfidenceBadge';
+import { ReasonText } from '../common/ReasonText';
 
 const STATUS_PILL: Record<AssessmentLine['status'], string> = {
   ok: 'bg-ulink-teal/15 text-ulink-teal-dark',
@@ -41,10 +42,10 @@ export function CaseJourneyPanel({ summary }: { summary: AssessmentSummary | und
             <li key={index} className="grid grid-cols-[1.5rem_7rem_1fr] gap-x-2 text-sm sm:grid-cols-[1.5rem_8rem_1fr]">
               <span className="text-slate-400">{index + 1}.</span>
               <span className={clsx('font-medium', isNow ? 'text-ulink-orange-dark' : 'text-slate-700')}>{step.stage}</span>
-              <span className="min-w-0 text-slate-700">
+              <div className="min-w-0 text-slate-700">
                 <span className="font-medium">{step.result}</span>
-                {step.why && <span className="text-slate-500"> — {step.why}</span>}
-              </span>
+                <ReasonText text={step.why} />
+              </div>
             </li>
           );
         })}
@@ -114,7 +115,7 @@ export function AssessmentSummaryPanel({ summary }: { summary: AssessmentSummary
               <p className="text-slate-700">
                 {line.decision}: <span className="font-medium">{line.result}</span>
               </p>
-              <p className="mt-0.5 text-xs text-slate-500">{line.why}</p>
+              <ReasonText text={line.why} />
               {line.review && (
                 <p className="mt-0.5 text-xs text-ulink-orange-dark">
                   {line.review.reason}

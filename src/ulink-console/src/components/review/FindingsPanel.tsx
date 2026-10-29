@@ -4,6 +4,7 @@ import clsx from 'clsx';
 import * as AlertDialog from '@radix-ui/react-alert-dialog';
 import { AlertTriangle, Check, ChevronDown, FileText, Mail, Pencil, Plus, X } from 'lucide-react';
 import { ConfidenceBadge } from '../common/ConfidenceBadge';
+import { ReasonText } from '../common/ReasonText';
 import { useConfidenceThreshold } from '../../hooks/useConfidenceThreshold';
 import type { AssessmentLine, ChecklistItem, CorrectionOption, FieldRead, WrongStep } from '../../types/case';
 import { pageRef, type PageRef, type ViewFile } from '../../lib/caseFiles';
@@ -324,7 +325,7 @@ export function FindingsPanel({
           {f.value != null && <span className="text-slate-700">"{f.value}"</span>}
           {f.confidence != null && <ConfidenceBadge confidence={f.confidence} failed={f.passed === false} />}
         </div>
-        {f.why && <p className="mt-1 text-xs text-slate-600">{f.why}</p>}
+        <ReasonText text={f.why} />
         {guide && (
           <details className="mt-1 text-xs text-slate-600">
             <summary className="cursor-pointer font-medium text-ulink-teal-dark">What to do</summary>
@@ -414,7 +415,7 @@ export function FindingsPanel({
           {f.value != null && <span className="text-slate-700">"{f.value}"</span>}
           {f.confidence != null && <ConfidenceBadge confidence={f.confidence} failed={f.passed === false} />}
         </div>
-        {f.why && <p className="mt-0.5 text-xs text-slate-500">{f.why}</p>}
+        <ReasonText text={f.why} />
         <div className="mt-1 flex flex-wrap gap-3 text-xs">
           {ref ? (
             <button onClick={() => onOpenPage(ref)} className="inline-flex items-center gap-1 text-ulink-teal-dark hover:underline">
@@ -506,7 +507,7 @@ export function FindingsPanel({
                       : <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-800"><AlertTriangle size={12} /> Needs your decision</span>)}
                     <span className="font-medium text-slate-800">{o.label}</span>
                   </div>
-                  {o.note && <p className="mt-1 text-xs text-slate-600">{o.note}</p>}
+                  <ReasonText text={o.note} />
                   {check && (
                     <details className="mt-1 text-xs text-slate-600">
                       <summary className="cursor-pointer font-medium text-ulink-teal-dark">What to do</summary>
@@ -566,7 +567,7 @@ export function FindingsPanel({
               <li key={`${l.area}-${l.decision}`} className="py-2 text-sm">
                 <span className="font-medium text-slate-800">{l.decision}</span>: {l.result}
                 {l.confidence != null && <span className="ml-2"><ConfidenceBadge confidence={l.confidence} failed={l.status === 'issue'} /></span>}
-                <p className="mt-0.5 text-xs text-slate-500">{l.why}</p>
+                <ReasonText text={l.why} />
               </li>
             ))}
           </ul>
