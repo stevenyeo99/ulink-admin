@@ -2,6 +2,7 @@ const { sequelize, Case, EmailThread, EmailMessage, EmailAttachment, CaseEvent }
 const config = require('../../config');
 const { getStorageAdapter } = require('../../storage');
 const { getChannelAdapter } = require('../../channels');
+const freshdesk = require('../../channels/freshdeskClient');
 const { matchOrCreateThread } = require('./threadMatcher');
 const { queueDedupedTask } = require('../shared/emailTaskQueue');
 const { datePathSegments } = require('../shared/datePathSegments');
@@ -254,7 +255,7 @@ async function queueNoAttachmentReminder(transaction, caseId, triggeringMessageI
 // it (modules/pipeline/service.js); a direct /run says so instead of failing on a connection error.
 async function notConfiguredReason() {
   if (config.channel.driver === 'imap_smtp' && !config.imap.host) return 'inbox not configured (IMAP_HOST is empty)';
-  if (config.channel.driver === 'freshdesk' && !(config.freshdesk.domain && config.freshdesk.apiKey)) {
+  if (config.channel.driver === 'freshdesk' && !freshdesk.isConfigured()) {
     return 'inbox not configured (FRESHDESK_DOMAIN or FRESHDESK_API_KEY is empty)';
   }
   if (!(await getSettings()).mailboxEnabled) return 'mailbox switched off (System settings)';

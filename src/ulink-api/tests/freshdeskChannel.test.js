@@ -2,7 +2,7 @@
 jest.mock('../config', () => ({ freshdesk: { domain: 'x.freshdesk.com', apiKey: 'k' } }));
 jest.mock('../db/models', () => ({ EmailMessage: { findAll: jest.fn(async () => []) } }));
 const { EmailMessage } = require('../db/models');
-const { fetchNewSubmissions } = require('../channels/freshdeskChannel');
+const { fetchNewSubmissions, sendReply } = require('../channels/freshdeskChannel');
 
 const realFetch = global.fetch;
 afterEach(() => { global.fetch = realFetch; EmailMessage.findAll.mockImplementation(async () => []); });
@@ -118,4 +118,57 @@ it('reads the next page while a page is full', async () => {
   });
   expect(await fetchNewSubmissions(jest.fn())).toEqual([]);
   expect(fetch.mock.calls.filter(([url]) => url.includes('updated_since')).map(([url]) => url.match(/page=(\d+)$/)[1])).toEqual(['1', '2']);
+});
+
+describe('sendReply', () => {
+  const ticketSide = { from: 'member@example.com', messageId: 'fd-conv:9', references: 'fd-ticket:4' };
+  // GET /tickets/4 answers with the requester; POST /reply answers with the new conversation.
+  const freshdeskWith = (conversationId) => jest.fn(async (url, init) =>
+    init?.method === 'POST' ? reply({ id: conversationId }) : reply({ id: 4, requester: { email: 'member@example.com' } }));
+
+  it('replies in the ticket as escaped HTML with cc, and returns the conversation id', async () => {
+    global.fetch = freshdeskWith(55);
+    const result = await sendReply(ticketSide, { to: 'Member@Example.com', cc: 'ops@x.com, jd@x.com', subject: 'ignored', bodyText: 'Dear <member>\nPlease send A & B' });
+
+    expect(result).toEqual({ messageId: 'fd-conv:55' });
+    const [url, init] = fetch.mock.calls.find(([, i]) => i?.method === 'POST');
+    expect(url).toBe('https://x.freshdesk.com/api/v2/tickets/4/reply');
+    expect(JSON.parse(init.body)).toEqual({ body: 'Dear &lt;member&gt;<br>Please send A &amp; B', cc_emails: ['ops@x.com', 'jd@x.com'] });
+  });
+
+  it('sends attachments as multipart, read from disk or from content', async () => {
+    const file = require('path').join(require('os').tmpdir(), `fd-test-${process.pid}.pdf`);
+    require('fs').writeFileSync(file, 'pdf');
+    global.fetch = freshdeskWith(56);
+    try {
+      await sendReply({ messageId: 'fd-ticket:4' }, { to: 'member@example.com', bodyText: 'Hi', attachments: [{ filename: 'csr.pdf', path: file }, { content: Buffer.from('b') }] });
+    } finally {
+      require('fs').unlinkSync(file);
+    }
+
+    const init = fetch.mock.calls.find(([, i]) => i?.method === 'POST')[1];
+    expect(init.body).toBeInstanceOf(FormData);
+    expect(init.headers['Content-Type']).toBeUndefined(); // fetch sets the multipart boundary
+    expect(init.body.get('body')).toBe('Hi');
+    const files = init.body.getAll('attachments[]');
+    expect(files.map((f) => f.name)).toEqual(['csr.pdf', 'attachment']);
+    expect(await files[0].text()).toBe('pdf');
+  });
+
+  it('never posts a reply meant for someone other than the ticket requester', async () => {
+    global.fetch = freshdeskWith(57);
+    // email-sender internal notice: to = ops, from = member
+    await expect(sendReply(ticketSide, { to: 'ops@x.com', bodyText: 'x' })).rejects.toThrow('Phase 4');
+    // api-email-sender internal email: no from at all
+    await expect(sendReply({ messageId: 'fd-conv:1', references: 'fd-ticket:4' }, { to: 'ops@x.com', bodyText: 'x' })).rejects.toThrow('Phase 4');
+    // a CC'd person replied last: Freshdesk would still email the requester
+    await expect(sendReply({ ...ticketSide, from: 'cc@x.com' }, { to: 'cc@x.com', bodyText: 'x' })).rejects.toThrow('Phase 4');
+    expect(fetch.mock.calls.some(([, i]) => i?.method === 'POST')).toBe(false);
+  });
+
+  it('refuses a send with no ticket yet (Phase 4: new outbound ticket)', async () => {
+    global.fetch = jest.fn();
+    await expect(sendReply({ messageId: null, references: null }, { to: 'a@x.com', bodyText: 'x' })).rejects.toThrow('Phase 4');
+    expect(fetch).not.toHaveBeenCalled();
+  });
 });

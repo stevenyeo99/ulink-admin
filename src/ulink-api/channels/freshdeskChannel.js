@@ -1,58 +1,21 @@
-const config = require('../config');
+const fs = require('fs');
+const path = require('path');
 const { EmailMessage } = require('../db/models');
+const freshdesk = require('./freshdeskClient');
 
 /**
  * Freshdesk channel adapter (docs/imp/CR/SYSTEM_6/freshdesk/FRESHDESK_EMAIL_PLAN.md).
  * Each Freshdesk ticket becomes the same Submission shape as channels/imapSmtpChannel.js,
  * so no caller changes. The first message of a ticket is `ticket:<id>`; each member reply is `conv:<id>`, and its
  * references point at `fd-ticket:<ticketId>` so threadMatcher joins it to the ticket's case.
+ * HTTP details (auth, retry, timeout, paging) live in channels/freshdeskClient.js.
  */
 
 // Every run re-reads the tickets created in this window, so a ticket that failed is tried again on the next run.
 // ponytail: a ticket that keeps failing for 24 hours is dropped (it shows in the job errors until then); store a
 // cursor if that is not enough.
 const LOOKBACK_MS = 24 * 60 * 60 * 1000;
-const PER_PAGE = 100;
-const MAX_429_RETRIES = 3;
-const MAX_RETRY_WAIT_SECONDS = 120;
-const REQUEST_TIMEOUT_MS = 30000;
 const SOURCE_OUTBOUND_EMAIL = 10; // a ticket an agent (or the pipeline) started; the member did not send it
-
-function assertFreshdeskConfigured() {
-  if (!config.freshdesk.domain || !config.freshdesk.apiKey) {
-    throw new Error('FRESHDESK_DOMAIN and FRESHDESK_API_KEY must be configured');
-  }
-}
-
-// GET a Freshdesk API path as JSON. On 429 it waits Retry-After seconds (at most 2 minutes), then tries again.
-async function request(path) {
-  const url = `https://${config.freshdesk.domain}/api/v2${path}`;
-  const authorization = `Basic ${Buffer.from(`${config.freshdesk.apiKey}:X`).toString('base64')}`;
-  for (let attempt = 0; ; attempt += 1) {
-    const response = await fetch(url, {
-      headers: { Authorization: authorization, 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-    if (response.status === 429 && attempt < MAX_429_RETRIES) {
-      const retryAfter = Number.parseInt(response.headers.get('Retry-After'), 10);
-      const waitSeconds = Number.isNaN(retryAfter) ? 60 : Math.min(retryAfter, MAX_RETRY_WAIT_SECONDS);
-      await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
-      continue;
-    }
-    if (!response.ok) throw new Error(`Freshdesk GET ${path} failed with status ${response.status}`);
-    return response.json();
-  }
-}
-
-// GET every page of a Freshdesk list path.
-async function requestAllPages(path) {
-  const rows = [];
-  for (let page = 1; ; page += 1) {
-    const batch = await request(`${path}${path.includes('?') ? '&' : '?'}per_page=${PER_PAGE}&page=${page}`);
-    rows.push(...batch);
-    if (batch.length < PER_PAGE) return rows;
-  }
-}
 
 // "DRT <support@x.com>" -> "support@x.com"; a list becomes one comma-separated string, as on IMAP.
 function joinAddresses(list) {
@@ -60,17 +23,14 @@ function joinAddresses(list) {
   return addresses.join(', ') || null;
 }
 
-// Download each file at once: the attachment_url is a signed link that expires. It needs no API key.
 async function downloadAttachments(attachments) {
   const files = [];
   for (const attachment of attachments || []) {
-    const response = await fetch(attachment.attachment_url, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
-    if (!response.ok) throw new Error(`Freshdesk attachment ${attachment.id} download failed with status ${response.status}`);
     files.push({
       filename: attachment.name || null,
       contentType: attachment.content_type || null,
       sizeBytes: attachment.size || null,
-      content: Buffer.from(await response.arrayBuffer()),
+      content: await freshdesk.download(attachment.attachment_url),
     });
   }
   return files;
@@ -134,10 +94,9 @@ async function submitOne(results, externalId, buildSubmission, onSubmission) {
 }
 
 async function fetchNewSubmissions(onSubmission) {
-  assertFreshdeskConfigured();
   const since = new Date(Date.now() - LOOKBACK_MS);
   const sinceParam = encodeURIComponent(since.toISOString().replace(/\.\d{3}Z$/, 'Z'));
-  const tickets = await requestAllPages(`/tickets?updated_since=${sinceParam}&order_by=updated_at&order_type=asc`);
+  const tickets = await freshdesk.getAllPages(`/tickets?updated_since=${sinceParam}&order_by=updated_at&order_type=asc`);
   // One query: the tickets whose first message is already stored, inbound (Phase 1) or sent by us as a new
   // outbound ticket (Phase 4). Both carry messageId fd-ticket:<id>.
   const ticketMessageIds = tickets.map((t) => `fd-ticket:${t.id}`);
@@ -156,7 +115,7 @@ async function fetchNewSubmissions(onSubmission) {
       const saved = await submitOne(
         results,
         ticketExternalId,
-        async () => ticketSubmission(await request(`/tickets/${listed.id}?include=requester`)),
+        async () => ticketSubmission(await freshdesk.get(`/tickets/${listed.id}?include=requester`)),
         onSubmission
       );
       if (saved) known.add(`fd-ticket:${listed.id}`);
@@ -170,7 +129,7 @@ async function fetchNewSubmissions(onSubmission) {
     // Freshdesk rate limit becomes a problem.
     let conversations;
     try {
-      conversations = await requestAllPages(`/tickets/${listed.id}/conversations`);
+      conversations = await freshdesk.getAllPages(`/tickets/${listed.id}/conversations`);
     } catch (error) {
       results.push({ externalId: `${ticketExternalId}:conversations`, ok: false, error: error.message });
       continue;
@@ -184,8 +143,57 @@ async function fetchNewSubmissions(onSubmission) {
   return results;
 }
 
-async function sendReply() {
-  throw new Error('freshdeskChannel.sendReply is not implemented yet (Phase 3)');
+// "a@x.com, b@x.com" -> ["a@x.com", "b@x.com"]
+function splitAddresses(value) {
+  return String(value || '').split(',').map((a) => a.trim()).filter(Boolean);
+}
+
+// The ticket this reply belongs to: the inbound ticket itself (fd-ticket:<id>) or a member reply that references it.
+function ticketIdOf(submission) {
+  const match = `${submission.messageId || ''} ${submission.references || ''}`.match(/(?:^|\s)fd-ticket:(\d+)(?=\s|$)/);
+  return match ? match[1] : null;
+}
+
+// Plain text -> HTML the way Freshdesk shows it: escaped, one <br> per line break.
+function textToHtml(text) {
+  const escaped = String(text || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  return escaped.replace(/\r?\n/g, '<br>');
+}
+
+// Template attachments are nodemailer-shaped: { filename, path } or { filename, content }.
+async function replyForm(body, ccEmails, attachments) {
+  const form = new FormData();
+  form.append('body', body);
+  for (const email of ccEmails) form.append('cc_emails[]', email);
+  for (const attachment of attachments) {
+    const content = attachment.content ?? (await fs.promises.readFile(attachment.path));
+    form.append('attachments[]', new Blob([content]), attachment.filename || (attachment.path ? path.basename(attachment.path) : 'attachment'));
+  }
+  return form;
+}
+
+/**
+ * Reply in the member's ticket. Freshdesk sends a reply only to the ticket's requester, in the same email thread, and
+ * keeps the ticket's own subject (reply.subject is not used). So the requester is read first: a reply meant for
+ * anyone else (an internal notice) must not go out to the member. Returns fd-conv:<id> for the sender's outbound row.
+ */
+async function sendReply(submission, reply) {
+  const ticketId = ticketIdOf(submission);
+  if (!ticketId) throw new Error('freshdeskChannel: no Freshdesk ticket to reply to (a new outbound ticket is Phase 4)');
+  const ticket = await freshdesk.get(`/tickets/${ticketId}?include=requester`);
+  const requester = (ticket.requester?.email || '').trim().toLowerCase();
+  const to = (reply.to || submission.from || '').trim().toLowerCase();
+  if (!requester || to !== requester) {
+    throw new Error('freshdeskChannel: sending to an address other than the ticket requester is Phase 4 (forward)');
+  }
+
+  const body = textToHtml(reply.bodyText);
+  const ccEmails = splitAddresses(reply.cc);
+  const payload = reply.attachments?.length
+    ? await replyForm(body, ccEmails, reply.attachments)
+    : { body, ...(ccEmails.length ? { cc_emails: ccEmails } : {}) };
+  const conversation = await freshdesk.post(`/tickets/${ticketId}/reply`, payload);
+  return { messageId: `fd-conv:${conversation.id}` };
 }
 
 module.exports = { fetchNewSubmissions, sendReply };

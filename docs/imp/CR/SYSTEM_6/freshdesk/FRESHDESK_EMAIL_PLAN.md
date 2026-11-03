@@ -16,9 +16,9 @@ The code already has the switch point. `src/ulink-api/channels/index.js` selects
 | Phase | Name | Status | Date done | Commit |
 |---|---|---|---|---|
 | 0 | Trial account setup | Done | 2026-11-03 | |
-| 1 | Input: first message of a ticket | In progress | | |
-| 2 | Input: follow-ups and attachments | In progress | | |
-| 3 | Output: reply in the ticket | Not started | | |
+| 1 | Input: first message of a ticket | Done | 2026-11-03 | 10f7da0 |
+| 2 | Input: follow-ups and attachments | Done | 2026-11-03 | 72bf960 |
+| 3 | Output: reply in the ticket | In progress | | |
 | 4 | Output: ops forward and new outbound ticket | Not started | | |
 | 5 | Thread storage: end-to-end test | Not started | | |
 
@@ -31,6 +31,7 @@ Status values: Not started, In progress, Done, Blocked.
 - Use only sample cases with fake names, NRC numbers, and bank accounts. Do not put real member data in a personal account.
 - Keep the domain, API key, and email configuration id in configuration. The production values will be different.
 - Use native `fetch`, `FormData`, and `Blob` from Node. No new dependency.
+- All Freshdesk HTTP calls go through `channels/freshdeskClient.js` (auth, timeout, 429 retry, paging). A new call is one `get` or `post` line in `channels/freshdeskChannel.js`.
 - Handle HTTP 429 with the `Retry-After` header. The trial has a low API rate limit.
 - No schema change. Freshdesk messages use the existing tables `ulink_email_threads`, `ulink_email_messages`, and `ulink_email_attachments`.
 
@@ -152,7 +153,7 @@ Done when:
 
 Goal: the pipeline reply arrives in the member mailbox in the same email thread.
 
-Files: `channels/freshdeskChannel.js`.
+Files: `channels/freshdeskChannel.js`, `channels/freshdeskClient.js`.
 
 Tasks:
 
@@ -232,3 +233,5 @@ Add one entry after each phase: date, what was done, what was found, open points
 | 2026-11-03 | 1 | Code done: `config.freshdesk` block, `fetchNewSubmissions` in `channels/freshdeskChannel.js`, test `tests/freshdeskChannel.test.js`. Live run on dev: tickets 1 to 4 gave 4 cases, the second run saved nothing. Tickets 1 to 3 are the Freshdesk demo tickets. Code review changes: fixed 24-hour window instead of a cursor from the last saved message (a failed ticket was lost), skip saved tickets before the detail call, skip outbound and old tickets, 30-second request timeout, 2-minute cap on `Retry-After`, and email-intake skips with a reason when the Freshdesk domain or key is empty. Open: a second live run after the review changes. |
 | 2026-11-03 | 2 | Code done in `channels/freshdeskChannel.js`: attachment download for the first message and replies, member replies as `conv:<id>` with references `fd-ticket:<ticketId>`, replies read on old and outbound tickets too. Test `tests/freshdeskChannel.test.js`. Ticket 4 stays without its PDFs, because it was saved in Phase 1. Open: live test with a new email with two PDF files and a member reply with one more file, then code review. |
 | 2026-11-03 | 2 | Live test passed: ticket 5 (one PDF) and its member reply (one PDF) are one case, and ticket 4 got both PDFs after the dev cases were cleared. Replies that agents type in Freshdesk are not stored (owner decision: store outbound only when the system sends it, Phase 3). Code review changes: replies are read only for tickets with a stored first message, and one query finds those tickets. Not changed: no size cap on attachment downloads (Freshdesk caps one email at 20 MB), quoted links in reply HTML can be fetched again (same as IMAP), and one conversations call per updated known ticket per run (`ponytail:` note). |
+| 2026-11-03 | 3 | Code done: `sendReply` posts to `/tickets/{id}/reply` (escaped HTML body, `cc_emails`, multipart attachments from template paths) and returns `fd-conv:<id>`. HTTP moved to `channels/freshdeskClient.js`; email-intake uses its `isConfigured`. Freshdesk keeps the ticket subject, so template subjects are not used. A send to another recipient than the requester, or with no ticket, fails with "Phase 4". Open: live test (set `SMTP_FROM` to the support address on dev), then code review. |
+| 2026-11-03 | 3 | Live test passed: three pipeline emails (two `DOCUMENT_COMPLETE_ACK`, one `MISSING_DOCUMENTS`) went out as replies in tickets 4 and 5, stored as outbound `fd-conv:` rows on the same threads, sender `support@dynrtech.freshdesk.com` (dev `SMTP_FROM` set to the support address). Both cases recognized as `ayas_member_claim`. Two `DOCUMENTS_INCOMPLETE` internal notices failed with the Phase 4 error, as expected. Code review changes: `sendReply` reads the ticket requester first and refuses any other recipient (the API sender passes no `from`, so an internal email could have gone to the member), downloads share the 429 retry, POST gets a 120-second timeout (a repeated POST sends the email twice), and an attachment with no file name is named `attachment`. Not changed: the outbound row stores the template subject, but Freshdesk sends the ticket subject; email-intake imports the Freshdesk client for its configured check. |
