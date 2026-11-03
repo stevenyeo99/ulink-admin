@@ -1,6 +1,7 @@
 const { sequelize, Case, CaseEvent, ApiCaseStep, JobCheckpoint } = require('../../db/models');
 const { listApiClaims } = require('./iasClient');
 const { todayInIasTimezone } = require('../shared/iasDates');
+const { getSettings, normalizeListValue } = require('../settings/settings');
 
 // api-claim-intake: the entry point of the API case workflow (docs/imp/day1/api-case-workflow.md
 // section 6.1). Lists claims created in IAS through its API and turns each new one into an
@@ -110,7 +111,8 @@ async function scheduledRange() {
  * Scheduled entry point (POST /api/jobs/api-claim-intake/run passes no range → scheduledRange).
  * An explicit range (a manual catch-up) is used as given and doesn't move the checkpoint.
  * An IAS failure throws before anything is written; the next run retries the same range.
- * One bad or clashing claim is reported and skipped, never blocking the rest of the list.
+ * One bad or clashing claim is reported and skipped, never blocking the rest of the list. A claim of a policy
+ * not on the System settings policy list is skipped and counted (skippedPolicy).
  */
 async function run(range) {
   const scheduled = !range;
@@ -118,12 +120,21 @@ async function run(range) {
   if (resolved.error) throw new Error(resolved.error);
 
   const { claims } = await fetchApiClaims(resolved);
-  const summary = { ...resolved, fetched: claims.length, inserted: 0, skippedExisting: 0, skippedInvalid: 0, errors: [] };
+  // System settings "Only these policies" (stored normalized; empty = every policy). A row without policyRefNo is kept.
+  const policies = new Set((await getSettings()).apiPolicyRefNos);
+  const summary = { ...resolved, fetched: claims.length, inserted: 0, skippedExisting: 0, skippedInvalid: 0, skippedPolicy: 0, skippedPolicyClaims: [], errors: [] };
 
   for (const claim of claims) {
     if (!isValidClaim(claim)) {
       summary.skippedInvalid += 1;
       summary.errors.push({ claim, error: 'clNo and tpaCaseNumber are required' });
+      continue;
+    }
+    const policy = claim.policyRefNo == null ? '' : normalizeListValue(claim.policyRefNo);
+    if (policies.size > 0 && policy !== '' && !policies.has(policy)) {
+      // Named in the run summary: a skipped claim never becomes a case, so this is its only trace.
+      summary.skippedPolicy += 1;
+      summary.skippedPolicyClaims.push({ clNo: claim.clNo, tpaCaseNumber: claim.tpaCaseNumber, policyRefNo: policy });
       continue;
     }
     try {

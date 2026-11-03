@@ -5,6 +5,10 @@
 // tests/caseSourceConstraint.test.js; the real IAS call by the dev preview endpoint.
 
 jest.mock('../modules/api-claim-intake/iasClient', () => ({ listApiClaims: jest.fn() }));
+jest.mock('../modules/settings/settings', () => {
+  const actual = jest.requireActual('../modules/settings/settings');
+  return { ...actual, getSettings: jest.fn(async () => ({ ...actual.DEFAULTS })) };
+});
 jest.mock('../db/models', () => {
   const store = new Map(); // claimNo -> case
   const checkpoint = { value: null };
@@ -35,6 +39,7 @@ jest.mock('../db/models', () => {
 const { resolveDateRange, run } = require('../modules/api-claim-intake/service');
 const { listApiClaims } = require('../modules/api-claim-intake/iasClient');
 const models = require('../db/models');
+const settings = require('../modules/settings/settings');
 const { todayInIasTimezone } = require('../modules/shared/iasDates');
 
 describe('todayInIasTimezone', () => {
@@ -155,6 +160,27 @@ describe('run', () => {
     expect(summary).toMatchObject({ fetched: 4, inserted: 2, skippedInvalid: 1 });
     expect(summary.errors).toHaveLength(2);
     expect(summary.errors[1]).toMatchObject({ clNo: '2604059999', error: expect.stringMatching(/tpa_case_number/) });
+  });
+
+  it('keeps only claims of the listed policies; a row without policyRefNo is kept', async () => {
+    settings.getSettings.mockResolvedValueOnce({ ...settings.DEFAULTS, apiPolicyRefNos: ['POL-A'] });
+    iasReturns([
+      { ...claim('1', 'T1'), policyRefNo: ' pol-a ' },
+      { ...claim('2', 'T2'), policyRefNo: 'POL-B' },
+      claim('3', 'T3'),
+      { ...claim('4', 'T4'), policyRefNo: '  ' },
+    ]);
+
+    const summary = await run();
+
+    expect(summary).toMatchObject({ fetched: 4, inserted: 3, skippedPolicy: 1, errors: [] });
+    expect(summary.skippedPolicyClaims).toEqual([{ clNo: '2', tpaCaseNumber: 'T2', policyRefNo: 'POL-B' }]);
+    expect([...models.store.keys()]).toEqual(['1', '3', '4']);
+  });
+
+  it('keeps every policy when the list is empty', async () => {
+    iasReturns([{ ...claim('1', 'T1'), policyRefNo: 'POL-B' }]);
+    expect(await run()).toMatchObject({ inserted: 1, skippedPolicy: 0 });
   });
 
   it('uses an explicit range as given and leaves the checkpoint alone', async () => {

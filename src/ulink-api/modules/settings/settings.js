@@ -54,6 +54,9 @@ const DEFAULTS = {
   // only, never past values (SYSTEM_4 F3, E4-15 step 4). Off: the AI reads every claim without them. On from the start —
   // the owner approved it so (2026-10-16); it does nothing until a correction is marked trusted.
   usePastCorrections: true,
+  // API cases: only claims of these IAS policies (policyRefNo on the claim list row) become cases. Empty: every policy.
+  // A row with no policyRefNo (IAS has not added the field yet) is kept, so a missing field never drops a claim.
+  apiPolicyRefNos: [],
 };
 
 // Settings that are whole numbers in a range (the rest of the numbers are shares 0–1). Sent to the console with the
@@ -77,10 +80,18 @@ async function getSettings() {
 
 const lastReadSettings = () => lastRead;
 
+// How a list setting's values are compared: case and spaces around a value don't matter.
+const normalizeListValue = (value) => String(value).trim().toUpperCase();
+
 // Why a value can't be saved, or null. Each setting takes the type of its default; the threshold is a share 0–1,
 // the working-day limit a whole number in its range.
 function settingError(key, value) {
   if (!(key in DEFAULTS)) return `Unknown switch ${key}.`;
+  if (Array.isArray(DEFAULTS[key])) {
+    if (!Array.isArray(value) || value.some((v) => typeof v !== 'string' || v.trim() === '')) return `${key} must be a list of non-empty values.`;
+    const normalized = value.map(normalizeListValue);
+    return new Set(normalized).size === normalized.length ? null : `${key} has a value twice.`;
+  }
   if (typeof DEFAULTS[key] === 'boolean') return typeof value === 'boolean' ? null : `${key} must be on or off.`;
   if (WHOLE_NUMBERS[key]) {
     const [min, max] = WHOLE_NUMBERS[key];
@@ -89,13 +100,14 @@ function settingError(key, value) {
   return typeof value === 'number' && value >= 0 && value <= 1 ? null : `${key} must be a percentage from 0 to 100.`;
 }
 
-// Only known keys, each of its own type. transaction: to save with other changes (the STP / System settings form).
+// Only known keys, each of its own type; a list is stored normalized. transaction: to save with other changes (the STP / System settings form).
 async function setSettings(changes, updatedBy, { transaction } = {}) {
   for (const [key, value] of Object.entries(changes)) {
     const error = settingError(key, value);
     if (error) throw new Error(error);
-    await Setting.upsert({ key, value, updatedBy }, { transaction });
+    const stored = Array.isArray(value) ? value.map(normalizeListValue) : value;
+    await Setting.upsert({ key, value: stored, updatedBy }, { transaction });
   }
 }
 
-module.exports = { getSettings, lastReadSettings, setSettings, settingError, DEFAULTS, SOURCE_SETTING, WHOLE_NUMBERS };
+module.exports = { getSettings, lastReadSettings, setSettings, settingError, normalizeListValue, DEFAULTS, SOURCE_SETTING, WHOLE_NUMBERS };

@@ -40,6 +40,8 @@ export interface Switches {
   mailboxEnabled: boolean;
   // API cases: the customer's missing-documents email (SYSTEM_4 E4-03).
   apiSendMissingDocumentsEmail: boolean;
+  // API cases: only claims of these IAS policies become cases; empty = every policy.
+  apiPolicyRefNos: string[];
   // At or below this (0–1) the AI counts as unsure (SYSTEM_4 E4-07).
   aiConfidenceThreshold: number;
   // A case waiting longer than this many working days is overdue (SYSTEM_4 E4-19 / E6; default 2 until ULINK sets it).

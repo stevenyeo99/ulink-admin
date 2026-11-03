@@ -164,7 +164,7 @@ checks them on the next run, then sends them to the IAS console before the IAS r
 
 | # | Step | What happens | Status (label) |
 |---|---|---|---|
-| 1 | **API claim intake** | Lists the claims created in IAS today (Myanmar time); one case per IAS claim number. A second IAS claim with the same TPA case number is refused (reported, not merged). | `API_RECEIVED` *Received from IAS* |
+| 1 | **API claim intake** | Lists the claims created in IAS today (Myanmar time); one case per IAS claim number. A second IAS claim with the same TPA case number is refused (reported, not merged). With a policy list set on System settings, a claim of another policy is skipped (no case). | `API_RECEIVED` *Received from IAS* |
 | 1a | **Upload on the case page** | A person uploads the customer's documents on a case **waiting on documents** (*No documents*, *Documents incomplete*, *Check before emailing customer*, *Check the AI's documents finding*). The files are merged into one PDF and stored on the case, and the case is read and checked again on the next run (steps 4–6). The PDF goes to the console after the check (steps 6a–6b). | `API_UPLOAD_RECEIVED` *Uploaded — being read* |
 | 1b | **Console watch** | For a case **waiting on documents**: a console submission the case doesn't have yet, put in the console by anyone, sends it on to be downloaded and checked again; complete, the next revision lifts the suspense. Our own case-page uploads are skipped (the case read them already). Uploads from before 2026-10-19 (*Uploaded — waiting for the console*) still finish here; not in the console after 2 hours → *Upload not in the console* (still watched). | `API_NEW_DOCUMENTS` *New documents in the console* · `API_UPLOAD_NOT_IN_CONSOLE` *Upload not in the console* |
 | 2 | **Console material download** | Downloads the images the customer uploaded to the console (only the submissions not stored yet) and stores each submission as one PDF. None after **2 hours** → the customer is asked for documents. Also runs on *New documents in the console*. | `API_MATERIALS_DOWNLOADED` *Images downloaded* · `API_NO_DOCUMENTS` *No documents* |
@@ -379,6 +379,7 @@ Team emails go to `INTERNAL_REVIEW_EMAIL` (+ the route's CC), start with "(ULINK
 | Work on email cases / API cases | Console → System settings | On | Off: that pipeline doesn't run (cron or Run) and its tab is hidden on the work pages; its cases are kept |
 | API cases: email the customer about missing documents | Console → System settings | On | Off: ULINK contacts the customer; team still emailed (section 3) |
 | Read new emails (mailbox or Freshdesk) | Console → System settings | On | Off: email-intake (email pipeline) is skipped (no `.env` change, no restart) |
+| API cases: which policies | Console → System settings | All policies | Only these policies: claim intake skips the claims of other policies (`policyRefNo` on the IAS claim list row; a row without it is kept). IAS does not send the field yet |
 | `IMAP_HOST` | `.env` | — | Empty: no inbox — email-intake is skipped |
 | `CONSOLE_UPLOAD_METHOD` | `.env` | `folder` | `folder` or `cl-upload` |
 | `CL_UPLOAD_URL`, `CL_UPLOAD_API_KEY` | `.env` | — | cl-upload API |

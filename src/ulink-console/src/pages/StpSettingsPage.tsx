@@ -103,7 +103,15 @@ interface Draft {
   switches: Switches;
   threshold: string; // aiConfidenceThreshold as a percentage, as typed
   numbers: Record<NumberKey, string>; // the whole-number settings, as typed
+  policyOnly: boolean; // API policy filter: false = all policies
+  policies: string; // the policy list, as typed (one per line)
 }
+
+// The policy box as a list: one value per line, trimmed, uppercase, each once, sorted (the API stores it normalized).
+const parsePolicies = (text: string): string[] => [...new Set(text.split('\n').map((p) => p.trim().toUpperCase()).filter(Boolean))].sort();
+// The stored list, sorted so a reordered box is not a change. Missing (an API older than this page): all policies.
+const storedPolicies = (switches: Switches): string[] => [...(switches.apiPolicyRefNos ?? [])].sort();
+const policyLabel = (list: string[]) => (list.length === 0 ? 'All policies' : list.join(', '));
 
 // The whole-number settings (all on System settings): label before the box, unit after, what it does.
 type NumberSetting = { key: NumberKey; label: string; unit: string; help: string };
@@ -131,6 +139,8 @@ function draftFrom(data: StpSettings): Draft {
     switches: { ...data.switches },
     threshold: String(Math.round(data.switches.aiConfidenceThreshold * 100)),
     numbers: Object.fromEntries(NUMBER_SETTINGS.map((n) => [n.key, String(data.switches[n.key])])) as Record<NumberKey, string>,
+    policyOnly: storedPolicies(data.switches).length > 0,
+    policies: storedPolicies(data.switches).join('\n'),
   };
 }
 
@@ -182,6 +192,7 @@ function StpForm({ view, data, canEdit }: { view: View; data: StpSettings; canEd
   const [source, setSource] = useState<Source>('EMAIL');
   const [draft, setDraft] = useState<Draft>(() => draftFrom(data));
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const draftPolicies = useMemo(() => (draft.policyOnly ? parsePolicies(draft.policies) : []), [draft.policyOnly, draft.policies]);
 
   // Every difference from what is stored, in words — the Review & save list, and the change count.
   const changes = useMemo(() => {
@@ -209,8 +220,11 @@ function StpForm({ view, data, canEdit }: { view: View; data: StpSettings; canEd
       const value = parseWhole(draft.numbers[n.key], data.numberRanges[n.key]);
       if (value !== null && value !== data.switches[n.key]) list.push({ key: n.key, text: `${n.label}: ${data.switches[n.key]} → ${value} ${n.unit}` });
     }
+    if (!isStp && draftPolicies.join('\n') !== storedPolicies(data.switches).join('\n')) {
+      list.push({ key: 'apiPolicyRefNos', text: `API claims from: ${policyLabel(storedPolicies(data.switches))} → ${policyLabel(draftPolicies)}` });
+    }
     return list;
-  }, [data, draft, isStp, page]);
+  }, [data, draft, draftPolicies, isStp, page]);
 
   // Problems the save would be refused for — shown on the row, and they block the save.
   const ruleErrors = useMemo(() => {
@@ -227,7 +241,8 @@ function StpForm({ view, data, canEdit }: { view: View; data: StpSettings; canEd
   const numberErrors = Object.fromEntries(page.numbers
     .filter((n) => parseWhole(draft.numbers[n.key], data.numberRanges[n.key]) === null)
     .map((n) => [n.key, `Enter a whole number from ${data.numberRanges[n.key][0]} to ${data.numberRanges[n.key][1]}.`]));
-  const errorCount = Object.keys(ruleErrors).length + (thresholdError ? 1 : 0) + Object.keys(numberErrors).length;
+  const policyError = !isStp && draft.policyOnly && draftPolicies.length === 0 ? 'Add at least one policy reference number, or choose All policies.' : null;
+  const errorCount = Object.keys(ruleErrors).length + (thresholdError ? 1 : 0) + Object.keys(numberErrors).length + (policyError ? 1 : 0);
   const dirty = changes.length > 0;
 
   // Leaving with unsaved changes asks first.
@@ -252,6 +267,7 @@ function StpForm({ view, data, canEdit }: { view: View; data: StpSettings; canEd
         switches: {
           ...Object.fromEntries(page.switches.filter((s) => changed.has(s.key)).map((s) => [s.key, draft.switches[s.key]])),
           ...(changed.has('aiConfidenceThreshold') && { aiConfidenceThreshold: (parsePercent(draft.threshold) ?? 0) / 100 }),
+          ...(changed.has('apiPolicyRefNos') && { apiPolicyRefNos: draftPolicies }),
           ...Object.fromEntries(page.numbers.filter((n) => changed.has(n.key)).map((n) => [n.key, parseWhole(draft.numbers[n.key], data.numberRanges[n.key])])),
         },
       });
@@ -383,6 +399,40 @@ function StpForm({ view, data, canEdit }: { view: View; data: StpSettings; canEd
             <h2 className="text-sm font-semibold text-slate-800">Which cases the system works on</h2>
             <p className="mb-4 mt-1 text-sm text-slate-600">For going live with one kind of case first. The STP rules (STP settings page) can be set for both either way.</p>
             <SwitchList switches={CASE_SWITCHES} draft={draft} stored={data.switches} canEdit={canEdit} onToggle={setSwitch} />
+            <fieldset className={clsx('mt-3 rounded-lg p-2', changes.some((c) => c.key === 'apiPolicyRefNos') && changedMark)}>
+              <legend className="text-sm font-medium text-slate-800">API cases: which policies</legend>
+              <p className="mt-1 text-sm text-slate-600">
+                Only claims of these IAS policies (policy reference number) become cases at the daily API claim list. Other claims are skipped. A
+                claim that IAS lists without a policy reference number is always kept. Adding a policy later does not bring back claims already
+                skipped.
+              </p>
+              <div className="mt-2 flex flex-wrap gap-4 text-sm text-slate-800">
+                {[false, true].map((only) => (
+                  <label key={String(only)} className="inline-flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="apiPolicyMode"
+                      checked={draft.policyOnly === only}
+                      disabled={!canEdit}
+                      onChange={() => setDraft((d) => ({ ...d, policyOnly: only }))}
+                    />
+                    {only ? 'Only these policies' : 'All policies'}
+                  </label>
+                ))}
+              </div>
+              {draft.policyOnly && (
+                <textarea
+                  value={draft.policies}
+                  disabled={!canEdit}
+                  onChange={(e) => setDraft((d) => ({ ...d, policies: e.target.value }))}
+                  rows={4}
+                  placeholder="One policy reference number per line"
+                  aria-label="Policy reference numbers, one per line"
+                  className={`${input} mt-2 w-full max-w-md font-mono`}
+                />
+              )}
+              {policyError && <p className="mt-1 text-xs text-red-600">{policyError}</p>}
+            </fieldset>
           </section>
 
           <section className={card}>

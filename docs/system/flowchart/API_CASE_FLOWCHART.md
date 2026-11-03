@@ -2,7 +2,7 @@
 
 This chart shows how an API case moves from the IAS claim list to the IAS revision. It shows the pipeline jobs in order, the stops where a person decides, and the emails that go out. The source is `src/ulink-api/modules/pipeline/service.js` (`API_STEPS`) and the input and output statuses of each `api-*` job.
 
-Last checked against the code: 2026-10-29. Published copy: https://claude.ai/artifact/6wQz6VycRj8e3TgdbvYWWg (private, republish it from this file after each change).
+Last checked against the code: 2026-11-03. Published copy: https://claude.ai/artifact/6wQz6VycRj8e3TgdbvYWWg (private, republish it from this file after each change).
 
 Image: [API_CASE_FLOWCHART.svg](API_CASE_FLOWCHART.svg). A Claude Code hook renders it from the chart below after each save of this file (`.claude/hooks/render-api-flowchart.sh`). If you edit the file outside Claude Code, run `.claude/hooks/render-api-flowchart.sh --all`.
 
@@ -19,7 +19,7 @@ flowchart TD
   classDef done fill:#e3f2ea,stroke:#3f8a5f,color:#1d2430
   classDef mail fill:#efe9f8,stroke:#7a5ea8,color:#1d2430
 
-  A[1 · Claim intake<br/>IAS claim list → API_RECEIVED]:::job --> B[2 · Material download<br/>console images → PDF]:::job
+  A[1 · Claim intake<br/>IAS claim list → API_RECEIVED<br/>only the listed policies, if set]:::job --> B[2 · Material download<br/>console images → PDF]:::job
   W[Console watch<br/>new documents for waiting cases]:::job -.->|new console images| B
   B -->|no images| ND{{API_NO_DOCUMENTS}}:::stop
   ND -.-> E1[/Customer: missing documents<br/>team instead while the switch is off/]:::mail
@@ -50,7 +50,7 @@ flowchart TD
   G -->|overdue| CB{{API_CONSOLE_BARCODE_MISSING<br/>checked again every run}}:::stop
   CB -->|barcode arrives| H
   F -->|no uploads| H
-  G --> H[8 · Claim preparation<br/>benefit, then ICD-10 (ULINK rule or AI),<br/>rejections, STP, suspense]:::job
+  G --> H["8 · Claim preparation<br/>benefit, then ICD-10 (ULINK rule or AI),<br/>rejections, STP, suspense"]:::job
   H -->|AI unsure of diagnosis,<br/>benefit or vitamins| PR{{API_PREPARATION_REVIEW}}:::stop
   H -->|balance dropped while waiting<br/>new shortage| BL{{API_BALANCE_REVIEW}}:::stop
   BL -->|Bypass with a reason,<br/>or balance enough again| H
@@ -104,4 +104,5 @@ flowchart TD
 - A correction sends the case back to the document check. A correction of a value that the member check compares with IAS sends it back to the member check. A correction of the diagnosis or the treatment does the same. The claim preparation choices of a person stay for the next run.
 - A person's decision at a stop (Mark OK, Revise, Ask the customer, override, a choice, an upload) marks the case. The API review lane (`api-review-pipeline`) then runs the same jobs at once, on marked cases only. The existing pipeline skips them. The case shows on the *Reviewed* page, not in the Review queue, and is read-only until its next stop, wait or end. After 30 minutes the existing pipeline takes it back. On the review page, every failed or unsure finding needs a decision with a reason before the save.
 - A super admin can switch a check off on *Admin → AI checklist* (with a reason). The member check and the document check skip it in both flows, and the case shows the line as *Turned off*, never a pass. A switched-off check adds no stop and sends no email. Four checks are locked on: member found, coverage active, member balance, voucher attached. A bank difference from IAS is a warning only: the case goes on, and STP stays possible, because the IAS claim pays to the IAS account.
+- Claim intake keeps only the claims of the policies on *System settings → API cases: which policies* (`apiPolicyRefNos`). An empty list means all policies. A skipped claim does not become a case, and it is counted as `skippedPolicy` in the run summary. A claim row with no `policyRefNo` is kept. IAS does not send `policyRefNo` on the claim list yet, so the filter has no effect until it does.
 - When a job fails because IAS, the console or LM Studio does not answer, the case keeps its status. The next pipeline run tries again.
