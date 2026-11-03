@@ -133,7 +133,7 @@ async function fetchLinkedDocument(url, { timeoutMs, maxBytes }) {
     throw new Error(`linked document fetch failed (${response.status} ${response.statusText})`);
   }
 
-  const contentType = (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+  let contentType = (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
   let ext = CONTENT_TYPE_EXTENSIONS[contentType];
   if (!ext) {
     // Azure Blob Storage (and similar object stores) commonly serves
@@ -144,10 +144,10 @@ async function fetchLinkedDocument(url, { timeoutMs, maxBytes }) {
     // fall back to the URL's own filename extension rather than reject a file that's
     // obviously the right type.
     const urlExt = path.extname(new URL(url).pathname).toLowerCase();
-    ext = Object.entries(CONTENT_TYPE_EXTENSIONS).find(([, mappedExt]) => mappedExt === urlExt)?.[1];
-  }
-  if (!ext) {
-    throw new Error(`linked document has unsupported content-type "${contentType || 'unknown'}"`);
+    const match = Object.entries(CONTENT_TYPE_EXTENSIONS).find(([, mappedExt]) => mappedExt === urlExt);
+    if (!match) throw new Error(`linked document has unsupported content-type "${contentType || 'unknown'}"`);
+    // Store the real type, not the header's: the console shows a file inline only as a PDF or an image.
+    [contentType, ext] = match;
   }
 
   const contentLength = parseInt(response.headers.get('content-length'), 10);
