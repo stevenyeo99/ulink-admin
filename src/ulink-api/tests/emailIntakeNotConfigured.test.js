@@ -9,8 +9,18 @@ const config = require('../config');
 const { Setting } = require('../db/models');
 const emailIntake = require('../modules/email-intake/service');
 
-const saved = { driver: config.channel.driver, host: config.imap.host };
-afterEach(() => { config.channel.driver = saved.driver; config.imap.host = saved.host; });
+const saved = { driver: config.channel.driver, host: config.imap.host, freshdesk: { ...config.freshdesk } };
+afterEach(() => {
+  config.channel.driver = saved.driver;
+  config.imap.host = saved.host;
+  Object.assign(config.freshdesk, saved.freshdesk);
+});
+
+it('is not configured with the Freshdesk driver and no API key', async () => {
+  config.channel.driver = 'freshdesk';
+  Object.assign(config.freshdesk, { domain: 'x.freshdesk.com', apiKey: '' });
+  expect(await emailIntake.notConfiguredReason()).toBe('inbox not configured (FRESHDESK_DOMAIN or FRESHDESK_API_KEY is empty)');
+});
 
 it('is not configured with the IMAP driver and no IMAP_HOST, and a run says so', async () => {
   config.channel.driver = 'imap_smtp';

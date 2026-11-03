@@ -78,8 +78,8 @@ const CASE_SWITCHES: { key: SwitchKey; title: string; text: string }[] = [
   },
   {
     key: 'mailboxEnabled',
-    title: 'Read the mailbox (IMAP)',
-    text: "Off: incoming email is not read — Email Intake and Email Reply Intake are skipped in the pipelines; new email claims and customer replies stay in the mailbox. Sending email is not affected. (With no mailbox set up on the server, it isn't read either way.)",
+    title: 'Read new emails (mailbox or Freshdesk)',
+    text: "Off: incoming email is not read — Email Intake and Email Reply Intake are skipped in the pipelines; new email claims and customer replies stay in the mailbox or in Freshdesk. Sending email is not affected. (With no mailbox set up on the server, nothing is read either way.)",
   },
   {
     key: 'apiSendMissingDocumentsEmail',

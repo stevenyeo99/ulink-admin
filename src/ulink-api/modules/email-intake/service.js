@@ -254,6 +254,9 @@ async function queueNoAttachmentReminder(transaction, caseId, triggeringMessageI
 // it (modules/pipeline/service.js); a direct /run says so instead of failing on a connection error.
 async function notConfiguredReason() {
   if (config.channel.driver === 'imap_smtp' && !config.imap.host) return 'inbox not configured (IMAP_HOST is empty)';
+  if (config.channel.driver === 'freshdesk' && !(config.freshdesk.domain && config.freshdesk.apiKey)) {
+    return 'inbox not configured (FRESHDESK_DOMAIN or FRESHDESK_API_KEY is empty)';
+  }
   if (!(await getSettings()).mailboxEnabled) return 'mailbox switched off (System settings)';
   return null;
 }

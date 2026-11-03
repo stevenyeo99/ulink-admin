@@ -225,6 +225,13 @@ module.exports = {
     driver: process.env.CHANNEL_DRIVER || 'imap_smtp',
   },
 
+  // Used when CHANNEL_DRIVER=freshdesk (channels/freshdeskChannel.js).
+  freshdesk: {
+    domain: process.env.FRESHDESK_DOMAIN,
+    apiKey: process.env.FRESHDESK_API_KEY,
+    emailConfigId: process.env.FRESHDESK_EMAIL_CONFIG_ID,
+  },
+
   smtp: {
     host: process.env.SMTP_HOST,
     port: parseInt(process.env.SMTP_PORT, 10) || 587,

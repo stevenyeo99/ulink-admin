@@ -15,8 +15,8 @@ The code already has the switch point. `src/ulink-api/channels/index.js` selects
 
 | Phase | Name | Status | Date done | Commit |
 |---|---|---|---|---|
-| 0 | Trial account setup | In progress | | |
-| 1 | Input: first message of a ticket | Not started | | |
+| 0 | Trial account setup | Done | 2026-11-03 | |
+| 1 | Input: first message of a ticket | In progress | | |
 | 2 | Input: follow-ups and attachments | Not started | | |
 | 3 | Output: reply in the ticket | Not started | | |
 | 4 | Output: ops forward and new outbound ticket | Not started | | |
@@ -90,9 +90,9 @@ Configuration (in `config/index.js` next to `channel`):
 Tasks:
 
 1. Add a small request helper in `freshdeskChannel.js`: Basic auth (`<key>:X`), JSON, and 429 retry.
-2. Find the cursor. Read the latest `receivedAt` in `ulink_email_messages` where `source = 'freshdesk'`. Subtract 10 minutes. If there are no rows, use the last 24 hours.
-3. Call `GET /tickets?updated_since=<cursor>&order_by=updated_at&order_type=asc`. Follow the pages.
-4. For each ticket, call `GET /tickets/{id}?include=requester`.
+2. Use a fixed window of the last 24 hours. Each run reads the window again, so a ticket that failed is tried again on the next run. A ticket that fails for 24 hours is dropped, and the job errors show it until then.
+3. Call `GET /tickets?updated_since=<now - 24h>&order_by=updated_at&order_type=asc`. Follow the pages. Keep only tickets created inside the window and not outbound (`source` 10).
+4. Skip tickets already saved in `ulink_email_messages`. For each new ticket, call `GET /tickets/{id}?include=requester`.
 5. Build one Submission for the first message and call `onSubmission`.
 
 Mapping for the first message:
@@ -228,3 +228,5 @@ Add one entry after each phase: date, what was done, what was found, open points
 | Date | Phase | Notes |
 |---|---|---|
 | 2026-11-02 | 0 | Trial account created: `dynrtech.freshdesk.com`. Trial ends about 2026-11-23. Steps 5 to 10 open. Next: get the support address, API key (keep in local `.env` only), and email configuration id. Then turn off the requester "New Ticket Created" notification, send a test email from a member mailbox, and run the curl round trip. Save the ticket and conversation JSON (fake data) in `samples/`. |
+| 2026-11-03 | 0 | Done. Support address `support@dynrtech.freshdesk.com`, email configuration id `39000068272`. Domain, key, and id are in the local `src/ulink-api/.env`, with placeholders in `.env.example`. Test ticket 4: the agent reply went out (no failed or pending delivery), and the member reply joined ticket 4 as `incoming: true`. The reply landed in the member Spam folder or was hard to find, so look there first in Phase 3. Samples in `samples/ticket.json` and `samples/conversations.json` (addresses and attachment URLs masked). Open: a member reply with an attachment, for Phase 2. |
+| 2026-11-03 | 1 | Code done: `config.freshdesk` block, `fetchNewSubmissions` in `channels/freshdeskChannel.js`, test `tests/freshdeskChannel.test.js`. Live run on dev: tickets 1 to 4 gave 4 cases, the second run saved nothing. Tickets 1 to 3 are the Freshdesk demo tickets. Code review changes: fixed 24-hour window instead of a cursor from the last saved message (a failed ticket was lost), skip saved tickets before the detail call, skip outbound and old tickets, 30-second request timeout, 2-minute cap on `Retry-After`, and email-intake skips with a reason when the Freshdesk domain or key is empty. Open: a second live run after the review changes. |

@@ -378,7 +378,7 @@ Team emails go to `INTERNAL_REVIEW_EMAIL` (+ the route's CC), start with "(ULINK
 | AI confidence threshold | Console → System settings | 70% | At or below: the AI counts as unsure (4.5) |
 | Work on email cases / API cases | Console → System settings | On | Off: that pipeline doesn't run (cron or Run) and its tab is hidden on the work pages; its cases are kept |
 | API cases: email the customer about missing documents | Console → System settings | On | Off: ULINK contacts the customer; team still emailed (section 3) |
-| Read the mailbox (IMAP) | Console → System settings | On | Off: email-intake (email pipeline) is skipped (no `.env` change, no restart) |
+| Read new emails (mailbox or Freshdesk) | Console → System settings | On | Off: email-intake (email pipeline) is skipped (no `.env` change, no restart) |
 | `IMAP_HOST` | `.env` | — | Empty: no inbox — email-intake is skipped |
 | `CONSOLE_UPLOAD_METHOD` | `.env` | `folder` | `folder` or `cl-upload` |
 | `CL_UPLOAD_URL`, `CL_UPLOAD_API_KEY` | `.env` | — | cl-upload API |

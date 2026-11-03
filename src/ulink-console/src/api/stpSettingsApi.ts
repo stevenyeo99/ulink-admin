@@ -36,7 +36,7 @@ export interface Switches {
   // Which cases the system works on (SYSTEM_4 E4-01); a source switched off has no pipeline runs and no tab.
   emailCasesEnabled: boolean;
   apiCasesEnabled: boolean;
-  // Read the mailbox (IMAP); off: the inbox step is skipped (SYSTEM_4 E4-02).
+  // Read new emails (mailbox or Freshdesk, by CHANNEL_DRIVER); off: the inbox step is skipped (SYSTEM_4 E4-02).
   mailboxEnabled: boolean;
   // API cases: the customer's missing-documents email (SYSTEM_4 E4-03).
   apiSendMissingDocumentsEmail: boolean;

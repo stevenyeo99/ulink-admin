@@ -55,7 +55,7 @@ Every call returns at once and works in the background. A trigger that overlaps 
 queued. A pipeline whose cases are switched off (System settings → *Work on email / API cases*) is skipped too
 (`reason: source_disabled`) — no run is created.
 
-**No inbox** (API-only go-live): switch off *Read the mailbox (IMAP)* on the System settings page, or leave `IMAP_HOST`
+**No inbox** (API-only go-live): switch off *Read new emails (mailbox or Freshdesk)* on the System settings page, or leave `IMAP_HOST`
 empty. The email-intake step is then skipped in both pipelines, and api-reply-intake in the API pipeline, with the
 reason; SMTP sending is not affected. The
 switch is the quick way to stop one environment reading a mailbox it shares with another (UAT and a dev machine). If the process died mid-run, the lock stays: clear it with `POST /api/jobs/<job or pipeline>/release`.
