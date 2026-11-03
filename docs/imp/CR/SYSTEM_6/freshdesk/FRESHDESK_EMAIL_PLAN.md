@@ -15,7 +15,7 @@ The code already has the switch point. `src/ulink-api/channels/index.js` selects
 
 | Phase | Name | Status | Date done | Commit |
 |---|---|---|---|---|
-| 0 | Trial account setup | Not started | | |
+| 0 | Trial account setup | In progress | | |
 | 1 | Input: first message of a ticket | Not started | | |
 | 2 | Input: follow-ups and attachments | Not started | | |
 | 3 | Output: reply in the ticket | Not started | | |
@@ -227,4 +227,4 @@ Add one entry after each phase: date, what was done, what was found, open points
 
 | Date | Phase | Notes |
 |---|---|---|
-| | | |
+| 2026-11-02 | 0 | Trial account created: `dynrtech.freshdesk.com`. Trial ends about 2026-11-23. Steps 5 to 10 open. Next: get the support address, API key (keep in local `.env` only), and email configuration id. Then turn off the requester "New Ticket Created" notification, send a test email from a member mailbox, and run the curl round trip. Save the ticket and conversation JSON (fake data) in `samples/`. |
