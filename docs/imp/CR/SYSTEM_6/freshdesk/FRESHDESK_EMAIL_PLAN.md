@@ -17,7 +17,7 @@ The code already has the switch point. `src/ulink-api/channels/index.js` selects
 |---|---|---|---|---|
 | 0 | Trial account setup | Done | 2026-11-03 | |
 | 1 | Input: first message of a ticket | In progress | | |
-| 2 | Input: follow-ups and attachments | Not started | | |
+| 2 | Input: follow-ups and attachments | In progress | | |
 | 3 | Output: reply in the ticket | Not started | | |
 | 4 | Output: ops forward and new outbound ticket | Not started | | |
 | 5 | Thread storage: end-to-end test | Not started | | |
@@ -123,9 +123,9 @@ Files: `channels/freshdeskChannel.js`.
 
 Tasks:
 
-1. Call `GET /tickets/{id}/conversations`. Keep only rows with `incoming: true` and `private: false`.
+1. Call `GET /tickets/{id}/conversations` for every ticket updated in the window, old and outbound tickets included. Keep only rows with `incoming: true` and `private: false` created inside the window, and skip rows already saved. Read replies only for a ticket whose first message is stored (`fd-ticket:<id>`, inbound or our own outbound ticket). Otherwise each reply would start a new case. Replies on tickets from before the switch to Freshdesk are not read.
 2. Build one Submission for each kept conversation.
-3. Download each `attachment_url` at once into a Buffer. Put it in `attachments[].content`. Do this for the ticket and for each conversation.
+3. Download each `attachment_url` at once into a Buffer, with no API key (the link is signed). Put it in `attachments[].content`. Do this for the ticket and for each conversation.
 
 Mapping for a follow-up:
 
@@ -230,3 +230,5 @@ Add one entry after each phase: date, what was done, what was found, open points
 | 2026-11-02 | 0 | Trial account created: `dynrtech.freshdesk.com`. Trial ends about 2026-11-23. Steps 5 to 10 open. Next: get the support address, API key (keep in local `.env` only), and email configuration id. Then turn off the requester "New Ticket Created" notification, send a test email from a member mailbox, and run the curl round trip. Save the ticket and conversation JSON (fake data) in `samples/`. |
 | 2026-11-03 | 0 | Done. Support address `support@dynrtech.freshdesk.com`, email configuration id `39000068272`. Domain, key, and id are in the local `src/ulink-api/.env`, with placeholders in `.env.example`. Test ticket 4: the agent reply went out (no failed or pending delivery), and the member reply joined ticket 4 as `incoming: true`. The reply landed in the member Spam folder or was hard to find, so look there first in Phase 3. Samples in `samples/ticket.json` and `samples/conversations.json` (addresses and attachment URLs masked). Open: a member reply with an attachment, for Phase 2. |
 | 2026-11-03 | 1 | Code done: `config.freshdesk` block, `fetchNewSubmissions` in `channels/freshdeskChannel.js`, test `tests/freshdeskChannel.test.js`. Live run on dev: tickets 1 to 4 gave 4 cases, the second run saved nothing. Tickets 1 to 3 are the Freshdesk demo tickets. Code review changes: fixed 24-hour window instead of a cursor from the last saved message (a failed ticket was lost), skip saved tickets before the detail call, skip outbound and old tickets, 30-second request timeout, 2-minute cap on `Retry-After`, and email-intake skips with a reason when the Freshdesk domain or key is empty. Open: a second live run after the review changes. |
+| 2026-11-03 | 2 | Code done in `channels/freshdeskChannel.js`: attachment download for the first message and replies, member replies as `conv:<id>` with references `fd-ticket:<ticketId>`, replies read on old and outbound tickets too. Test `tests/freshdeskChannel.test.js`. Ticket 4 stays without its PDFs, because it was saved in Phase 1. Open: live test with a new email with two PDF files and a member reply with one more file, then code review. |
+| 2026-11-03 | 2 | Live test passed: ticket 5 (one PDF) and its member reply (one PDF) are one case, and ticket 4 got both PDFs after the dev cases were cleared. Replies that agents type in Freshdesk are not stored (owner decision: store outbound only when the system sends it, Phase 3). Code review changes: replies are read only for tickets with a stored first message, and one query finds those tickets. Not changed: no size cap on attachment downloads (Freshdesk caps one email at 20 MB), quoted links in reply HTML can be fetched again (same as IMAP), and one conversations call per updated known ticket per run (`ponytail:` note). |

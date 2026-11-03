@@ -4,7 +4,8 @@ const { EmailMessage } = require('../db/models');
 /**
  * Freshdesk channel adapter (docs/imp/CR/SYSTEM_6/freshdesk/FRESHDESK_EMAIL_PLAN.md).
  * Each Freshdesk ticket becomes the same Submission shape as channels/imapSmtpChannel.js,
- * so no caller changes. Phase 1: the first message of each ticket only.
+ * so no caller changes. The first message of a ticket is `ticket:<id>`; each member reply is `conv:<id>`, and its
+ * references point at `fd-ticket:<ticketId>` so threadMatcher joins it to the ticket's case.
  */
 
 // Every run re-reads the tickets created in this window, so a ticket that failed is tried again on the next run.
@@ -43,13 +44,45 @@ async function request(path) {
   }
 }
 
+// GET every page of a Freshdesk list path.
+async function requestAllPages(path) {
+  const rows = [];
+  for (let page = 1; ; page += 1) {
+    const batch = await request(`${path}${path.includes('?') ? '&' : '?'}per_page=${PER_PAGE}&page=${page}`);
+    rows.push(...batch);
+    if (batch.length < PER_PAGE) return rows;
+  }
+}
+
 // "DRT <support@x.com>" -> "support@x.com"; a list becomes one comma-separated string, as on IMAP.
 function joinAddresses(list) {
   const addresses = (list || []).map((entry) => (entry.match(/<([^>]+)>/)?.[1] || entry).trim()).filter(Boolean);
   return addresses.join(', ') || null;
 }
 
-function ticketSubmission(ticket) {
+// Download each file at once: the attachment_url is a signed link that expires. It needs no API key.
+async function downloadAttachments(attachments) {
+  const files = [];
+  for (const attachment of attachments || []) {
+    const response = await fetch(attachment.attachment_url, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    if (!response.ok) throw new Error(`Freshdesk attachment ${attachment.id} download failed with status ${response.status}`);
+    files.push({
+      filename: attachment.name || null,
+      contentType: attachment.content_type || null,
+      sizeBytes: attachment.size || null,
+      content: Buffer.from(await response.arrayBuffer()),
+    });
+  }
+  return files;
+}
+
+async function savedExternalIds(externalIds) {
+  if (externalIds.length === 0) return new Set();
+  const rows = await EmailMessage.findAll({ where: { source: 'freshdesk', externalId: externalIds }, attributes: ['externalId'] });
+  return new Set(rows.map((m) => m.externalId));
+}
+
+async function ticketSubmission(ticket) {
   return {
     source: 'freshdesk',
     externalId: `ticket:${ticket.id}`,
@@ -65,39 +98,90 @@ function ticketSubmission(ticket) {
     bodyHtml: ticket.description || null,
     receivedAt: new Date(ticket.created_at),
     rawSizeBytes: null,
-    attachments: [], // Phase 2
+    attachments: await downloadAttachments(ticket.attachments),
   };
+}
+
+async function conversationSubmission(ticket, conversation) {
+  return {
+    source: 'freshdesk',
+    externalId: `conv:${conversation.id}`,
+    direction: 'inbound',
+    messageId: `fd-conv:${conversation.id}`,
+    inReplyTo: `fd-ticket:${ticket.id}`,
+    references: `fd-ticket:${ticket.id}`,
+    from: joinAddresses([conversation.from_email]),
+    to: joinAddresses(conversation.to_emails),
+    cc: joinAddresses(conversation.cc_emails),
+    subject: ticket.subject || null,
+    bodyText: conversation.body_text || null,
+    bodyHtml: conversation.body || null,
+    receivedAt: new Date(conversation.created_at),
+    rawSizeBytes: null,
+    attachments: await downloadAttachments(conversation.attachments),
+  };
+}
+
+// Hand one Submission to onSubmission; a failure is reported for that message only.
+async function submitOne(results, externalId, buildSubmission, onSubmission) {
+  try {
+    results.push({ externalId, ok: true, ...(await onSubmission(await buildSubmission())) });
+    return true;
+  } catch (error) {
+    results.push({ externalId, ok: false, error: error.message });
+    return false;
+  }
 }
 
 async function fetchNewSubmissions(onSubmission) {
   assertFreshdeskConfigured();
   const since = new Date(Date.now() - LOOKBACK_MS);
   const sinceParam = encodeURIComponent(since.toISOString().replace(/\.\d{3}Z$/, 'Z'));
+  const tickets = await requestAllPages(`/tickets?updated_since=${sinceParam}&order_by=updated_at&order_type=asc`);
+  // One query: the tickets whose first message is already stored, inbound (Phase 1) or sent by us as a new
+  // outbound ticket (Phase 4). Both carry messageId fd-ticket:<id>.
+  const ticketMessageIds = tickets.map((t) => `fd-ticket:${t.id}`);
+  const known = new Set(
+    ticketMessageIds.length === 0
+      ? []
+      : (await EmailMessage.findAll({ where: { messageId: ticketMessageIds }, attributes: ['messageId'] })).map((m) => m.messageId)
+  );
   const results = [];
-  for (let page = 1; ; page += 1) {
-    const tickets = await request(
-      `/tickets?updated_since=${sinceParam}&order_by=updated_at&order_type=asc&per_page=${PER_PAGE}&page=${page}`
-    );
-    // Only tickets a member started inside the window; an old ticket that was only updated is not a new claim.
-    const ids = tickets
-      .filter((t) => t.source !== SOURCE_OUTBOUND_EMAIL && new Date(t.created_at) >= since)
-      .map((t) => `ticket:${t.id}`);
-    // Skip tickets already saved before the detail call, so a re-read costs no extra API request.
-    const saved = new Set(
-      (await EmailMessage.findAll({ where: { source: 'freshdesk', externalId: ids }, attributes: ['externalId'] })).map(
-        (m) => m.externalId
-      )
-    );
-    for (const externalId of ids.filter((id) => !saved.has(id))) {
-      try {
-        const ticket = await request(`/tickets/${externalId.slice('ticket:'.length)}?include=requester`);
-        results.push({ externalId, ok: true, ...(await onSubmission(ticketSubmission(ticket))) });
-      } catch (error) {
-        results.push({ externalId, ok: false, error: error.message });
-      }
+  for (const listed of tickets) {
+    const ticketExternalId = `ticket:${listed.id}`;
+    // First message: only a ticket a member started inside the window. An old ticket that was only updated is not a
+    // new claim, and an outbound ticket was started by us.
+    const isNewTicket = listed.source !== SOURCE_OUTBOUND_EMAIL && new Date(listed.created_at) >= since;
+    if (isNewTicket && !known.has(`fd-ticket:${listed.id}`)) {
+      const saved = await submitOne(
+        results,
+        ticketExternalId,
+        async () => ticketSubmission(await request(`/tickets/${listed.id}?include=requester`)),
+        onSubmission
+      );
+      if (saved) known.add(`fd-ticket:${listed.id}`);
     }
-    if (tickets.length < PER_PAGE) return results;
+    // A reply joins the case of its ticket's first message. With no stored first message (a ticket from before the
+    // switch, or one that failed), it would start a new case for every reply, so it is not read.
+    if (!known.has(`fd-ticket:${listed.id}`)) continue;
+
+    // Member replies on a known ticket, old ones included.
+    // ponytail: one conversations call per ticket updated in the last 24 hours, every run; store a cursor if the
+    // Freshdesk rate limit becomes a problem.
+    let conversations;
+    try {
+      conversations = await requestAllPages(`/tickets/${listed.id}/conversations`);
+    } catch (error) {
+      results.push({ externalId: `${ticketExternalId}:conversations`, ok: false, error: error.message });
+      continue;
+    }
+    const replies = conversations.filter((c) => c.incoming && !c.private && new Date(c.created_at) >= since);
+    const saved = await savedExternalIds(replies.map((c) => `conv:${c.id}`));
+    for (const reply of replies.filter((c) => !saved.has(`conv:${c.id}`))) {
+      await submitOne(results, `conv:${reply.id}`, () => conversationSubmission(listed, reply), onSubmission);
+    }
   }
+  return results;
 }
 
 async function sendReply() {
