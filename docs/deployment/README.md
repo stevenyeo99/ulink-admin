@@ -8,6 +8,7 @@ Start here. Which file answers what:
 | Release a new **console** build | `DEPLOY_CONSOLE.md` |
 | Release a new **API** build, change its `.env`, check / roll back | `DEPLOY_API.md` |
 | Scheduled pipelines (cron) — install, change, pause, prod | `CRONTAB_SETUP.md` |
+| Create a console user, reset a password, disable a user (dev, UAT, prod) | `USER_MANAGEMENT.md` |
 | How the server was set up, why, what was checked, progress | `ULINK_AWS_User_and_Tailscale_Setup.md` |
 | Add **prod** next to UAT | `ULINK_AWS_User_and_Tailscale_Setup.md` Part 7 |
 | Original plan (Phases 0–8, written before the server was inspected) | `ULINK_AWS_Deployment_Guide.docx` |
