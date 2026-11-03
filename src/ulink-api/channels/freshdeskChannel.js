@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { EmailMessage } = require('../db/models');
+const config = require('../config');
 const freshdesk = require('./freshdeskClient');
 
 /**
@@ -16,6 +17,9 @@ const freshdesk = require('./freshdeskClient');
 // cursor if that is not enough.
 const LOOKBACK_MS = 24 * 60 * 60 * 1000;
 const SOURCE_OUTBOUND_EMAIL = 10; // a ticket an agent (or the pipeline) started; the member did not send it
+// A new outbound ticket must have a status and a priority. Dev default: Open, Low. ULINK to confirm.
+const OUTBOUND_TICKET_STATUS = 2; // Open
+const OUTBOUND_TICKET_PRIORITY = 1; // Low
 
 // "DRT <support@x.com>" -> "support@x.com"; a list becomes one comma-separated string, as on IMAP.
 function joinAddresses(list) {
@@ -160,11 +164,16 @@ function textToHtml(text) {
   return escaped.replace(/\r?\n/g, '<br>');
 }
 
-// Template attachments are nodemailer-shaped: { filename, path } or { filename, content }.
-async function replyForm(body, ccEmails, attachments) {
+// The call's fields as JSON, or as multipart when there are attachments. Template attachments are nodemailer-shaped:
+// { filename, path } or { filename, content }. An array field becomes `name[]` in the form.
+async function payloadWith(fields, attachments) {
+  const clean = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined && !(Array.isArray(v) && v.length === 0)));
+  if (!attachments?.length) return clean;
   const form = new FormData();
-  form.append('body', body);
-  for (const email of ccEmails) form.append('cc_emails[]', email);
+  for (const [name, value] of Object.entries(clean)) {
+    if (Array.isArray(value)) value.forEach((v) => form.append(`${name}[]`, v));
+    else form.append(name, String(value));
+  }
   for (const attachment of attachments) {
     const content = attachment.content ?? (await fs.promises.readFile(attachment.path));
     form.append('attachments[]', new Blob([content]), attachment.filename || (attachment.path ? path.basename(attachment.path) : 'attachment'));
@@ -173,26 +182,57 @@ async function replyForm(body, ccEmails, attachments) {
 }
 
 /**
- * Reply in the member's ticket. Freshdesk sends a reply only to the ticket's requester, in the same email thread, and
- * keeps the ticket's own subject (reply.subject is not used). So the requester is read first: a reply meant for
- * anyone else (an internal notice) must not go out to the member. Returns fd-conv:<id> for the sender's outbound row.
+ * Send one pipeline email through Freshdesk. Returns the message id for the sender's outbound row.
+ *  - No ticket yet (first API case email, or a case that started on IMAP): a new outbound ticket -> fd-ticket:<id>.
+ *    A member reply to it comes back as a conversation and joins the same case (fetchNewSubmissions).
+ *  - To the ticket's requester: a reply in the ticket -> fd-conv:<id>. Freshdesk keeps the ticket subject.
+ *  - To anyone else (an internal notice to Ops): a forward of the ticket -> fd-conv:<id>. A reply only ever reaches
+ *    the requester, so the requester is read first and an internal notice never goes to the member.
+ *    Dev default; ULINK to confirm forward or private note (freshdesk_clarification.md question 6).
  */
 async function sendReply(submission, reply) {
-  const ticketId = ticketIdOf(submission);
-  if (!ticketId) throw new Error('freshdeskChannel: no Freshdesk ticket to reply to (a new outbound ticket is Phase 4)');
-  const ticket = await freshdesk.get(`/tickets/${ticketId}?include=requester`);
-  const requester = (ticket.requester?.email || '').trim().toLowerCase();
-  const to = (reply.to || submission.from || '').trim().toLowerCase();
-  if (!requester || to !== requester) {
-    throw new Error('freshdeskChannel: sending to an address other than the ticket requester is Phase 4 (forward)');
-  }
-
   const body = textToHtml(reply.bodyText);
   const ccEmails = splitAddresses(reply.cc);
-  const payload = reply.attachments?.length
-    ? await replyForm(body, ccEmails, reply.attachments)
-    : { body, ...(ccEmails.length ? { cc_emails: ccEmails } : {}) };
-  const conversation = await freshdesk.post(`/tickets/${ticketId}/reply`, payload);
+  const toEmails = splitAddresses(reply.to || submission.from);
+  if (toEmails.length === 0) throw new Error('freshdeskChannel: no recipient for the email');
+
+  const ticketId = ticketIdOf(submission);
+  if (!ticketId) {
+    const emailConfigId = Number(config.freshdesk.emailConfigId);
+    if (!Number.isInteger(emailConfigId) || emailConfigId <= 0) {
+      throw new Error('FRESHDESK_EMAIL_CONFIG_ID must be configured (a number) for a new outbound ticket');
+    }
+    const [email, ...otherTo] = toEmails;
+    const ticket = await freshdesk.post(
+      '/tickets/outbound_email',
+      await payloadWith(
+        {
+          email,
+          subject: reply.subject || submission.subject || '(no subject)',
+          description: body,
+          email_config_id: emailConfigId,
+          status: OUTBOUND_TICKET_STATUS,
+          priority: OUTBOUND_TICKET_PRIORITY,
+          cc_emails: [...otherTo, ...ccEmails],
+        },
+        reply.attachments
+      )
+    );
+    return { messageId: `fd-ticket:${ticket.id}` };
+  }
+
+  const ticket = await freshdesk.get(`/tickets/${ticketId}?include=requester`);
+  const requester = (ticket.requester?.email || '').trim().toLowerCase();
+  if (!requester) throw new Error(`freshdeskChannel: ticket ${ticketId} has no requester email`);
+  const others = toEmails.filter((e) => e.toLowerCase() !== requester);
+  // The member is a recipient: a reply, with any other recipient in CC. Nobody else: a forward, without the member's
+  // own files (Ops opens the ticket for those; a third party must not get them).
+  const conversation = others.length < toEmails.length
+    ? await freshdesk.post(`/tickets/${ticketId}/reply`, await payloadWith({ body, cc_emails: [...others, ...ccEmails] }, reply.attachments))
+    : await freshdesk.post(
+      `/tickets/${ticketId}/forward`,
+      await payloadWith({ body, to_emails: toEmails, cc_emails: ccEmails, include_original_attachments: false }, reply.attachments)
+    );
   return { messageId: `fd-conv:${conversation.id}` };
 }
 

@@ -1,5 +1,6 @@
 // channels/freshdeskChannel.js: each ticket's first message and each member reply becomes one Submission.
-jest.mock('../config', () => ({ freshdesk: { domain: 'x.freshdesk.com', apiKey: 'k' } }));
+jest.mock('../config', () => ({ freshdesk: { domain: 'x.freshdesk.com', apiKey: 'k', emailConfigId: '39' } }));
+const config = require('../config');
 jest.mock('../db/models', () => ({ EmailMessage: { findAll: jest.fn(async () => []) } }));
 const { EmailMessage } = require('../db/models');
 const { fetchNewSubmissions, sendReply } = require('../channels/freshdeskChannel');
@@ -155,20 +156,61 @@ describe('sendReply', () => {
     expect(await files[0].text()).toBe('pdf');
   });
 
-  it('never posts a reply meant for someone other than the ticket requester', async () => {
+  it('forwards the ticket to anyone other than the requester, and never replies to the member with it', async () => {
     global.fetch = freshdeskWith(57);
     // email-sender internal notice: to = ops, from = member
-    await expect(sendReply(ticketSide, { to: 'ops@x.com', bodyText: 'x' })).rejects.toThrow('Phase 4');
+    expect(await sendReply(ticketSide, { to: 'ops@x.com', cc: 'lead@x.com', bodyText: 'Docs incomplete' })).toEqual({ messageId: 'fd-conv:57' });
     // api-email-sender internal email: no from at all
-    await expect(sendReply({ messageId: 'fd-conv:1', references: 'fd-ticket:4' }, { to: 'ops@x.com', bodyText: 'x' })).rejects.toThrow('Phase 4');
-    // a CC'd person replied last: Freshdesk would still email the requester
-    await expect(sendReply({ ...ticketSide, from: 'cc@x.com' }, { to: 'cc@x.com', bodyText: 'x' })).rejects.toThrow('Phase 4');
+    await sendReply({ messageId: 'fd-conv:1', references: 'fd-ticket:4' }, { to: 'ops@x.com', bodyText: 'x' });
+    // a CC'd person replied last: a reply would still go to the requester, so it is a forward
+    await sendReply({ ...ticketSide, from: 'cc@x.com' }, { to: 'cc@x.com', bodyText: 'x' });
+
+    const posts = fetch.mock.calls.filter(([, i]) => i?.method === 'POST');
+    expect(posts.map(([url]) => url)).toEqual(Array(3).fill('https://x.freshdesk.com/api/v2/tickets/4/forward'));
+    expect(JSON.parse(posts[0][1].body)).toEqual({ body: 'Docs incomplete', to_emails: ['ops@x.com'], cc_emails: ['lead@x.com'], include_original_attachments: false });
+  });
+
+  it('replies when the member is one of several recipients, and refuses a ticket with no requester', async () => {
+    global.fetch = freshdeskWith(58);
+    await sendReply(ticketSide, { to: 'member@example.com, spouse@x.com', cc: 'ops@x.com', bodyText: 'x' });
+    const [url, init] = fetch.mock.calls.find(([, i]) => i?.method === 'POST');
+    expect(url).toBe('https://x.freshdesk.com/api/v2/tickets/4/reply');
+    expect(JSON.parse(init.body).cc_emails).toEqual(['spouse@x.com', 'ops@x.com']);
+
+    global.fetch = jest.fn(async (u, i) => (i?.method === 'POST' ? reply({ id: 1 }) : reply({ id: 4 })));
+    await expect(sendReply(ticketSide, { to: 'member@example.com', bodyText: 'x' })).rejects.toThrow('has no requester email');
     expect(fetch.mock.calls.some(([, i]) => i?.method === 'POST')).toBe(false);
   });
 
-  it('refuses a send with no ticket yet (Phase 4: new outbound ticket)', async () => {
+  it('starts a new outbound ticket when there is no ticket yet, with the template subject', async () => {
+    global.fetch = jest.fn(async () => reply({ id: 77 }));
+    const result = await sendReply({ messageId: null, references: null }, { to: 'customer@x.com, other@x.com', cc: 'ops@x.com', subject: 'Claim (Ref: T1)', bodyText: 'Hi' });
+
+    expect(result).toEqual({ messageId: 'fd-ticket:77' });
+    const [url, init] = fetch.mock.calls[0];
+    expect(fetch).toHaveBeenCalledTimes(1); // no ticket to read first
+    expect(url).toBe('https://x.freshdesk.com/api/v2/tickets/outbound_email');
+    expect(JSON.parse(init.body)).toEqual({
+      email: 'customer@x.com',
+      subject: 'Claim (Ref: T1)',
+      description: 'Hi',
+      email_config_id: 39,
+      status: 2,
+      priority: 1,
+      cc_emails: ['other@x.com', 'ops@x.com'],
+    });
+  });
+
+  it('needs FRESHDESK_EMAIL_CONFIG_ID for a new outbound ticket', async () => {
     global.fetch = jest.fn();
-    await expect(sendReply({ messageId: null, references: null }, { to: 'a@x.com', bodyText: 'x' })).rejects.toThrow('Phase 4');
+    try {
+      for (const value of [undefined, 'support']) {
+        config.freshdesk.emailConfigId = value;
+        await expect(sendReply({}, { to: 'a@x.com', bodyText: 'x' })).rejects.toThrow('FRESHDESK_EMAIL_CONFIG_ID');
+      }
+    } finally {
+      config.freshdesk.emailConfigId = '39';
+    }
     expect(fetch).not.toHaveBeenCalled();
   });
 });
