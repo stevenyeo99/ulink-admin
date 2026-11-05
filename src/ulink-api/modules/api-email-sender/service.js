@@ -1,6 +1,7 @@
 const { sequelize, Sequelize, Case, CaseEvent, ClaimRoute, EmailThread, EmailMessage, ApiCaseStep } = require('../../db/models');
 const config = require('../../config');
 const { getChannelAdapter } = require('../../channels');
+const imapSmtpChannel = require('../../channels/imapSmtpChannel');
 const { render } = require('../email-sender/templates');
 const { getSettings } = require('../settings/settings');
 
@@ -147,7 +148,10 @@ async function send(request) {
     : { [Sequelize.Op.or]: [{ direction: 'inbound' }, { direction: 'outbound', toAddr: to }] };
   const last = thread && await EmailMessage.findOne({ where: { threadId: thread.id, ...conversation }, order: [['createdAt', 'DESC']] });
 
-  const { messageId } = await getChannelAdapter().sendReply(
+  // Internal emails always go by SMTP: on Freshdesk an API case gets a ticket only from its first member email
+  // (ULINK opens one only to ask the member for documents), never from a team notice.
+  const sender = email.audience === 'internal' ? imapSmtpChannel : getChannelAdapter();
+  const { messageId } = await sender.sendReply(
     { messageId: last?.messageId || null, references: last?.referencesHeader || null },
     { to, cc, subject, bodyText: rendered.bodyText, attachments: rendered.attachments }
   );

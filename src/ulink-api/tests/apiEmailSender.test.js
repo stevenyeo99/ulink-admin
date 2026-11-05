@@ -11,8 +11,10 @@ jest.mock('../config', () => ({
 jest.mock('../channels', () => {
   let n = 0;
   const sendReply = jest.fn(async () => ({ messageId: `<m${(n += 1)}@test>` }));
-  return { sendReply, getChannelAdapter: () => ({ sendReply }) };
+  // One mock for both senders; the third argument says which one was called.
+  return { sendReply, getChannelAdapter: () => ({ sendReply: (s, r) => sendReply(s, r, 'channel') }) };
 });
+jest.mock('../channels/imapSmtpChannel', () => ({ sendReply: (s, r) => require('../channels').sendReply(s, r, 'smtp') }));
 jest.mock('../db/models', () => {
   const { Sequelize } = jest.requireActual('sequelize');
   const state = { requests: [], steps: [], threads: [], messages: [], events: [] };
@@ -90,6 +92,7 @@ it('replies in the same thread afterwards, and sends internal emails to the inte
   const [submission, reply] = sendReply.mock.calls[1];
   expect(submission).toEqual({ messageId: null, references: null }); // internal side starts its own chain (S19)
   expect(reply.to).toBe('ops@test');
+  expect(sendReply.mock.calls.map((c) => c[2])).toEqual(['channel', 'smtp']); // customer on the channel, internal by SMTP
   expect(reply.subject).toMatch(/Member verification hold .* \(Ref: STEVENEVERHILLC58\)$/);
   expect(state.threads).toHaveLength(1);
 });
