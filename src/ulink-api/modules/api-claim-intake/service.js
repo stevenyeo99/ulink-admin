@@ -112,7 +112,7 @@ async function scheduledRange() {
  * An explicit range (a manual catch-up) is used as given and doesn't move the checkpoint.
  * An IAS failure throws before anything is written; the next run retries the same range.
  * One bad or clashing claim is reported and skipped, never blocking the rest of the list. A claim of a policy
- * not on the System settings policy list is skipped and counted (skippedPolicy).
+ * not on the System settings policy list (or on it, when the list is a skip list) is skipped and counted (skippedPolicy).
  */
 async function run(range) {
   const scheduled = !range;
@@ -120,8 +120,10 @@ async function run(range) {
   if (resolved.error) throw new Error(resolved.error);
 
   const { claims } = await fetchApiClaims(resolved);
-  // System settings "Only these policies" (stored normalized; empty = every policy). A row without policyRefNo is kept.
-  const policies = new Set((await getSettings()).apiPolicyRefNos);
+  // System settings policy filter: all / include / exclude the listed policies (stored normalized; an empty list
+  // filters nothing). A row without policyRefNo is kept.
+  const { apiPolicyMode, apiPolicyRefNos } = await getSettings();
+  const policies = new Set(apiPolicyMode === 'all' ? [] : apiPolicyRefNos);
   const summary = { ...resolved, fetched: claims.length, inserted: 0, skippedExisting: 0, skippedInvalid: 0, skippedPolicy: 0, skippedPolicyClaims: [], errors: [] };
 
   for (const claim of claims) {
@@ -131,7 +133,8 @@ async function run(range) {
       continue;
     }
     const policy = claim.policyRefNo == null ? '' : normalizeListValue(claim.policyRefNo);
-    if (policies.size > 0 && policy !== '' && !policies.has(policy)) {
+    const listed = policies.has(policy);
+    if (policies.size > 0 && policy !== '' && (apiPolicyMode === 'exclude' ? listed : !listed)) {
       // Named in the run summary: a skipped claim never becomes a case, so this is its only trace.
       summary.skippedPolicy += 1;
       summary.skippedPolicyClaims.push({ clNo: claim.clNo, tpaCaseNumber: claim.tpaCaseNumber, policyRefNo: policy });

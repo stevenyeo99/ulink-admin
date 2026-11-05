@@ -178,6 +178,27 @@ describe('run', () => {
     expect([...models.store.keys()]).toEqual(['1', '3', '4']);
   });
 
+  it('skips only claims of the listed policies when the list is a skip list', async () => {
+    settings.getSettings.mockResolvedValueOnce({ ...settings.DEFAULTS, apiPolicyRefNos: ['POL-A'], apiPolicyMode: 'exclude' });
+    iasReturns([
+      { ...claim('1', 'T1'), policyRefNo: ' pol-a ' },
+      { ...claim('2', 'T2'), policyRefNo: 'POL-B' },
+      claim('3', 'T3'),
+    ]);
+
+    const summary = await run();
+
+    expect(summary).toMatchObject({ fetched: 3, inserted: 2, skippedPolicy: 1, errors: [] });
+    expect(summary.skippedPolicyClaims).toEqual([{ clNo: '1', tpaCaseNumber: 'T1', policyRefNo: 'POL-A' }]);
+    expect([...models.store.keys()]).toEqual(['2', '3']);
+  });
+
+  it('keeps every policy with mode all, even with a stored list', async () => {
+    settings.getSettings.mockResolvedValueOnce({ ...settings.DEFAULTS, apiPolicyRefNos: ['POL-A'], apiPolicyMode: 'all' });
+    iasReturns([{ ...claim('1', 'T1'), policyRefNo: 'POL-B' }]);
+    expect(await run()).toMatchObject({ inserted: 1, skippedPolicy: 0 });
+  });
+
   it('keeps every policy when the list is empty', async () => {
     iasReturns([{ ...claim('1', 'T1'), policyRefNo: 'POL-B' }]);
     expect(await run()).toMatchObject({ inserted: 1, skippedPolicy: 0 });

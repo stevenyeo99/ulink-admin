@@ -62,11 +62,14 @@ describe('validateStpForm', () => {
 
   // API policy filter: a list of policy reference numbers; empty = every policy.
   it('checks the policy list', () => {
-    expect(validateStpForm({ switches: { apiPolicyRefNos: [] } }, rules).errors).toEqual([]);
-    expect(validateStpForm({ switches: { apiPolicyRefNos: ['POL-A', 'POL-B'] } }, rules).errors).toEqual([]);
-    expect(validateStpForm({ switches: { apiPolicyRefNos: 'POL-A' } }, rules).errors).toEqual(['apiPolicyRefNos must be a list of non-empty values.']);
-    expect(validateStpForm({ switches: { apiPolicyRefNos: ['POL-A', ' '] } }, rules).errors).toEqual(['apiPolicyRefNos must be a list of non-empty values.']);
-    expect(validateStpForm({ switches: { apiPolicyRefNos: ['POL-A', ' pol-a'] } }, rules).errors).toEqual(['apiPolicyRefNos has a value twice.']);
+    expect(validateStpForm({ switches: { apiPolicyMode: 'include', apiPolicyRefNos: [] } }, rules).errors).toEqual([]);
+    expect(validateStpForm({ switches: { apiPolicyMode: 'exclude' } }, rules).errors).toEqual([]);
+    expect(validateStpForm({ switches: { apiPolicyMode: 'only' } }, rules).errors).toEqual(['apiPolicyMode must be one of all, include, exclude.']);
+    expect(validateStpForm({ switches: { apiPolicyMode: 'include', apiPolicyRefNos: ['POL-A', 'POL-B'] } }, rules).errors).toEqual([]);
+    expect(validateStpForm({ switches: { apiPolicyMode: 'include', apiPolicyRefNos: 'POL-A' } }, rules).errors).toEqual(['apiPolicyRefNos must be a list of non-empty values.']);
+    expect(validateStpForm({ switches: { apiPolicyMode: 'include', apiPolicyRefNos: ['POL-A', ' '] } }, rules).errors).toEqual(['apiPolicyRefNos must be a list of non-empty values.']);
+    expect(validateStpForm({ switches: { apiPolicyMode: 'include', apiPolicyRefNos: ['POL-A', ' pol-a'] } }, rules).errors).toEqual(['apiPolicyRefNos has a value twice.']);
+    expect(validateStpForm({ switches: { apiPolicyRefNos: ['POL-A'] } }, rules).errors).toEqual(['apiPolicyRefNos must be saved with apiPolicyMode.']);
   });
 });
 

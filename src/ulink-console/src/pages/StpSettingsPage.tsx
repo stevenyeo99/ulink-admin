@@ -103,7 +103,7 @@ interface Draft {
   switches: Switches;
   threshold: string; // aiConfidenceThreshold as a percentage, as typed
   numbers: Record<NumberKey, string>; // the whole-number settings, as typed
-  policyOnly: boolean; // API policy filter: false = all policies
+  policyMode: PolicyMode; // API policy filter
   policies: string; // the policy list, as typed (one per line)
 }
 
@@ -111,7 +111,18 @@ interface Draft {
 const parsePolicies = (text: string): string[] => [...new Set(text.split('\n').map((p) => p.trim().toUpperCase()).filter(Boolean))].sort();
 // The stored list, sorted so a reordered box is not a change. Missing (an API older than this page): all policies.
 const storedPolicies = (switches: Switches): string[] => [...(switches.apiPolicyRefNos ?? [])].sort();
-const policyLabel = (list: string[]) => (list.length === 0 ? 'All policies' : list.join(', '));
+type PolicyMode = Switches['apiPolicyMode'];
+const POLICY_MODES: { mode: PolicyMode; label: string }[] = [
+  { mode: 'all', label: 'All policies' },
+  { mode: 'include', label: 'Only these policies' },
+  { mode: 'exclude', label: 'All policies except these' },
+];
+// An empty list filters nothing, so it shows as All policies.
+const storedPolicyMode = (switches: Switches): PolicyMode => (storedPolicies(switches).length === 0 ? 'all' : switches.apiPolicyMode);
+// What the filter does, to compare draft and stored: mode all, or an empty list, is all policies (the API ignores the list).
+const policyState = (mode: PolicyMode, list: string[]) => (mode === 'all' || list.length === 0 ? 'all' : `${mode}\n${list.join('\n')}`);
+const policyLabel = (mode: PolicyMode, list: string[]) =>
+  mode === 'all' || list.length === 0 ? 'All policies' : `${mode === 'exclude' ? 'All except' : 'Only'} ${list.join(', ')}`;
 
 // The whole-number settings (all on System settings): label before the box, unit after, what it does.
 type NumberSetting = { key: NumberKey; label: string; unit: string; help: string };
@@ -139,7 +150,7 @@ function draftFrom(data: StpSettings): Draft {
     switches: { ...data.switches },
     threshold: String(Math.round(data.switches.aiConfidenceThreshold * 100)),
     numbers: Object.fromEntries(NUMBER_SETTINGS.map((n) => [n.key, String(data.switches[n.key])])) as Record<NumberKey, string>,
-    policyOnly: storedPolicies(data.switches).length > 0,
+    policyMode: storedPolicyMode(data.switches),
     policies: storedPolicies(data.switches).join('\n'),
   };
 }
@@ -192,7 +203,7 @@ function StpForm({ view, data, canEdit }: { view: View; data: StpSettings; canEd
   const [source, setSource] = useState<Source>('EMAIL');
   const [draft, setDraft] = useState<Draft>(() => draftFrom(data));
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const draftPolicies = useMemo(() => (draft.policyOnly ? parsePolicies(draft.policies) : []), [draft.policyOnly, draft.policies]);
+  const draftPolicies = useMemo(() => (draft.policyMode === 'all' ? [] : parsePolicies(draft.policies)), [draft.policyMode, draft.policies]);
 
   // Every difference from what is stored, in words — the Review & save list, and the change count.
   const changes = useMemo(() => {
@@ -220,8 +231,9 @@ function StpForm({ view, data, canEdit }: { view: View; data: StpSettings; canEd
       const value = parseWhole(draft.numbers[n.key], data.numberRanges[n.key]);
       if (value !== null && value !== data.switches[n.key]) list.push({ key: n.key, text: `${n.label}: ${data.switches[n.key]} → ${value} ${n.unit}` });
     }
-    if (!isStp && draftPolicies.join('\n') !== storedPolicies(data.switches).join('\n')) {
-      list.push({ key: 'apiPolicyRefNos', text: `API claims from: ${policyLabel(storedPolicies(data.switches))} → ${policyLabel(draftPolicies)}` });
+    const storedMode = storedPolicyMode(data.switches);
+    if (!isStp && policyState(draft.policyMode, draftPolicies) !== policyState(storedMode, storedPolicies(data.switches))) {
+      list.push({ key: 'apiPolicyRefNos', text: `API claims from: ${policyLabel(storedMode, storedPolicies(data.switches))} → ${policyLabel(draft.policyMode, draftPolicies)}` });
     }
     return list;
   }, [data, draft, draftPolicies, isStp, page]);
@@ -241,7 +253,7 @@ function StpForm({ view, data, canEdit }: { view: View; data: StpSettings; canEd
   const numberErrors = Object.fromEntries(page.numbers
     .filter((n) => parseWhole(draft.numbers[n.key], data.numberRanges[n.key]) === null)
     .map((n) => [n.key, `Enter a whole number from ${data.numberRanges[n.key][0]} to ${data.numberRanges[n.key][1]}.`]));
-  const policyError = !isStp && draft.policyOnly && draftPolicies.length === 0 ? 'Add at least one policy reference number, or choose All policies.' : null;
+  const policyError = !isStp && draft.policyMode !== 'all' && draftPolicies.length === 0 ? 'Add at least one policy reference number, or choose All policies.' : null;
   const errorCount = Object.keys(ruleErrors).length + (thresholdError ? 1 : 0) + Object.keys(numberErrors).length + (policyError ? 1 : 0);
   const dirty = changes.length > 0;
 
@@ -267,7 +279,8 @@ function StpForm({ view, data, canEdit }: { view: View; data: StpSettings; canEd
         switches: {
           ...Object.fromEntries(page.switches.filter((s) => changed.has(s.key)).map((s) => [s.key, draft.switches[s.key]])),
           ...(changed.has('aiConfidenceThreshold') && { aiConfidenceThreshold: (parsePercent(draft.threshold) ?? 0) / 100 }),
-          ...(changed.has('apiPolicyRefNos') && { apiPolicyRefNos: draftPolicies }),
+          // All policies keeps the stored list, so switching back to a list mode does not mean typing it again.
+          ...(changed.has('apiPolicyRefNos') && { apiPolicyMode: draft.policyMode, ...(draft.policyMode !== 'all' && { apiPolicyRefNos: draftPolicies }) }),
           ...Object.fromEntries(page.numbers.filter((n) => changed.has(n.key)).map((n) => [n.key, parseWhole(draft.numbers[n.key], data.numberRanges[n.key])])),
         },
       });
@@ -402,25 +415,25 @@ function StpForm({ view, data, canEdit }: { view: View; data: StpSettings; canEd
             <fieldset className={clsx('mt-3 rounded-lg p-2', changes.some((c) => c.key === 'apiPolicyRefNos') && changedMark)}>
               <legend className="text-sm font-medium text-slate-800">API cases: which policies</legend>
               <p className="mt-1 text-sm text-slate-600">
-                Only claims of these IAS policies (policy reference number) become cases at the daily API claim list. Other claims are skipped. A
-                claim that IAS lists without a policy reference number is always kept. Adding a policy later does not bring back claims already
-                skipped.
+                Which IAS policies (policy reference number) become cases at the daily API claim list: all, only the listed ones, or all
+                except the listed ones. Other claims are skipped. A claim that IAS lists without a policy reference number is always kept.
+                Changing the list later does not bring back claims already skipped.
               </p>
               <div className="mt-2 flex flex-wrap gap-4 text-sm text-slate-800">
-                {[false, true].map((only) => (
-                  <label key={String(only)} className="inline-flex items-center gap-2">
+                {POLICY_MODES.map(({ mode, label }) => (
+                  <label key={mode} className="inline-flex items-center gap-2">
                     <input
                       type="radio"
                       name="apiPolicyMode"
-                      checked={draft.policyOnly === only}
+                      checked={draft.policyMode === mode}
                       disabled={!canEdit}
-                      onChange={() => setDraft((d) => ({ ...d, policyOnly: only }))}
+                      onChange={() => setDraft((d) => ({ ...d, policyMode: mode }))}
                     />
-                    {only ? 'Only these policies' : 'All policies'}
+                    {label}
                   </label>
                 ))}
               </div>
-              {draft.policyOnly && (
+              {draft.policyMode !== 'all' && (
                 <textarea
                   value={draft.policies}
                   disabled={!canEdit}

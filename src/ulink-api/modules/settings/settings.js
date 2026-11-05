@@ -54,10 +54,16 @@ const DEFAULTS = {
   // only, never past values (SYSTEM_4 F3, E4-15 step 4). Off: the AI reads every claim without them. On from the start —
   // the owner approved it so (2026-10-16); it does nothing until a correction is marked trusted.
   usePastCorrections: true,
-  // API cases: only claims of these IAS policies (policyRefNo on the claim list row) become cases. Empty: every policy.
+  // API cases: which IAS policies (policyRefNo on the claim list row) become cases. all: every policy. include: only
+  // the claims of apiPolicyRefNos. exclude: every claim but those of apiPolicyRefNos. An empty list filters nothing.
+  // 'include' by default: a list saved before the mode existed keeps meaning "only these".
   // A row with no policyRefNo (IAS has not added the field yet) is kept, so a missing field never drops a claim.
+  apiPolicyMode: 'include',
   apiPolicyRefNos: [],
 };
+
+// Settings that take one of a fixed set of values.
+const CHOICES = { apiPolicyMode: ['all', 'include', 'exclude'] };
 
 // Settings that are whole numbers in a range (the rest of the numbers are shares 0–1). Sent to the console with the
 // settings, so its form checks the same ranges.
@@ -93,6 +99,7 @@ function settingError(key, value) {
     return new Set(normalized).size === normalized.length ? null : `${key} has a value twice.`;
   }
   if (typeof DEFAULTS[key] === 'boolean') return typeof value === 'boolean' ? null : `${key} must be on or off.`;
+  if (CHOICES[key]) return CHOICES[key].includes(value) ? null : `${key} must be one of ${CHOICES[key].join(', ')}.`;
   if (WHOLE_NUMBERS[key]) {
     const [min, max] = WHOLE_NUMBERS[key];
     return Number.isInteger(value) && value >= min && value <= max ? null : `${key} must be a whole number from ${min} to ${max}.`;

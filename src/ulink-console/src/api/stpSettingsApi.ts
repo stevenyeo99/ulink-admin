@@ -40,7 +40,8 @@ export interface Switches {
   mailboxEnabled: boolean;
   // API cases: the customer's missing-documents email (SYSTEM_4 E4-03).
   apiSendMissingDocumentsEmail: boolean;
-  // API cases: only claims of these IAS policies become cases; empty = every policy.
+  // API cases: all policies, only the listed ones (include), or all but the listed ones (exclude); an empty list filters nothing.
+  apiPolicyMode: 'all' | 'include' | 'exclude';
   apiPolicyRefNos: string[];
   // At or below this (0–1) the AI counts as unsure (SYSTEM_4 E4-07).
   aiConfidenceThreshold: number;

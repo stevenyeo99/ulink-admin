@@ -71,6 +71,8 @@ function validateStpForm(body, existingRules) {
     if (error) errors.push(error);
     else switches[key] = value;
   }
+  // The list means nothing without its mode: a client that sends the list alone (an old console tab) could flip it.
+  if ('apiPolicyRefNos' in (body?.switches || {}) && !('apiPolicyMode' in body.switches)) errors.push('apiPolicyRefNos must be saved with apiPolicyMode.');
 
   return { errors, form: { rules, blockedDiagnoses, switches } };
 }
