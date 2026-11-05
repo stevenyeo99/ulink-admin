@@ -106,3 +106,10 @@ describe('POST .../run with steps', () => {
     await new Promise((resolve) => setImmediate(resolve));
   });
 });
+
+it("the API pipeline's mailbox read takes the email pipeline's email-intake lock (one reader at a time)", async () => {
+  await pipelineService.executeSteps(runOf('API'), ['api-mailbox-replies']);
+  expect(ran).toEqual(['api-mailbox-replies']);
+  expect(jobLock.acquire).toHaveBeenCalledWith('email-intake');
+  expect(jobLock.release).toHaveBeenCalledWith('email-intake');
+});

@@ -8,7 +8,8 @@ const { forCase } = require('../llm-calls/log');
  *
  *   { name, inputStatus, inputs: ['earlier-job', ...], optionalInputs: [...], batchLimit,
  *     (inputStatus: one or several; optionalInputs: jobs that may not have run for the case yet)
- *     process({ caseRecord, input }) -> { output, nextStatus, message } | { wait: true, output } }
+ *     process({ caseRecord, input }) -> { output, nextStatus, message, save? } | { wait: true, output } }
+ *     (save(transaction): rows of the job's own, written with the status move — api-reply-intake's upload)
  *
  * `input` is { [earlierJob]: its latest DONE output } — a job only ever receives what the jobs it
  * names produced, so each job's input and output are explicit and stored (ulink_api_case_steps).
@@ -38,7 +39,7 @@ async function recordRetryable(caseId, job, status, fields) {
   return ApiCaseStep.create({ caseId, job, status, ...fields });
 }
 
-async function recordDone(caseRecord, job, { input, output, nextStatus, message, startedAt }) {
+async function recordDone(caseRecord, job, { input, output, nextStatus, message, startedAt, save }) {
   const prevStatus = caseRecord.currentStatus;
   await sequelize.transaction(async (transaction) => {
     const [moved] = await Case.update(
@@ -55,6 +56,7 @@ async function recordDone(caseRecord, job, { input, output, nextStatus, message,
       { caseId: caseRecord.id, blockName: job.name, prevStatus, newStatus: nextStatus, message },
       { transaction }
     );
+    if (save) await save(transaction);
   });
 }
 

@@ -25,6 +25,7 @@ export type BlockName =
   | 'api-claim-intake'
   | 'api-console-watch'
   | 'api-material-download'
+  | 'api-mailbox-replies'
   | 'api-claim-recognition'
   | 'api-member-verification'
   | 'api-document-checking'

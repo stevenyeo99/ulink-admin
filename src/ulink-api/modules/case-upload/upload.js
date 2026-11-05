@@ -29,8 +29,9 @@ class UploadRefused extends Error {
   }
 }
 
-// files: [{ filename, contentType, bytes }]. Returns { status: 'API_UPLOAD_RECEIVED', files }.
-async function uploadDocuments(caseRecord, files, { operator, username, comment }) {
+// Checks the files, merges them into one PDF and stores it. Throws UploadRefused for a business answer. Returns what
+// saveUpload records. files: [{ filename, contentType, bytes }]. Also used for a member's email reply (api-reply-intake).
+async function prepareUpload(caseRecord, files) {
   if (caseRecord.source !== 'API' || !UPLOADABLE_STATUSES.includes(caseRecord.currentStatus)) {
     throw new UploadRefused('Documents can be uploaded only for an API case waiting on documents (no documents, documents incomplete, or a documents check).');
   }
@@ -53,23 +54,34 @@ async function uploadDocuments(caseRecord, files, { operator, username, comment 
   // name, so two uploads in the same second never overwrite each other.
   const key = `${datePathSegments(uploadedAt)}/api/API-${caseRecord.tpaCaseNumber}/upload/${crypto.randomUUID()}.pdf`;
   const { storageRef } = await getStorageAdapter().put(key, pdf);
+  return { uploadedAt, filename, storageRef, sizeBytes: pdf.length, names: files.map((f) => f.filename), pageCount };
+}
 
-  const names = files.map((f) => f.filename);
+// The upload's document (origin UPLOAD, no barcode yet) and its case-upload step, in the caller's transaction.
+async function saveUpload(caseRecord, upload, { username, comment, transaction }) {
+  const document = await CaseDocument.create({
+    caseId: caseRecord.id, origin: 'UPLOAD', barcodeId: null, originalFilename: upload.filename,
+    contentType: 'application/pdf', sizeBytes: upload.sizeBytes, storageRef: upload.storageRef,
+  }, { transaction });
+  await ApiCaseStep.create({
+    caseId: caseRecord.id, job: 'case-upload', status: 'DONE',
+    input: { username, comment, files: upload.names },
+    output: { uploadedAt: upload.uploadedAt.toISOString(), documentId: document.id, files: upload.names, pageCount: upload.pageCount },
+    startedAt: upload.uploadedAt, finishedAt: new Date(),
+  }, { transaction });
+  return document;
+}
+
+// files: [{ filename, contentType, bytes }]. Returns { status: 'API_UPLOAD_RECEIVED', files }.
+async function uploadDocuments(caseRecord, files, { operator, username, comment }) {
+  const upload = await prepareUpload(caseRecord, files);
+  const { names, pageCount } = upload;
   const prevStatus = caseRecord.currentStatus;
   await sequelize.transaction(async (transaction) => {
     // A person's upload goes to the review lane (SYSTEM_5): read at once, apart from new cases.
     const [moved] = await Case.update({ currentStatus: 'API_UPLOAD_RECEIVED', ...markFor(caseRecord, operator) }, { where: { id: caseRecord.id, currentStatus: UPLOADABLE_STATUSES }, transaction });
     if (moved !== 1) throw new UploadRefused('The case moved on while you were uploading; reload the page and try again.', 409);
-    const document = await CaseDocument.create({
-      caseId: caseRecord.id, origin: 'UPLOAD', barcodeId: null, originalFilename: filename,
-      contentType: 'application/pdf', sizeBytes: pdf.length, storageRef,
-    }, { transaction });
-    await ApiCaseStep.create({
-      caseId: caseRecord.id, job: 'case-upload', status: 'DONE',
-      input: { username, comment, files: names },
-      output: { uploadedAt: uploadedAt.toISOString(), documentId: document.id, files: names, pageCount },
-      startedAt: uploadedAt, finishedAt: new Date(),
-    }, { transaction });
+    await saveUpload(caseRecord, upload, { username, comment, transaction });
     await CaseEvent.create({
       caseId: caseRecord.id, blockName: 'case-review', prevStatus, newStatus: 'API_UPLOAD_RECEIVED', reasonCode: 'DOCUMENTS_UPLOADED',
       message: `Documents uploaded by ${operator} — comment: ${comment} (${names.join(', ')}, ${pageCount} page${pageCount === 1 ? '' : 's'}); read and checked next, then sent to the IAS console`,
@@ -78,4 +90,4 @@ async function uploadDocuments(caseRecord, files, { operator, username, comment 
   return { status: 'API_UPLOAD_RECEIVED', files: names };
 }
 
-module.exports = { uploadDocuments, UploadRefused, UPLOADABLE_STATUSES, MAX_FILES, MAX_TOTAL_BYTES };
+module.exports = { uploadDocuments, prepareUpload, saveUpload, UploadRefused, UPLOADABLE_STATUSES, MAX_FILES, MAX_TOTAL_BYTES };

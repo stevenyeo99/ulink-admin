@@ -86,11 +86,13 @@ async function conversationSubmission(ticket, conversation) {
   };
 }
 
-// Hand one Submission to onSubmission; a failure is reported for that message only.
+// Hand one Submission to onSubmission; a failure is reported for that message only. True when it was stored, not when
+// it failed or was left for another read (leaveUnseen: the API pipeline's replies-only read).
 async function submitOne(results, externalId, buildSubmission, onSubmission) {
   try {
-    results.push({ externalId, ok: true, ...(await onSubmission(await buildSubmission())) });
-    return true;
+    const outcome = await onSubmission(await buildSubmission());
+    results.push({ externalId, ok: true, ...outcome });
+    return !outcome?.leaveUnseen;
   } catch (error) {
     results.push({ externalId, ok: false, error: error.message });
     return false;

@@ -83,8 +83,8 @@ const CASE_SWITCHES: { key: SwitchKey; title: string; text: string }[] = [
   },
   {
     key: 'apiSendMissingDocumentsEmail',
-    title: 'API cases: email the customer about missing documents',
-    text: 'Off: the customer is not emailed — the team gets the list and contacts the customer. The claim is still suspended in IAS as usual.',
+    title: 'API cases: email the member about missing documents, and read the reply',
+    text: 'On: the system emails the member and reads the reply. Documents in the reply are uploaded to the case as if a person uploaded them. Off: the system does not email the member and does not read the reply. The team gets the list, contacts the member, and uploads the documents on the case page. Either way, the claim is still suspended in IAS as usual.',
   },
 ];
 

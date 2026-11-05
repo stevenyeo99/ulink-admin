@@ -97,6 +97,26 @@ it('replies in the same thread afterwards, and sends internal emails to the inte
   expect(state.threads).toHaveLength(1);
 });
 
+it('sends the settlement report by SMTP, so on Freshdesk it never opens a ticket (plan decision 3)', async () => {
+  state.requests.push({ ...request('step-1', { taskType: 'CSR_REPORT', audience: 'customer', payload: { csrFilePath: '/csr/CSR-1.pdf', claimNo: '2604050015' }, dedupeKey: 'CSR-1.pdf' }), job: 'api-claim-stp' });
+
+  await run();
+
+  expect(sendReply.mock.calls.map((c) => c[2])).toEqual(['smtp']);
+  expect(sendReply.mock.calls[0][1].to).toBe('customer@test');
+});
+
+it('an SMTP email after a Freshdesk ticket starts its own chain (a Freshdesk id is no Message-ID)', async () => {
+  state.threads.push({ id: 'thread-1', caseId: 'case-1' });
+  state.messages.push({ threadId: 'thread-1', direction: 'outbound', toAddr: 'customer@test', messageId: 'fd-ticket:7', referencesHeader: null });
+  state.requests.push({ ...request('step-1', { taskType: 'CSR_REPORT', audience: 'customer', payload: { csrFilePath: '/csr/CSR-1.pdf', claimNo: '2604050015' }, dedupeKey: 'CSR-1.pdf' }), job: 'api-claim-stp' });
+
+  await run();
+
+  expect(sendReply.mock.calls[0][0]).toEqual({ messageId: null, references: null });
+  expect(sendReply.mock.calls[0][2]).toBe('smtp');
+});
+
 it('skips an email that repeats the last one of the same type (same dedupe key)', async () => {
   state.requests.push(request('step-1', missingDocs(['No Medical Report(s)'])));
   await run();

@@ -274,6 +274,23 @@ ${SIGN_OFF}`,
   };
 }
 
+// Internal: an API case member's email reply had files the upload refused (api-reply-intake). reason: the upload's answer.
+function renderMemberReplyRefused(payload) {
+  const { caseId, reason } = payload;
+  return {
+    subject: `${INTERNAL_SUBJECT_PREFIX}Member reply not uploaded — Case ${caseId}`,
+    bodyText: `Hi team,
+
+The member replied by email, but the system could not take the files as an upload. The case keeps waiting on documents.
+
+Reason: ${reason}
+
+Please read the member's reply and upload the documents on the case page.${internalExtras(payload)}
+
+${SIGN_OFF}`,
+  };
+}
+
 const RENDERERS = {
   MISSING_DOCUMENTS: renderMissingDocuments,
   DOCUMENT_COMPLETE_ACK: renderDocumentCompleteAck,
@@ -284,6 +301,7 @@ const RENDERERS = {
   CSR_REPORT: renderCsrReport,
   DOCUMENTS_INCOMPLETE: renderDocumentsIncomplete,
   CONSOLE_UPLOAD_ISSUE: renderConsoleUploadIssue,
+  MEMBER_REPLY_REFUSED: renderMemberReplyRefused,
 };
 
 function render(taskType, payload) {

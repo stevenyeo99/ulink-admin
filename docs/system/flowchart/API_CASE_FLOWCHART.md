@@ -26,6 +26,10 @@ flowchart TD
   ND -->|case-page upload| UP
   B --> C[3 · Claim recognition<br/>AI reads every page]:::job
   UP[Case-page upload<br/>API_UPLOAD_RECEIVED]:::job -->|read again at once| C
+  MRP[Member reply intake<br/>reply files taken as an upload<br/>only while the switch is on]:::job -->|new files| UP
+  MRP -.->|no new files| E1
+  MRP -.->|files refused| E10[/Team: member reply not uploaded/]:::mail
+  ND -.->|member replies| MRP
   C -->|too long / unreadable| MR{{API_MANUAL_REVIEW}}:::stop
   C --> D[4 · Member verification<br/>member, policy, bank vs IAS<br/>account number length per bank<br/>AI head per voucher + IAS balance<br/>IAS exclusions judged by meaning<br/>policy contract exclusion]:::job
   D -->|mismatch / account number length /<br/>balance not enough / possible exclusion| MV{{API_MEMBER_REVIEW_REQUIRED<br/>rechecked every run}}:::stop
@@ -61,6 +65,7 @@ flowchart TD
   S -.-> E5[/Team: documents incomplete/]:::mail
   S -.->|new documents| W
   S -->|case-page upload| UP
+  S -.->|member replies| MRP
   W -->|older upload not in<br/>the console in time| UNC{{API_UPLOAD_NOT_IN_CONSOLE}}:::stop
   I -->|complete, not STP| R([API_CLAIM_REVISED<br/>JD3 approves in IAS]):::done
   R -.-> E6[/Team: claim ready for review/]:::mail
@@ -105,5 +110,6 @@ flowchart TD
 - A person's decision at a stop (Mark OK, Revise, Ask the customer, override, a choice, an upload) marks the case. The API review lane (`api-review-pipeline`) then runs the same jobs at once, on marked cases only. The existing pipeline skips them. The case shows on the *Reviewed* page, not in the Review queue, and is read-only until its next stop, wait or end. After 30 minutes the existing pipeline takes it back. On the review page, every failed or unsure finding needs a decision with a reason before the save.
 - A super admin can switch a check off on *Admin → AI checklist* (with a reason). The member check and the document check skip it in both flows, and the case shows the line as *Turned off*, never a pass. A switched-off check adds no stop and sends no email. Four checks are locked on: member found, coverage active, member balance, voucher attached. A bank difference from IAS is a warning only: the case goes on, and STP stays possible, because the IAS claim pays to the IAS account.
 - Claim intake filters claims by the policy list on *System settings → API cases: which policies* (`apiPolicyRefNos`). An empty list means all policies. With *Only these policies*, claims of other policies are skipped. With *All policies except these* (`apiPolicyMode` = `exclude`), claims of the listed policies are skipped. A skipped claim does not become a case, and it is counted as `skippedPolicy` in the run summary. A claim row with no `policyRefNo` is kept. IAS does not send `policyRefNo` on the claim list yet, so the filter has no effect until it does.
-- Team emails for API cases always go by SMTP to `INTERNAL_REVIEW_EMAIL`, also when `CHANNEL_DRIVER=freshdesk`. Member emails go through the channel. On Freshdesk, the first member email creates the case's ticket, and later member emails reply in it.
+- Team emails and the settlement report for API cases always go by SMTP, also when `CHANNEL_DRIVER=freshdesk`. Team emails go to `INTERNAL_REVIEW_EMAIL`. Other member emails go through the channel. On Freshdesk, the first member email creates the case's ticket, and later member emails reply in it.
+- When `apiSendMissingDocumentsEmail` is on, member reply intake (`api-reply-intake`) reads the member's email replies at the case-page upload statuses. It reads only replies that came after the system first asked the member for documents (`MISSING_DOCUMENTS`). A reply with new files is taken as a case-page upload, but it waits for the normal pipeline run, not the review lane. A reply with no new file gets the missing documents list again. If the upload refuses the files (wrong type, more than 10 files, more than 20 MB), the case keeps waiting and the team gets an email. When the switch is off, the step is skipped. While email cases are off, the API pipeline also reads the mailbox (`api-mailbox-replies`, replies-only, under the `email-intake` lock) before this step. It stores only replies that join an API case. Every other email stays for the email pipeline.
 - When a job fails because IAS, the console or LM Studio does not answer, the case keeps its status. The next pipeline run tries again.

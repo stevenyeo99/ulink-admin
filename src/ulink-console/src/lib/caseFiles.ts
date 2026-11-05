@@ -29,9 +29,14 @@ export function caseFiles(caseRecord: CaseDetail, documents: CaseDocument[], api
       return { key: a.id, name, path: attachmentPath(caseRecord.id, a.id), pdf: isPdf(a.contentType, name), group: 'Email attachments' };
     });
   }
+  // A member's email reply is uploaded as the user 'member' (ulink-api modules/api-reply-intake).
+  const memberUploads = new Set(apiSteps
+    .filter((s) => s.job === 'case-upload' && (s.input as { username?: string } | null)?.username === 'member')
+    .map((s) => (s.output as { documentId?: string } | null)?.documentId));
+  const uploadGroup = (id: string) => (memberUploads.has(id) ? "Member's email reply" : 'Uploaded on the case page');
   const consoleFiles = documents.map((d) => ({
     key: d.id, name: `${d.barcodeId ?? 'upload'}/${d.originalFilename}`, path: documentPath(caseRecord.id, d.id),
-    pdf: isPdf(d.contentType, d.originalFilename), group: d.barcodeId ? `Console ${d.barcodeId}` : 'Uploaded on the case page',
+    pdf: isPdf(d.contentType, d.originalFilename), group: d.barcodeId ? `Console ${d.barcodeId}` : uploadGroup(d.id),
   }));
   const reply = [...apiSteps].reverse().find((s) => s.job === 'api-reply-intake' && s.status === 'DONE');
   const replyIds = new Set(((reply?.output as { attachmentIds?: string[] } | null)?.attachmentIds) ?? []);

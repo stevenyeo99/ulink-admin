@@ -883,11 +883,12 @@ router.use('/api-email-sender', createJobRouter('api-email-sender', apiEmailSend
  *     tags: [jobs]
  *     summary: Start the api-reply-intake job (fire-and-forget) — customer replies to API emails
  *     description: >
- *       For API cases waiting on the customer (API_INCOMPLETE, API_MEMBER_REVIEW_REQUIRED,
- *       API_NO_DOCUMENTS), takes replies email-intake stored on the case's thread that no earlier
- *       round handled. New attachments (by content) → API_REPLY_RECEIVED, and OCR reads them with
- *       the console images. No new attachment → stays waiting; a missing-documents reminder is
- *       asked for. See docs/imp/day1/api-case-workflow.md section 7.2.
+ *       For API cases waiting on documents (the case-page upload statuses), takes the member replies
+ *       email-intake stored on the case's thread after the system first emailed the member, that no
+ *       earlier round handled. New attachments (by content) are taken as a case-page upload → one
+ *       merged PDF, API_UPLOAD_RECEIVED. Refused files → stays waiting, the team is emailed. No new
+ *       attachment → stays waiting; a missing-documents reminder is asked for. Skipped while the
+ *       missing-documents email is switched off. See docs/imp/CR/SYSTEM_6/freshdesk/API_MEMBER_REPLY_PLAN.md.
  *     responses:
  *       200:
  *         description: Started, or skipped because a prior run is still in progress

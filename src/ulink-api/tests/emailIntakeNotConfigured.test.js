@@ -52,7 +52,9 @@ it('does not depend on IMAP for another channel driver', async () => {
 });
 
 // The API pipeline's reply step only takes what the mailbox brought in — off with it.
-it('skips the API reply step whenever the mailbox is not read', () => {
+it('skips the API reply step whenever the mailbox is not read', async () => {
   const apiReplyIntake = require('../modules/api-reply-intake/service');
-  expect(apiReplyIntake.notConfiguredReason).toBe(emailIntake.notConfiguredReason);
+  config.channel.driver = 'imap_smtp';
+  config.imap.host = '';
+  expect(await apiReplyIntake.notConfiguredReason()).toBe('inbox not configured (IMAP_HOST is empty)');
 });

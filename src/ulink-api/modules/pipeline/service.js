@@ -2,6 +2,7 @@ const { PipelineRun, PipelineRunStep } = require('../../db/models');
 const config = require('../../config');
 const logger = require('../../utils/logger');
 const jobLock = require('../../jobs/jobLock');
+const { getSettings } = require('../settings/settings');
 
 const emailIntakeService = require('../email-intake/service');
 const claimRecognitionService = require('../claim-recognition/service');
@@ -16,6 +17,7 @@ const iasClaimStpService = require('../ias-claim-stp/service');
 const apiClaimIntakeService = require('../api-claim-intake/service');
 const apiConsoleWatchService = require('../api-console-watch/service');
 const apiMaterialDownloadService = require('../api-material-download/service');
+const apiReplyIntakeService = require('../api-reply-intake/service');
 const apiClaimRecognitionService = require('../api-claim-recognition/service');
 const apiMemberVerificationService = require('../api-member-verification/service');
 const apiDocumentCheckingService = require('../api-document-checking/service');
@@ -77,14 +79,33 @@ const STEPS = [
 // POST /api/jobs/api-pipeline/run. Only jobs that exist are listed; each phase adds its own
 // (email-intake joins when API replies are routed, Phase 4). Its jobs only ever select
 // source='API' cases, and the email STEPS above can't see them (DB check on ulink_cases).
+const apiRepliesIntake = {
+  run: () => emailIntakeService.run({ repliesOnly: true }),
+  async notConfiguredReason() {
+    const mailbox = await emailIntakeService.notConfiguredReason();
+    if (mailbox) return mailbox;
+    const settings = await getSettings();
+    if (!settings.apiSendMissingDocumentsEmail) return 'member replies left to ULINK (missing-documents email switched off, System settings)';
+    if (settings.emailCasesEnabled) return 'the email pipeline reads the mailbox (email cases on)';
+    return null;
+  },
+};
+
+const SHARED_LOCKS = { 'api-mailbox-replies': 'email-intake' };
+
 const API_STEPS = [
   ['api-claim-intake', apiClaimIntakeService],
   // Cases waiting on documents: new ones in the console (uploaded from the case page, or by anyone) → downloaded
   // next, and the case is checked again (SYSTEM_4 E4-04).
   ['api-console-watch', apiConsoleWatchService],
   ['api-material-download', apiMaterialDownloadService],
-  // No inbox steps: ULINK emails the customer (draft on the case page) and uploads what comes back on the case
-  // page; it is read at once (api-claim-recognition). The api-reply-intake job stays callable on its own (old cases' history).
+  // A member's email reply with documents is taken as a case-page upload (API_MEMBER_REPLY_PLAN.md Phase 1). Skipped
+  // while the missing-documents email is switched off: ULINK then emails the member and uploads what comes back itself.
+  // While email cases are off, the email pipeline reads no mailbox: this read takes the replies to API cases only, and
+  // leaves every other email for the email pipeline (API_MEMBER_REPLY_PLAN.md Phase 2). It takes the email pipeline's
+  // email-intake lock (executeSteps), so the two never read the mailbox at once.
+  ['api-mailbox-replies', apiRepliesIntake],
+  ['api-reply-intake', apiReplyIntakeService],
   ['api-claim-recognition', apiClaimRecognitionService],
   ['api-member-verification', apiMemberVerificationService],
   ['api-document-checking', apiDocumentCheckingService],
@@ -179,7 +200,8 @@ async function executeSteps(pipelineRun, onlySteps = null) {
     for (const [blockName, service] of steps) {
       // Every email sender step shares one lock with the email review lane's sender (SYSTEM_5): a task is never sent
       // by two senders at once (a task is only marked SENT after it went out).
-      const lockName = blockName.startsWith('email-sender') ? 'email-sender' : blockName;
+      // The API pipeline's mailbox read shares email-intake's lock the same way (one mailbox, one reader at a time).
+      const lockName = blockName.startsWith('email-sender') ? 'email-sender' : (SHARED_LOCKS[blockName] || blockName);
       await runStep(pipelineRun.id, blockName, service, sequence, { lockName });
       sequence += 1;
     }

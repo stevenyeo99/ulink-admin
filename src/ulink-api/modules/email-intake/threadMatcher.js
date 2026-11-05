@@ -38,7 +38,8 @@ async function matchApiCaseByRef(transaction, { subjectHint, from }) {
   return sentToSender ? { threadId: thread.id, caseId: apiCase.id, isNewCase: false } : null;
 }
 
-async function matchOrCreateThread(transaction, { inReplyTo, references, subjectHint, firstMessageId, from }) {
+// create: false (the API pipeline's replies-only read): null when nothing matches, never a new case.
+async function matchOrCreateThread(transaction, { inReplyTo, references, subjectHint, firstMessageId, from }, { create = true } = {}) {
   const candidates = []
     .concat(inReplyTo ? [inReplyTo] : [])
     .concat(references ? String(references).split(/\s+/).filter(Boolean) : []);
@@ -57,6 +58,7 @@ async function matchOrCreateThread(transaction, { inReplyTo, references, subject
 
   const byRef = await matchApiCaseByRef(transaction, { subjectHint, from });
   if (byRef) return byRef;
+  if (!create) return null;
 
   const newCase = await Case.create({}, { transaction });
   const newThread = await EmailThread.create(

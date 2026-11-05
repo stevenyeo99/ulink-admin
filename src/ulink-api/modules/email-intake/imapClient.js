@@ -11,7 +11,7 @@ function assertConfigured() {
 /**
  * Fetch unseen messages (up to fetchLimit) and hand each one to onMessage
  * with its full raw source. Only flags a message \Seen after onMessage
- * resolves successfully, so a crash mid-run leaves it to be retried on the
+ * resolves successfully (and did not ask to leave it unseen), so a crash mid-run leaves it to be retried on the
  * next cron tick instead of being silently skipped.
  */
 async function processUnseenMessages(onMessage) {
@@ -74,7 +74,8 @@ async function processUnseenMessages(onMessage) {
     for (const message of fetched) {
       try {
         const outcome = await onMessage(message);
-        await client.messageFlagsAdd(message.uid, ['\\Seen'], { uid: true });
+        // leaveUnseen: a message this read does not take (the API pipeline's replies-only read) stays for the next one.
+        if (!outcome?.leaveUnseen) await client.messageFlagsAdd(message.uid, ['\\Seen'], { uid: true });
         results.push({ uid: message.uid, ok: true, ...outcome });
       } catch (error) {
         results.push({ uid: message.uid, ok: false, error: error.message });

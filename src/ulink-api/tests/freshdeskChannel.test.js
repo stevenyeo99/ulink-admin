@@ -214,3 +214,17 @@ describe('sendReply', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 });
+
+it("a new ticket left for another read (replies-only) is not counted as stored, so its replies are not read either", async () => {
+  routeFetch({
+    '/tickets?updated_since=': reply([{ ...ticket, attachments: undefined }]),
+    '/tickets/4?include=requester': reply(ticket),
+    'https://files/1': reply('pdf'),
+  });
+  const onSubmission = jest.fn(async () => ({ skipped: 'not a reply to an API case', leaveUnseen: true }));
+
+  expect(await fetchNewSubmissions(onSubmission)).toEqual([
+    { externalId: 'ticket:4', ok: true, skipped: 'not a reply to an API case', leaveUnseen: true },
+  ]);
+  expect(fetch.mock.calls.some(([url]) => url.includes('/conversations'))).toBe(false);
+});

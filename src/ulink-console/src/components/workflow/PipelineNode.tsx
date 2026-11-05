@@ -19,6 +19,7 @@ const ICONS: Record<BlockName, LucideIcon> = {
   'api-claim-intake': ListChecks,
   'api-console-watch': RefreshCw,
   'api-material-download': Images,
+  'api-mailbox-replies': Mail,
   'api-claim-recognition': ScanSearch,
   'api-member-verification': UserCheck,
   'api-document-checking': ClipboardCheck,

@@ -116,3 +116,11 @@ it('passes an optional input only when that job has output for the case', async 
   await runApiJob({ ...job(process), optionalInputs: ['job-maybe'] });
   expect(process.mock.calls[0][0].input).toEqual({ 'job-a': { v: 2 } });
 });
+
+it("writes the job's own rows (save) in the transaction of the status move", async () => {
+  const save = jest.fn();
+  await runApiJob(job(async () => ({ output: {}, nextStatus: 'API_B_DONE', message: 'ok', save })));
+  expect(save).toHaveBeenCalledTimes(1);
+  expect(models.cases[0].currentStatus).toBe('API_B_DONE');
+  expect(models.steps.find((s) => s.job === 'job-b').output).toEqual({});
+});

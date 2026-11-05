@@ -148,11 +148,14 @@ async function send(request) {
     : { [Sequelize.Op.or]: [{ direction: 'inbound' }, { direction: 'outbound', toAddr: to }] };
   const last = thread && await EmailMessage.findOne({ where: { threadId: thread.id, ...conversation }, order: [['createdAt', 'DESC']] });
 
-  // Internal emails always go by SMTP: on Freshdesk an API case gets a ticket only from its first member email
-  // (ULINK opens one only to ask the member for documents), never from a team notice.
-  const sender = email.audience === 'internal' ? imapSmtpChannel : getChannelAdapter();
+  // Internal emails and the settlement report always go by SMTP: on Freshdesk an API case gets a ticket only from its
+  // first member email (ULINK opens one only to ask the member for documents), never from a team notice or the
+  // settlement report of an STP claim (API_MEMBER_REPLY_PLAN.md decision 3).
+  const sender = email.audience === 'internal' || email.taskType === 'CSR_REPORT' ? imapSmtpChannel : getChannelAdapter();
+  // A Freshdesk id (fd-ticket:N / fd-conv:N) is no Message-ID: an SMTP email after one starts its own chain.
+  const replyTo = sender === imapSmtpChannel && /^fd-/.test(last?.messageId || '') ? null : last;
   const { messageId } = await sender.sendReply(
-    { messageId: last?.messageId || null, references: last?.referencesHeader || null },
+    { messageId: replyTo?.messageId || null, references: replyTo?.referencesHeader || null },
     { to, cc, subject, bodyText: rendered.bodyText, attachments: rendered.attachments }
   );
 
@@ -164,8 +167,8 @@ async function send(request) {
       threadId,
       direction: 'outbound',
       messageId,
-      inReplyTo: last?.messageId || null,
-      referencesHeader: [last?.referencesHeader, last?.messageId].filter(Boolean).join(' ') || null,
+      inReplyTo: replyTo?.messageId || null,
+      referencesHeader: [replyTo?.referencesHeader, replyTo?.messageId].filter(Boolean).join(' ') || null,
       fromAddr: config.smtp.fromAddr,
       toAddr: to,
       ccAddr: cc,

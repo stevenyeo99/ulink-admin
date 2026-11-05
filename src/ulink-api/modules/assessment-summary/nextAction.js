@@ -90,7 +90,9 @@ function nextAction(fields = {}, summary = null, events = []) {
       const suspended = status === 'API_CLAIM_SUSPENDED' ? ' Missing documents do not stop the claim: it waits in IAS as suspended until they come.' : '';
       const upload = ' When the documents come in, upload them on this page.';
       if (!lastReadSettings().apiSendMissingDocumentsEmail) return act(`ULINK contacts the customer: ${what}.${suspended}${upload}`);
-      return wait(`Waiting for the customer: ${what}.${suspended}${upload}`, 'Customer');
+      // Switch on: api-reply-intake takes the customer's email reply as an upload (API_MEMBER_REPLY_PLAN.md Phase 1).
+      const read = " The system reads the customer's email reply and uploads its documents. If the documents come in another way, upload them on this page.";
+      return wait(`Waiting for the customer: ${what}.${suspended}${read}`, 'Customer');
     }
     case 'API_DOCUMENTS_UPLOADED':
       return wait('Nothing to do — the uploaded documents get a barcode in the IAS console (usually 15–30 minutes), then the case is checked again.');

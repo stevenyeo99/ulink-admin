@@ -63,7 +63,10 @@ function attachmentStorageKey({ caseId, messageId, receivedAt, filename, index }
  * Business logic only — takes the channel-agnostic Submission shape (see
  * channels/index.js) and never touches IMAP/Freshdesk-specific fields.
  */
-async function persistSubmission(submission) {
+// repliesOnly (the API pipeline's read while email cases are off, API_MEMBER_REPLY_PLAN.md Phase 2): only a reply that
+// joins an API case is stored. Anything else (a new claim email, a reply to an email case) is left for the email
+// pipeline: nothing stored, no case made, and on IMAP the message stays unseen (leaveUnseen).
+async function persistSubmission(submission, { repliesOnly = false } = {}) {
   const storage = getStorageAdapter();
 
   return sequelize.transaction(async (transaction) => {
@@ -83,13 +86,17 @@ async function persistSubmission(submission) {
       return { caseId: existing.EmailThread.caseId, skipped: true };
     }
 
-    const { threadId, caseId } = await matchOrCreateThread(transaction, {
+    const match = await matchOrCreateThread(transaction, {
       inReplyTo: submission.inReplyTo,
       references: submission.references,
       subjectHint: submission.subject,
       firstMessageId: submission.messageId,
       from: submission.from,
-    });
+    }, { create: !repliesOnly });
+    if (repliesOnly && (!match || (await Case.findByPk(match.caseId, { attributes: ['source'], transaction }))?.source !== 'API')) {
+      return { skipped: 'not a reply to an API case', leaveUnseen: true };
+    }
+    const { threadId, caseId } = match;
 
     const emailMessage = await EmailMessage.create(
       {
@@ -262,13 +269,14 @@ async function notConfiguredReason() {
   return null;
 }
 
-async function run() {
+async function run({ repliesOnly = false } = {}) {
   const notConfigured = await notConfiguredReason();
   if (notConfigured) throw new Error(`email-intake: ${notConfigured}`);
-  const results = await getChannelAdapter().fetchNewSubmissions(persistSubmission);
-  const processed = results.filter((r) => r.ok).length;
+  const results = await getChannelAdapter().fetchNewSubmissions((submission) => persistSubmission(submission, { repliesOnly }));
+  const left = results.filter((r) => r.ok && r.leaveUnseen).length;
+  const processed = results.filter((r) => r.ok).length - left;
   const errors = results.filter((r) => !r.ok).map((r) => ({ externalId: r.externalId, error: r.error }));
-  return { processed, errors };
+  return repliesOnly ? { processed, leftForEmailPipeline: left, errors } : { processed, errors };
 }
 
-module.exports = { run, notConfiguredReason };
+module.exports = { run, notConfiguredReason, persistSubmission };

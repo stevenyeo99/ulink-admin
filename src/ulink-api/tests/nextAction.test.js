@@ -38,7 +38,7 @@ it("uses the job's own words for manual reading and IAS refusals", () => {
 
 it('waits for the customer — or tells ULINK to contact them when the missing-documents email is off', async () => {
   const fields = { currentStatus: 'API_CLAIM_SUSPENDED', documentCheckResult: { issues: ['No medical report'] } };
-  expect(nextAction(fields)).toEqual({ text: 'Waiting for the customer: No medical report. Missing documents do not stop the claim: it waits in IAS as suspended until they come. When the documents come in, upload them on this page.', who: 'Customer', act: false });
+  expect(nextAction(fields)).toEqual({ text: "Waiting for the customer: No medical report. Missing documents do not stop the claim: it waits in IAS as suspended until they come. The system reads the customer's email reply and uploads its documents. If the documents come in another way, upload them on this page.", who: 'Customer', act: false });
 
   Setting.findAll.mockResolvedValue([{ key: 'apiSendMissingDocumentsEmail', value: false }]);
   await getSettings();

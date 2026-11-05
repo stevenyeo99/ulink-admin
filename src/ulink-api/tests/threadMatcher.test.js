@@ -59,3 +59,9 @@ it('creates a new case when there is no ref or it is not an API case', async () 
   expect((await matchOrCreateThread(null, { subjectHint: 'New claim', from: 'customer@example.com' })).isNewCase).toBe(true);
   expect((await matchOrCreateThread(null, { subjectHint: '(Ref: UNKNOWN-1)', from: 'customer@example.com' })).isNewCase).toBe(true);
 });
+
+it('replies-only (create: false): a match is returned as usual, nothing that does not match makes a case', async () => {
+  expect(await matchOrCreateThread(null, { inReplyTo: '<sent-1>' }, { create: false })).toEqual({ threadId: 'api-thread', caseId: 'api-case', isNewCase: false });
+  expect(await matchOrCreateThread(null, { subjectHint: 'New claim', from: 'customer@example.com' }, { create: false })).toBeNull();
+  expect(state.cases).toHaveLength(1);
+});
