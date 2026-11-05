@@ -11,7 +11,7 @@
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/render-api-flowchart.sh",
             "timeout": 90,
-            "statusMessage": "Rendering the API case flowchart SVG"
+            "statusMessage": "Rendering the case flowchart SVG"
           }
         ]
       }

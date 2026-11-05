@@ -1,18 +1,22 @@
 #!/usr/bin/env bash
-# Renders docs/system/flowchart/API_CASE_FLOWCHART.svg from the Mermaid block in docs/system/flowchart/API_CASE_FLOWCHART.md.
+# Renders docs/system/flowchart/<NAME>.svg from the Mermaid block in docs/system/flowchart/<NAME>.md, for the API and the
+# email case flowcharts (API_CASE_FLOWCHART, EMAIL_CASE_FLOWCHART).
 # Claude Code runs it after every Write/Edit (PostToolUse hook in .claude/settings.json): the hook JSON comes on stdin,
-# and anything but the flowchart file is ignored. By hand: .claude/hooks/render-api-flowchart.sh --all
+# and anything but a flowchart file is ignored. By hand: .claude/hooks/render-api-flowchart.sh --all (both charts).
 # Needs mmdc (npm i -g @mermaid-js/mermaid-cli) and a Chromium it can start.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-MD="$ROOT/docs/system/flowchart/API_CASE_FLOWCHART.md"
-SVG="$ROOT/docs/system/flowchart/API_CASE_FLOWCHART.svg"
+DIR="$ROOT/docs/system/flowchart"
+CHARTS="API_CASE_FLOWCHART EMAIL_CASE_FLOWCHART"
 
-if [ "${1:-}" != "--all" ]; then
+if [ "${1:-}" = "--all" ]; then
+  names="$CHARTS"
+else
   edited="$(python3 -c 'import json,sys; d=json.load(sys.stdin); print((d.get("tool_input") or {}).get("file_path",""))' 2>/dev/null || true)"
   case "$edited" in
-    */docs/system/flowchart/API_CASE_FLOWCHART.md) ;;
+    */docs/system/flowchart/API_CASE_FLOWCHART.md) names="API_CASE_FLOWCHART" ;;
+    */docs/system/flowchart/EMAIL_CASE_FLOWCHART.md) names="EMAIL_CASE_FLOWCHART" ;;
     *) exit 0 ;;
   esac
 fi
@@ -24,11 +28,15 @@ fi
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
-awk '/^```mermaid$/{f=1;next} /^```$/{f=0} f' "$MD" > "$tmp/flow.mmd"
-if [ ! -s "$tmp/flow.mmd" ]; then
-  echo "render-api-flowchart: no mermaid block in $MD" >&2
-  exit 1
-fi
-mmdc -q -i "$tmp/flow.mmd" -o "$tmp/flow.svg" -b white
-mv "$tmp/flow.svg" "$SVG"
-echo '{"systemMessage": "docs/system/flowchart/API_CASE_FLOWCHART.svg rendered"}'
+rendered=""
+for name in $names; do
+  awk '/^```mermaid$/{f=1;next} /^```$/{f=0} f' "$DIR/$name.md" > "$tmp/$name.mmd"
+  if [ ! -s "$tmp/$name.mmd" ]; then
+    echo "render-api-flowchart: no mermaid block in $DIR/$name.md" >&2
+    exit 1
+  fi
+  mmdc -q -i "$tmp/$name.mmd" -o "$tmp/$name.svg" -b white
+  mv "$tmp/$name.svg" "$DIR/$name.svg"
+  rendered="$rendered docs/system/flowchart/$name.svg"
+done
+echo "{\"systemMessage\": \"rendered:$rendered\"}"

@@ -95,5 +95,8 @@ Where real data helps, a **read-only** run against the dev DB or console middlew
   a new one appeared.
 - API flow changed (a job, status, stop, switch or email) → update `docs/system/flowchart/API_CASE_FLOWCHART.md` (the Mermaid chart,
   the stop table and its "Last checked" date), then republish its copy at the URL in that file.
+- Email flow changed (a job, status, stop, switch or email) → update `docs/system/flowchart/EMAIL_CASE_FLOWCHART.md` the same
+  way, then republish its copy at the URL in that file.
+- A change that business users would notice → update "The flow in plain words" at the top of the flowchart file too.
 
 **Done when** someone reading only those docs would know the change exists and how it behaves.

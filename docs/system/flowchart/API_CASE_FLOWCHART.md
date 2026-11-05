@@ -4,9 +4,22 @@ This chart shows how an API case moves from the IAS claim list to the IAS revisi
 
 Last checked against the code: 2026-11-05. Published copy: https://claude.ai/artifact/6wQz6VycRj8e3TgdbvYWWg (private, republish it from this file after each change).
 
-Image: [API_CASE_FLOWCHART.svg](API_CASE_FLOWCHART.svg). A Claude Code hook renders it from the chart below after each save of this file (`.claude/hooks/render-api-flowchart.sh`). If you edit the file outside Claude Code, run `.claude/hooks/render-api-flowchart.sh --all`.
+Image: [API_CASE_FLOWCHART.svg](API_CASE_FLOWCHART.svg). A Claude Code hook renders it from the chart below after each save of this file (`.claude/hooks/render-api-flowchart.sh`, which also renders `EMAIL_CASE_FLOWCHART.md`). If you edit the file outside Claude Code, run `.claude/hooks/render-api-flowchart.sh --all`.
 
 When an API job, status, stop, switch or email changes, update this file in the same change. The checklist in `.claude/skills/ulink-pipeline-change/SKILL.md` (step 9) says the same.
+
+## The flow in plain words
+
+This part is for business users. The chart below has the detail.
+
+1. A member's claim is already in IAS. Every run, the system takes the new claims from the IAS claim list.
+2. The system downloads the claim's documents from the IAS console. If there are none, the member is asked for them.
+3. The AI reads every page.
+4. The system checks the member in IAS: the member, the policy, the coverage, the bank details and the balance. If something does not match, a person checks the case.
+5. The system checks that every required document is there. If documents are missing, the member gets an email with the list. When the member replies with the documents, the system takes them as an upload and checks the case again.
+6. The system sends any new documents to the IAS console.
+7. The system prepares the claim and revises it in IAS. Missing documents do not stop this step: the claim waits in IAS as suspended until the documents come.
+8. A straight-through claim (STP) needs no person to approve it. For an STP claim, the system gets the settlement report from IAS and emails it to the member. Any other claim waits for a JD3 approver in IAS.
 
 ## Flow
 
