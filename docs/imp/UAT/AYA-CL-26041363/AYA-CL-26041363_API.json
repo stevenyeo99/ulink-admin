@@ -1,0 +1,37 @@
+{
+    "Items": [
+        {
+            "PlanId": "2147",
+            "BankName": "AYA Bank",
+            "ClaimType": "M",
+            "InvoiceID": "NIL",
+            "BankAcctNo": "20003448025",
+            "PayeeEmail": "sumonthaw1983@gmail.com",
+            "BenefitHead": "",
+            "BenefitType": "",
+            "IncurDateTo": "09242026",
+            "SymptomDate": "09242026",
+            "BankAcctName": "Saw Su Mon Thaw",
+            "ExchangeRate": 1,
+            "PresentedAmt": 141100,
+            "ProviderCode": null,
+            "ProviderName": "အောင်သစ္စာဆေးရုံ",
+            "ReceivedDate": "09282026",
+            "ContactNumber": "09256495944",
+            "DiagnosisCode": "",
+            "IncurDateFrom": "09242026",
+            "PaymentMethod": null,
+            "PaymentCurrency": "MMK",
+            "TreatmentCountry": "MYANMAR",
+            "DiagnosisCodeDesc": "",
+            "PresentedCurrency": "MMK",
+            "PaymentExchangeRate": 1,
+            "DiagnosisDescription": "",
+            "ReviseClaimReasonCode": ""
+        }
+    ],
+    "MemberRefNo": "9/PAULA(N)001273",
+    "TpaCaseNumber": "AYA-CL-26041363",
+    "TpaClaimNumber": "CL/YGN/AYH/26031977",
+    "ProvPortalCaseNumber": ""
+}

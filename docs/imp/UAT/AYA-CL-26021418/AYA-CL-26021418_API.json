@@ -1,0 +1,37 @@
+{
+    "Items": [
+        {
+            "PlanId": "2147",
+            "BankName": "KBZ Bank",
+            "ClaimType": "M",
+            "InvoiceID": "NIL",
+            "BankAcctNo": "12730102104946001",
+            "PayeeEmail": "modest14.mm@gmail.com",
+            "BenefitHead": "",
+            "BenefitType": "",
+            "IncurDateTo": "06102026",
+            "SymptomDate": "06102026",
+            "BankAcctName": "me me win pe",
+            "ExchangeRate": 1,
+            "PresentedAmt": 36750,
+            "ProviderCode": null,
+            "ProviderName": "Aryu",
+            "ReceivedDate": "06102026",
+            "ContactNumber": "09798431424",
+            "DiagnosisCode": "",
+            "IncurDateFrom": "06102026",
+            "PaymentMethod": null,
+            "PaymentCurrency": "MMK",
+            "TreatmentCountry": "MYANMAR",
+            "DiagnosisCodeDesc": "",
+            "PresentedCurrency": "MMK",
+            "PaymentExchangeRate": 1,
+            "DiagnosisDescription": "",
+            "ReviseClaimReasonCode": ""
+        }
+    ],
+    "MemberRefNo": "12/OUKATA(N)166006",
+    "TpaCaseNumber": "AYA-CL-26021418",
+    "TpaClaimNumber": "CL/YGN/AYH/26016885",
+    "ProvPortalCaseNumber": ""
+}

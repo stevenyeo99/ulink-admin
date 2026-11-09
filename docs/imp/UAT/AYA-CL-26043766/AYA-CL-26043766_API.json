@@ -1,0 +1,37 @@
+{
+    "Items": [
+        {
+            "PlanId": "2147",
+            "BankName": "AYA Bank",
+            "ClaimType": "M",
+            "InvoiceID": "NIL",
+            "BankAcctNo": "20030586211",
+            "PayeeEmail": "sawwaiyan.sms@gmail.com",
+            "BenefitHead": "",
+            "BenefitType": "",
+            "IncurDateTo": "10022026",
+            "SymptomDate": "10022026",
+            "BankAcctName": "Saw Wai Yan",
+            "ExchangeRate": 1,
+            "PresentedAmt": 110000,
+            "ProviderCode": null,
+            "ProviderName": "Mudetar Medical Centre",
+            "ReceivedDate": "10112026",
+            "ContactNumber": "09971703072",
+            "DiagnosisCode": "",
+            "IncurDateFrom": "10022026",
+            "PaymentMethod": null,
+            "PaymentCurrency": "MMK",
+            "TreatmentCountry": "MYANMAR",
+            "DiagnosisCodeDesc": "",
+            "PresentedCurrency": "MMK",
+            "PaymentExchangeRate": 1,
+            "DiagnosisDescription": "",
+            "ReviseClaimReasonCode": ""
+        }
+    ],
+    "MemberRefNo": "12/MARAKA(N)157676",
+    "TpaCaseNumber": "AYA-CL-26043766",
+    "TpaClaimNumber": "CL/YGN/AYH/26033746",
+    "ProvPortalCaseNumber": ""
+}
