@@ -1,0 +1,37 @@
+{
+    "Items": [
+        {
+            "PlanId": "2147",
+            "BankName": "KBZ Bank",
+            "ClaimType": "M",
+            "InvoiceID": "NIL",
+            "BankAcctNo": "12730102104946001",
+            "PayeeEmail": "modest14.mm@gmail.com",
+            "BenefitHead": "",
+            "BenefitType": "",
+            "IncurDateTo": "05062026",
+            "SymptomDate": "05062026",
+            "BankAcctName": "me me win pe",
+            "ExchangeRate": 1,
+            "PresentedAmt": 66000,
+            "ProviderCode": null,
+            "ProviderName": "Mary Clinic",
+            "ReceivedDate": "05112026",
+            "ContactNumber": "09798431424",
+            "DiagnosisCode": "",
+            "IncurDateFrom": "05062026",
+            "PaymentMethod": null,
+            "PaymentCurrency": "MMK",
+            "TreatmentCountry": "MYANMAR",
+            "DiagnosisCodeDesc": "",
+            "PresentedCurrency": "MMK",
+            "PaymentExchangeRate": 1,
+            "DiagnosisDescription": "",
+            "ReviseClaimReasonCode": ""
+        }
+    ],
+    "MemberRefNo": "12/OUKATA(N)166006",
+    "TpaCaseNumber": "AYA-CL-26016756",
+    "TpaClaimNumber": "CL/YGN/AYH/26013256",
+    "ProvPortalCaseNumber": ""
+}
