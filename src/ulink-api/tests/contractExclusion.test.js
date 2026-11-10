@@ -42,6 +42,16 @@ it('raises a member finding with the clause, the confidence and the reason, and 
   expect(await checkExclusions({ medical: {} }, 'ayas_member_claim')).toBeNull();
 });
 
+it('gives the AI the member plan benefits, and a plan change is judged again (UAT AYA-CL-26016756)', async () => {
+  const plans = (head) => [{ coverageLimits: [{ benefits: [{ benefit_type_code: 'OP', benefit_type_desc: 'Outpatient', benefit_head_code: head, benefit_head_desc: 'Vaccination' }] }] }];
+  const first = await checkExclusions(fields('Flu vaccine'), 'ayas_member_claim', null, plans('VACC'));
+  expect(judgeExclusion).toHaveBeenLastCalledWith(expect.objectContaining({
+    planBenefits: [{ type: 'OP', typeDesc: 'Outpatient', head: 'VACC', headDesc: 'Vaccination' }],
+  }));
+  await checkExclusions(fields('Flu vaccine'), 'ayas_member_claim', { fingerprint: first.fingerprint, flag: first.flag }, plans('GP'));
+  expect(judgeExclusion).toHaveBeenCalledTimes(2);
+});
+
 it('holds the member check until a person answers for this clause and this text', async () => {
   const { issue } = await checkExclusions(fields(), 'ayas_member_claim');
   expect(evaluate(fields(), ias, [issue])).toMatchObject({ outcome: 'MEMBER_REVIEW_REQUIRED', reasonCode: 'POSSIBLE_EXCLUSION' });

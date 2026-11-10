@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const { findCandidates } = require('../policy-exclusion/lookup');
 const { judgeExclusion } = require('../policy-exclusion/judge');
 const { findOverrides } = require('../policy-exclusion/overrideLookup');
+const { uniqueBenefitCandidates } = require('../shared/iasBenefits');
 
 /**
  * The policy contract exclusion check (SOP §6.3; SYSTEM_5, docs/imp/CR/SYSTEM_5/PRD/CONTRACT_EXCLUSION_PRD.md): the
@@ -18,7 +19,7 @@ const { findOverrides } = require('../policy-exclusion/overrideLookup');
  * something to weigh it against.
  */
 
-// What the AI judged: the text, the product and the policyholder — the same fingerprint reuses the last answer, so a case
+// What the AI judged: the text, the product, the policyholder and the plan's benefits — the same fingerprint reuses the last answer, so a case
 // re-checked every run at member review costs no new AI call, and the finding a person saw stays the same (PRD 4.4).
 const fingerprintOf = (...parts) => crypto.createHash('sha256').update(JSON.stringify(parts)).digest('hex').slice(0, 16);
 
@@ -38,22 +39,25 @@ function contractIssue(flag, fingerprint) {
 /**
  * Returns { fingerprint, flag, issue } — flag null when no clause applies — or null when there is nothing to judge.
  * previous: the last check's { fingerprint, flag } (memberVerifyResult.contractExclusion), reused while unchanged.
+ * memberPlansRaw: the member's IAS plans (memberPlans). The AI reads the plan's benefits, so a clause with a "unless
+ * included in the Table of Benefits" exception does not apply when the plan covers it (UAT AYA-CL-26016756: OP/VACC).
  */
-async function checkExclusions(extractedFields, routeKey, previous = null) {
+async function checkExclusions(extractedFields, routeKey, previous = null, memberPlansRaw = null) {
   const diagnosisText = extractedFields.medical?.detail_of_illness_injury;
   const treatmentText = extractedFields.medical?.full_description_of_treatment;
   if (!routeKey || (!diagnosisText && !treatmentText)) return null;
 
   const companyName = extractedFields.policy?.company_name;
-  const fingerprint = fingerprintOf(diagnosisText ?? null, treatmentText ?? null, routeKey, companyName ?? null);
-  const flag = previous?.fingerprint === fingerprint ? previous.flag : await judge(diagnosisText, treatmentText, routeKey, companyName);
+  const planBenefits = uniqueBenefitCandidates(memberPlansRaw);
+  const fingerprint = fingerprintOf(diagnosisText ?? null, treatmentText ?? null, routeKey, companyName ?? null, planBenefits);
+  const flag = previous?.fingerprint === fingerprint ? previous.flag : await judge(diagnosisText, treatmentText, routeKey, companyName, planBenefits);
   return { fingerprint, flag, issue: flag ? contractIssue(flag, fingerprint) : null };
 }
 
-async function judge(diagnosisText, treatmentText, routeKey, companyName) {
+async function judge(diagnosisText, treatmentText, routeKey, companyName, planBenefits) {
   const queryText = [diagnosisText, treatmentText].filter(Boolean).join(' — ');
   const candidates = await findCandidates(queryText, routeKey);
-  const judgment = await judgeExclusion({ diagnosisText, treatmentText, candidates });
+  const judgment = await judgeExclusion({ diagnosisText, treatmentText, candidates, planBenefits });
   if (!judgment) return null;
 
   const overrides = await findOverrides(companyName, routeKey);

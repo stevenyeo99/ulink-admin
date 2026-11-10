@@ -28,8 +28,10 @@ const CONFIDENCE_THRESHOLD = 0.5;
  * Judges whether a claim's diagnosis/treatment falls under any of the given candidate
  * exclusion clauses (from lookup.js's findCandidates). Returns null (never a guess) if
  * there's no free text, no candidates, or confidence is too low.
+ * planBenefits: the member's plan benefits ({ type, typeDesc, head, headDesc }, shared/iasBenefits.js), so a clause's
+ * "unless included in the Table of Benefits" exception is judged against the member's own plan.
  */
-async function judgeExclusion({ diagnosisText, treatmentText, candidates }) {
+async function judgeExclusion({ diagnosisText, treatmentText, candidates, planBenefits = [] }) {
   if (!diagnosisText && !treatmentText) return null;
   if (!candidates || candidates.length === 0) return null;
 
@@ -39,6 +41,11 @@ async function judgeExclusion({ diagnosisText, treatmentText, candidates }) {
     '',
     'Candidate exclusion clauses (nearest by vector similarity, not guaranteed to apply):',
     ...candidates.map((c) => `- ${c.clauseRef}: ${c.clauseText}`),
+    '',
+    "The member's plan covers these benefits (the member's Table of Benefits):",
+    ...(planBenefits.length
+      ? planBenefits.map((b) => `- type=${b.type} (${b.typeDesc}), head=${b.head || '(none)'} (${b.headDesc || '(none)'})`)
+      : ['- (not known)']),
   ].join('\n');
 
   const result = await synthesizeJson({ systemPrompt: SYSTEM_PROMPT, userText, jsonSchema: SCHEMA });

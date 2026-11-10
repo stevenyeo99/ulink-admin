@@ -14,6 +14,10 @@ Rules:
   at all. A few are sub-limits, not full exclusions (e.g. a clause capping cost at a fixed
   amount rather than excluding it) — those are `severity: "cap"`. Read the candidate's own
   wording to tell which; do not assume "exclude" by default.
+- Some clauses make an exception for what the member's plan covers, for example "unless
+  included in the Table of Benefits". The member's plan benefits are listed below the clauses.
+  If the plan lists a benefit that matches this claim, that clause does not apply. For
+  example, head VACC (Vaccination) matches a vaccine. If the plan benefits are "(not known)", judge the clause as written.
 - If nothing in the candidate list plausibly applies, return `excluded: false, clauseRef:
   null, severity: null` — do not force a pick you don't actually believe in.
 - `confidence`: your own honest 0.0-1.0 estimate. Prefer a low confidence (or treating this

@@ -79,7 +79,7 @@ async function checkCase(caseRecord) {
   // No contractExclusion on the case: the check never ran (claim preparation keeps an overridden case from STP then).
   const previousContract = caseRecord.memberVerifyResult?.contractExclusion;
   const contractRuns = result.outcome === 'MEMBER_VERIFIED' && !off.has('POSSIBLE_EXCLUSION');
-  const contract = contractRuns ? await checkExclusions(extractedFields, caseRecord.recognizedType, previousContract) : null;
+  const contract = contractRuns ? await checkExclusions(extractedFields, caseRecord.recognizedType, previousContract, iasResponse.payload?.memberPlans) : null;
   if (contract?.issue) result = evaluate(extractedFields, iasResponse, [...extra, contract.issue], off);
   // Ran with nothing to judge (no diagnosis or treatment text): nothing is kept. Not run: the last answer is kept.
   const contractExclusion = contractRuns ? (contract ? { fingerprint: contract.fingerprint, flag: contract.flag } : { fingerprint: null, flag: null }) : previousContract;
