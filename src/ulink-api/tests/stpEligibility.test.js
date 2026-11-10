@@ -1,7 +1,7 @@
 // STP rules (2026-09-29): per case type (EMAIL / API) + IAS benefit type + currency, plus a
 // never-STP diagnosis prefix list. Every block comes back as a reason.
 
-jest.mock('../db/models', () => ({ StpRule: { findAll: jest.fn() }, StpBlockedDiagnosis: { findAll: jest.fn() } }));
+jest.mock('../db/models', () => ({ StpRule: { findAll: jest.fn() }, StpBlockedDiagnosis: { findAll: jest.fn() }, StpBlockedBenefit: { findAll: jest.fn() } }));
 
 const { evaluateStp } = require('../modules/ias-claim-preparation/stpEligibility');
 
@@ -44,4 +44,14 @@ it('blocks a diagnosis on the never-STP list by code prefix, any case', () => {
   expect(decide({ lines, diagCode: 'R69' }).reasons).toEqual(['Diagnosis R69 is on the never-STP list (R69: not found).']);
   expect(decide({ lines, diagCode: 'C50.9' }).isStp).toBe(false);
   expect(decide({ lines, diagCode: 'J06.9' }).isStp).toBe(true);
+});
+
+it('blocks a voucher whose benefit head is on the never-STP list, while the type rule still decides the rest', () => {
+  const blocking = { ...config, blockedBenefits: [{ benefitType: 'OP', benefitHead: 'VACC', note: 'Vaccination: a person approves' }] };
+  const run = (lines) => evaluateStp(blocking, { source: 'EMAIL', currency: 'MMK', diagCode: 'J06.9', lines });
+  expect(run([{ benefitType: 'OP', benefitHead: 'CONS', subtotal: 30000 }]).isStp).toBe(true);
+  expect(run([{ benefitType: 'OP', benefitHead: 'Vacc', subtotal: 1 }]).reasons).toEqual(['Voucher 1 is OP/Vacc, which is on the never-STP list (Vaccination: a person approves).']); // a head as typed
+  const result = run([{ benefitType: 'OP', benefitHead: 'CONS', subtotal: 30000 }, { benefitType: 'OP', benefitHead: 'VACC', subtotal: 10000 }]);
+  expect(result.reasons).toEqual(['Voucher 2 is OP/VACC, which is on the never-STP list (Vaccination: a person approves).']);
+  expect(result.benefits).toEqual([{ benefitType: 'OP', total: 40000, allowed: true, limit: 50000 }]);
 });

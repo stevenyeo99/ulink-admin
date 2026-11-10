@@ -11,6 +11,7 @@ jest.mock('../db/models', () => ({
   Setting: { findAll: jest.fn(), upsert: jest.fn() },
   StpRule: { findAll: jest.fn() },
   StpBlockedDiagnosis: { findAll: jest.fn() },
+  StpBlockedBenefit: { findAll: jest.fn() },
   ClaimRoute: { findOne: jest.fn() },
 }));
 jest.mock('../modules/shared/emailTaskQueue', () => ({ queueDedupedTask: jest.fn() }));

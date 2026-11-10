@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as AlertDialog from '@radix-ui/react-alert-dialog';
 import { X } from 'lucide-react';
@@ -100,12 +100,20 @@ const onOff = (b: boolean) => (b ? 'On' : 'Off');
 interface Draft {
   rules: Record<string, { stpAllowed: boolean; amount: string }>;
   diagnoses: { codePrefix: string; note: string | null }[];
+  benefits: ListItem[]; // never-STP benefit heads, as "OP/VACC"
   switches: Switches;
   threshold: string; // aiConfidenceThreshold as a percentage, as typed
   numbers: Record<NumberKey, string>; // the whole-number settings, as typed
   policyMode: PolicyMode; // API policy filter
   policies: string; // the policy list, as typed (one per line)
 }
+
+// A never-STP benefit head as a chip ("OP/VACC") and back.
+const benefitItem = (b: { benefitType: string; benefitHead: string; note: string | null }): ListItem => ({ code: `${b.benefitType}/${b.benefitHead}`, note: b.note });
+const benefitFrom = (item: ListItem) => {
+  const [benefitType, benefitHead] = item.code.split('/');
+  return { benefitType, benefitHead, note: item.note };
+};
 
 // The policy box as a list: one value per line, trimmed, uppercase, each once, sorted (the API stores it normalized).
 const parsePolicies = (text: string): string[] => [...new Set(text.split('\n').map((p) => p.trim().toUpperCase()).filter(Boolean))].sort();
@@ -147,6 +155,7 @@ function draftFrom(data: StpSettings): Draft {
   return {
     rules: Object.fromEntries(data.rules.map((r) => [r.id, { stpAllowed: r.stpAllowed, amount: r.amountLimit == null ? '' : String(r.amountLimit) }])),
     diagnoses: data.blockedDiagnoses.map((d) => ({ codePrefix: d.codePrefix, note: d.note })),
+    benefits: data.blockedBenefits.map(benefitItem),
     switches: { ...data.switches },
     threshold: String(Math.round(data.switches.aiConfidenceThreshold * 100)),
     numbers: Object.fromEntries(NUMBER_SETTINGS.map((n) => [n.key, String(data.switches[n.key])])) as Record<NumberKey, string>,
@@ -184,7 +193,7 @@ export function StpSettingsPage({ view = 'stp' }: { view?: View }) {
     <div className="mx-auto h-full w-full max-w-4xl overflow-y-auto px-4 pb-28 pt-6 sm:px-6">
       <p className="mb-4 max-w-2xl text-sm text-slate-600">
         {view === 'stp'
-          ? 'A claim goes straight through (STP) only when every benefit type on it is allowed and within its limit, and its diagnosis is not on the never-STP list. Nothing changes until you save; changes apply to claims prepared after that.'
+          ? 'A claim goes straight through (STP) only when every benefit type on it is allowed and within its limit, and neither its diagnosis nor the benefit head of a voucher is on a never-STP list. Nothing changes until you save; changes apply to claims prepared after that.'
           : 'Which cases the system works on, when the AI counts as unsure and a person checks, and when cases and pipelines are flagged. Nothing changes until you save.'}
         {!isSuperAdmin() && ' Only a super admin can change these.'}
       </p>
@@ -219,6 +228,10 @@ function StpForm({ view, data, canEdit }: { view: View; data: StpSettings; canEd
       const drafted = draft.diagnoses.map((d) => d.codePrefix);
       for (const d of draft.diagnoses) if (!stored.includes(d.codePrefix)) list.push({ key: `+${d.codePrefix}`, text: `Never-STP diagnoses: add ${d.codePrefix}${d.note ? ` (${d.note})` : ''}` });
       for (const code of stored) if (!drafted.includes(code)) list.push({ key: `-${code}`, text: `Never-STP diagnoses: remove ${code}` });
+      const storedBenefits = data.blockedBenefits.map((b) => benefitItem(b).code);
+      const draftedBenefits = draft.benefits.map((b) => b.code);
+      for (const b of draft.benefits) if (!storedBenefits.includes(b.code)) list.push({ key: `b+${b.code}`, text: `Never-STP benefit heads: add ${b.code}${b.note ? ` (${b.note})` : ''}` });
+      for (const code of storedBenefits) if (!draftedBenefits.includes(code)) list.push({ key: `b-${code}`, text: `Never-STP benefit heads: remove ${code}` });
     }
     for (const s of page.switches) {
       if (draft.switches[s.key] !== data.switches[s.key]) list.push({ key: s.key, text: `"${s.title}": ${onOff(data.switches[s.key])} → ${onOff(draft.switches[s.key])}` });
@@ -276,6 +289,7 @@ function StpForm({ view, data, canEdit }: { view: View; data: StpSettings; canEd
           .filter((r) => changed.has(`${r.id}-a`) || changed.has(`${r.id}-m`))
           .map((r) => ({ id: r.id, stpAllowed: draft.rules[r.id].stpAllowed, amountLimit: parseAmount(draft.rules[r.id].amount) })),
         ...(changes.some((c) => /^[+-]/.test(c.key)) && { blockedDiagnoses: draft.diagnoses }),
+        ...(changes.some((c) => /^b[+-]/.test(c.key)) && { blockedBenefits: draft.benefits.map(benefitFrom) }),
         switches: {
           ...Object.fromEntries(page.switches.filter((s) => changed.has(s.key)).map((s) => [s.key, draft.switches[s.key]])),
           ...(changed.has('aiConfidenceThreshold') && { aiConfidenceThreshold: (parsePercent(draft.threshold) ?? 0) / 100 }),
@@ -393,11 +407,32 @@ function StpForm({ view, data, canEdit }: { view: View; data: StpSettings; canEd
             <p className="mt-3 text-xs text-slate-500">A benefit type not listed here (e.g. PA) never goes STP.</p>
           </section>
 
-          <NeverStpDiagnoses
-            diagnoses={draft.diagnoses}
-            stored={data.blockedDiagnoses.map((d) => ({ codePrefix: d.codePrefix, note: d.note }))}
+          <NeverStpList
+            title="Diagnoses that never go STP"
+            help={<>ICD-10 codes, or the start of one: <b>C</b> blocks every cancer code, <b>C50</b> only breast cancer. Applies to email and API
+              cases. <b>R69</b> is the code used when the AI could not find the diagnosis.</>}
+            placeholder="Code, e.g. C50"
+            codeLabel="ICD-10 code"
+            pattern={/^[A-Z][0-9A-Z.]{0,6}$/}
+            patternHint="Enter an ICD-10 code or the start of one, e.g. C or C50."
+            items={draft.diagnoses.map((d) => ({ code: d.codePrefix, note: d.note }))}
+            stored={data.blockedDiagnoses.map((d) => ({ code: d.codePrefix, note: d.note }))}
             canEdit={canEdit}
-            onChange={(diagnoses) => setDraft((d) => ({ ...d, diagnoses }))}
+            onChange={(items) => setDraft((d) => ({ ...d, diagnoses: items.map((i) => ({ codePrefix: i.code, note: i.note })) }))}
+          />
+
+          <NeverStpList
+            title="Benefit heads that never go STP"
+            help={<>An IAS benefit type and head, e.g. <b>OP/VACC</b>: a voucher submitted with it waits for a person. The benefit type rule
+              above still decides the other vouchers of that type. Applies to email and API cases.</>}
+            placeholder="e.g. OP/VACC"
+            codeLabel="Benefit type and head"
+            pattern={/^[A-Z0-9_]{1,20}\/[A-Z0-9_]{1,20}$/}
+            patternHint="Enter the benefit type and head, e.g. OP/VACC."
+            items={draft.benefits}
+            stored={data.blockedBenefits.map(benefitItem)}
+            canEdit={canEdit}
+            onChange={(benefits) => setDraft((d) => ({ ...d, benefits }))}
           />
 
           <section className={card}>
@@ -569,47 +604,58 @@ function SwitchList({
   );
 }
 
-function NeverStpDiagnoses({
-  diagnoses,
+// A never-STP list as chips: add with a code and an optional note, remove, undo a removal. Codes are uppercase.
+type ListItem = { code: string; note: string | null };
+function NeverStpList({
+  title,
+  help,
+  placeholder,
+  codeLabel,
+  pattern,
+  patternHint,
+  items,
   stored,
   canEdit,
   onChange,
 }: {
-  diagnoses: { codePrefix: string; note: string | null }[];
-  stored: { codePrefix: string; note: string | null }[];
+  title: string;
+  help: ReactNode;
+  placeholder: string;
+  codeLabel: string;
+  pattern: RegExp;
+  patternHint: string;
+  items: ListItem[];
+  stored: ListItem[];
   canEdit: boolean;
-  onChange: (diagnoses: { codePrefix: string; note: string | null }[]) => void;
+  onChange: (items: ListItem[]) => void;
 }) {
   const [code, setCode] = useState('');
   const [note, setNote] = useState('');
   const normalized = code.trim().toUpperCase();
   const problem =
     normalized === '' ? null
-      : !/^[A-Z][0-9A-Z.]{0,6}$/.test(normalized) ? 'Enter an ICD-10 code or the start of one, e.g. C or C50.'
-        : diagnoses.some((d) => d.codePrefix === normalized) ? `${normalized} is already on the list.`
+      : !pattern.test(normalized) ? patternHint
+        : items.some((d) => d.code === normalized) ? `${normalized} is already on the list.`
           : null;
-  const removed = stored.filter((s) => !diagnoses.some((d) => d.codePrefix === s.codePrefix));
-  const isStored = (codePrefix: string) => stored.some((s) => s.codePrefix === codePrefix);
+  const removed = stored.filter((s) => !items.some((d) => d.code === s.code));
+  const isStored = (c: string) => stored.some((s) => s.code === c);
 
   return (
     <section className={card}>
-      <h2 className="text-sm font-semibold text-slate-800">Diagnoses that never go STP</h2>
-      <p className="mb-4 mt-1 text-sm text-slate-600">
-        ICD-10 codes, or the start of one: <b>C</b> blocks every cancer code, <b>C50</b> only breast cancer. Applies to email and API
-        cases. <b>R69</b> is the code used when the AI could not find the diagnosis.
-      </p>
+      <h2 className="text-sm font-semibold text-slate-800">{title}</h2>
+      <p className="mb-4 mt-1 text-sm text-slate-600">{help}</p>
       <ul className="mb-4 flex flex-wrap gap-2">
-        {diagnoses.map((d) => {
-          const added = !isStored(d.codePrefix);
+        {items.map((d) => {
+          const added = !isStored(d.code);
           return (
-            <li key={d.codePrefix} className={clsx('inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm', added ? 'bg-ulink-orange/10 ring-1 ring-ulink-orange/40' : 'bg-slate-100')}>
-              <span className="font-medium text-slate-800">{d.codePrefix}</span>
+            <li key={d.code} className={clsx('inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm', added ? 'bg-ulink-orange/10 ring-1 ring-ulink-orange/40' : 'bg-slate-100')}>
+              <span className="font-medium text-slate-800">{d.code}</span>
               {d.note && <span className="text-slate-500">{d.note}</span>}
               {added && <span className="text-xs text-ulink-orange-dark">new</span>}
               {canEdit && (
                 <button
-                  onClick={() => onChange(diagnoses.filter((x) => x.codePrefix !== d.codePrefix))}
-                  aria-label={`Remove ${d.codePrefix}`}
+                  onClick={() => onChange(items.filter((x) => x.code !== d.code))}
+                  aria-label={`Remove ${d.code}`}
                   className="text-slate-400 hover:text-red-600"
                 >
                   <X size={14} />
@@ -619,17 +665,17 @@ function NeverStpDiagnoses({
           );
         })}
         {removed.map((s) => (
-          <li key={s.codePrefix} className="inline-flex items-center gap-2 rounded-full bg-red-50 px-3 py-1 text-sm text-red-700">
-            <span className="line-through">{s.codePrefix}</span>
+          <li key={s.code} className="inline-flex items-center gap-2 rounded-full bg-red-50 px-3 py-1 text-sm text-red-700">
+            <span className="line-through">{s.code}</span>
             <span className="text-xs">removed</span>
             {canEdit && (
-              <button onClick={() => onChange([...diagnoses, s])} className="text-xs underline">
+              <button onClick={() => onChange([...items, s])} className="text-xs underline">
                 undo
               </button>
             )}
           </li>
         ))}
-        {diagnoses.length === 0 && removed.length === 0 && <li className="text-sm text-slate-500">None.</li>}
+        {items.length === 0 && removed.length === 0 && <li className="text-sm text-slate-500">None.</li>}
       </ul>
       {canEdit && (
         <form
@@ -637,13 +683,13 @@ function NeverStpDiagnoses({
           onSubmit={(e) => {
             e.preventDefault();
             if (problem || normalized === '') return;
-            onChange([...diagnoses, { codePrefix: normalized, note: note.trim() || null }]);
+            onChange([...items, { code: normalized, note: note.trim() || null }]);
             setCode('');
             setNote('');
           }}
         >
           <div>
-            <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Code, e.g. C50" aria-label="ICD-10 code" className={`${input} w-36`} />
+            <input value={code} onChange={(e) => setCode(e.target.value)} placeholder={placeholder} aria-label={codeLabel} className={`${input} w-36`} />
             {problem && <p className="mt-1 text-xs text-red-600">{problem}</p>}
           </div>
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" aria-label="Note" className={`${input} min-w-0 flex-1`} />

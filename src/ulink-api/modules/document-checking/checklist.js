@@ -112,11 +112,16 @@ function checkIncompleteMedicalReport(fields) {
 // are deliberately not flagged under this line until/unless business approves a
 // generalized wording — this isn't a coverage gap being silently accepted, it's staying
 // within what the approved customer-facing text actually says.
+//
+// A voucher whose printed lines the AI added up (line_total is a number) has a breakdown, whatever its
+// has_itemized_breakdown says: UAT AYA-CL-26035164, a pharmacy receipt listing two medicines with prices was
+// flagged. The check fails only when both readings agree that there are no line amounts.
+const lacksBreakdown = (item) => item.voucher_type === 'pharmacy' && item.has_itemized_breakdown === false
+  && !(typeof item.line_total === 'number' && Number.isFinite(item.line_total));
+
 function checkMissingVoucherBreakdown(fields) {
   if (fields.invoices?.present !== true) return null;
-  const anyMissingBreakdown = (fields.invoices.items || []).some(
-    (item) => item.voucher_type === 'pharmacy' && item.has_itemized_breakdown === false
-  );
+  const anyMissingBreakdown = (fields.invoices.items || []).some(lacksBreakdown);
   return anyMissingBreakdown ? ISSUES.MISSING_VOUCHER_BREAKDOWN : null;
 }
 
@@ -499,7 +504,7 @@ function reasonForIssue(issue, fields) {
     case ISSUES.MISSING_VOUCHER_BREAKDOWN:
       return {
         code: 'MISSING_VOUCHER_BREAKDOWN',
-        reason: `Pharmacy voucher(s) ${indexed((item) => item.voucher_type === 'pharmacy' && item.has_itemized_breakdown === false)} do not list the individual medicines and their prices.`,
+        reason: `Pharmacy voucher(s) ${indexed(lacksBreakdown)} do not list the individual medicines and their prices.`,
       };
     case ISSUES.VOUCHER_AMOUNT_MISMATCH: {
       const subtotals = invoiceItems.map((item) => item.subtotal).filter((amount) => amount > 0);

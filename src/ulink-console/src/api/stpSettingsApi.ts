@@ -16,6 +16,14 @@ export interface StpBlockedDiagnosis {
   note: string | null;
 }
 
+// An IAS benefit type + head that never goes STP (e.g. OP / VACC); the benefit type rule still decides the rest.
+export interface StpBlockedBenefit {
+  id: string;
+  benefitType: string;
+  benefitHead: string;
+  note: string | null;
+}
+
 // Settings changed on the STP and System settings pages (ulink-api modules/settings/settings.js DEFAULTS).
 export interface Switches {
   // Human-in-the-loop switches — both off until Ulink decides.
@@ -62,15 +70,17 @@ export type SwitchKey = { [K in keyof Switches]: Switches[K] extends boolean ? K
 export interface StpSettings {
   rules: StpRule[];
   blockedDiagnoses: StpBlockedDiagnosis[];
+  blockedBenefits: StpBlockedBenefit[];
   switches: Switches;
   numberRanges: Record<NumberKey, [number, number]>;
 }
 
 // What the one Save sends: the rules, the complete never-STP list, the switches (saved all or nothing).
-// One page's part (STP settings or System settings). blockedDiagnoses left out: the never-STP list is unchanged.
+// One page's part (STP settings or System settings). blockedDiagnoses / blockedBenefits left out: that list is unchanged.
 export interface StpSettingsForm {
   rules?: { id: string; stpAllowed: boolean; amountLimit: number | null }[];
   blockedDiagnoses?: { codePrefix: string; note: string | null }[];
+  blockedBenefits?: { benefitType: string; benefitHead: string; note: string | null }[];
   switches: Partial<Switches>;
 }
 

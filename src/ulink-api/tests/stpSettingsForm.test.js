@@ -5,6 +5,7 @@ jest.mock('../db/models', () => ({
   sequelize: { transaction: (fn) => fn('tx') },
   StpRule: { findAll: jest.fn(), update: jest.fn() },
   StpBlockedDiagnosis: { findAll: jest.fn(), create: jest.fn() },
+  StpBlockedBenefit: { findAll: jest.fn().mockResolvedValue([]), create: jest.fn() },
   Setting: { findAll: jest.fn().mockResolvedValue([]), upsert: jest.fn() },
 }));
 
@@ -29,6 +30,7 @@ describe('validateStpForm', () => {
     expect(form).toEqual({
       rules: [{ id: 'r1', stpAllowed: true, amountLimit: 60000 }],
       blockedDiagnoses: [{ codePrefix: 'R69', note: 'Not found' }, { codePrefix: 'C50', note: null }],
+      blockedBenefits: null,
       switches: { stpBlockOnReviewPoints: true },
     });
   });
@@ -129,4 +131,11 @@ describe('saveStpSettings', () => {
     expect(r.status).toHaveBeenCalledWith(400);
     expect(Setting.upsert).not.toHaveBeenCalled();
   });
+});
+
+it('checks the never-STP benefit heads like the diagnosis list', () => {
+  const { errors, form } = validateStpForm({ blockedBenefits: [{ benefitType: ' op ', benefitHead: 'vacc', note: 'Vaccination' }, { benefitType: 'OP', benefitHead: 'VACC' }, { benefitType: 'OP', benefitHead: '' }] }, rules);
+  expect(form.blockedBenefits).toEqual([{ benefitType: 'OP', benefitHead: 'VACC', note: 'Vaccination' }]);
+  expect(errors).toEqual(['OP/VACC is on the list twice.', '"OP/" is not an IAS benefit type and head (e.g. OP and VACC).']);
+  expect(validateStpForm({}, rules).form.blockedBenefits).toBeNull();
 });

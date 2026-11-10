@@ -1,4 +1,4 @@
-const { sequelize, StpRule, StpBlockedDiagnosis } = require('../../db/models');
+const { sequelize, StpRule, StpBlockedDiagnosis, StpBlockedBenefit } = require('../../db/models');
 const { getSettings, setSettings, settingError, WHOLE_NUMBERS } = require('../../modules/settings/settings');
 
 // STP settings and System settings edited from the console (one form per page, one Save) — read by
@@ -16,15 +16,18 @@ const ruleView = (r) => ({
   amountLimit: r.amountLimit == null ? null : Number(r.amountLimit),
 });
 const diagnosisView = (d) => ({ id: d.id, codePrefix: d.codePrefix, note: d.note });
+const benefitView = (b) => ({ id: b.id, benefitType: b.benefitType, benefitHead: b.benefitHead, note: b.note });
+const benefitKey = (b) => `${b.benefitType}/${b.benefitHead}`;
 
 async function settingsView() {
-  const [rules, blockedDiagnoses, switches] = await Promise.all([
+  const [rules, blockedDiagnoses, blockedBenefits, switches] = await Promise.all([
     StpRule.findAll({ order: [['caseSource', 'ASC'], ['benefitType', 'ASC']] }),
     StpBlockedDiagnosis.findAll({ order: [['codePrefix', 'ASC']] }),
+    StpBlockedBenefit.findAll({ order: [['benefitType', 'ASC'], ['benefitHead', 'ASC']] }),
     getSettings(),
   ]);
   // numberRanges: the allowed range of each whole-number setting, so the form checks what the save will (SYSTEM_4 E6).
-  return { rules: rules.map(ruleView), blockedDiagnoses: blockedDiagnoses.map(diagnosisView), switches, numberRanges: WHOLE_NUMBERS };
+  return { rules: rules.map(ruleView), blockedDiagnoses: blockedDiagnoses.map(diagnosisView), blockedBenefits: blockedBenefits.map(benefitView), switches, numberRanges: WHOLE_NUMBERS };
 }
 
 async function getStpSettings(req, res) {
@@ -65,6 +68,20 @@ function validateStpForm(body, existingRules) {
     else { seen.add(codePrefix); blockedDiagnoses.push({ codePrefix, note }); }
   }
 
+  // Never-STP benefit heads (e.g. OP/VACC): same rules as the diagnosis list — left out or null = not touched.
+  const blockedBenefits = body?.blockedBenefits == null ? null : [];
+  if (blockedBenefits && !Array.isArray(body.blockedBenefits)) errors.push('The never-STP benefit heads must be a list.');
+  const seenBenefits = new Set();
+  const code = (v) => (typeof v === 'string' ? v.trim().toUpperCase() : '');
+  for (const input of Array.isArray(body?.blockedBenefits) ? body.blockedBenefits : []) {
+    const benefit = { benefitType: code(input?.benefitType), benefitHead: code(input?.benefitHead) };
+    const note = typeof input?.note === 'string' && input.note.trim() ? input.note.trim() : null;
+    if (![benefit.benefitType, benefit.benefitHead].every((c) => /^[A-Z0-9_]{1,20}$/.test(c))) {
+      errors.push(`"${input?.benefitType ?? ''}/${input?.benefitHead ?? ''}" is not an IAS benefit type and head (e.g. OP and VACC).`);
+    } else if (seenBenefits.has(benefitKey(benefit))) errors.push(`${benefitKey(benefit)} is on the list twice.`);
+    else { seenBenefits.add(benefitKey(benefit)); blockedBenefits.push({ ...benefit, note }); }
+  }
+
   const switches = {};
   for (const [key, value] of Object.entries(body?.switches || {})) {
     const error = settingError(key, value);
@@ -74,15 +91,30 @@ function validateStpForm(body, existingRules) {
   // The list means nothing without its mode: a client that sends the list alone (an old console tab) could flip it.
   if ('apiPolicyRefNos' in (body?.switches || {}) && !('apiPolicyMode' in body.switches)) errors.push('apiPolicyRefNos must be saved with apiPolicyMode.');
 
-  return { errors, form: { rules, blockedDiagnoses, switches } };
+  return { errors, form: { rules, blockedDiagnoses, blockedBenefits, switches } };
+}
+
+// A never-STP list saved as the form sent it: rows not in the form removed, new ones added, a changed note updated.
+async function replaceList(Model, list, key, transaction) {
+  const existing = await Model.findAll({ transaction });
+  const keep = new Set(list.map(key));
+  for (const row of existing) {
+    if (!keep.has(key(row))) await row.destroy({ transaction });
+  }
+  for (const item of list) {
+    const current = existing.find((row) => key(row) === key(item));
+    if (!current) await Model.create(item, { transaction });
+    else if ((current.note ?? null) !== item.note) await current.update({ note: item.note }, { transaction });
+  }
 }
 
 /**
  * PUT /api/stp-settings — a page's form: { rules?: [{ id, stpAllowed, amountLimit }], blockedDiagnoses?:
- * [{ codePrefix, note }] (the complete list; left out = unchanged), switches?: { … } }. All or nothing: any error → nothing saved.
+ * [{ codePrefix, note }] and blockedBenefits?: [{ benefitType, benefitHead, note }] (each the complete list; left out =
+ * unchanged), switches?: { … } }. All or nothing: any error → nothing saved.
  */
 async function saveStpSettings(req, res) {
-  if (['rules', 'blockedDiagnoses', 'switches'].every((part) => req.body?.[part] == null)) return bad(res, 'Nothing to save.');
+  if (['rules', 'blockedDiagnoses', 'blockedBenefits', 'switches'].every((part) => req.body?.[part] == null)) return bad(res, 'Nothing to save.');
   const { errors, form } = validateStpForm(req.body, await StpRule.findAll());
   if (errors.length) return bad(res, errors.join(' '), errors);
 
@@ -90,18 +122,8 @@ async function saveStpSettings(req, res) {
     for (const { id, stpAllowed, amountLimit } of form.rules) {
       await StpRule.update({ stpAllowed, amountLimit }, { where: { id }, transaction });
     }
-    if (form.blockedDiagnoses) {
-      const keep = form.blockedDiagnoses.map((d) => d.codePrefix);
-      const existing = await StpBlockedDiagnosis.findAll({ transaction });
-      for (const d of existing) {
-        if (!keep.includes(d.codePrefix)) await d.destroy({ transaction });
-      }
-      for (const d of form.blockedDiagnoses) {
-        const current = existing.find((e) => e.codePrefix === d.codePrefix);
-        if (!current) await StpBlockedDiagnosis.create(d, { transaction });
-        else if ((current.note ?? null) !== d.note) await current.update({ note: d.note }, { transaction });
-      }
-    }
+    if (form.blockedDiagnoses) await replaceList(StpBlockedDiagnosis, form.blockedDiagnoses, (d) => d.codePrefix, transaction);
+    if (form.blockedBenefits) await replaceList(StpBlockedBenefit, form.blockedBenefits, benefitKey, transaction);
     await setSettings(form.switches, req.user.username, { transaction });
   });
   res.json(await settingsView());

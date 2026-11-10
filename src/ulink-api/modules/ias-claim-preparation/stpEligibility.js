@@ -1,17 +1,19 @@
-const { StpRule, StpBlockedDiagnosis } = require('../../db/models');
+const { StpRule, StpBlockedDiagnosis, StpBlockedBenefit } = require('../../db/models');
 const { getSettings } = require('../settings/settings');
 
 const amount = (n) => Number(n).toLocaleString('en-US');
 
 /**
  * STP (straight-through processing) decision from the rules set on the console Settings page
- * (ulink_stp_rules + ulink_stp_blocked_diagnoses). Pure — rules are passed in.
+ * (ulink_stp_rules + ulink_stp_blocked_diagnoses + ulink_stp_blocked_benefits). Pure — rules are passed in.
  *
  * A case is STP only when nothing below blocks it; every block is kept as a reason:
  * - a line has no IAS benefit type (the AI couldn't pick one) — no rule can apply;
  * - no rule for the case type + benefit type + currency, or the rule says STP not allowed;
  * - the case's lines of one benefit type add up to more than that type's limit;
  * - the diagnosis code starts with a blocked prefix (R69 = diagnosis not found);
+ * - a voucher's benefit type + head is on the never-STP benefit list (e.g. OP/VACC) — the type rule still decides the
+ *   other vouchers, and the voucher still counts in its type's total;
  * - switch "open review point blocks STP" on (settings) and the case has an open review point — the
  *   AI was unsure, a possible exclusion, … (openReviewPoints: [{ decision, reason }]) — a person checks first.
  *
@@ -20,7 +22,7 @@ const amount = (n) => Number(n).toLocaleString('en-US');
  *
  * Returns { isStp, source, currency, diagCode, benefits: [{ benefitType, total, allowed, limit }], reasons }.
  */
-function evaluateStp({ rules, blockedDiagnoses, blockOnReviewPoints = false, blockVitamins = false }, { source, currency, lines, diagCode, openReviewPoints = [], vitaminVouchers = [], balanceBypassed = false, checksOff = [], exclusionLetThrough = false, contractExclusionLetThrough = false }) {
+function evaluateStp({ rules, blockedDiagnoses, blockedBenefits = [], blockOnReviewPoints = false, blockVitamins = false }, { source, currency, lines, diagCode, openReviewPoints = [], vitaminVouchers = [], balanceBypassed = false, checksOff = [], exclusionLetThrough = false, contractExclusionLetThrough = false }) {
   const reasons = [];
   const totals = new Map();
   for (const { benefitType, subtotal } of lines) {
@@ -42,6 +44,12 @@ function evaluateStp({ rules, blockedDiagnoses, blockOnReviewPoints = false, blo
       reasons.push(limit == null ? `${benefitType} has no amount limit set.` : `${benefitType} ${amount(total)} ${currency} > limit ${amount(limit)}.`);
     }
     return { benefitType, total, allowed, limit };
+  });
+
+  lines.forEach(({ benefitType, benefitHead }, i) => {
+    const same = (a, b) => String(a).toUpperCase() === String(b).toUpperCase();
+    const hit = benefitHead && blockedBenefits.find((b) => same(b.benefitType, benefitType) && same(b.benefitHead, benefitHead));
+    if (hit) reasons.push(`Voucher ${i + 1} is ${benefitType}/${benefitHead}, which is on the never-STP list${hit.note ? ` (${hit.note})` : ''}.`);
   });
 
   const blocked = diagCode && blockedDiagnoses.find((d) => diagCode.toUpperCase().startsWith(d.codePrefix.toUpperCase()));
@@ -73,8 +81,10 @@ function evaluateStp({ rules, blockedDiagnoses, blockOnReviewPoints = false, blo
 }
 
 async function stpDecision(input) {
-  const [rules, blockedDiagnoses, settings] = await Promise.all([StpRule.findAll(), StpBlockedDiagnosis.findAll(), getSettings()]);
-  return evaluateStp({ rules, blockedDiagnoses, blockOnReviewPoints: settings.stpBlockOnReviewPoints, blockVitamins: settings.vitaminsBlockStp }, input);
+  const [rules, blockedDiagnoses, blockedBenefits, settings] = await Promise.all([
+    StpRule.findAll(), StpBlockedDiagnosis.findAll(), StpBlockedBenefit.findAll(), getSettings(),
+  ]);
+  return evaluateStp({ rules, blockedDiagnoses, blockedBenefits, blockOnReviewPoints: settings.stpBlockOnReviewPoints, blockVitamins: settings.vitaminsBlockStp }, input);
 }
 
 module.exports = { stpDecision, evaluateStp };

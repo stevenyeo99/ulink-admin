@@ -162,7 +162,7 @@ async function checkCase(caseRecord) {
     openReviewPoints,
     source: caseRecord.source,
     currency: 'MMK',
-    lines: lines.map((line) => ({ benefitType: line.benefit?.benefitType ?? null, subtotal: line.subtotal })),
+    lines: lines.map((line) => ({ benefitType: line.benefit?.benefitType ?? null, benefitHead: line.benefit?.benefitHead ?? null, subtotal: line.subtotal })),
     diagCode: diagnosisPick.pick?.diagCode ?? null,
     // Vouchers the AI read vitamins / supplements on, or a person rejected them on (SYSTEM_4 E4-10) — numbered like the
     // document check's line.

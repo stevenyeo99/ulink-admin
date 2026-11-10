@@ -12,13 +12,14 @@ const router = express.Router();
  *     summary: STP settings and System settings — rules per case type (EMAIL / API) and IAS benefit type, never-STP diagnoses, every switch and number
  *     responses:
  *       200:
- *         description: "{ rules: [{ id, caseSource, benefitType, currency, stpAllowed, amountLimit }], blockedDiagnoses: [{ id, codePrefix, note }], switches: { stpBlockOnReviewPoints, holdUnsureMissingDocsEmail } }"
+ *         description: "{ rules: [{ id, caseSource, benefitType, currency, stpAllowed, amountLimit }], blockedDiagnoses: [{ id, codePrefix, note }], blockedBenefits: [{ id, benefitType, benefitHead, note }], switches: { stpBlockOnReviewPoints, holdUnsureMissingDocsEmail } }"
  *   put:
  *     tags: [stp-settings]
- *     summary: Save one settings page's form (super admin) — all or nothing; blockedDiagnoses left out = unchanged
+ *     summary: Save one settings page's form (super admin) — all or nothing; blockedDiagnoses / blockedBenefits left out = unchanged
  *     description: >
  *       The console's one Save. rules — the rules to change; blockedDiagnoses — the complete never-STP list
- *       (codes left out are removed); switches — the switches to set. Any error → nothing is saved and every
+ *       (codes left out are removed); blockedBenefits — the complete never-STP benefit head list (e.g. OP/VACC);
+ *       switches — the switches to set. Any error → nothing is saved and every
  *       problem is returned in error.errors. Applies to claims prepared after the save.
  *     requestBody:
  *       required: true
@@ -33,6 +34,9 @@ const router = express.Router();
  *               blockedDiagnoses:
  *                 type: array
  *                 items: { type: object, properties: { codePrefix: { type: string, example: C50 }, note: { type: string } } }
+ *               blockedBenefits:
+ *                 type: array
+ *                 items: { type: object, properties: { benefitType: { type: string, example: OP }, benefitHead: { type: string, example: VACC }, note: { type: string } } }
  *               switches:
  *                 type: object
  *                 properties: { stpBlockOnReviewPoints: { type: boolean }, holdUnsureMissingDocsEmail: { type: boolean } }
