@@ -830,7 +830,7 @@ function evaluateDocumentChecks(extractedFields) {
     ...buildEvaluatorChecklist(extractedFields),
     ...buildMandatoryFieldChecklist(extractedFields),
     ...buildDateConsistencyChecklist(extractedFields),
-  ].map((item) => withFieldConfidence(item, entries))
+  ].map((item) => withFieldConfidence(item, entries, extractedFields))
     .map((item) => (CHECK_FIELDS[item.code] ? { ...item, editItems: editItemsFor(item.code, extractedFields) } : item));
   return { issues, passed: issues.length === 0, details, flags, checklist };
 }
@@ -1237,9 +1237,11 @@ const leastSure = (entries) => entries.filter((e) => typeof e.confidence === 'nu
 // compared: whether the check compared anything — a check that had nothing to compare used no value.
 // Checks about how a document looks (legible, stamp, breakdown) and the presence checks have their own scores.
 // voucherField: which value of each voucher the check compares — so the review page can offer it for correction.
+// anyOne: the check passes on any one of its values (MISSING_BANK_INFO: one bank detail found), so one value read
+// surely makes the pass sure. An unsure value still shows once, on "Key values read clearly" (AYA-CL-26016756).
 const CHECK_FIELDS = {
   INCOMPLETE_CLAIM_FORM: { paths: ['medical.detail_of_illness_injury', 'medical.full_description_of_treatment'] },
-  MISSING_BANK_INFO: { paths: ['bank.bank_name', 'bank.bank_account_name', 'bank.bank_account_number'] },
+  MISSING_BANK_INFO: { paths: ['bank.bank_name', 'bank.bank_account_name', 'bank.bank_account_number'], anyOne: true },
   VOUCHER_AMOUNT_MISMATCH: { paths: ['claim.total_claim_amount'], vouchers: (v) => v.subtotal > 0, voucherField: 'subtotal', compared: (item) => item.confidence != null },
   TREATMENT_DATE_INCONSISTENT: { paths: ['claim.appointment_date', 'claim.accident_date', 'medical_record.date'], compared: (item) => item.confidence != null },
   INVOICE_DATE_INCONSISTENT: { paths: ['medical_record.date'], vouchers: (v) => v.date != null, voucherField: 'date', compared: (item) => item.confidence != null },
@@ -1283,9 +1285,11 @@ function withEditItems(documentCheckResult, extractedFields) {
 // with a note naming the value (usedFields: every unsure value it used, so "Key values read clearly" doesn't repeat
 // them). A failed check stays as the rule decided it — a plainly missing item still goes to the customer
 // (holdForReview.js). A check whose values were all read surely is left as it was (a rule result, not "AI self-rated").
-function withFieldConfidence(item, entries) {
+function withFieldConfidence(item, entries, fields) {
   const uses = CHECK_FIELDS[item.code];
   if (!uses || item.passed !== true || (uses.compared && !uses.compared(item))) return item;
+  if (uses.anyOne && uses.paths.some((path) => valueAt(fields, path) != null
+    && !entries.some((e) => e.field === path && isUnsure(e.confidence)))) return item;
   const unsure = entries.filter((e) => isUnsure(e.confidence)
     && (uses.paths.includes(e.field) || (uses.vouchers && e.voucher && uses.vouchers(e.voucher))));
   const least = leastSure(unsure);

@@ -240,9 +240,9 @@ const NUMBER_AT_PAGE_START = /^(?:\[[^\]]+\][ \t]*\n)?[ \t]*([0-9][0-9 \-]{4,28}
  * Deterministic backstop for the bank account number (AYA-CL-26043766): the AI read it as "unclear" on the typed
  * e-claim page while page 12 printed it clearly, so the case asked the customer for a number they had given. When the
  * AI read no number, the page transcripts are searched for the "Account Number" label, also a label that ends one
- * page with the number starting the next (AYA-CL-26016756). One distinct number fills the
- * field, with evidence below the AI confidence threshold, so a person still sees it as unsure and checks it against
- * the page. Several different numbers, or none: the field stays empty, as the AI left it.
+ * page with the number starting the next (AYA-CL-26016756). One distinct number fills the field as sure (owner,
+ * 2026-11-10: a number printed after its label is not a doubt, so it passes; it was 0.6, unsure, before). Several
+ * different numbers, or none: the field stays empty, as the AI left it.
  */
 function fillAccountNumberFromText(fields, transcriptChunks = []) {
   if (!fields?.bank || fields.bank.bank_account_number) return fields;
@@ -260,8 +260,8 @@ function fillAccountNumberFromText(fields, transcriptChunks = []) {
   const [[number, page]] = [...found];
   return replaceEvidence({ ...fields, bank: { ...fields.bank, bank_account_number: number } }, 'bank.bank_account_number', {
     page,
-    confidence: 0.6,
-    reason: `Found by text search: "Account Number" on ${page ?? 'a page'}; the AI did not read it. Check it against the page.`,
+    confidence: 0.9,
+    reason: `Found by text search: the number printed after "Account Number" on ${page ?? 'a page'}.`,
   });
 }
 

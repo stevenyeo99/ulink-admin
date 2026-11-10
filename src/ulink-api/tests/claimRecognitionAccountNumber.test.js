@@ -1,5 +1,5 @@
 // Bank account number backstop (AYA-CL-26043766): the AI read "unclear" on the typed e-claim page while page 12 printed
-// the number. When the AI read none, one "Account Number" in the page text fills it, marked unsure for a person.
+// the number. When the AI read none, one "Account Number" in the page text fills it, as sure (owner, 2026-11-10).
 const { fillAccountNumberFromText } = require('../modules/claim-recognition/service');
 
 const read = (number) => ({ bank: { bank_name: 'AYA', bank_account_name: 'Saw Wai Yan', bank_account_number: number }, field_evidence: [] });
@@ -8,10 +8,10 @@ const pages = [
   '[claim.pdf - page 12]\nAccount Holder Name\nSaw Wai Yan\nAccount Number\n20030586211\nSignature',
 ];
 
-it('fills the number from the page text, as unsure, with the page', () => {
+it('fills the number from the page text, as sure, with the page', () => {
   const fields = fillAccountNumberFromText(read(null), pages);
   expect(fields.bank.bank_account_number).toBe('20030586211');
-  expect(fields.field_evidence).toEqual([expect.objectContaining({ field: 'bank.bank_account_number', page: 'claim.pdf - page 12', confidence: 0.6 })]);
+  expect(fields.field_evidence).toEqual([expect.objectContaining({ field: 'bank.bank_account_number', page: 'claim.pdf - page 12', confidence: 0.9 })]);
 });
 
 it('leaves the field alone when the AI read a number, when two different numbers appear, or when none does', () => {
@@ -29,7 +29,7 @@ it('takes the number that starts the next page when a page ends with the label (
   ];
   const fields = fillAccountNumberFromText(read(null), split);
   expect(fields.bank.bank_account_number).toBe('12730102104946001');
-  expect(fields.field_evidence).toEqual([expect.objectContaining({ page: 'VSQB919839.pdf - page 3', confidence: 0.6 })]);
+  expect(fields.field_evidence).toEqual([expect.objectContaining({ page: 'VSQB919839.pdf - page 3', confidence: 0.9 })]);
   // A number starting a page is taken only after a page that ends with the label.
   expect(fillAccountNumberFromText(read(null), ['[a.pdf - page 1]\nBank Name: Kbz', split[1]]).bank.bank_account_number).toBeNull();
   expect(fillAccountNumberFromText(read(null), [split[0], '[a.pdf - page 3]\nTotal 66000\n12730102104946001']).bank.bank_account_number).toBeNull();

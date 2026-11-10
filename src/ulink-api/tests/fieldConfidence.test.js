@@ -28,7 +28,9 @@ const summaryOf = (checklist) => buildAssessmentSummary({ documentCheckResult: {
 beforeEach(async () => { Setting.findAll.mockResolvedValue([]); await getSettings(); });
 
 it('a check read from an unsure value is as unsure as that value, and says which', () => {
-  const bank = item(fields({ evidence: [{ field: 'bank.bank_account_number', confidence: 0.5, reason: 'handwritten, last digit 1 or 7', page: 'claim.pdf - page 2' }] }), 'MISSING_BANK_INFO');
+  const f = fields({ evidence: [{ field: 'bank.bank_account_number', confidence: 0.5, reason: 'handwritten, last digit 1 or 7', page: 'claim.pdf - page 2' }] });
+  f.bank = { bank_name: null, bank_account_name: null, bank_account_number: '123' }; // the only bank value found is unsure
+  const bank = item(f, 'MISSING_BANK_INFO');
   expect(bank).toMatchObject({ passed: true, confidence: 0.5 });
   expect(bank.note).toContain('Least sure value read: Account number 50% (handwritten, last digit 1 or 7).');
   expect(summaryOf([bank]).reviewPoints).toEqual([expect.objectContaining({ decision: 'Bank information present', reason: 'AI unsure' })]);
@@ -108,8 +110,18 @@ describe('code review 2026-10-15', () => {
     expect(item(f, 'VOUCHER_AMOUNT_MISMATCH').confidence).toBe(1);
   });
 
+  it('the bank check passes on one sure value; an unsure account number shows once, on "Values read" (AYA-CL-26016756)', () => {
+    const f = fields({ evidence: [unsureBank] });
+    const { checklist } = evaluateDocumentChecks(f);
+    expect(checklist.find((i) => i.code === 'MISSING_BANK_INFO')).toMatchObject({ passed: true, confidence: null });
+    const read = fieldsReadCheck(f, checklist);
+    expect(read.fields.find((e) => e.field === 'bank.bank_account_number').reportedBy).toBeUndefined();
+    expect(read.confidence).toBe(unsureBank.confidence);
+  });
+
   it('one doubt is one review point: the check that used it reports it, "Values read" does not repeat it', () => {
     const f = fields({ evidence: [unsureBank] });
+    f.bank = { bank_name: null, bank_account_name: null, bank_account_number: '123' };
     const { checklist } = evaluateDocumentChecks(f);
     const read = fieldsReadCheck(f, checklist);
     expect(read.fields.find((e) => e.field === 'bank.bank_account_number')).toMatchObject({ reportedBy: 'MISSING_BANK_INFO' });
