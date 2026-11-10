@@ -1,5 +1,6 @@
 const { todayInIasTimezone } = require('../shared/iasDates');
 const { lastReadSettings } = require('../settings/settings');
+const { followUpVerdicts, labVouchersOffDate } = require('./labFollowUp');
 
 /**
  * Canonical customer-facing issue wording + the evaluator logic that decides which apply
@@ -616,18 +617,25 @@ function evaluateMandatoryFieldFlags(fields) {
 // treatment-date resolution (an illness claim has no accident_date; appointment_date is the
 // real visit date) — reused here rather than reinvented, for the same reason it's used
 // there.
-function checkTreatmentDateConsistency(fields) {
+//
+// One exception (users, 2026-11-10; labFollowUp.js): a lab / imaging voucher inside the doctor's own follow-up period
+// is not a mismatch, and neither is a claim date that is the date of such a voucher (the customer wrote the day of the
+// test on the claim form).
+function checkTreatmentDateConsistency(fields, verdicts = followUpVerdicts(fields)) {
   const flags = [];
   const claimDate = fields.claim?.accident_date || fields.claim?.appointment_date;
   const medicalRecordDate = fields.medical_record?.date;
+  const explained = verdicts.map((verdict) => verdict?.passed === true);
+  const items = fields.invoices?.items || [];
 
-  if (claimDate != null && medicalRecordDate != null && claimDate !== medicalRecordDate) {
+  if (claimDate != null && medicalRecordDate != null && claimDate !== medicalRecordDate
+    && !items.some((item, index) => explained[index] && item.date === claimDate)) {
     flags.push({ code: 'TREATMENT_DATE_INCONSISTENT', claimDate, medicalRecordDate });
   }
 
   if (medicalRecordDate != null) {
-    (fields.invoices?.items || []).forEach((item, index) => {
-      if (item.date != null && item.date !== medicalRecordDate) {
+    items.forEach((item, index) => {
+      if (item.date != null && item.date !== medicalRecordDate && !explained[index]) {
         flags.push({ code: 'INVOICE_DATE_INCONSISTENT', voucherIndex: index + 1, medicalRecordDate, invoiceDate: item.date });
       }
     });
@@ -793,27 +801,38 @@ const isFollowUpVoucher = (item, medicalRecordDate) => ['lab', 'pharmacy'].inclu
 const withNote = (agreement, extra) => (agreement && extra ? { ...agreement, note: `${agreement.note} ${extra}` } : agreement);
 
 function buildDateConsistencyChecklist(extractedFields) {
-  const dateFlags = checkTreatmentDateConsistency(extractedFields) || [];
+  // The doctor's own follow-up period, where the note was read (labFollowUp.js): a voucher it explains agrees in full;
+  // one it does not explain says why, in place of the general hint. Worked out once, for the flags and the lines.
+  const verdicts = followUpVerdicts(extractedFields);
+  const dateFlags = checkTreatmentDateConsistency(extractedFields, verdicts) || [];
   const claimDate = extractedFields.claim?.accident_date || extractedFields.claim?.appointment_date;
   const medicalRecordDate = extractedFields.medical_record?.date;
   const items = extractedFields.invoices?.items || [];
   const followUp = items.map((item) => isFollowUpVoucher(item, medicalRecordDate));
   const claimFollowUp = claimDate !== medicalRecordDate ? items.findIndex((item, i) => followUp[i] && item.date === claimDate) : -1;
-  const treatmentAgreement = withNote(dateAgreement(claimDate, medicalRecordDate, 'Claim date', 'Medical record date'),
-    claimFollowUp >= 0 ? `The claim date matches voucher ${claimFollowUp + 1} (possible follow-up visit).` : null);
+  const claimExplained = claimDate !== medicalRecordDate ? items.findIndex((item, i) => verdicts[i]?.passed && item.date === claimDate) : -1;
+  const treatmentAgreement = claimExplained >= 0 && claimDate != null && medicalRecordDate != null
+    ? { confidence: 1, note: `Claim date (${claimDate}) is the date of voucher ${claimExplained + 1}, a lab test within the doctor's follow-up of ${verdicts[claimExplained].followUp} from the visit on ${medicalRecordDate}.` }
+    : withNote(dateAgreement(claimDate, medicalRecordDate, 'Claim date', 'Medical record date'),
+      claimFollowUp >= 0 ? `The claim date matches voucher ${claimFollowUp + 1} (possible follow-up visit).` : null);
 
   // A case can have more than one voucher, each with its own date — report the worst
   // (lowest-confidence) agreement found, same "one representative reason" approach the
   // issues[] line already takes for this check (one INVOICE_DATE_INCONSISTENT issue text
   // covers every mismatched voucher, not one line each).
   const invoiceAgreements = items
-    .map((item, index) => withNote(dateAgreement(item.date, medicalRecordDate, `Voucher ${index + 1} date`, 'Medical record date'),
-      followUp[index] ? `Possible follow-up visit (${item.voucher_type} voucher after the consultation): check the doctor's recommendation in the medical record.` : null))
+    .map((item, index) => (verdicts[index]?.passed
+      ? { confidence: 1, note: verdicts[index].note, explained: true }
+      : withNote(dateAgreement(item.date, medicalRecordDate, `Voucher ${index + 1} date`, 'Medical record date'),
+        verdicts[index]?.note
+          ?? (followUp[index] ? `Possible follow-up visit (${item.voucher_type} voucher after the consultation): check the doctor's recommendation in the medical record.` : null))))
     .filter((agreement) => agreement != null);
   const worstInvoiceAgreement =
     invoiceAgreements.length === 0
       ? null
-      : invoiceAgreements.reduce((worst, agreement) => (agreement.confidence < worst.confidence ? agreement : worst));
+      // Equally sure: the voucher the doctor's follow-up explains is the one to show, not one that simply matches.
+      : invoiceAgreements.reduce((worst, agreement) => (agreement.confidence < worst.confidence
+        || (agreement.confidence === worst.confidence && agreement.explained && !worst.explained) ? agreement : worst));
 
   return [
     {
@@ -1215,6 +1234,10 @@ const FIELD_LABELS = {
   'bank.bank_account_name': 'Account holder',
   'bank.bank_account_number': 'Account number',
   'medical_record.date': 'Medical record date',
+  // The doctor's follow-up period ("1 week"): read only for a lab voucher off the medical record date (labFollowUp.js).
+  // Its AI evidence is on the medical record itself (follow_up_evidence), so it is never a "value read unsurely" on a
+  // case that does not use it; a reviewer can correct it like any key value.
+  'medical_record.follow_up': 'Follow-up period',
 };
 
 const valueAt = (fields, path) => path.split('.').reduce((o, key) => (o == null ? o : o[key]), fields);
@@ -1276,7 +1299,9 @@ function editItemsFor(code, fields) {
   const vouchers = uses.voucherField
     ? (fields.invoices?.items || []).map((v, i) => (uses.vouchers(v) ? `invoices.items.${i}.${uses.voucherField}` : null)).filter(Boolean)
     : [];
-  return [...uses.paths, ...vouchers];
+  // The follow-up period, where the invoice date check uses it: a lab voucher off the medical record date.
+  const followUp = code === 'INVOICE_DATE_INCONSISTENT' && labVouchersOffDate(fields).length ? ['medical_record.follow_up'] : [];
+  return [...uses.paths, ...followUp, ...vouchers];
 }
 
 // The same on a stored check result (cases checked before editItems existed get them when the case page loads).

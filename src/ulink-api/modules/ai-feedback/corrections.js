@@ -8,6 +8,7 @@
 // The AI's own value is kept in the correction (aiValue) — and, for API cases, in the earlier recognition step.
 
 const { ISSUES, FIELD_LABELS, isRealDate, valueAt } = require('../document-checking/checklist');
+const { parseFollowUp } = require('../document-checking/labFollowUp');
 const { ACCEPTABLE_MEMBER_ITEMS, MEMBER_ITEM_LABELS } = require('../member-verification/checks');
 
 const WRONG_STEP_LABELS = {
@@ -119,6 +120,11 @@ function validateCorrection(body, options) {
   } else {
     value = typeof value === 'string' ? value.trim() : '';
     if (!value || value.length > 200) return { error: `${option.label}: enter the value (up to 200 characters).` };
+    // The doctor's follow-up period is compared as dates (labFollowUp.js): only the fixed form, kept as "2 weeks".
+    if (option.item === 'medical_record.follow_up') {
+      value = parseFollowUp(value)?.text;
+      if (!value) return { error: `${option.label}: enter a number and day, week or month, e.g. 2 weeks.` };
+    }
   }
   if (value === option.current) return { error: `${option.label} is already "${value}".` };
   return { option, corrected: value };
@@ -139,7 +145,9 @@ function aiOriginal(fields, option, documentCheckResult) {
   const voucher = option.item.match(VOUCHER_ITEM);
   const evidence = voucher
     ? fields.invoices?.items?.[Number(voucher[1])]?.evidence
-    : (fields.field_evidence || []).find((e) => e.field === option.item);
+    : (fields.field_evidence || []).find((e) => e.field === option.item)
+      // The follow-up period's AI evidence is on the medical record itself (labFollowUp.js).
+      || (option.item === 'medical_record.follow_up' ? fields.medical_record?.follow_up_evidence : null);
   return { aiValue: option.current, aiConfidence: evidence?.confidence ?? null, page: evidence?.page ?? null };
 }
 

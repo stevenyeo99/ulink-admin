@@ -83,7 +83,8 @@ const CHECKS = [
     does: 'Compares the claimant name on the claim form with the patient name on each voucher. Vouchers with no name are left out. Not compared on a claim for a child.',
     fields: ['claimant.claimant_name'] },
   { code: 'INVOICE_DATE_INCONSISTENT', section: 'vouchers', question: 'Does each voucher date match the medical record date?', label: 'Invoice date(s) are consistent with medical record date', effect: 'stops',
-    does: 'Each voucher date must match the medical record date.', fields: ['voucher.date', 'medical_record.date'] },
+    does: "Each voucher date must match the medical record date. One exception: a lab or imaging voucher (no consultation or doctor fee) dated after the visit passes when the doctor's note gives a follow-up period, such as \"1 week\", and the voucher is inside it. Without a period, or when the AI is unsure, a person decides.",
+    fields: ['voucher.date', 'medical_record.date', 'medical_record.follow_up'] },
 
   // Medical record.
   { code: 'NO_MEDICAL_REPORT', section: 'medicalRecord', question: 'Is there a medical record?', label: ISSUES.NO_MEDICAL_REPORT, effect: 'stops',
@@ -93,7 +94,7 @@ const CHECKS = [
   { code: 'EYE_TEST_SLIP_UNDATED', section: 'medicalRecord', question: 'Is the eye test slip dated?', label: ISSUES.EYE_TEST_SLIP_UNDATED, effect: 'stops',
     does: 'If there is an eye test slip, it must show the treatment date. Shown only on claims with an eye test slip.' },
   { code: 'TREATMENT_DATE_INCONSISTENT', section: 'medicalRecord', question: 'Does the treatment date match the medical record?', label: 'Treatment date is consistent with medical record date', effect: 'stops',
-    does: 'The claim date (accident date, or the visit date) must match the medical record date.',
+    does: "The claim date (accident date, or the visit date) must match the medical record date. It also passes when it is the date of a lab or imaging voucher that the doctor's follow-up period explains.",
     fields: ['claim.accident_date', 'claim.appointment_date', 'medical_record.date'] },
   { code: 'PATIENT_NAME_INCONSISTENT', section: 'medicalRecord', question: 'Is the claimant the patient on the medical record?', label: D('PATIENT_NAME_INCONSISTENT'), effect: 'stops', usesAi: true,
     does: 'Compares the claimant name on the claim form with the patient name on the medical record.', fields: ['claimant.claimant_name'] },

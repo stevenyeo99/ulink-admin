@@ -13,6 +13,7 @@ const { gatherAttachments } = require('../shared/gatherAttachments');
 const { datePathSegments } = require('../shared/datePathSegments');
 const { forCase } = require('../llm-calls/log');
 const { pastCorrectionNotes } = require('../ai-feedback/memory');
+const { readDoctorFollowUp } = require('./doctorFollowUp');
 
 const BLOCK_NAME = 'claim-recognition';
 const ajv = new Ajv({ allErrors: true });
@@ -716,7 +717,8 @@ async function extractFields(transcriptChunks, matchedRoute) {
   const withRecordDate = withFallback.medical_record?.date !== normalizedFields.medical_record?.date
     ? replaceEvidence(withFallback, 'medical_record.date', null)
     : withFallback;
-  const extractedFields = fillAccountNumberFromText(withRecordDate, transcriptChunks);
+  // A lab voucher off the medical record date: the doctor's note and follow-up period are read too (doctorFollowUp.js).
+  const extractedFields = await readDoctorFollowUp(fillAccountNumberFromText(withRecordDate, transcriptChunks), transcriptChunks);
   return { extractedFields: learnedFrom.length ? { ...extractedFields, learnedFrom } : extractedFields, schemaValidationError: null };
 }
 
