@@ -231,24 +231,31 @@ function withoutBadDocumentList(parsed, schema) {
 // replaced too (evidence) or dropped (null — "not recorded" beats a wrong reason). Fields without the list: unchanged.
 // "Account Number" (or "Account No") followed by a number of 6 to 20 digits, on the same line or the next one.
 const ACCOUNT_NUMBER_LABEL = /account\s*(?:number|no\.?)\s*[:\-]?[ \t]*\n?[ \t]*([0-9][0-9 \-]{4,28}[0-9])/gi;
+// The label as the last line of one page and the number as the first line of the next (AYA-CL-26016756): each page is
+// transcribed alone, so the label page reads "unclear" and the number page shows a bare number.
+const LABEL_AT_PAGE_END = /account\s*(?:number|no\.?)\s*[:\-]?[ \t]*(?:unclear|illegible)?\s*$/i;
+const NUMBER_AT_PAGE_START = /^(?:\[[^\]]+\][ \t]*\n)?[ \t]*([0-9][0-9 \-]{4,28}[0-9])[ \t]*(?:\n|$)/;
 
 /**
  * Deterministic backstop for the bank account number (AYA-CL-26043766): the AI read it as "unclear" on the typed
  * e-claim page while page 12 printed it clearly, so the case asked the customer for a number they had given. When the
- * AI read no number, the page transcripts are searched for the "Account Number" label. One distinct number fills the
+ * AI read no number, the page transcripts are searched for the "Account Number" label, also a label that ends one
+ * page with the number starting the next (AYA-CL-26016756). One distinct number fills the
  * field, with evidence below the AI confidence threshold, so a person still sees it as unsure and checks it against
  * the page. Several different numbers, or none: the field stays empty, as the AI left it.
  */
 function fillAccountNumberFromText(fields, transcriptChunks = []) {
   if (!fields?.bank || fields.bank.bank_account_number) return fields;
   const found = new Map(); // number → page
-  for (const chunk of transcriptChunks) {
+  transcriptChunks.forEach((chunk, index) => {
     const page = /^\[([^\]]+)\]/.exec(chunk)?.[1] ?? null;
-    for (const match of chunk.matchAll(ACCOUNT_NUMBER_LABEL)) {
+    const matches = [...chunk.matchAll(ACCOUNT_NUMBER_LABEL)];
+    const carried = index > 0 && LABEL_AT_PAGE_END.test(transcriptChunks[index - 1]) ? NUMBER_AT_PAGE_START.exec(chunk) : null;
+    for (const match of carried ? [...matches, carried] : matches) {
       const number = match[1].replace(/[ \-]/g, '');
       if (number.length >= 6 && number.length <= 20 && !found.has(number)) found.set(number, page);
     }
-  }
+  });
   if (found.size !== 1) return fields;
   const [[number, page]] = [...found];
   return replaceEvidence({ ...fields, bank: { ...fields.bank, bank_account_number: number } }, 'bank.bank_account_number', {

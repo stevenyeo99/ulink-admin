@@ -59,3 +59,13 @@ it('a held case a person overrode is revised as documents complete (no suspense)
   expect(result.output.payload).toMatchObject({ isSuspense: 'N' });
   expect(preparationJob.optionalInputs).toContain('case-override');
 });
+
+it('checks an API case with the IAS case number, not the one read from the documents (AYA-CL-26016756)', async () => {
+  getSettings.mockResolvedValue({ holdUnsureMissingDocsEmail: false });
+  documentChecking.checkCase.mockResolvedValue({ outcome: 'DOCUMENT_CHECKED', result: { passed: true, issues: [], details: [], checklist: [] } });
+  const read = { 'api-claim-recognition': { recognizedType: 'ayas_member_claim', extractedFields: { claim: { insurer_case_number: null, appointment_date: '2026-05-06' } } } };
+  await documentJob.process({ caseRecord: { ...caseRecord, tpaCaseNumber: 'AYA-CL-26016756' }, input: read });
+  expect(documentChecking.checkCase).toHaveBeenCalledWith(expect.objectContaining({
+    extractedFields: { claim: { insurer_case_number: 'AYA-CL-26016756', appointment_date: '2026-05-06' } },
+  }));
+});

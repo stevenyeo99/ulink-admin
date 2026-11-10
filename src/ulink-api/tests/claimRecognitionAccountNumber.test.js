@@ -21,3 +21,16 @@ it('leaves the field alone when the AI read a number, when two different numbers
   // The same number on two pages is one number.
   expect(fillAccountNumberFromText(read(null), [...pages, '[claim.pdf - page 2]\nAccount Number: 2003 0586 211']).bank.bank_account_number).toBe('20030586211');
 });
+
+it('takes the number that starts the next page when a page ends with the label (AYA-CL-26016756)', () => {
+  const split = [
+    '[VSQB919839.pdf - page 2]\nBank Account Name: me me win pe\nBank Account Number: unclear',
+    '[VSQB919839.pdf - page 3]\n12730102104946001\nRequired Documents for Claim',
+  ];
+  const fields = fillAccountNumberFromText(read(null), split);
+  expect(fields.bank.bank_account_number).toBe('12730102104946001');
+  expect(fields.field_evidence).toEqual([expect.objectContaining({ page: 'VSQB919839.pdf - page 3', confidence: 0.6 })]);
+  // A number starting a page is taken only after a page that ends with the label.
+  expect(fillAccountNumberFromText(read(null), ['[a.pdf - page 1]\nBank Name: Kbz', split[1]]).bank.bank_account_number).toBeNull();
+  expect(fillAccountNumberFromText(read(null), [split[0], '[a.pdf - page 3]\nTotal 66000\n12730102104946001']).bank.bank_account_number).toBeNull();
+});

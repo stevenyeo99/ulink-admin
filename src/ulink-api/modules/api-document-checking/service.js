@@ -26,6 +26,13 @@ function emailFor(result) {
   return { taskType: 'MISSING_DOCUMENTS', audience: 'customer', payload: { issues: missingDocumentItems(result) }, dedupeKey: [...result.issues].sort().join('|') };
 }
 
+// An API case's case number comes from IAS at intake (Case.tpaCaseNumber), not from the documents: a Claim Notification
+// form prints none, and the "Case Number" check failed on it (AYA-CL-26016756). The IAS value always wins.
+function withIasCaseNumber(extractedFields, tpaCaseNumber) {
+  if (!extractedFields || !tpaCaseNumber) return extractedFields;
+  return { ...extractedFields, claim: { ...extractedFields.claim, insurer_case_number: tpaCaseNumber } };
+}
+
 const OUTCOME_TO_STATUS = {
   DOCUMENT_CHECKED: 'API_DOCUMENTS_VERIFIED',
   INCOMPLETE: 'API_INCOMPLETE',
@@ -33,7 +40,7 @@ const OUTCOME_TO_STATUS = {
 
 async function processCase({ caseRecord, input }) {
   const { extractedFields, recognizedType } = input['api-claim-recognition'];
-  const checked = await checkCase({ id: caseRecord.id, extractedFields, recognizedType });
+  const checked = await checkCase({ id: caseRecord.id, extractedFields: withIasCaseNumber(extractedFields, caseRecord.tpaCaseNumber), recognizedType });
   const { outcome } = checked;
   // A reviewer's own lines (SYSTEM_4 E4-28) go on the result; open ones hold a pass for a person whatever the switch.
   const result = withRequests(checked.result, await openRequests(caseRecord.id));
