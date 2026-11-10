@@ -72,7 +72,8 @@ function followUpVerdicts(fields) {
   return items.map((item, i) => {
     if (!about.has(i) || !noteRead) return null;
     const voucher = `Voucher ${i + 1}`;
-    if (record.follow_up == null) return { passed: false, note: `The doctor's note gives no follow-up period for ${voucher.toLowerCase()} (lab).` };
+    const quote = record.doctor_note ? ` Doctor's note: "${record.doctor_note}".` : '';
+    if (record.follow_up == null) return { passed: false, note: `The doctor's note gives no follow-up period for ${voucher.toLowerCase()} (lab).${quote}` };
     const period = parseFollowUp(record.follow_up);
     const until = followUpDate(record.date, record.follow_up);
     if (!period || !until) return { passed: false, note: `The follow-up period "${record.follow_up}" is not a number of days, weeks or months.` };
@@ -94,7 +95,6 @@ function followUpVerdicts(fields) {
     if (doubts.length) return { passed: false, note: `${followUp} and ${voucher.toLowerCase()} (lab, ${item.date}) is within it, but the AI was not sure of ${doubts.join(', ')}.` };
 
     const where = periodEvidence?.page ? `, read on ${periodEvidence.page}` : '';
-    const quote = record.doctor_note ? ` Doctor's note: "${record.doctor_note}".` : '';
     return { passed: true, followUp: period.text, followUpDate: until, note: `${voucher} (lab, ${item.date}) is within the doctor's follow-up of ${period.text} from the visit on ${record.date} (until ${until}${where}).${quote}` };
   });
 }

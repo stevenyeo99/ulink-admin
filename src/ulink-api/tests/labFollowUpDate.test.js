@@ -153,3 +153,17 @@ it('a reviewer corrects the period in the fixed form only, and the corrected per
   expect(validateCorrection({ ...body, value: ' 1 Week ' }, options).corrected).toBe('1 week');
   expect(evaluateDocumentChecks(unsure).checklist.find((i) => i.code === 'INVOICE_DATE_INCONSISTENT').editItems).toContain('medical_record.follow_up');
 });
+
+it('tells the reviewer in the summary why the lab voucher still fails, and leaves a plain date mismatch as before', () => {
+  const { buildAssessmentSummary } = require('../modules/assessment-summary/summary');
+  const invoiceLine = (f) => buildAssessmentSummary({ documentCheckResult: evaluateDocumentChecks(f) }).lines.find((l) => /Invoice date/.test(l.decision));
+
+  const lab = invoiceLine(fields({ record: { follow_up: null, follow_up_evidence: null } }));
+  expect(lab.why).toContain('gives no follow-up period for voucher 1 (lab). Doctor\'s note: "Ix: CBC. Review after 1 week"');
+  expect(lab.review.reason).toBe('Lab or imaging test on a later date');
+
+  // Not a lab voucher: the rule never applies, so the summary is the one from before.
+  const other = invoiceLine(fields({ voucher: { voucher_type: 'consultation' } }));
+  expect(other.why).toBe('Invoice #1 date 2026-06-05 does not match medical-record date 2026-06-01.');
+  expect(other.review.reason).toBe('Data mismatch');
+});

@@ -38,6 +38,8 @@ const REVIEW = {
   DATA_MISMATCH: { reason: 'Data mismatch', mightBeWrong: ['Customer', 'AI vision', 'IAS record'], check: 'Compare the document, IAS and the customer; decide which is right.' },
   MISSING: { reason: 'Missing information', mightBeWrong: ['Customer', 'AI vision'], check: 'Confirm it is really missing, then ask the customer.' },
   RULE_HOLD: { reason: 'Rule hold', mightBeWrong: [], check: 'Apply the policy rule.' },
+  // A lab or imaging voucher dated off the medical record, that the doctor's follow-up does not explain (labFollowUp.js).
+  LATER_TEST: { reason: 'Lab or imaging test on a later date', mightBeWrong: ['Customer', 'AI vision'], check: "See if the doctor ordered the test or a follow-up in the medical record. If not, ask the customer." },
   VITAMINS: { reason: 'Vitamins / supplements', mightBeWrong: ['AI vision'], check: 'Check the voucher items; a person approves the claim (no STP).' },
   // A reviewer's own lines (SYSTEM_4 E4-28 / E4-29): the AI cannot check them.
   // SYSTEM_5 member balance phase C: the AI was unsure of a voucher's benefit head; a person chooses it.
@@ -357,12 +359,12 @@ function documentLines(documentCheckResult) {
       decision,
       result: failed ? 'Issue' : 'OK',
       status: failed ? 'issue' : 'ok',
-      why: failed ? reasonFor(item.code) || item.note : item.note,
+      why: failed && !item.labFollowUp ? reasonFor(item.code) || item.note : item.note,
       confidence: formatConfidence(item.confidence),
       verified: item.corrected ? VERIFIED.PERSON
         : CROSS_CHECKED_DOCUMENT_CODES.has(item.code) ? VERIFIED.CROSS_CHECK
           : item.confidence != null ? VERIFIED.AI : VERIFIED.RULE,
-      review: failed ? (DOCUMENT_REVIEW[item.code] || REVIEW.DATA_MISMATCH) : lowConfidenceReview(item.confidence),
+      review: failed ? (item.labFollowUp ? REVIEW.LATER_TEST : DOCUMENT_REVIEW[item.code] || REVIEW.DATA_MISMATCH) : lowConfidenceReview(item.confidence),
     }));
   }
   if (quietlyPassed.length) {

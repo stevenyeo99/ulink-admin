@@ -811,6 +811,8 @@ function buildDateConsistencyChecklist(extractedFields) {
   const followUp = items.map((item) => isFollowUpVoucher(item, medicalRecordDate));
   const claimFollowUp = claimDate !== medicalRecordDate ? items.findIndex((item, i) => followUp[i] && item.date === claimDate) : -1;
   const claimExplained = claimDate !== medicalRecordDate ? items.findIndex((item, i) => verdicts[i]?.passed && item.date === claimDate) : -1;
+  // The claim date is the date of a lab voucher the doctor's note was read for (the summary words its review for that).
+  const claimOnLabVoucher = claimDate !== medicalRecordDate && items.some((item, i) => verdicts[i] && item.date === claimDate);
   const treatmentAgreement = claimExplained >= 0 && claimDate != null && medicalRecordDate != null
     ? { confidence: 1, note: `Claim date (${claimDate}) is the date of voucher ${claimExplained + 1}, a lab test within the doctor's follow-up of ${verdicts[claimExplained].followUp} from the visit on ${medicalRecordDate}.` }
     : withNote(dateAgreement(claimDate, medicalRecordDate, 'Claim date', 'Medical record date'),
@@ -826,6 +828,7 @@ function buildDateConsistencyChecklist(extractedFields) {
       : withNote(dateAgreement(item.date, medicalRecordDate, `Voucher ${index + 1} date`, 'Medical record date'),
         verdicts[index]?.note
           ?? (followUp[index] ? `Possible follow-up visit (${item.voucher_type} voucher after the consultation): check the doctor's recommendation in the medical record.` : null))))
+    .map((agreement, index) => (agreement && verdicts[index] ? { ...agreement, labFollowUp: true } : agreement))
     .filter((agreement) => agreement != null);
   const worstInvoiceAgreement =
     invoiceAgreements.length === 0
@@ -842,6 +845,7 @@ function buildDateConsistencyChecklist(extractedFields) {
       confidence: treatmentAgreement?.confidence ?? null,
       note: treatmentAgreement?.note ?? null,
       reason: treatmentAgreement?.note ?? 'Nothing to compare: no claim date or no medical record date was read.',
+      ...(claimOnLabVoucher && { labFollowUp: true }),
     },
     {
       code: 'INVOICE_DATE_INCONSISTENT',
@@ -850,6 +854,7 @@ function buildDateConsistencyChecklist(extractedFields) {
       confidence: worstInvoiceAgreement?.confidence ?? null,
       note: worstInvoiceAgreement?.note ?? null,
       reason: worstInvoiceAgreement?.note ?? 'Nothing to compare: no voucher date or no medical record date was read.',
+      ...(worstInvoiceAgreement?.labFollowUp && { labFollowUp: true }),
     },
   ];
 }
