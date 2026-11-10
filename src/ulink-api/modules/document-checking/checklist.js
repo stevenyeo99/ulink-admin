@@ -777,18 +777,33 @@ function dateAgreement(dateA, dateB, labelA, labelB) {
   };
 }
 
+// A follow-up visit (UAT AYA-CL-26021418, users 2026-11-10): a lab or pharmacy voucher dated after the consultation, up to
+// FOLLOW_UP_DAYS later, can be a test or medicine the doctor ordered. A voucher with a consultation must match the medical
+// record date, so consultation and "other" (may mix a consultation in) vouchers never get the hint. Wording only: the check
+// still fails and a person decides, from the doctor's recommendation in the medical record.
+const FOLLOW_UP_DAYS = 30;
+const isFollowUpVoucher = (item, medicalRecordDate) => ['lab', 'pharmacy'].includes(item.voucher_type)
+  && item.date != null && medicalRecordDate != null && item.date > medicalRecordDate
+  && daysBetween(item.date, medicalRecordDate) <= FOLLOW_UP_DAYS;
+const withNote = (agreement, extra) => (agreement && extra ? { ...agreement, note: `${agreement.note} ${extra}` } : agreement);
+
 function buildDateConsistencyChecklist(extractedFields) {
   const dateFlags = checkTreatmentDateConsistency(extractedFields) || [];
   const claimDate = extractedFields.claim?.accident_date || extractedFields.claim?.appointment_date;
   const medicalRecordDate = extractedFields.medical_record?.date;
-  const treatmentAgreement = dateAgreement(claimDate, medicalRecordDate, 'Claim date', 'Medical record date');
+  const items = extractedFields.invoices?.items || [];
+  const followUp = items.map((item) => isFollowUpVoucher(item, medicalRecordDate));
+  const claimFollowUp = claimDate !== medicalRecordDate ? items.findIndex((item, i) => followUp[i] && item.date === claimDate) : -1;
+  const treatmentAgreement = withNote(dateAgreement(claimDate, medicalRecordDate, 'Claim date', 'Medical record date'),
+    claimFollowUp >= 0 ? `The claim date matches voucher ${claimFollowUp + 1} (possible follow-up visit).` : null);
 
   // A case can have more than one voucher, each with its own date — report the worst
   // (lowest-confidence) agreement found, same "one representative reason" approach the
   // issues[] line already takes for this check (one INVOICE_DATE_INCONSISTENT issue text
   // covers every mismatched voucher, not one line each).
-  const invoiceAgreements = (extractedFields.invoices?.items || [])
-    .map((item, index) => dateAgreement(item.date, medicalRecordDate, `Voucher ${index + 1} date`, 'Medical record date'))
+  const invoiceAgreements = items
+    .map((item, index) => withNote(dateAgreement(item.date, medicalRecordDate, `Voucher ${index + 1} date`, 'Medical record date'),
+      followUp[index] ? `Possible follow-up visit (${item.voucher_type} voucher after the consultation): check the doctor's recommendation in the medical record.` : null))
     .filter((agreement) => agreement != null);
   const worstInvoiceAgreement =
     invoiceAgreements.length === 0
