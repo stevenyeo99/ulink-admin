@@ -22,7 +22,7 @@ const amount = (n) => Number(n).toLocaleString('en-US');
  *
  * Returns { isStp, source, currency, diagCode, benefits: [{ benefitType, total, allowed, limit }], reasons }.
  */
-function evaluateStp({ rules, blockedDiagnoses, blockedBenefits = [], blockOnReviewPoints = false, blockVitamins = false }, { source, currency, lines, diagCode, openReviewPoints = [], vitaminVouchers = [], balanceBypassed = false, checksOff = [], exclusionLetThrough = false, contractExclusionLetThrough = false }) {
+function evaluateStp({ rules, blockedDiagnoses, blockedBenefits = [], blockOnReviewPoints = false, blockVitamins = false }, { source, currency, lines, diagCode, openReviewPoints = [], vitaminVouchers = [], balanceBypassed = false, checksOff = [], exclusionLetThrough = false, contractExclusionLetThrough = false, diagnosisFromMedicalRecord = false }) {
   const reasons = [];
   const totals = new Map();
   for (const { benefitType, subtotal } of lines) {
@@ -54,6 +54,10 @@ function evaluateStp({ rules, blockedDiagnoses, blockedBenefits = [], blockOnRev
 
   const blocked = diagCode && blockedDiagnoses.find((d) => diagCode.toUpperCase().startsWith(d.codePrefix.toUpperCase()));
   if (blocked) reasons.push(`Diagnosis ${diagCode} is on the never-STP list (${blocked.codePrefix}${blocked.note ? `: ${blocked.note}` : ''}).`);
+
+  // A code the AI took from the doctor's note because the claim form gave none (UAT AYA-CL-26035164): never STP,
+  // whatever the switches.
+  if (diagnosisFromMedicalRecord) reasons.push(`Diagnosis ${diagCode} was taken from the doctor's note, not the claim form — a person approves.`);
 
   if (blockVitamins && vitaminVouchers.length) {
     reasons.push(`Vitamins / supplements on voucher${vitaminVouchers.length > 1 ? 's' : ''} ${vitaminVouchers.join(', ')} — a person approves.`);

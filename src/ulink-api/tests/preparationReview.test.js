@@ -192,3 +192,96 @@ describe('diagnosis rule from the benefit (owner, 2026-10-29)', () => {
     expect(prepared.payload.Items[0]).toMatchObject({ DiagnosisCode: 'K02.9' });
   });
 });
+
+// The claim form gave no code (R69): the doctor's note is tried next (UAT AYA-CL-26035164 — the form said "ဓမ္မတာ",
+// the note said fever). The claim form stays first; a code from the note always waits for a person.
+describe("diagnosis from the doctor's note", () => {
+  const { stpDecision } = require('../modules/ias-claim-preparation/stpEligibility');
+  const R69 = { pick: { diagCode: 'R69', diagDesc: 'Unknown' }, defaulted: true, confidence: 0.1, candidates: [] };
+  const FEVER = { pick: { diagCode: 'R50.9', diagDesc: 'Fever, unspecified' }, defaulted: false, confidence: 0.9, candidates: [] };
+  const withNote = (note) => ({
+    ...caseRecord,
+    preparationChoice: null,
+    extractedFields: {
+      ...caseRecord.extractedFields,
+      medical: { detail_of_illness_injury: 'ဓမ္မတာ', full_description_of_treatment: 'ဓမ္မတာ' },
+      medical_record: { present: true, diagnosis_or_treatment: note },
+    },
+  });
+  const diagnosisLine = (meta) => buildAssessmentSummary({ source: 'API', claimPrepMeta: meta }).lines.find((l) => l.decision === 'Diagnosis code');
+
+  it('the claim form gives R69: the code comes from the note, a person confirms it, never STP', async () => {
+    pickDiagnosis.mockResolvedValueOnce(R69).mockResolvedValueOnce(FEVER);
+
+    const prepared = await checkCase(withNote('c/o fever x 1 day'));
+
+    expect(pickDiagnosis).toHaveBeenLastCalledWith("Doctor's note: c/o fever x 1 day", { searchText: 'c/o fever x 1 day' });
+    expect(prepared.payload.Items[0]).toMatchObject({ DiagnosisCode: 'R50.9', DiagnosisDescription: 'ဓမ္မတာ' });
+    expect(prepared.claimPrepMeta.diagnosis).toMatchObject({ fromMedicalRecord: { searchedAs: 'c/o fever x 1 day' }, doctorNote: 'c/o fever x 1 day' });
+    expect(diagnosisUnsure(prepared.claimPrepMeta.diagnosis, 0.7)).toBe(true);
+    expect(stpDecision).toHaveBeenCalledWith(expect.objectContaining({ diagCode: 'R50.9', diagnosisFromMedicalRecord: true }));
+    const line = diagnosisLine(prepared.claimPrepMeta);
+    expect(line.why).toContain('Code from the doctor\'s note (searched as "c/o fever x 1 day"), because the claim form\'s illness "ဓမ္မတာ" gave no match.');
+    expect(line.why).toContain('Doctor\'s note says: "c/o fever x 1 day"');
+    expect(line.review).not.toBeNull();
+  });
+
+  it('unreadable words are left out of the search', async () => {
+    pickDiagnosis.mockResolvedValueOnce(R69).mockResolvedValueOnce(FEVER);
+    await checkCase(withNote('c/o fever x 1 day; unclear; Paracetamol'));
+    expect(pickDiagnosis).toHaveBeenLastCalledWith("Doctor's note: c/o fever x 1 day; ; Paracetamol", { searchText: 'c/o fever x 1 day; ; Paracetamol' });
+  });
+
+  it('no fallback when the note is not the medical record, or under a ULINK rule; an AI failure keeps R69', async () => {
+    pickDiagnosis.mockResolvedValue(R69);
+    const notRecord = withNote('fever');
+    notRecord.extractedFields.medical_record.present = false;
+    await checkCase(notRecord);
+    expect(pickDiagnosis).toHaveBeenCalledTimes(1);
+
+    jest.clearAllMocks();
+    pickRuledDiagnosis.mockResolvedValueOnce({ ...R69, rule: { label: 'MAT/NDEL', codes: ['O80', 'O82'] } });
+    await checkCase(withNote('fever'));
+    expect(pickDiagnosis).not.toHaveBeenCalled();
+    pickRuledDiagnosis.mockReset();
+
+    jest.clearAllMocks();
+    pickDiagnosis.mockResolvedValueOnce(R69).mockRejectedValueOnce(new Error('LM Studio timeout'));
+    const prepared = await checkCase(withNote('fever'));
+    expect(prepared.payload.Items[0]).toMatchObject({ DiagnosisCode: 'R69' });
+  });
+
+  it('the note gives no match either: R69 stays, as today', async () => {
+    pickDiagnosis.mockResolvedValue(R69);
+    const prepared = await checkCase(withNote('6 faa x 1day'));
+    expect(prepared.payload.Items[0]).toMatchObject({ DiagnosisCode: 'R69' });
+    expect(prepared.claimPrepMeta.diagnosis.fromMedicalRecord).toBeUndefined();
+    expect(diagnosisLine(prepared.claimPrepMeta).why).toContain('Doctor\'s note says: "6 faa x 1day"');
+  });
+
+  it('a clear claim form diagnosis: the note is not asked, only shown', async () => {
+    pickDiagnosis.mockResolvedValue({ pick: { diagCode: 'K02.9', diagDesc: 'Dental caries' }, defaulted: false, confidence: 0.9, candidates: [] });
+    const clear = withNote('fever');
+    clear.extractedFields.medical = { detail_of_illness_injury: 'Toothache', full_description_of_treatment: 'filling' };
+
+    const prepared = await checkCase(clear);
+
+    expect(pickDiagnosis).toHaveBeenCalledTimes(1);
+    expect(prepared.payload.Items[0]).toMatchObject({ DiagnosisCode: 'K02.9' });
+    expect(stpDecision).toHaveBeenCalledWith(expect.objectContaining({ diagnosisFromMedicalRecord: false }));
+  });
+
+  it("a person's code wins over the note's, and STP is open again", async () => {
+    const chose = withNote('c/o fever x 1 day');
+    chose.preparationChoice = {
+      ...caseRecord.preparationChoice,
+      diagnosis: { diagCode: 'R50.9', diagDesc: 'Fever, unspecified', source: 'ဓမ္မတာ\nဓမ္မတာ', aiPick: { ...FEVER, fromMedicalRecord: { searchedAs: 'fever' } } },
+    };
+
+    const prepared = await checkCase(chose);
+
+    expect(pickDiagnosis).not.toHaveBeenCalled();
+    expect(diagnosisUnsure(prepared.claimPrepMeta.diagnosis, 0.7)).toBe(false);
+    expect(stpDecision).toHaveBeenCalledWith(expect.objectContaining({ diagnosisFromMedicalRecord: false }));
+  });
+});

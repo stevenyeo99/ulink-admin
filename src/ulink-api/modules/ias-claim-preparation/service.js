@@ -26,6 +26,26 @@ async function logEvent(transaction, { caseId, prevStatus = null, newStatus, rea
   await CaseEvent.create({ caseId, blockName: BLOCK_NAME, prevStatus, newStatus, reasonCode, message }, { transaction });
 }
 
+// The claim form gave no code (R69 default): try the doctor's note's own text (UAT AYA-CL-26035164 — the form said
+// "ဓမ္မတာ", the note said fever). The claim form stays first: this runs only after it failed, and never under a ULINK
+// rule (its codes are the only ones allowed). Only a note the AI kept as the medical record (present), with its
+// unreadable words left out. A code found here is marked fromMedicalRecord, so a person always confirms it
+// (preparationReview.diagnosisUnsure). An AI call failing keeps R69, as before.
+async function pickFromMedicalRecord(record, formPick) {
+  const noteText = record?.present === true ? record.diagnosis_or_treatment?.trim() : null;
+  if (!noteText || formPick.rule) return formPick;
+  try {
+    const { diagnosis } = await toEnglishMedicalText({ diagnosis: noteText });
+    const searchedAs = diagnosis.replace(/\bunclear\b/gi, ' ').replace(/\s+/g, ' ').trim();
+    if (!searchedAs) return formPick;
+    const notePick = await pickDiagnosis(`Doctor's note: ${searchedAs}`, { searchText: searchedAs });
+    return notePick.defaulted ? formPick : { ...notePick, fromMedicalRecord: { searchedAs } };
+  } catch (error) {
+    logger.warn(`Diagnosis from the doctor's note failed, R69 kept: ${error.message}`);
+    return formPick;
+  }
+}
+
 /**
  * Not pure — makes real LLM calls (diagnosis/benefit picks). The dev preview endpoint calls
  * this same function directly and just skips persistOutcome, same spirit as
@@ -126,16 +146,18 @@ async function checkCase(caseRecord) {
   // claim's benefit (dental Z01.2, vision Z46.0, … — diagnosisRules.js); else the AI's pick from the ICD-10 search.
   const rule = chosenDiagnosis ? null : diagnosisRule(lineMeta, lastReadSettings().aiConfidenceThreshold);
   const benefits = lineMeta.map((line) => line.pick && `${line.pick.benefitType}/${line.pick.benefitHead ?? ''}`).filter(Boolean);
-  const diagnosisPick = chosenDiagnosis
+  const formPick = chosenDiagnosis
     ? { ...chosenDiagnosis.aiPick, pick: { diagCode: chosenDiagnosis.diagCode, diagDesc: chosenDiagnosis.diagDesc }, defaulted: false, chosen }
     : (rule && await pickRuledDiagnosis(rule, diagnosisText, { benefits })) || await pickDiagnosis(diagnosisText, { searchText: illnessText });
+  const diagnosisPick = formPick.defaulted ? await pickFromMedicalRecord(extractedFields.medical_record, formPick) : formPick;
 
   // Internal-only diagnostic record of *why* each pick landed where it did — confidence
   // score plus the candidate list the LLM was actually shown — never merged into `payload`,
   // which is the literal IAS-bound submission (see payloadBuilder.js's header comment).
   const claimPrepMeta = {
     // text: what the pick actually searched with (English); translation: the Burmese original, when translated.
-    diagnosis: { text: diagnosisText || null, source, translation, ...diagnosisPick },
+    // doctorNote: what the AI read on the doctor's note, shown to the reviewer next to the code.
+    diagnosis: { text: diagnosisText || null, source, translation, ...diagnosisPick, doctorNote: extractedFields.medical_record?.diagnosis_or_treatment || null },
     lines: lineMeta,
   };
 
@@ -164,6 +186,8 @@ async function checkCase(caseRecord) {
     currency: 'MMK',
     lines: lines.map((line) => ({ benefitType: line.benefit?.benefitType ?? null, benefitHead: line.benefit?.benefitHead ?? null, subtotal: line.subtotal })),
     diagCode: diagnosisPick.pick?.diagCode ?? null,
+    // A person's choice keeps the AI pick's fields (aiPick): their code is decided, not the note's.
+    diagnosisFromMedicalRecord: Boolean(diagnosisPick.fromMedicalRecord && !diagnosisPick.chosen),
     // Vouchers the AI read vitamins / supplements on, or a person rejected them on (SYSTEM_4 E4-10) — numbered like the
     // document check's line.
     vitaminVouchers: invoiceItems.map((item, i) => (item.has_vitamin_or_supplement === true || lines[i]?.vitamin ? i + 1 : null)).filter(Boolean),

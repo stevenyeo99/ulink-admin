@@ -102,5 +102,6 @@ flowchart TD
 - Only the AYAS member claim route (`ayas_member_claim`) goes on to the console upload and IAS.
 - The console upload uses one of two methods (`CONSOLE_UPLOAD_METHOD`). The folder method makes the barcode at once. The cl-upload method waits for the console to make it, about every 15 minutes.
 - Claim preparation decides STP. A never-STP diagnosis, vitamins, an amount over the limit or an open review point makes the claim non-STP. JD3 then approves it in IAS.
+- If the claim form text gives no diagnosis code (R69), claim preparation tries the doctor's note text. A code from the note is never STP, so JD3 approves it in IAS.
 - A person's decision at a stop marks the case. The email review lane then runs the same jobs at once, on marked cases only.
 - When a job fails because IAS, the console or LM Studio does not answer, the case keeps its status. The next pipeline run tries again.

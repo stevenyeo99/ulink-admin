@@ -55,3 +55,10 @@ it('blocks a voucher whose benefit head is on the never-STP list, while the type
   expect(result.reasons).toEqual(['Voucher 2 is OP/VACC, which is on the never-STP list (Vaccination: a person approves).']);
   expect(result.benefits).toEqual([{ benefitType: 'OP', total: 40000, allowed: true, limit: 50000 }]);
 });
+
+it("a code taken from the doctor's note (claim form gave none) is never STP, whatever the switches (UAT AYA-CL-26035164)", () => {
+  const lines = [{ benefitType: 'OP', subtotal: 1000 }];
+  expect(decide({ lines, diagCode: 'R50.9', diagnosisFromMedicalRecord: true }).reasons)
+    .toEqual(["Diagnosis R50.9 was taken from the doctor's note, not the claim form — a person approves."]);
+  expect(decide({ lines, diagCode: 'R50.9' }).isStp).toBe(true);
+});

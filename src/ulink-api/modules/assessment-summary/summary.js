@@ -468,13 +468,16 @@ function preparationLines(claimPrepMeta, isStp) {
     const translated = diagnosis.translation
       ? `Translated from Burmese as: "${diagnosis.text}"${diagnosis.translation.note ? ` (${diagnosis.translation.note})` : ''}.`
       : null;
+    // What the AI read on the doctor's note (UAT AYA-CL-26035164), next to the claim form's diagnosis: the reviewer sees it
+    // without opening every page.
+    const doctorNote = diagnosis.doctorNote ? `Doctor's note says: "${diagnosis.doctorNote}" (AI reading of the note; make sure that it is right).` : null;
     // A person chose the code (API_PREPARATION_REVIEW): no longer the AI's guess.
     if (diagnosis.chosen) {
       lines.push(line({
         decision: 'Diagnosis code',
         result: code,
         status: 'ok',
-        why: [`Chosen by ${diagnosis.chosen.by}: ${diagnosis.chosen.comment}`, translated].filter(Boolean).join(' '),
+        why: [`Chosen by ${diagnosis.chosen.by}: ${diagnosis.chosen.comment}`, translated, doctorNote].filter(Boolean).join(' '),
         verified: VERIFIED.PERSON,
       }));
     } else if (diagnosis.rule?.set) {
@@ -486,13 +489,16 @@ function preparationLines(claimPrepMeta, isStp) {
       status: diagnosis.defaulted ? 'issue' : 'ok',
       why: [
         translated,
+        // source: the illness, then the treatment, on its own line; only the illness was searched.
+        diagnosis.fromMedicalRecord && `Code from the doctor's note (searched as "${diagnosis.fromMedicalRecord.searchedAs}"), because the claim form's illness "${(diagnosis.source || '').split('\n')[0].trim()}" gave no match.`,
         diagnosis.defaulted
           ? ['No confident match for the diagnosis text, so the default code was used.', diagnosis.reason && `AI: ${diagnosis.reason}`].filter(Boolean).join(' ')
           : diagnosis.reason,
+        doctorNote,
       ].filter(Boolean).join(' ') || null,
       confidence: formatConfidence(diagnosis.confidence),
       verified: diagnosis.translation ? `${VERIFIED.AI}, AI translated` : VERIFIED.AI,
-      review: diagnosis.defaulted ? REVIEW.AI_UNSURE : lowConfidenceReview(diagnosis.confidence),
+      review: diagnosis.defaulted || diagnosis.fromMedicalRecord ? REVIEW.AI_UNSURE : lowConfidenceReview(diagnosis.confidence),
     }));
   }
 
