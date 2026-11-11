@@ -635,7 +635,7 @@ function checkTreatmentDateConsistency(fields, verdicts = followUpVerdicts(field
 
   if (medicalRecordDate != null) {
     items.forEach((item, index) => {
-      if (item.date != null && item.date !== medicalRecordDate && !explained[index]) {
+      if (item.date != null && item.date !== medicalRecordDate && !explained[index] && !doctorNotesOn(fields, item.date).length) {
         flags.push({ code: 'INVOICE_DATE_INCONSISTENT', voucherIndex: index + 1, medicalRecordDate, invoiceDate: item.date });
       }
     });
@@ -800,6 +800,23 @@ const isFollowUpVoucher = (item, medicalRecordDate) => ['lab', 'pharmacy'].inclu
   && daysBetween(item.date, medicalRecordDate) <= FOLLOW_UP_DAYS;
 const withNote = (agreement, extra) => (agreement && extra ? { ...agreement, note: `${agreement.note} ${extra}` } : agreement);
 
+// A claim with two visits (UAT AYA-CL-26041363: notes on 24 and 26 Sep, a consultation voucher on each): the medical
+// record is one note, but a voucher dated on another doctor's note the AI was sure of is that visit's voucher. Only a
+// note within FOLLOW_UP_DAYS of the medical record: an old visit's note (another year) must not clear an old voucher.
+const datedDoctorNotes = (fields) => {
+  const recordDate = fields.medical_record?.date;
+  return trustedDoctorPages(fields).filter((d) => d.date && recordDate && daysBetween(d.date, recordDate) <= FOLLOW_UP_DAYS);
+};
+const doctorNotesOn = (fields, date) => datedDoctorNotes(fields).filter((d) => d.date === date);
+const pageNumbers = (pages) => pages.map((d) => d.page?.match(/page (\d+)/)?.[1]).filter(Boolean).join(', ');
+// The doctor's notes found, by date, so the reader sees which pages the AI compared: "2026-09-24 (pages 4, 15)".
+function doctorNotesText(fields) {
+  const byDate = new Map();
+  for (const d of datedDoctorNotes(fields)) byDate.set(d.date, [...(byDate.get(d.date) || []), d]);
+  if (!byDate.size) return null;
+  return `Doctor's notes found: ${[...byDate].sort(([a], [b]) => a.localeCompare(b)).map(([date, pages]) => `${date}${pageNumbers(pages) ? ` (page ${pageNumbers(pages)})` : ''}`).join(', ')}.`;
+}
+
 function buildDateConsistencyChecklist(extractedFields) {
   // The doctor's own follow-up period, where the note was read (labFollowUp.js): a voucher it explains agrees in full;
   // one it does not explain says why, in place of the general hint. Worked out once, for the flags and the lines.
@@ -822,12 +839,20 @@ function buildDateConsistencyChecklist(extractedFields) {
   // (lowest-confidence) agreement found, same "one representative reason" approach the
   // issues[] line already takes for this check (one INVOICE_DATE_INCONSISTENT issue text
   // covers every mismatched voucher, not one line each).
+  const notesFound = doctorNotesText(extractedFields);
   const invoiceAgreements = items
-    .map((item, index) => (verdicts[index]?.passed
-      ? { confidence: 1, note: verdicts[index].note, explained: true }
-      : withNote(dateAgreement(item.date, medicalRecordDate, `Voucher ${index + 1} date`, 'Medical record date'),
+    .map((item, index) => {
+      if (verdicts[index]?.passed) return { confidence: 1, note: verdicts[index].note, explained: true };
+      const sameDayNotes = item.date !== medicalRecordDate ? doctorNotesOn(extractedFields, item.date) : [];
+      if (item.date != null && medicalRecordDate != null && sameDayNotes.length) {
+        const pages = pageNumbers(sameDayNotes);
+        return { confidence: 1, note: `Voucher ${index + 1} date (${item.date}) matches the doctor's note${pages ? ` on page ${pages}` : ''}.`, explained: true };
+      }
+      const agreement = withNote(dateAgreement(item.date, medicalRecordDate, `Voucher ${index + 1} date`, 'Medical record date'),
         verdicts[index]?.note
-          ?? (followUp[index] ? `Possible follow-up visit (${item.voucher_type} voucher after the consultation): check the doctor's recommendation in the medical record.` : null))))
+          ?? (followUp[index] ? `Possible follow-up visit (${item.voucher_type} voucher after the consultation): check the doctor's recommendation in the medical record.` : null));
+      return agreement && agreement.confidence < 1 ? withNote(agreement, notesFound) : agreement;
+    })
     .map((agreement, index) => (agreement && verdicts[index] ? { ...agreement, labFollowUp: true } : agreement))
     .filter((agreement) => agreement != null);
   const worstInvoiceAgreement =
