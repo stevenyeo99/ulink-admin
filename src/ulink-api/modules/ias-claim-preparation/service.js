@@ -216,6 +216,8 @@ async function checkCase(caseRecord) {
     iasMemberInfoResponse,
     route,
     diagnosis: diagnosisPick.pick,
+    // The note's own term, with the code it gave; a person's choice keeps the claim form's text.
+    diagnosisText: diagnosisPick.chosen ? null : diagnosisPick.fromMedicalRecord?.searchedAs ?? null,
     lines,
     receivedAt: caseRecord.createdAt,
     barcode: caseRecord.consoleBarcode,

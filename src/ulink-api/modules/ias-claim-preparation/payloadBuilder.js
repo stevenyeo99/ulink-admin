@@ -42,7 +42,7 @@ const { isoToMMDDYYYY, dateToMMDDYYYY } = require('../shared/iasDates');
  * fabrication incident, not reintroduced — see db/migrations/20260822200000-simplify-
  * invoice-items.js), so a different visit date per voucher isn't something this can express.
  */
-function buildPayload({ extractedFields, iasMemberInfoResponse, route, diagnosis, lines, receivedAt, barcode, isStp, docCompleteDate }) {
+function buildPayload({ extractedFields, iasMemberInfoResponse, route, diagnosis, diagnosisText = null, lines, receivedAt, barcode, isStp, docCompleteDate }) {
   const member = iasMemberInfoResponse?.payload?.member || {};
   const memberPlan = iasMemberInfoResponse?.payload?.memberPlans?.[0] || {};
   const planId = memberPlan?.plan?.PLAN_ID ?? null;
@@ -89,7 +89,9 @@ function buildPayload({ extractedFields, iasMemberInfoResponse, route, diagnosis
     BenefitHead: benefit?.benefitHead ?? null,
     DiagnosisCode: diagnosis?.diagCode ?? null,
     DiagnosisCodeDesc: '',
-    DiagnosisDescription: medical.detail_of_illness_injury ?? null,
+    // diagnosisText: the doctor's note's main diagnosis or symptom, when the code came from the note (UAT AYA-CL-26035164,
+    // owner 2026-11-11); else the claim form's illness, as the customer wrote it.
+    DiagnosisDescription: diagnosisText || medical.detail_of_illness_injury || null,
     PresentedCurrency: 'MMK',
     PresentedAmt: subtotal ?? null,
     ExchangeRate: 1,

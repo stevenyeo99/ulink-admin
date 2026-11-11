@@ -221,7 +221,7 @@ describe("diagnosis from the doctor's note", () => {
 
     expect(mainDiagnosisTerm).toHaveBeenCalledWith('c/o fever x 1 day');
     expect(pickDiagnosis).toHaveBeenLastCalledWith("Doctor's note: c/o fever x 1 day\nMain diagnosis or symptom: fever", { searchText: 'fever' });
-    expect(prepared.payload.Items[0]).toMatchObject({ DiagnosisCode: 'R50.9', DiagnosisDescription: 'ဓမ္မတာ' });
+    expect(prepared.payload.Items[0]).toMatchObject({ DiagnosisCode: 'R50.9', DiagnosisDescription: 'fever' });
     expect(prepared.claimPrepMeta.diagnosis).toMatchObject({ fromMedicalRecord: { searchedAs: 'fever' }, doctorNote: 'c/o fever x 1 day' });
     expect(diagnosisUnsure(prepared.claimPrepMeta.diagnosis, 0.7)).toBe(false);
     expect(stpDecision).toHaveBeenCalledWith(expect.objectContaining({ diagCode: 'R50.9', diagnosisFromMedicalRecord: true }));
@@ -236,6 +236,13 @@ describe("diagnosis from the doctor's note", () => {
     const prepared = await checkCase(withNote('c/o fever x 1 day'));
     expect(prepared.claimPrepMeta.diagnosis.fromMedicalRecord).toBeTruthy();
     expect(diagnosisUnsure(prepared.claimPrepMeta.diagnosis, 0.7)).toBe(true);
+  });
+
+  it("the IAS description is the note's own term, from the AI per case, not a fixed word", async () => {
+    pickDiagnosis.mockResolvedValueOnce(R69).mockResolvedValueOnce({ ...FEVER, pick: { diagCode: 'A09.9', diagDesc: 'Gastroenteritis' } });
+    mainDiagnosisTerm.mockResolvedValueOnce('gastroenteritis');
+    const prepared = await checkCase(withNote('Gastroenteritis'));
+    expect(prepared.payload.Items[0]).toMatchObject({ DiagnosisCode: 'A09.9', DiagnosisDescription: 'gastroenteritis' });
   });
 
   it('a Burmese note: the pick sees only its English term', async () => {
@@ -279,7 +286,7 @@ describe("diagnosis from the doctor's note", () => {
   it('the note gives no match either: R69 stays, as today', async () => {
     pickDiagnosis.mockResolvedValue(R69);
     const prepared = await checkCase(withNote('6 faa x 1day'));
-    expect(prepared.payload.Items[0]).toMatchObject({ DiagnosisCode: 'R69' });
+    expect(prepared.payload.Items[0]).toMatchObject({ DiagnosisCode: 'R69', DiagnosisDescription: 'ဓမ္မတာ' });
     expect(prepared.claimPrepMeta.diagnosis.fromMedicalRecord).toBeUndefined();
     expect(diagnosisLine(prepared.claimPrepMeta).why).toContain('Doctor\'s note says: "6 faa x 1day"');
   });
@@ -307,6 +314,7 @@ describe("diagnosis from the doctor's note", () => {
     const prepared = await checkCase(chose);
 
     expect(pickDiagnosis).not.toHaveBeenCalled();
+    expect(prepared.payload.Items[0]).toMatchObject({ DiagnosisCode: 'R50.9', DiagnosisDescription: 'ဓမ္မတာ' });
     expect(diagnosisUnsure(prepared.claimPrepMeta.diagnosis, 0.7)).toBe(false);
     expect(stpDecision).toHaveBeenCalledWith(expect.objectContaining({ diagnosisFromMedicalRecord: false }));
   });
