@@ -55,9 +55,9 @@ function evaluateStp({ rules, blockedDiagnoses, blockedBenefits = [], blockOnRev
   const blocked = diagCode && blockedDiagnoses.find((d) => diagCode.toUpperCase().startsWith(d.codePrefix.toUpperCase()));
   if (blocked) reasons.push(`Diagnosis ${diagCode} is on the never-STP list (${blocked.codePrefix}${blocked.note ? `: ${blocked.note}` : ''}).`);
 
-  // A code the AI took from the doctor's note because the claim form gave none (UAT AYA-CL-26035164): never STP,
-  // whatever the switches.
-  if (diagnosisFromMedicalRecord) reasons.push(`Diagnosis ${diagCode} was taken from the doctor's note, not the claim form — a person approves.`);
+  // A code the AI took from the doctor's note because the claim form gave none (UAT AYA-CL-26035164, owner 2026-11-11):
+  // it does not block STP (an unsure one already stops the case for a person), but the STP line says where it came from.
+  const notes = diagnosisFromMedicalRecord ? [`Diagnosis ${diagCode} was taken from the doctor's note, because the claim form's diagnosis gave no match.`] : [];
 
   if (blockVitamins && vitaminVouchers.length) {
     reasons.push(`Vitamins / supplements on voucher${vitaminVouchers.length > 1 ? 's' : ''} ${vitaminVouchers.join(', ')} — a person approves.`);
@@ -81,7 +81,7 @@ function evaluateStp({ rules, blockedDiagnoses, blockedBenefits = [], blockOnRev
     reasons.push(`Open review point${openReviewPoints.length > 1 ? 's' : ''}: ${openReviewPoints.map((p) => `${p.decision} (${p.reason})`).join('; ')} — a person checks first.`);
   }
 
-  return { isStp: reasons.length === 0, source, currency, diagCode: diagCode ?? null, benefits, reasons };
+  return { isStp: reasons.length === 0, source, currency, diagCode: diagCode ?? null, benefits, reasons, notes };
 }
 
 async function stpDecision(input) {

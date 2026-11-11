@@ -9,7 +9,7 @@ const unsure = (confidence, threshold) => typeof confidence === 'number' && conf
 // ULINK rule set from the benefit (diagnosisRules.js, rule.set).
 function diagnosisUnsure(diagnosis, threshold) {
   if (!diagnosis || diagnosis.chosen || diagnosis.rule?.set) return false;
-  return Boolean(diagnosis.defaulted) || Boolean(diagnosis.fromMedicalRecord) || unsure(diagnosis.confidence, threshold);
+  return Boolean(diagnosis.defaulted) || unsure(diagnosis.confidence, threshold);
 }
 
 // No benefit, no head where the member's plan has heads for that type, or the pick at or below the threshold.

@@ -452,8 +452,10 @@ function stpWhy(stp, isStp) {
   if (!stp) return null;
   const rulesFor = stp.source ? ` (${stp.source === 'API' ? 'API' : 'email'} case rules)` : '';
   if (stp.reasons) {
-    if (stp.reasons.length > 0) return stp.reasons.join(' ') + rulesFor;
-    return stp.benefits.map((b) => `${b.benefitType} ${amount(b.total)} ${stp.currency} ≤ limit ${amount(b.limit)}`).join('; ') + rulesFor;
+    // notes: facts the reader must see, STP or not (a diagnosis taken from the doctor's note).
+    const notes = stp.notes?.length ? ` ${stp.notes.join(' ')}` : '';
+    if (stp.reasons.length > 0) return stp.reasons.join(' ') + notes + rulesFor;
+    return stp.benefits.map((b) => `${b.benefitType} ${amount(b.total)} ${stp.currency} ≤ limit ${amount(b.limit)}`).join('; ') + notes + rulesFor;
   }
   return stp.limit == null ? `No STP limit is configured for this claim type${stp.currency ? ` in ${stp.currency}` : ''}, so it is not STP.`
     : `Claimed ${amount(stp.total)} ${stp.currency || ''} ${isStp ? '≤' : '>'} limit ${amount(stp.limit)}`.replace(/\s+/g, ' ').trim();
@@ -498,7 +500,7 @@ function preparationLines(claimPrepMeta, isStp) {
       ].filter(Boolean).join(' ') || null,
       confidence: formatConfidence(diagnosis.confidence),
       verified: diagnosis.translation ? `${VERIFIED.AI}, AI translated` : VERIFIED.AI,
-      review: diagnosis.defaulted || diagnosis.fromMedicalRecord ? REVIEW.AI_UNSURE : lowConfidenceReview(diagnosis.confidence),
+      review: diagnosis.defaulted ? REVIEW.AI_UNSURE : lowConfidenceReview(diagnosis.confidence),
     }));
   }
 

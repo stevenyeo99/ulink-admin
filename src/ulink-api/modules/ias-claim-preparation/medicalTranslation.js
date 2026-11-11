@@ -63,9 +63,13 @@ const TERM_SCHEMA = {
 
 // A doctor's note → its main diagnosis or symptom in a few English words, for the ICD-10 search (UAT AYA-CL-26035164):
 // the whole note, with "c/o", durations, tests and drugs, finds unrelated codes; "fever" alone finds R50.9.
+// No term (null) when the AI is unsure of it (below the diagnosis picker's own 0.5) or names an unreadable word.
+const TERM_MIN_CONFIDENCE = 0.5;
 async function mainDiagnosisTerm(noteText) {
   const result = await synthesizeJson({ systemPrompt: TERM_PROMPT, userText: noteText, jsonSchema: TERM_SCHEMA });
-  return result.term?.trim() || null;
+  const term = result.term?.trim();
+  if (!term || /\bunclear\b/i.test(term) || !(result.confidence >= TERM_MIN_CONFIDENCE)) return null;
+  return term;
 }
 
 module.exports = { hasBurmese, toEnglishMedicalText, mainDiagnosisTerm };

@@ -13,7 +13,7 @@ const { uniqueBenefitCandidates } = require('../shared/iasBenefits');
 const { buildPayload } = require('./payloadBuilder');
 const { vitaminRejection } = require('../document-checking/checklist');
 const { stpDecision } = require('./stpEligibility');
-const { toEnglishMedicalText, mainDiagnosisTerm } = require('./medicalTranslation');
+const { toEnglishMedicalText, mainDiagnosisTerm, hasBurmese } = require('./medicalTranslation');
 const { aiSummaryRemark } = require('./aiSummaryRemark');
 const { overridesFromEvents } = require('../case-override/override');
 const { barcodeFields } = require('../shared/barcodeFields');
@@ -30,14 +30,17 @@ async function logEvent(transaction, { caseId, prevStatus = null, newStatus, rea
 // note said fever). The claim form stays first: this runs only after it failed, and never under a ULINK rule (its codes
 // are the only ones allowed). Only a note the AI kept as the medical record (present). The search uses the note's main
 // diagnosis or symptom (mainDiagnosisTerm); the pick sees the whole note. A code found here is marked
-// fromMedicalRecord, so a person always confirms it (preparationReview.diagnosisUnsure). An AI call failing keeps R69.
+// fromMedicalRecord: the same confidence rule as any pick decides whether a person confirms it (owner 2026-11-11: a sure
+// one can go STP), and the summary and STP line say it came from the note. An AI call failing keeps R69.
 async function pickFromMedicalRecord(record, formPick) {
   const noteText = record?.present === true ? record.diagnosis_or_treatment?.trim() : null;
   if (!noteText || formPick.rule) return formPick;
   try {
     const searchedAs = await mainDiagnosisTerm(noteText);
     if (!searchedAs) return formPick;
-    const notePick = await pickDiagnosis(`Doctor's note: ${noteText}\nMain diagnosis or symptom: ${searchedAs}`, { searchText: searchedAs });
+    // The pick works in English: a Burmese note is not shown to it, only its English term.
+    const context = hasBurmese(noteText) ? '' : `Doctor's note: ${noteText}\n`;
+    const notePick = await pickDiagnosis(`${context}Main diagnosis or symptom: ${searchedAs}`, { searchText: searchedAs });
     return notePick.defaulted ? formPick : { ...notePick, fromMedicalRecord: { searchedAs } };
   } catch (error) {
     logger.warn(`Diagnosis from the doctor's note failed, R69 kept: ${error.message}`);

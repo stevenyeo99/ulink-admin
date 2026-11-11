@@ -12,6 +12,7 @@ jest.mock('../modules/ias-claim-preparation/benefitPicker', () => ({
 jest.mock('../modules/ias-claim-preparation/medicalTranslation', () => ({
   toEnglishMedicalText: jest.fn(async ({ diagnosis, treatment }) => ({ diagnosis, treatment, translation: null })),
   mainDiagnosisTerm: jest.fn(async () => 'fever'),
+  hasBurmese: jest.requireActual('../modules/ias-claim-preparation/medicalTranslation').hasBurmese,
 }));
 jest.mock('../modules/ias-claim-preparation/stpEligibility', () => ({ stpDecision: jest.fn().mockResolvedValue({ isStp: false, reasons: [] }) }));
 jest.mock('../modules/ias-claim-preparation/aiSummaryRemark', () => ({ aiSummaryRemark: jest.fn(() => 'remark') }));
@@ -195,7 +196,8 @@ describe('diagnosis rule from the benefit (owner, 2026-10-29)', () => {
 });
 
 // The claim form gave no code (R69): the doctor's note is tried next (UAT AYA-CL-26035164 — the form said "ဓမ္မတာ",
-// the note said fever). The claim form stays first; a code from the note always waits for a person.
+// the note said fever). The claim form stays first; a sure code from the note can go STP (owner 2026-11-11), an unsure
+// one waits for a person.
 describe("diagnosis from the doctor's note", () => {
   const { stpDecision } = require('../modules/ias-claim-preparation/stpEligibility');
   const { mainDiagnosisTerm } = require('../modules/ias-claim-preparation/medicalTranslation');
@@ -212,7 +214,7 @@ describe("diagnosis from the doctor's note", () => {
   });
   const diagnosisLine = (meta) => buildAssessmentSummary({ source: 'API', claimPrepMeta: meta }).lines.find((l) => l.decision === 'Diagnosis code');
 
-  it('the claim form gives R69: the code comes from the note, a person confirms it, never STP', async () => {
+  it('the claim form gives R69: the code comes from the note; sure, it does not stop the case, and says where it came from', async () => {
     pickDiagnosis.mockResolvedValueOnce(R69).mockResolvedValueOnce(FEVER);
 
     const prepared = await checkCase(withNote('c/o fever x 1 day'));
@@ -221,12 +223,25 @@ describe("diagnosis from the doctor's note", () => {
     expect(pickDiagnosis).toHaveBeenLastCalledWith("Doctor's note: c/o fever x 1 day\nMain diagnosis or symptom: fever", { searchText: 'fever' });
     expect(prepared.payload.Items[0]).toMatchObject({ DiagnosisCode: 'R50.9', DiagnosisDescription: 'ဓမ္မတာ' });
     expect(prepared.claimPrepMeta.diagnosis).toMatchObject({ fromMedicalRecord: { searchedAs: 'fever' }, doctorNote: 'c/o fever x 1 day' });
-    expect(diagnosisUnsure(prepared.claimPrepMeta.diagnosis, 0.7)).toBe(true);
+    expect(diagnosisUnsure(prepared.claimPrepMeta.diagnosis, 0.7)).toBe(false);
     expect(stpDecision).toHaveBeenCalledWith(expect.objectContaining({ diagCode: 'R50.9', diagnosisFromMedicalRecord: true }));
     const line = diagnosisLine(prepared.claimPrepMeta);
     expect(line.why).toContain('Code from the doctor\'s note (searched as "fever"), because the claim form\'s illness "ဓမ္မတာ" gave no match.');
     expect(line.why).toContain('Doctor\'s note says: "c/o fever x 1 day"');
-    expect(line.review).not.toBeNull();
+    expect(line).toMatchObject({ status: 'ok', review: null });
+  });
+
+  it('an unsure code from the note waits for a person', async () => {
+    pickDiagnosis.mockResolvedValueOnce(R69).mockResolvedValueOnce({ ...FEVER, confidence: 0.6 });
+    const prepared = await checkCase(withNote('c/o fever x 1 day'));
+    expect(prepared.claimPrepMeta.diagnosis.fromMedicalRecord).toBeTruthy();
+    expect(diagnosisUnsure(prepared.claimPrepMeta.diagnosis, 0.7)).toBe(true);
+  });
+
+  it('a Burmese note: the pick sees only its English term', async () => {
+    pickDiagnosis.mockResolvedValueOnce(R69).mockResolvedValueOnce(FEVER);
+    await checkCase(withNote('ဖျား'));
+    expect(pickDiagnosis).toHaveBeenLastCalledWith('Main diagnosis or symptom: fever', { searchText: 'fever' });
   });
 
   it('the note names no diagnosis or symptom: R69 stays, no code search', async () => {
@@ -254,6 +269,11 @@ describe("diagnosis from the doctor's note", () => {
     pickDiagnosis.mockResolvedValueOnce(R69).mockRejectedValueOnce(new Error('LM Studio timeout'));
     const prepared = await checkCase(withNote('fever'));
     expect(prepared.payload.Items[0]).toMatchObject({ DiagnosisCode: 'R69' });
+
+    jest.clearAllMocks();
+    pickDiagnosis.mockResolvedValue(R69);
+    mainDiagnosisTerm.mockRejectedValueOnce(new Error('LM Studio timeout'));
+    expect((await checkCase(withNote('fever'))).payload.Items[0]).toMatchObject({ DiagnosisCode: 'R69' });
   });
 
   it('the note gives no match either: R69 stays, as today', async () => {
@@ -272,6 +292,7 @@ describe("diagnosis from the doctor's note", () => {
     const prepared = await checkCase(clear);
 
     expect(pickDiagnosis).toHaveBeenCalledTimes(1);
+    expect(mainDiagnosisTerm).not.toHaveBeenCalled();
     expect(prepared.payload.Items[0]).toMatchObject({ DiagnosisCode: 'K02.9' });
     expect(stpDecision).toHaveBeenCalledWith(expect.objectContaining({ diagnosisFromMedicalRecord: false }));
   });
