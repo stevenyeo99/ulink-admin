@@ -267,10 +267,90 @@ docker ps --format '{{.Names}} {{.Image}}'          # which env runs which image
 `.env` and attachments (they are folders on the server, mounted in). Bump the tag each time (`22-3`, …); delete
 an old image only when no container uses it: `docker image rm ulink-api-runtime:22`.
 
+## Burmese OCR (Tesseract)
+
+Claim recognition reads typed Burmese text on claim form pages with Tesseract OCR (OCR: software that reads text
+from an image). The AI page reader misreads small typed Burmese letters; Tesseract reads them correctly (UAT
+AYA-CL-26041363: "နေမကောင်း" was read as "အနာရောဂါ"). Tesseract needs two packages: `tesseract-ocr` (the engine)
+and `tesseract-ocr-mya` (the Burmese language data). If they are missing, the API logs a warning and reads the
+pages without OCR, as before. A case does not fail.
+
+### Your machine (WSL, dev)
+
+Tesseract 4.1.1 is already installed on the dev machine. Install the Burmese language data:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y tesseract-ocr tesseract-ocr-mya
+tesseract --list-langs                # make sure that the list shows: eng, mya
+```
+
+Restart the API on dev after the install.
+
+### Server (UAT, then prod)
+
+The packages go into the runtime image, not onto the Debian 9 host. This is the procedure in "Adding a library",
+with the exact values for this change. Do UAT first. Do not touch prod until UAT passes.
+
+1. On your machine, make sure that `ulink-api-runtime.Dockerfile` installs `poppler-utils tesseract-ocr tesseract-ocr-mya`.
+2. Upload `ulink-api-runtime.Dockerfile` to `~/upload` on the server (WinSCP).
+3. On the server, as `ulinkai`, see which image tag each environment uses:
+
+   ```bash
+   docker ps --format '{{.Names}} {{.Image}}'
+   ```
+
+   Pick the next free tag. The steps below use `22-2`. If `22-2` already exists, use `22-3`.
+
+4. Fix the line endings and build the new image:
+
+   ```bash
+   sed -i 's/\r$//' ~/upload/ulink-api-runtime.Dockerfile
+   cd ~/upload && docker build -t ulink-api-runtime:22-2 -f ulink-api-runtime.Dockerfile . && cd
+   ```
+
+5. Make sure that the new image has Burmese:
+
+   ```bash
+   docker run --rm ulink-api-runtime:22-2 tesseract --list-langs     # must show: eng, mya
+   ```
+
+6. Recreate the UAT container on the new image. The code, `.env` and attachments stay, because they are mounted folders.
+
+   ```bash
+   docker rm -f ulink-api-uat
+   D=/home/ulinkai/uat
+   docker run -d --name ulink-api-uat --restart unless-stopped --log-opt max-size=20m --log-opt max-file=3 --network host --user $(id -u):$(id -g) \
+     -v $D/ulink-api:/app -v $D/ulink-attachments:$D/ulink-attachments \
+     -w /app -e NODE_ENV=production ulink-api-runtime:22-2 node bin/www
+   ```
+
+7. Make sure that UAT runs on the new image and that Tesseract works in it:
+
+   ```bash
+   docker ps --format '{{.Names}} {{.Image}}'                   # ulink-api-uat  ulink-api-runtime:22-2
+   docker exec ulink-api-uat tesseract --list-langs            # eng, mya
+   curl -s -o /dev/null -w "api %{http_code}\n" http://localhost:3088/api/docs   # 200 (UAT port)
+   ```
+
+8. Deploy the API release that uses the OCR (`~/bin/ulink-deploy-api uat <file>`), then run one claim with a Burmese
+   claim form. In the logs, make sure that there is no "Burmese OCR skipped" warning.
+9. When UAT passes, repeat step 6 for prod with `D=/home/ulinkai/prod` and the name `ulink-api-prod`, then step 7 with
+   `ulink-api-prod`, then deploy the release to prod.
+
+Rollback: repeat step 6 with the old tag (for example `ulink-api-runtime:22`). Delete an old image only when no
+container uses it: `docker image rm ulink-api-runtime:22`.
+
+### For a new server
+
+A new server builds `ulink-api-runtime.Dockerfile` in "One-time setup". The Dockerfile already installs Tesseract and
+Burmese, so a new server needs no extra step. Do step 5 to make sure that it worked.
+
 ## Troubleshooting
 
 | Symptom | Cause / fix |
 |---|---|
+| Log warning "Burmese OCR skipped", or `tesseract --list-langs` in the container has no `mya` | The container runs an image without Tesseract or the Burmese data. Build and switch the image as in "Burmese OCR (Tesseract)". Cases still go on without OCR. |
 | `docker: invalid reference format` → `FAILED at npm-ci` | Old `ulink-deploy-api.sh` (before 2026-10-14 fix) on a first deploy — reinstall the current script and rerun. |
 | `FAILED at no-env` | `~/uat/ulink-api/.env` missing — see "Change a setting". |
 | `FAILED at restart` on the very first deploy | Expected — create the container (one-time setup). |

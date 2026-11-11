@@ -18,7 +18,7 @@ Start here. Which file answers what:
 | `pack-release.sh` | your machine (WSL) | packs `release/api/` / `release/console/` `.tar.gz` |
 | `ulink-deploy-console.sh` | server, `~/bin/ulink-deploy-console <uat\|prod> <file>` | installs a console release |
 | `ulink-deploy-api.sh` | server, `~/bin/ulink-deploy-api <uat\|prod> <file>` | installs an API release |
-| `ulink-api-runtime.Dockerfile` | server, `docker build` once | Node 22 (bullseye) + poppler-utils image for ulink-api |
+| `ulink-api-runtime.Dockerfile` | server, `docker build` once | Node 22 (bullseye) + poppler-utils + Tesseract (English, Burmese) image for ulink-api |
 | `ulinkai-logrotate.conf` | server, `/etc/logrotate.d/ulinkai` | daily rotate + gzip of ulink-api `logs/*.log`, 30 days |
 | `ulinkai-console-uat-nginx.conf` | server, `/etc/nginx/conf.d/` | UAT site on port 5173: console files + `/api` → 3088 |
 
