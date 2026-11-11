@@ -3,6 +3,7 @@ const os = require('os');
 const path = require('path');
 const { promisify } = require('util');
 const { execFile } = require('child_process');
+const sharp = require('sharp');
 const config = require('../../config');
 
 const execFileAsync = promisify(execFile);
@@ -73,4 +74,20 @@ async function preparePageImages(buffer, filename, label) {
   return rasterizePdf(buffer, label);
 }
 
-module.exports = { preparePageImages };
+// One page as a PNG for Tesseract (burmeseOcr.js, sidewaysPage.js): a PDF page rendered again with its longest side
+// OCR_MAX_SIDE_PX — A4 at 300 DPI; at the 100 DPI page image the letters are too small — and an image attachment with
+// its EXIF orientation applied (so it matches what the AI was shown) and its longest side capped the same (a phone
+// photo is far bigger). → the PNG's path, inside tempDir (the caller removes it).
+const OCR_MAX_SIDE_PX = 3508;
+async function renderForOcr(page, tempDir, timeoutMs = 60000) {
+  const outPath = path.join(tempDir, `ocr-page-${page.pageNumber}.png`);
+  if (page.pdfPath) {
+    const n = String(page.pageNumber);
+    await execFileAsync('pdftoppm', ['-scale-to', String(OCR_MAX_SIDE_PX), '-f', n, '-l', n, '-png', '-singlefile', page.pdfPath, outPath.replace(/\.png$/, '')], { timeout: timeoutMs });
+  } else {
+    await sharp(page.filePath).rotate().resize({ width: OCR_MAX_SIDE_PX, height: OCR_MAX_SIDE_PX, fit: 'inside', withoutEnlargement: true }).png().toFile(outPath);
+  }
+  return outPath;
+}
+
+module.exports = { preparePageImages, renderForOcr };

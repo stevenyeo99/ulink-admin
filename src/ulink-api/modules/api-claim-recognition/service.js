@@ -51,13 +51,13 @@ async function processCase({ caseRecord, input }) {
 
   const storage = getStorageAdapter();
   const transcripts = [];
-  const ocrTexts = []; // Burmese OCR per page, for the extraction only (claim-recognition pushPage)
+  const extraReadings = []; // a sideways photo read upright, Burmese OCR: per page, for the extraction only (claim-recognition pushPage)
   // Same "[<file> - page N]" chunk labels as email attachments — the medical-record fallback
   // groups pages by that label. The barcode is part of the name because every console
   // submission numbers its pages from page-000.jpg; reply files get a reply-N prefix.
   const read = async (name, storageRef, filename, label) => {
     const pages = await transcribePages(await storage.get(storageRef), filename, label);
-    for (const page of pages) pushPage(transcripts, ocrTexts, name, page);
+    for (const page of pages) pushPage(transcripts, extraReadings, name, page);
   };
   for (const doc of documents) await read(`${doc.barcodeId || 'upload'}/${doc.originalFilename}`, doc.storageRef, doc.originalFilename, doc.id);
   for (const [i, att] of attachments.entries()) {
@@ -67,7 +67,7 @@ async function processCase({ caseRecord, input }) {
   // Too long for the model's context (SYSTEM_4 E4-27): a person reads it — never a call with pages cut off.
   let extraction;
   try {
-    extraction = await extractFields(transcripts, route, ocrTexts);
+    extraction = await extractFields(transcripts, route, extraReadings);
   } catch (error) {
     if (!(error instanceof DocumentsTooLongError)) throw error;
     return {

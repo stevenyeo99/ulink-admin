@@ -7,9 +7,9 @@
 jest.mock('../modules/claim-recognition/service', () => ({
   transcribePages: jest.fn(),
   extractFields: jest.fn(),
-  pushPage: (chunks, ocrTexts, label, page) => {
+  pushPage: (chunks, extraReadings, label, page) => {
     chunks.push(`[${label} - page ${page.pageNumber}]\n${page.text}`);
-    if (page.ocr) ocrTexts.push(`[${label} - page ${page.pageNumber}]\n${page.ocr}`);
+    if (page.ocr) extraReadings.push(`[${label} - page ${page.pageNumber}]\n${page.ocr}`);
   },
 }));
 jest.mock('../storage', () => ({ getStorageAdapter: () => ({ get: jest.fn(async (ref) => Buffer.from(`bytes of ${ref}`)) }) }));
