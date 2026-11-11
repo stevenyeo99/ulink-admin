@@ -43,7 +43,8 @@ async function rasterizePdf(pdfBuffer, label) {
 
   const pages = pageFiles.map((fileName, index) => {
     const pageMatch = fileName.match(/-(\d+)\.jpg$/);
-    return { pageNumber: pageMatch ? Number(pageMatch[1]) : index + 1, filePath: path.join(tempDir, fileName) };
+    // pdfPath: the source PDF, for a sharper render of one page (burmeseOcr.js).
+    return { pageNumber: pageMatch ? Number(pageMatch[1]) : index + 1, filePath: path.join(tempDir, fileName), pdfPath: inputPath };
   });
 
   return { pages, cleanup: () => fs.promises.rm(tempDir, { recursive: true, force: true }).catch(() => undefined) };

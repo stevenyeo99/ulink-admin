@@ -14,6 +14,8 @@ const { datePathSegments } = require('../shared/datePathSegments');
 const { forCase } = require('../llm-calls/log');
 const { pastCorrectionNotes } = require('../ai-feedback/memory');
 const { readDoctorFollowUp } = require('./doctorFollowUp');
+const { burmeseOcrText } = require('./burmeseOcr');
+const { hasBurmese } = require('../ias-claim-preparation/medicalTranslation');
 
 const BLOCK_NAME = 'claim-recognition';
 const ajv = new Ajv({ allErrors: true });
@@ -63,7 +65,9 @@ async function transcribePages(buffer, filename, label) {
     for (const page of pages) {
       const imageBuffer = await fs.promises.readFile(page.filePath);
       const text = await transcribePage({ imageBuffer, instruction: TRANSCRIBE_INSTRUCTION });
-      pageTexts.push({ pageNumber: page.pageNumber, text });
+      // Typed Burmese: Tesseract's reading under the AI's (extract-fields.md says which to trust for what).
+      const ocr = hasBurmese(text) ? await burmeseOcrText(page) : null;
+      pageTexts.push({ pageNumber: page.pageNumber, text: ocr ? `${text}\n\nBurmese OCR text (page ${page.pageNumber}):\n${ocr}` : text });
     }
     return pageTexts;
   } finally {
