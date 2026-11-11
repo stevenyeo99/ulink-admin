@@ -272,8 +272,8 @@ an old image only when no container uses it: `docker image rm ulink-api-runtime:
 Claim recognition reads typed Burmese text on claim form pages with Tesseract OCR (OCR: software that reads text
 from an image). The AI page reader misreads small typed Burmese letters; Tesseract reads them correctly (UAT
 AYA-CL-26041363: "နေမကောင်း" was read as "အနာရောဂါ"). Tesseract needs two packages: `tesseract-ocr` (the engine)
-and `tesseract-ocr-mya` (the Burmese language data). If they are missing, the API logs a warning and reads the
-pages without OCR, as before. A case does not fail.
+and `tesseract-ocr-mya` (the Burmese language data). If they are missing, the API logs one "Burmese OCR skipped"
+warning and reads the pages without OCR, as before, until it restarts. A case does not fail.
 
 ### Your machine (WSL, dev)
 

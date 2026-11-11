@@ -3,7 +3,15 @@
 // the ayas_member_claim route, without a route decision. The OCR/LLM functions are mocked here —
 // what matters is that the API job hands them the same kind of input the email job does.
 
-jest.mock('../modules/claim-recognition/service', () => ({ transcribePages: jest.fn(), extractFields: jest.fn() }));
+// pushPage: the real one (a page's chunk, and its Burmese OCR apart) — it has no I/O.
+jest.mock('../modules/claim-recognition/service', () => ({
+  transcribePages: jest.fn(),
+  extractFields: jest.fn(),
+  pushPage: (chunks, ocrTexts, label, page) => {
+    chunks.push(`[${label} - page ${page.pageNumber}]\n${page.text}`);
+    if (page.ocr) ocrTexts.push(`[${label} - page ${page.pageNumber}]\n${page.ocr}`);
+  },
+}));
 jest.mock('../storage', () => ({ getStorageAdapter: () => ({ get: jest.fn(async (ref) => Buffer.from(`bytes of ${ref}`)) }) }));
 jest.mock('../db/models', () => ({
   ClaimRoute: { findOne: jest.fn() },
@@ -84,7 +92,7 @@ it("reads every document with the email flow's OCR and extracts with the ayas_me
     ['bytes of api/API-T2/B1/page-001.jpg', 'page-001.jpg', 'd2'],
   ]);
   const transcripts = ['[B1/page-000.jpg - page 1]\ntext of page-000.jpg', '[B1/page-001.jpg - page 1]\ntext of page-001.jpg'];
-  expect(extractFields).toHaveBeenCalledWith(transcripts, route);
+  expect(extractFields).toHaveBeenCalledWith(transcripts, route, []); // no Burmese OCR on these pages
   expect(result).toEqual({
     nextStatus: 'API_RECOGNIZED',
     message: expect.any(String),

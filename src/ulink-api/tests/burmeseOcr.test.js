@@ -1,46 +1,73 @@
 // Typed Burmese on a claim form page (UAT AYA-CL-26041363): a page whose AI reading has Burmese also gets Tesseract's
-// reading under it; an English page does not run Tesseract; Tesseract missing or failing leaves the AI reading alone.
+// Burmese lines, kept apart from the page text (only the extraction gets them); an English page does not run
+// Tesseract; Tesseract missing leaves the AI reading alone, with one warning.
 jest.mock('child_process', () => ({ execFile: jest.fn() }));
-jest.mock('../modules/claim-recognition/rasterize', () => ({
-  preparePageImages: jest.fn(async () => ({
-    pages: [{ pageNumber: 1, filePath: __filename, pdfPath: '/tmp/x.pdf' }, { pageNumber: 2, filePath: __filename, pdfPath: '/tmp/x.pdf' }],
-    cleanup: async () => undefined,
-  })),
-}));
+jest.mock('../modules/claim-recognition/rasterize', () => ({ preparePageImages: jest.fn() }));
 jest.mock('../modules/claim-recognition/llmClient', () => ({ transcribePage: jest.fn(), synthesizeJson: jest.fn(), DocumentsTooLongError: class extends Error {} }));
 
 const { execFile } = require('child_process');
+const { preparePageImages } = require('../modules/claim-recognition/rasterize');
 const { transcribePage } = require('../modules/claim-recognition/llmClient');
-const { transcribePages } = require('../modules/claim-recognition/service');
+const { transcribePages, pushPage } = require('../modules/claim-recognition/service');
+const { burmeseLines } = require('../modules/claim-recognition/burmeseOcr');
 
+const OCR = 'Detail of illness injury\nနေမကောင်း\nDoctor Name\nDr.Khin Aye Gyi\nHospital or Clinic Name\nအောင်သစ္စာဆေးရုံ\n';
 // execFile(cmd, args, options, callback): pdftoppm renders, tesseract prints its reading.
-const tools = (tesseract) => execFile.mockImplementation((cmd, args, options, callback) => {
-  if (cmd === 'pdftoppm') return callback(null, { stdout: '', stderr: '' });
-  return tesseract(callback);
+const tools = (tesseract) => execFile.mockImplementation((cmd, args, options, callback) => (cmd === 'pdftoppm' ? callback(null, { stdout: '' }) : tesseract(callback)));
+const pdfPages = () => preparePageImages.mockResolvedValue({
+  pages: [{ pageNumber: 1, filePath: __filename, pdfPath: '/tmp/x.pdf' }, { pageNumber: 2, filePath: __filename, pdfPath: '/tmp/x.pdf' }],
+  cleanup: async () => undefined,
 });
 
 beforeEach(() => {
   jest.clearAllMocks();
-  transcribePage.mockResolvedValueOnce('Detail of illness injury: အနာရောဂါ').mockResolvedValueOnce('Bank Name: AYA');
+  transcribePage.mockResolvedValueOnce('Detail of illness injury: အနာရောဂါ\nAccount Number:').mockResolvedValueOnce('Bank Name: AYA');
 });
 
-it("a Burmese page gets Tesseract's reading under the AI's; an English page does not run Tesseract", async () => {
-  tools((callback) => callback(null, { stdout: 'Detail of illness injury\n\nနေမကောင်း\n', stderr: '' }));
+it('keeps only the Burmese lines, each with the line before it (its label)', () => {
+  expect(burmeseLines(OCR)).toBe('Detail of illness injury\nနေမကောင်း\nHospital or Clinic Name\nအောင်သစ္စာဆေးရုံ');
+  expect(burmeseLines('Bank Name\nAYA')).toBeNull();
+});
+
+it("a Burmese page gets the OCR apart from its text; an English page does not run Tesseract; the chunk is unchanged", async () => {
+  pdfPages();
+  tools((callback) => callback(null, { stdout: OCR }));
 
   const pages = await transcribePages(Buffer.from('%PDF'), 'form.pdf', 'form');
 
-  expect(pages[0].text).toBe('Detail of illness injury: အနာရောဂါ\n\nBurmese OCR text (page 1):\nDetail of illness injury\nနေမကောင်း');
-  expect(pages[1].text).toBe('Bank Name: AYA');
-  const tesseractCalls = execFile.mock.calls.filter(([cmd]) => cmd === 'tesseract');
-  expect(tesseractCalls).toHaveLength(1);
-  expect(tesseractCalls[0][1]).toEqual(expect.arrayContaining(['-l', 'mya+eng', '--psm', '11']));
-  expect(execFile.mock.calls.find(([cmd]) => cmd === 'pdftoppm')[1]).toEqual(expect.arrayContaining(['-r', '300', '-f', '1', '-l', '1']));
+  expect(pages[0]).toMatchObject({ text: 'Detail of illness injury: အနာရောဂါ\nAccount Number:', ocr: expect.stringContaining('နေမကောင်း') });
+  expect(pages[1]).toMatchObject({ text: 'Bank Name: AYA', ocr: null });
+  expect(execFile.mock.calls.filter(([cmd]) => cmd === 'tesseract')).toHaveLength(1);
+  expect(execFile.mock.calls.find(([cmd]) => cmd === 'tesseract')[1]).toEqual(expect.arrayContaining(['-l', 'mya+eng', '--psm', '11']));
+  expect(execFile.mock.calls.find(([cmd]) => cmd === 'pdftoppm')[1]).toEqual(expect.arrayContaining(['-scale-to', '3508', '-f', '1', '-l', '1']));
+
+  // The page chunk stays as the AI read it (the account number backstop still sees "Account Number:" at the end).
+  const chunks = [];
+  const ocrTexts = [];
+  pages.forEach((page) => pushPage(chunks, ocrTexts, 'form.pdf', page));
+  expect(chunks).toEqual(['[form.pdf - page 1]\nDetail of illness injury: အနာရောဂါ\nAccount Number:', '[form.pdf - page 2]\nBank Name: AYA']);
+  expect(ocrTexts).toEqual([expect.stringMatching(/^\[form\.pdf - page 1\]\nDetail of illness injury\nနေမကောင်း/)]);
 });
 
-it('Tesseract missing: the page keeps the AI reading, the case goes on', async () => {
-  tools((callback) => callback(Object.assign(new Error('spawn tesseract ENOENT'), { stderr: '' })));
+it('an image attachment is read as it is, with no PDF render', async () => {
+  preparePageImages.mockResolvedValue({ pages: [{ pageNumber: 1, filePath: __filename }], cleanup: async () => undefined });
+  tools((callback) => callback(null, { stdout: OCR }));
+
+  await transcribePages(Buffer.from('jpg'), 'photo.jpg', 'photo');
+
+  expect(execFile.mock.calls.map(([cmd]) => cmd)).toEqual(['tesseract']);
+  expect(execFile.mock.calls[0][1][0]).toBe(__filename);
+});
+
+it('Tesseract missing: the pages keep the AI reading, and it is not tried again', async () => {
+  pdfPages();
+  tools((callback) => callback(Object.assign(new Error('spawn tesseract ENOENT'), { code: 'ENOENT' })));
 
   const pages = await transcribePages(Buffer.from('%PDF'), 'form.pdf', 'form');
+  transcribePage.mockResolvedValueOnce('အနာရောဂါ');
+  preparePageImages.mockResolvedValue({ pages: [{ pageNumber: 1, filePath: __filename, pdfPath: '/tmp/x.pdf' }], cleanup: async () => undefined });
+  await transcribePages(Buffer.from('%PDF'), 'form.pdf', 'form');
 
-  expect(pages.map((p) => p.text)).toEqual(['Detail of illness injury: အနာရောဂါ', 'Bank Name: AYA']);
+  expect(pages.map((p) => p.ocr)).toEqual([null, null]);
+  expect(execFile.mock.calls.filter(([cmd]) => cmd === 'tesseract')).toHaveLength(1);
 });

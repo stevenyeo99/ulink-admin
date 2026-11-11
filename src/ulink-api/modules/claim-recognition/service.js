@@ -65,9 +65,10 @@ async function transcribePages(buffer, filename, label) {
     for (const page of pages) {
       const imageBuffer = await fs.promises.readFile(page.filePath);
       const text = await transcribePage({ imageBuffer, instruction: TRANSCRIBE_INSTRUCTION });
-      // Typed Burmese: Tesseract's reading under the AI's (extract-fields.md says which to trust for what).
+      // Typed Burmese: Tesseract's reading, kept apart from the page text (ocrSection) — only the extraction gets it,
+      // so the backstops that search the page text (account number, date of birth) and the other prompts see no change.
       const ocr = hasBurmese(text) ? await burmeseOcrText(page) : null;
-      pageTexts.push({ pageNumber: page.pageNumber, text: ocr ? `${text}\n\nBurmese OCR text (page ${page.pageNumber}):\n${ocr}` : text });
+      pageTexts.push({ pageNumber: page.pageNumber, text, ocr });
     }
     return pageTexts;
   } finally {
@@ -84,7 +85,14 @@ async function transcribePages(buffer, filename, label) {
  * fetched. A document already fetched for this attachment (e.g. a retried run) is reused
  * from storage rather than fetched and stored again.
  */
-async function transcribeLinkedDocuments(attachment, pdfBuffer, storage) {
+// One page's chunk, "[<label> - page N]\n<text>", and its Burmese OCR (if any) under the same label, in ocrTexts.
+function pushPage(chunks, ocrTexts, label, page) {
+  const name = `[${label} - page ${page.pageNumber}]`;
+  chunks.push(`${name}\n${page.text}`);
+  if (page.ocr) ocrTexts.push(`${name}\n${page.ocr}`);
+}
+
+async function transcribeLinkedDocuments(attachment, pdfBuffer, storage, ocrTexts = []) {
   const ext = path.extname(attachment.originalFilename || '').toLowerCase();
   if (ext !== '.pdf') return []; // only generated claim PDFs carry this kind of link
 
@@ -126,19 +134,18 @@ async function transcribeLinkedDocuments(attachment, pdfBuffer, storage) {
 
     const buffer = await storage.get(linkedAttachment.storageRef);
     const pages = await transcribePages(buffer, linkedAttachment.originalFilename, linkedAttachment.id);
-    for (const page of pages) {
-      pageTexts.push(`[linked from ${attachment.originalFilename || 'attachment'} - ${url} - page ${page.pageNumber}]\n${page.text}`);
-    }
+    for (const page of pages) pushPage(pageTexts, ocrTexts, `linked from ${attachment.originalFilename || 'attachment'} - ${url}`, page);
   }
 
   return pageTexts;
 }
 
-async function transcribeAttachment(attachment, storage) {
+async function transcribeAttachment(attachment, storage, ocrTexts = []) {
   const buffer = await storage.get(attachment.storageRef);
   const pages = await transcribePages(buffer, attachment.originalFilename, attachment.id);
-  const pageTexts = pages.map((page) => `[${attachment.originalFilename || 'attachment'} - page ${page.pageNumber}]\n${page.text}`);
-  pageTexts.push(...(await transcribeLinkedDocuments(attachment, buffer, storage)));
+  const pageTexts = [];
+  for (const page of pages) pushPage(pageTexts, ocrTexts, attachment.originalFilename || 'attachment', page);
+  pageTexts.push(...(await transcribeLinkedDocuments(attachment, buffer, storage, ocrTexts)));
   return pageTexts;
 }
 
@@ -694,11 +701,13 @@ async function decideRoute(transcriptChunks, emailContext, routes) {
  * document-checking/checklist.js's checkDelegationLetterRequired comment for the one live
  * check that depended on it).
  */
-async function extractFields(transcriptChunks, matchedRoute) {
+// ocrTexts: Burmese OCR per page (pushPage), given after the page transcripts as its own section (extract-fields.md).
+async function extractFields(transcriptChunks, matchedRoute, ocrTexts = []) {
   const responseSchema = matchedRoute.extractionSchema;
   // Reviewer notes from past claims of the same hospital — lessons only, no values (SYSTEM_4 F3, ai-feedback/memory.js).
   const { block: notes, learnedFrom } = await pastCorrectionNotes(transcriptChunks);
-  const userText = ['Page transcripts:', transcriptChunks.join('\n\n'), ...(notes ? ['', notes] : [])].join('\n');
+  const ocrSection = ocrTexts.length ? ['', 'Burmese OCR text (typed Burmese lines, each with the line before it):', ocrTexts.join('\n\n')] : [];
+  const userText = ['Page transcripts:', transcriptChunks.join('\n\n'), ...ocrSection, ...(notes ? ['', notes] : [])].join('\n');
 
   const parsed = dropOutOfRangeEvidence(
     await synthesizeJson({
@@ -735,16 +744,16 @@ async function extractFields(transcriptChunks, matchedRoute) {
  */
 // The whole claim's text is sent twice (route decision, field extraction). Too long for the model's context: a person
 // reads it ("Needs manual reading") — never a call with pages cut off (SYSTEM_4 E4-27).
-async function recognizeFromTranscripts(transcriptChunks, emailContext, routes) {
+async function recognizeFromTranscripts(transcriptChunks, emailContext, routes, ocrTexts = []) {
   try {
-    return await recognizeWithinContext(transcriptChunks, emailContext, routes);
+    return await recognizeWithinContext(transcriptChunks, emailContext, routes, ocrTexts);
   } catch (error) {
     if (!(error instanceof DocumentsTooLongError)) throw error;
     return { outcome: 'MANUAL_REVIEW', recognizedType: null, reasonCode: 'DOCUMENTS_TOO_LONG', message: error.message, extractedFields: null };
   }
 }
 
-async function recognizeWithinContext(transcriptChunks, emailContext, routes) {
+async function recognizeWithinContext(transcriptChunks, emailContext, routes, ocrTexts = []) {
   const routeResult = await decideRoute(transcriptChunks, emailContext, routes);
   if (routeResult.schemaValidationError) {
     return {
@@ -781,7 +790,7 @@ async function recognizeWithinContext(transcriptChunks, emailContext, routes) {
     return { outcome, recognizedType, reasonCode, message: routeResult.reason, extractedFields: null };
   }
 
-  const extraction = await extractFields(transcriptChunks, matchedRoute);
+  const extraction = await extractFields(transcriptChunks, matchedRoute, ocrTexts);
   if (extraction.schemaValidationError) {
     return {
       outcome: 'MANUAL_REVIEW',
@@ -804,8 +813,9 @@ async function recognizeCase(caseRecord, routes) {
   }
 
   const transcriptChunks = [];
+  const ocrTexts = [];
   for (const attachment of attachments) {
-    transcriptChunks.push(...(await transcribeAttachment(attachment, storage)));
+    transcriptChunks.push(...(await transcribeAttachment(attachment, storage, ocrTexts)));
   }
 
   // Inbound only — email-sender's own outbound replies (canned "Incorrect bank details...
@@ -821,7 +831,7 @@ async function recognizeCase(caseRecord, routes) {
   });
   const emailContext = emailMessages.map((m) => `Subject: ${m.subject || ''}\nBody: ${m.bodyText || ''}`).join('\n---\n');
 
-  const result = await recognizeFromTranscripts(transcriptChunks, emailContext, routes);
+  const result = await recognizeFromTranscripts(transcriptChunks, emailContext, routes, ocrTexts);
   return { caseId: caseRecord.id, ...result };
 }
 
@@ -837,16 +847,15 @@ async function recognizeCase(caseRecord, routes) {
  */
 async function recognizeFromPdfPaths(pdfPaths, routes) {
   const transcriptChunks = [];
+  const ocrTexts = [];
   for (const pdfPath of pdfPaths) {
     const buffer = await fs.promises.readFile(pdfPath);
     const filename = path.basename(pdfPath);
     const pages = await transcribePages(buffer, filename, path.basename(pdfPath, path.extname(pdfPath)));
-    for (const page of pages) {
-      transcriptChunks.push(`[${filename} - page ${page.pageNumber}]\n${page.text}`);
-    }
+    for (const page of pages) pushPage(transcriptChunks, ocrTexts, filename, page);
   }
 
-  return recognizeFromTranscripts(transcriptChunks, '', routes);
+  return recognizeFromTranscripts(transcriptChunks, '', routes, ocrTexts);
 }
 
 // Deliberately does NOT fire for MANUAL_REVIEW — that outcome means a route DID match
@@ -926,6 +935,7 @@ module.exports = {
   decideRoute,
   extractFields,
   transcribePages,
+  pushPage,
   dedupeInvoiceItems,
   normalizeClaimantDob,
   fillAccountNumberFromText,
