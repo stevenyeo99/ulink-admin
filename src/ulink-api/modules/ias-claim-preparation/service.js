@@ -13,7 +13,7 @@ const { uniqueBenefitCandidates } = require('../shared/iasBenefits');
 const { buildPayload } = require('./payloadBuilder');
 const { vitaminRejection } = require('../document-checking/checklist');
 const { stpDecision } = require('./stpEligibility');
-const { toEnglishMedicalText } = require('./medicalTranslation');
+const { toEnglishMedicalText, mainDiagnosisTerm } = require('./medicalTranslation');
 const { aiSummaryRemark } = require('./aiSummaryRemark');
 const { overridesFromEvents } = require('../case-override/override');
 const { barcodeFields } = require('../shared/barcodeFields');
@@ -26,19 +26,18 @@ async function logEvent(transaction, { caseId, prevStatus = null, newStatus, rea
   await CaseEvent.create({ caseId, blockName: BLOCK_NAME, prevStatus, newStatus, reasonCode, message }, { transaction });
 }
 
-// The claim form gave no code (R69 default): try the doctor's note's own text (UAT AYA-CL-26035164 — the form said
-// "ဓမ္မတာ", the note said fever). The claim form stays first: this runs only after it failed, and never under a ULINK
-// rule (its codes are the only ones allowed). Only a note the AI kept as the medical record (present), with its
-// unreadable words left out. A code found here is marked fromMedicalRecord, so a person always confirms it
-// (preparationReview.diagnosisUnsure). An AI call failing keeps R69, as before.
+// The claim form gave no code (R69 default): try the doctor's note (UAT AYA-CL-26035164 — the form said "ဓမ္မတာ", the
+// note said fever). The claim form stays first: this runs only after it failed, and never under a ULINK rule (its codes
+// are the only ones allowed). Only a note the AI kept as the medical record (present). The search uses the note's main
+// diagnosis or symptom (mainDiagnosisTerm); the pick sees the whole note. A code found here is marked
+// fromMedicalRecord, so a person always confirms it (preparationReview.diagnosisUnsure). An AI call failing keeps R69.
 async function pickFromMedicalRecord(record, formPick) {
   const noteText = record?.present === true ? record.diagnosis_or_treatment?.trim() : null;
   if (!noteText || formPick.rule) return formPick;
   try {
-    const { diagnosis } = await toEnglishMedicalText({ diagnosis: noteText });
-    const searchedAs = diagnosis.replace(/\bunclear\b/gi, ' ').replace(/\s+/g, ' ').trim();
+    const searchedAs = await mainDiagnosisTerm(noteText);
     if (!searchedAs) return formPick;
-    const notePick = await pickDiagnosis(`Doctor's note: ${searchedAs}`, { searchText: searchedAs });
+    const notePick = await pickDiagnosis(`Doctor's note: ${noteText}\nMain diagnosis or symptom: ${searchedAs}`, { searchText: searchedAs });
     return notePick.defaulted ? formPick : { ...notePick, fromMedicalRecord: { searchedAs } };
   } catch (error) {
     logger.warn(`Diagnosis from the doctor's note failed, R69 kept: ${error.message}`);

@@ -54,4 +54,18 @@ async function toEnglishMedicalText({ diagnosis = null, treatment = null }) {
   };
 }
 
-module.exports = { hasBurmese, toEnglishMedicalText };
+const TERM_PROMPT = fs.readFileSync(path.join(__dirname, 'prompts', 'note-diagnosis-term.md'), 'utf8');
+const TERM_SCHEMA = {
+  type: 'object',
+  required: ['term', 'confidence'],
+  properties: { term: { type: ['string', 'null'] }, confidence: { type: 'number' } },
+};
+
+// A doctor's note → its main diagnosis or symptom in a few English words, for the ICD-10 search (UAT AYA-CL-26035164):
+// the whole note, with "c/o", durations, tests and drugs, finds unrelated codes; "fever" alone finds R50.9.
+async function mainDiagnosisTerm(noteText) {
+  const result = await synthesizeJson({ systemPrompt: TERM_PROMPT, userText: noteText, jsonSchema: TERM_SCHEMA });
+  return result.term?.trim() || null;
+}
+
+module.exports = { hasBurmese, toEnglishMedicalText, mainDiagnosisTerm };
