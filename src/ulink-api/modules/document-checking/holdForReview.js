@@ -11,6 +11,9 @@ const { isLowConfidence } = require('../assessment-summary/summary');
 //
 // Date mismatches (2026-10-01): a follow-up pharmacy/lab voucher is often dated days after the visit, and a
 // handwritten 7 is often read as 1 — a person decides before the customer is asked for a corrected invoice.
+// Two decimals, as a person reads it (0.9485436893203884 → 0.95; 0.3 stays 0.3).
+const shown = (confidence) => Number(Number(confidence).toFixed(2)); // a stored string ("0.4") too
+
 const ALWAYS_UNSURE = new Set(['INCOMPLETE_MEDICAL_REPORT', 'UNCLEAR_VOUCHER', 'TREATMENT_DATE_INCONSISTENT', 'INVOICE_DATE_INCONSISTENT']);
 // Held for a person even with the switch off (owner 2026-11-12, UAT AYA-CL-26034500): an amount mismatch or a refund
 // slip — a person revises each line amount, overrides the check or asks the customer. Never a claim revise or a
@@ -22,7 +25,7 @@ function unsureDocumentPoints(documentCheckResult, switchOn = true) {
   return (documentCheckResult?.checklist || [])
     .filter((item) => item.passed === false
       && (ALWAYS_HOLD.has(item.code) || (switchOn && (ALWAYS_UNSURE.has(item.code) || isLowConfidence(item.confidence)))))
-    .map((item) => `${item.label || item.code}${item.confidence != null ? ` (AI confidence ${item.confidence})` : ' (could not read clearly)'}`);
+    .map((item) => `${item.label || item.code}${item.confidence != null ? ` (AI confidence ${shown(item.confidence)})` : ' (could not read clearly)'}`);
 }
 
 // Switch "documents the AI passed but wasn't sure about: a person confirms first" (settings.holdUnsureDocumentPass,
@@ -36,10 +39,10 @@ function unsurePassedPoints(documentCheckResult) {
       if (item.code === 'VALUE_FORMAT') return `Values read: ${item.note}`;
       if (item.code === 'DOCUMENT_DATES') return `Medical documents without a date: ${item.note}`;
       if (item.code === 'FIELDS_READ') {
-        const unsure = item.fields.filter((f) => !f.reportedBy && isLowConfidence(f.confidence)).map((f) => `${f.label} (AI confidence ${f.confidence})`);
+        const unsure = item.fields.filter((f) => !f.reportedBy && isLowConfidence(f.confidence)).map((f) => `${f.label} (AI confidence ${shown(f.confidence)})`);
         return `Values read with low confidence: ${unsure.join('; ')}`;
       }
-      return `${item.label || item.code} (AI confidence ${item.confidence})`;
+      return `${item.label || item.code} (AI confidence ${shown(item.confidence)})`;
     });
 }
 

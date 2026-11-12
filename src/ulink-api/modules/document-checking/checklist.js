@@ -518,7 +518,7 @@ function reasonForIssue(issue, fields) {
       };
     case ISSUES.VOUCHER_AMOUNT_MISMATCH: {
       const net = voucherNet(fields);
-      const refund = net.refunds.length ? ` Voucher(s) ${net.refunds.join(', ')} are a refund: revise the line amounts before IAS.` : '';
+      const refund = net.refunds.length ? ` ${net.refunds.length > 1 ? 'Vouchers' : 'Voucher'} ${net.refunds.join(', ')} ${net.refunds.length > 1 ? 'are refunds' : 'is a refund'}: revise the line amounts before IAS.` : '';
       return {
         code: 'VOUCHER_AMOUNT_MISMATCH',
         reason: `The vouchers add up to ${mmk(net.total)}${net.refunds.length ? ' (refunds deducted)' : ''}, but the claimed amount is ${fields.claim.total_claim_amount == null ? 'not read' : mmk(fields.claim.total_claim_amount)}.${refund}`,

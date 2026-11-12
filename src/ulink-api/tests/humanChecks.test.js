@@ -74,6 +74,8 @@ describe('#2 what counts as "the AI is unsure a document is missing"', () => {
       { code: 'NO_MEDICAL_REPORT', label: 'Medical report present', passed: false, confidence: 0.3 },
     ];
     expect(unsureDocumentPoints({ checklist }, false)).toEqual(['Voucher amount (AI confidence 0.99)']);
+    expect(unsureDocumentPoints({ checklist: [{ ...checklist[0], confidence: 0.9485436893203884 }] }, false)).toEqual(['Voucher amount (AI confidence 0.95)']);
+    expect(unsureDocumentPoints({ checklist: [{ ...checklist[0], confidence: '0.4' }] }, false)).toEqual(['Voucher amount (AI confidence 0.4)']);
     expect(unsureDocumentPoints({ checklist }, true)).toHaveLength(2);
   });
 
