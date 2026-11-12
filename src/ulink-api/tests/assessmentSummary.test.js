@@ -136,7 +136,7 @@ it('explains the STP rules decision per benefit type, or why it was blocked', ()
 });
 
 it("says on the STP line when the diagnosis came from the doctor's note, STP or not (UAT AYA-CL-26035164)", () => {
-  const note = "Diagnosis R50.9 was taken from the doctor's note, because the claim form's diagnosis gave no match.";
+  const note = "Diagnosis R50.9 was taken from the doctor's note, because the claim form gave no clear diagnosis.";
   const stp = { source: 'API', currency: 'MMK', benefits: [{ benefitType: 'OP', total: 30000, allowed: true, limit: 100000 }], reasons: [], notes: [note] };
   expect(find(buildAssessmentSummary({ claimPrepMeta: { stp }, isStp: true }), 'STP').why)
     .toBe(`OP 30,000 MMK ≤ limit 100,000 ${note} (API case rules)`);

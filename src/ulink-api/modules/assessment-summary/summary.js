@@ -492,7 +492,7 @@ function preparationLines(claimPrepMeta, isStp) {
       why: [
         translated,
         // source: the illness, then the treatment, on its own line; only the illness was searched.
-        diagnosis.fromMedicalRecord && `Code from the doctor's note (searched as "${diagnosis.fromMedicalRecord.searchedAs}"), because the claim form's illness "${(diagnosis.source || '').split('\n')[0].trim()}" gave no match.`,
+        diagnosis.fromMedicalRecord && `Code from the doctor's note (searched as "${diagnosis.fromMedicalRecord.searchedAs}"), because the claim form's illness "${(diagnosis.source || '').split('\n')[0].trim()}" gave no clear diagnosis.`,
         diagnosis.defaulted
           ? ['No confident match for the diagnosis text, so the default code was used.', diagnosis.reason && `AI: ${diagnosis.reason}`].filter(Boolean).join(' ')
           : diagnosis.reason,

@@ -226,9 +226,24 @@ describe("diagnosis from the doctor's note", () => {
     expect(diagnosisUnsure(prepared.claimPrepMeta.diagnosis, 0.7)).toBe(false);
     expect(stpDecision).toHaveBeenCalledWith(expect.objectContaining({ diagCode: 'R50.9', diagnosisFromMedicalRecord: true }));
     const line = diagnosisLine(prepared.claimPrepMeta);
-    expect(line.why).toContain('Code from the doctor\'s note (searched as "fever"), because the claim form\'s illness "ဓမ္မတာ" gave no match.');
+    expect(line.why).toContain('Code from the doctor\'s note (searched as "fever"), because the claim form\'s illness "ဓမ္မတာ" gave no clear diagnosis.');
     expect(line.why).toContain('Doctor\'s note says: "c/o fever x 1 day"');
     expect(line).toMatchObject({ status: 'ok', review: null });
+  });
+
+  // Owner 2026-11-12 (UAT AYA-CL-26035164): "unwell" on the claim form (R53) is no diagnosis either — the note decides.
+  it('the claim form gives only R53 (unwell): the code comes from the note; a person\'s R53 stays', async () => {
+    const R53 = { pick: { diagCode: 'R53', diagDesc: 'Malaise and fatigue' }, defaulted: false, confidence: 0.9, candidates: [] };
+    pickDiagnosis.mockResolvedValueOnce(R53).mockResolvedValueOnce(FEVER);
+    const prepared = await checkCase(withNote('c/o fever x 1 day'));
+    expect(prepared.payload.Items[0]).toMatchObject({ DiagnosisCode: 'R50.9' });
+    expect(prepared.claimPrepMeta.diagnosis.fromMedicalRecord).toEqual({ searchedAs: 'fever' });
+
+    pickDiagnosis.mockClear();
+    const chosen = { diagCode: 'R53', diagDesc: 'Malaise and fatigue', source: 'ဓမ္မတာ\nဓမ္မတာ', aiPick: R53 };
+    const kept = await checkCase({ ...withNote('c/o fever x 1 day'), preparationChoice: { diagnosis: chosen, benefits: [], by: 'ulink', comment: 'per the plan' } });
+    expect(kept.payload.Items[0]).toMatchObject({ DiagnosisCode: 'R53' });
+    expect(pickDiagnosis).not.toHaveBeenCalled();
   });
 
   it('an unsure code from the note waits for a person', async () => {

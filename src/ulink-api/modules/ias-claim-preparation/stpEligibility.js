@@ -57,7 +57,7 @@ function evaluateStp({ rules, blockedDiagnoses, blockedBenefits = [], blockOnRev
 
   // A code the AI took from the doctor's note because the claim form gave none (UAT AYA-CL-26035164, owner 2026-11-11):
   // it does not block STP (an unsure one already stops the case for a person), but the STP line says where it came from.
-  const notes = diagnosisFromMedicalRecord ? [`Diagnosis ${diagCode} was taken from the doctor's note, because the claim form's diagnosis gave no match.`] : [];
+  const notes = diagnosisFromMedicalRecord ? [`Diagnosis ${diagCode} was taken from the doctor's note, because the claim form gave no clear diagnosis.`] : [];
 
   if (blockVitamins && vitaminVouchers.length) {
     reasons.push(`Vitamins / supplements on voucher${vitaminVouchers.length > 1 ? 's' : ''} ${vitaminVouchers.join(', ')} — a person approves.`);

@@ -32,6 +32,11 @@ async function logEvent(transaction, { caseId, prevStatus = null, newStatus, rea
 // diagnosis or symptom (mainDiagnosisTerm); the pick sees the whole note. A code found here is marked
 // fromMedicalRecord: the same confidence rule as any pick decides whether a person confirms it (owner 2026-11-11: a sure
 // one can go STP), and the summary and STP line say it came from the note. An AI call failing keeps R69.
+// The claim form's codes that say nothing about the illness: none found (R69), or only "unwell" (R53 Malaise and
+// fatigue, owner 2026-11-12, UAT AYA-CL-26035164: the form said "နေမကောင်း", the note said fever). A person's choice stays.
+const VAGUE_FORM_CODES = new Set(['R69', 'R53']);
+const vagueFormPick = (pick) => !pick.chosen && (pick.defaulted || VAGUE_FORM_CODES.has(String(pick.pick?.diagCode || '').split('.')[0]));
+
 async function pickFromMedicalRecord(record, formPick) {
   const noteText = record?.present === true ? record.diagnosis_or_treatment?.trim() : null;
   if (!noteText || formPick.rule) return formPick;
@@ -151,7 +156,7 @@ async function checkCase(caseRecord) {
   const formPick = chosenDiagnosis
     ? { ...chosenDiagnosis.aiPick, pick: { diagCode: chosenDiagnosis.diagCode, diagDesc: chosenDiagnosis.diagDesc }, defaulted: false, chosen }
     : (rule && await pickRuledDiagnosis(rule, diagnosisText, { benefits })) || await pickDiagnosis(diagnosisText, { searchText: illnessText });
-  const diagnosisPick = formPick.defaulted ? await pickFromMedicalRecord(extractedFields.medical_record, formPick) : formPick;
+  const diagnosisPick = vagueFormPick(formPick) ? await pickFromMedicalRecord(extractedFields.medical_record, formPick) : formPick;
 
   // Internal-only diagnostic record of *why* each pick landed where it did — confidence
   // score plus the candidate list the LLM was actually shown — never merged into `payload`,

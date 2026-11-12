@@ -61,7 +61,7 @@ it("a code taken from the doctor's note does not block STP, but the result says 
   expect(decide({ lines, diagCode: 'R50.9', diagnosisFromMedicalRecord: true })).toMatchObject({
     isStp: true,
     reasons: [],
-    notes: ["Diagnosis R50.9 was taken from the doctor's note, because the claim form's diagnosis gave no match."],
+    notes: ["Diagnosis R50.9 was taken from the doctor's note, because the claim form gave no clear diagnosis."],
   });
   expect(decide({ lines, diagCode: 'R50.9' }).notes).toEqual([]);
 });
