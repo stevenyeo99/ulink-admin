@@ -193,7 +193,8 @@ export interface ClaimPrepMeta {
   })[];
   // What the claim preparation stop asked a person to decide: the diagnosis, the vouchers' benefit and the vouchers'
   // manual rejection (0-based).
-  review?: { diagnosis: boolean; vouchers: number[]; rejections?: number[] };
+  // amount: the voucher amounts do not match the claimed amount (owner 2026-11-12): decided by a correction.
+  review?: { diagnosis: boolean; vouchers: number[]; rejections?: number[]; amount?: boolean };
 }
 
 export interface EmailAttachment {

@@ -108,6 +108,8 @@ export function PreparationReviewPanel({ caseRecord, corrections, onSaved }: { c
     return r.remark.trim() ? null : 'a remark';
   };
   const missing = [
+    // The amount check: decided by a correction (a voucher amount, the claimed amount, or the check marked OK).
+    ...(review.amount && !fixes.length ? ['the voucher amounts (correct them, or mark the amount check OK)'] : []),
     ...(review.diagnosis && !code ? ['the diagnosis code'] : []),
     ...flagged.filter((i) => !complete(choices[i])).map((i) => `voucher ${i + 1}`),
     ...Object.entries(choices).filter(([, c]) => !complete(c)).map(([i]) => `voucher ${Number(i) + 1}`),
@@ -175,6 +177,11 @@ export function PreparationReviewPanel({ caseRecord, corrections, onSaved }: { c
       <p className="mt-1 text-sm text-slate-600">
         The documents are done. Check what the AI wasn't sure of below; the revision is prepared with your choices and only then goes to IAS.
       </p>
+      {review.amount && (
+        <p className="mt-2 text-sm text-amber-700">
+          The voucher amounts do not match the claimed amount, or a voucher is a refund. Correct each voucher amount or the claimed amount on the amount check, or mark the check OK. Then save all and check again.
+        </p>
+      )}
 
       <h3 className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">Diagnosis code</h3>
       {!changeDiagnosis ? (

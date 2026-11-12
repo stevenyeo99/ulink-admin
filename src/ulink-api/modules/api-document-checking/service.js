@@ -2,7 +2,7 @@ const config = require('../../config');
 const { runApiJob } = require('../api-pipeline/runApiJob');
 const { checkCase, missingDocumentItems } = require('../document-checking/service');
 const { getSettings } = require('../settings/settings');
-const { unsureDocumentPoints, unsurePassedPoints } = require('../document-checking/holdForReview');
+const { unsureDocumentPoints, unsurePassedPoints, amountOnly } = require('../document-checking/holdForReview');
 const { correctionHold, askCovers, requestsReleased } = require('../ai-feedback/corrections');
 const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment-summary/summary');
 const { caseBasics } = require('../assessment-summary/journey');
@@ -48,6 +48,17 @@ async function processCase({ caseRecord, input }) {
   const released = requestsReleased(extractedFields);
   const requested = released ? [] : requestHold(result);
   if (!OUTCOME_TO_STATUS[outcome]) throw new Error(`Unexpected document check outcome: ${outcome}`);
+
+  // Only the amount check failed (owner 2026-11-12, UAT AYA-CL-26034500): no stop here and no customer email — on to
+  // claim preparation, which stops at API_PREPARATION_REVIEW before the revise. A person corrects the line amounts (or
+  // marks the check OK) and decides the preparation on one page. "Ask the customer" chosen: the normal request below.
+  if (!askCovers(result, extractedFields) && amountOnly(result)) {
+    return {
+      output: { outcome, documentCheckResult: result, checkedAt: new Date().toISOString(), email: null },
+      nextStatus: OUTCOME_TO_STATUS[outcome],
+      message: `Documents: ${result.issues.join('; ')} — on to claim preparation, which waits for a person before the revision (customer not emailed)`,
+    };
+  }
 
   // Switch "hold the missing-documents email when the AI is unsure" (settings): the case waits for a
   // person (API_DOCUMENTS_REVIEW) instead of going on to a suspended revision; the customer email is kept

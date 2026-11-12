@@ -53,6 +53,16 @@ it('refuses a pair not on the plan, a flagged voucher left out, or an unsure dia
   expect(ApiCaseStep.create).not.toHaveBeenCalled();
 });
 
+// The amount check open (owner 2026-11-12): decided by a correction, so the choices are kept only with one (recheck).
+it('with the amount check open, a save without corrections is refused; with them (recheck) the choices are kept', async () => {
+  ApiCaseStep.findAll.mockResolvedValue(steps({ diagnosis: true, vouchers: [], amount: true }));
+  expect((await send({ diagCode: 'K05.1' })).body.error.message).toMatch(/^Amounts/);
+  expect(Case.update).not.toHaveBeenCalled();
+
+  expect((await send({ diagCode: 'K05.1', recheck: true })).status).toBe(200);
+  expect(Case.update).toHaveBeenCalledWith(expect.objectContaining({ currentStatus: 'API_PREPARATION_REVIEW' }), expect.anything());
+});
+
 it('saves the choices with the AI picks beside them and sends the case back to claim preparation once', async () => {
   ApiCaseStep.findAll.mockResolvedValue(steps({ diagnosis: true, vouchers: [0] }));
   const { status } = await send({ diagCode: 'K05.1', benefits: [{ voucher: 0, benefitType: 'DT', benefitHead: 'SCP' }] });

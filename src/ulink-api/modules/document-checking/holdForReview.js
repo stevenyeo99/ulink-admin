@@ -19,6 +19,16 @@ const ALWAYS_UNSURE = new Set(['INCOMPLETE_MEDICAL_REPORT', 'UNCLEAR_VOUCHER', '
 // slip — a person revises each line amount, overrides the check or asks the customer. Never a claim revise or a
 // customer email on its own.
 const ALWAYS_HOLD = new Set(['VOUCHER_AMOUNT_MISMATCH']);
+// Only the amount check failed (owner 2026-11-12): an API case goes on to claim preparation, which stops for a person
+// before the claim revise (api-claim-preparation) — the amounts and the preparation are decided on one page.
+// The findings that failed the check are its details (one per issue); information lines (vitamins) do not count. A
+// reviewer's open request line is a finding too.
+const amountOnly = (result) => {
+  const codes = (result?.details || []).map((detail) => detail.code);
+  const request = (result?.checklist || []).some((item) => item.code === 'PERSON_REQUEST' && item.passed === false);
+  return result?.passed === false && !request && codes.length > 0 && codes.length === (result.issues || []).length
+    && codes.every((code) => ALWAYS_HOLD.has(code));
+};
 
 // switchOn: settings.holdUnsureMissingDocsEmail. Off: only the ALWAYS_HOLD findings.
 function unsureDocumentPoints(documentCheckResult, switchOn = true) {
@@ -46,4 +56,4 @@ function unsurePassedPoints(documentCheckResult) {
     });
 }
 
-module.exports = { unsureDocumentPoints, unsurePassedPoints };
+module.exports = { unsureDocumentPoints, unsurePassedPoints, amountOnly };

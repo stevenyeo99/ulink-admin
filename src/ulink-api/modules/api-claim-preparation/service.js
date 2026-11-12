@@ -7,6 +7,7 @@ const { barcodeFields } = require('../shared/barcodeFields');
 const { openRequests } = require('../case-requests/requests');
 const { getSettings } = require('../settings/settings');
 const { reviewNeeded } = require('../ias-claim-preparation/preparationReview');
+const { amountOnly } = require('../document-checking/holdForReview');
 
 // api-claim-preparation: API case workflow job (docs/imp/day1/api-case-workflow.md section 6.6).
 //
@@ -114,15 +115,20 @@ async function processCase({ caseRecord, input }) {
 
   // The AI wasn't sure of the diagnosis code, a voucher's benefit or its vitamins / supplements (switches
   // holdUnsureDiagnosis / holdUnsureBenefit / holdUnsureVitamin, owner 2026-10-20): a person decides before anything goes to IAS (preparationReview.js).
-  const review = prepared.claimPrepMeta ? reviewNeeded(prepared.claimPrepMeta, await getSettings()) : null;
+  // The amount check still open (api-document-checking sent it on, owner 2026-11-12): a person corrects the line amounts
+  // or marks the check OK here, with the preparation — the revise waits. A person's override already decided it.
+  const amount = !documentsComplete && amountOnly(documentCheck.documentCheckResult);
+  const unsure = prepared.claimPrepMeta ? reviewNeeded(prepared.claimPrepMeta, await getSettings()) : null;
+  const review = unsure || amount ? { diagnosis: false, vouchers: [], rejections: [], ...unsure, ...(amount ? { amount } : {}) } : null;
   if (review) {
-    const what = [review.diagnosis && `the diagnosis code (${prepared.diagnosis?.diagCode ?? 'none'})`,
+    const what = [review.amount && 'the voucher amounts (they do not match the claimed amount)',
+      review.diagnosis && `the diagnosis code (${prepared.diagnosis?.diagCode ?? 'none'})`,
       review.vouchers.length && `the benefit of voucher ${review.vouchers.map((i) => i + 1).join(', ')}`,
       review.rejections.length && `the vitamins / supplements of voucher ${review.rejections.map((i) => i + 1).join(', ')}`].filter(Boolean).join(' and ');
     return {
       output: { ...output, claimPrepMeta: { ...output.claimPrepMeta, review } },
       nextStatus: 'API_PREPARATION_REVIEW',
-      message: `Claim ${claim.clNo}: the AI wasn't sure of ${what}; a person decides before the revision`,
+      message: `Claim ${claim.clNo}: a person decides ${what} before the revision`,
     };
   }
 

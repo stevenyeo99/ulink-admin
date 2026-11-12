@@ -53,7 +53,7 @@ flowchart TD
   D -->|verified| E[5 · Document checking<br/>checklist + AI confidence]:::job
   E -->|complete, AI unsure| DU{{API_DOCUMENTS_UNSURE}}:::stop
   DU -->|person confirms| F
-  E -->|missing, AI unsure, amount mismatch<br/>or refund, or a person corrected items| DR{{API_DOCUMENTS_REVIEW}}:::stop
+  E -->|missing, AI unsure, amount mismatch<br/>with another finding, or a person corrected items| DR{{API_DOCUMENTS_REVIEW}}:::stop
   DR -.-> E4[/Team: check before the customer is asked/]:::mail
   DR -->|documents are missing| F
   DR -->|case-page upload| UP
@@ -68,7 +68,7 @@ flowchart TD
   CB -->|barcode arrives| H
   F -->|no uploads| H
   G --> H["8 · Claim preparation<br/>benefit, then ICD-10 (ULINK rule or AI),<br/>rejections, STP, suspense"]:::job
-  H -->|AI unsure of diagnosis,<br/>benefit or vitamins| PR{{API_PREPARATION_REVIEW}}:::stop
+  H -->|AI unsure of diagnosis,<br/>benefit or vitamins,<br/>or only an amount mismatch| PR{{API_PREPARATION_REVIEW}}:::stop
   H -->|balance dropped while waiting<br/>new shortage| BL{{API_BALANCE_REVIEW}}:::stop
   BL -->|Bypass with a reason,<br/>or balance enough again| H
   PR -->|person chooses| H
@@ -103,11 +103,11 @@ flowchart TD
 | `API_BALANCE_REVIEW` | The member balance dropped while the case waited for its documents: a voucher no longer fits. | Bypass with a reason (the only action). The revision is then prepared and never goes STP. Asked again every run: goes on by itself once the balance is enough. | None |
 | `API_MEMBER_REVIEW_REQUIRED` | Member or policy details differ from IAS, or the IAS balance is not enough for a voucher (`member:balance`), or the claim may fall under a member or policy exclusion in IAS (`member:exclusion`) or a policy contract clause (`member:contract_exclusion`), or the account number on the claim form has the wrong number of digits for its bank (`member:bank_number`: AYA 11, CB 16, KBZ 17, YOMA 15, UAB 15 or 16). | A bank difference is a warning only and never holds the case. Fix IAS (rechecked every run), Mark OK, correct a value, or override. A short balance or a possible exclusion in IAS: Bypass with a reason only, and the claim then never goes STP. A contract exclusion: *Does not apply* (STP stays possible) or *Let it go on* (never STP). An account number length: Mark OK when the number is right, or correct it (checked again). | None |
 | `API_DOCUMENTS_UNSURE` | The documents are complete, but the AI was unsure of an item. A reviewer's open request line also holds the case here, even when the switch is off. | Use the `Confirm and continue` button, or correct a value. | `holdUnsureDocumentPass` |
-| `API_DOCUMENTS_REVIEW` | Documents are missing and the AI was unsure, or a person corrected items. If the voucher total differs from the claimed amount, or a voucher is below 0, the case always stops here. | Documents are missing: continue (suspended revision). Documents are fine: override. Or correct a value, for example each voucher amount. | `holdUnsureMissingDocsEmail` (not for the amount check) |
+| `API_DOCUMENTS_REVIEW` | Documents are missing and the AI was unsure, or a person corrected items. If the amount check fails together with another finding, the case always stops here. An amount check that fails alone goes on to claim preparation. | Documents are missing: continue (suspended revision). Documents are fine: override. Or correct a value, for example each voucher amount. | `holdUnsureMissingDocsEmail` (not for the amount check) |
 | `API_CONSOLE_UPLOAD_FAILED` | Case-page uploads did not reach the IAS console. | Retry from the case page. | None |
 | `API_CONSOLE_BARCODE_MISSING` | Case-page uploads got no barcode in time. | Nothing to click: the barcode job checks again every run and continues when the barcode arrives. If it stays, look in the IAS console. | None |
 | `API_UPLOAD_NOT_IN_CONSOLE` | Older cases only: an upload from the case page did not appear in the IAS console in time. | Look in the IAS console. Console watch keeps checking every run. | None |
-| `API_PREPARATION_REVIEW` | The AI was unsure of the diagnosis code, a voucher's benefit, or its vitamins. | Choose. With corrections, one save sends both, and the case is checked again first. Add your own request lines on the case page: the case stays here, and the revision then goes with `isSuspense=Y`. | `holdUnsureDiagnosis`, `holdUnsureBenefit`, `holdUnsureVitamin` |
+| `API_PREPARATION_REVIEW` | The AI was unsure of the diagnosis code, a voucher's benefit, or its vitamins. Also, the amount check failed alone: the voucher total differs from the claimed amount, or a voucher is below 0. | Choose. With corrections, one save sends both, and the case is checked again first. For the amount check, correct each voucher amount or the claimed amount, or mark the check OK. No customer email goes out. Add your own request lines on the case page: the case stays here, and the revision then goes with `isSuspense=Y`. | `holdUnsureDiagnosis`, `holdUnsureBenefit`, `holdUnsureVitamin` |
 | `API_CLAIM_REVISION_FAILED` | IAS refused the revision. | Retry from the case page. | None |
 
 ## Rules that are easy to miss

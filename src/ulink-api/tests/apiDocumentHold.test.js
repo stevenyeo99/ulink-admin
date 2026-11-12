@@ -42,17 +42,43 @@ it('switch off, or the AI sure: as before — API_INCOMPLETE and the customer em
   expect((await documentJob.process({ caseRecord, input })).nextStatus).toBe('API_INCOMPLETE');
 });
 
-// Owner 2026-11-12 (UAT AYA-CL-26034500): an amount mismatch or a refund slip always waits for a person — no claim
-// revise, no customer email — whatever the switch.
-it('an amount mismatch is held for a person even with the switch off', async () => {
+// Owner 2026-11-12 (UAT AYA-CL-26034500): only the amount check failed — on to claim preparation (no customer email),
+// which stops for a person before the revise. With another finding as well, it waits at the document stop, switch or not.
+const amountCheck = { code: 'VOUCHER_AMOUNT_MISMATCH', label: 'Voucher amount', passed: false, confidence: 0.99 };
+// Vitamins are an information line: failed on the checklist, but not a finding that stops the check (AYA-CL-26041363).
+const vitamins = { code: 'VITAMIN_OR_SUPPLEMENT', label: 'No vitamins', passed: false };
+it('only an amount mismatch (vitamins aside): on to claim preparation, no customer email', async () => {
+  getSettings.mockResolvedValue({ holdUnsureMissingDocsEmail: true });
+  documentChecking.checkCase.mockResolvedValue({ outcome: 'INCOMPLETE', result: { passed: false, issues: ['Amounts differ'], details: [{ code: 'VOUCHER_AMOUNT_MISMATCH' }], checklist: [amountCheck, vitamins] } });
+  expect(await documentJob.process({ caseRecord, input })).toMatchObject({ nextStatus: 'API_INCOMPLETE', output: { email: null } });
+});
+
+it('an amount mismatch with another finding waits at the document stop, even with the switch off', async () => {
   getSettings.mockResolvedValue({ holdUnsureMissingDocsEmail: false });
   documentChecking.checkCase.mockResolvedValue({
     outcome: 'INCOMPLETE',
-    result: { passed: false, issues: ['Amounts differ'], details: [], checklist: [{ code: 'VOUCHER_AMOUNT_MISMATCH', label: 'Voucher amount', passed: false, confidence: 0.99 }] },
+    result: { passed: false, issues: ['Amounts differ', 'No medical report'], details: [{ code: 'VOUCHER_AMOUNT_MISMATCH' }, { code: 'NO_MEDICAL_REPORT' }], checklist: [amountCheck, { code: 'NO_MEDICAL_REPORT', label: 'Medical report', passed: false, confidence: 0.95 }] },
   });
   const result = await documentJob.process({ caseRecord, input });
   expect(result.nextStatus).toBe('API_DOCUMENTS_REVIEW');
   expect(result.output.heldEmail).toMatchObject({ audience: 'customer' });
+});
+
+it('claim preparation stops for a person while the amount check is open; the revise waits', async () => {
+  getSettings.mockResolvedValue({});
+  iasPreparation.checkCase.mockResolvedValue({ payload: { Items: [] }, diagnosis: null, lines: [], isStp: false, claimPrepMeta: { lines: [] } });
+  const result = await preparationJob.process({
+    caseRecord: { ...caseRecord, currentStatus: 'API_READY_FOR_CLAIM_PREPARATION' },
+    input: {
+      'api-claim-intake': { clNo: '2609290001', tpaCaseNumber: 'AYA-CL-26034500' },
+      'api-material-download': { documents: [] },
+      'api-claim-recognition': { recognizedType: 'ayas_member_claim', extractedFields: {} },
+      'api-member-verification': { iasMemberInfoResponse: {} },
+      'api-document-checking': { outcome: 'INCOMPLETE', documentCheckResult: { passed: false, issues: ['Amounts differ'], details: [{ code: 'VOUCHER_AMOUNT_MISMATCH' }], checklist: [amountCheck] } },
+    },
+  });
+  expect(result.nextStatus).toBe('API_PREPARATION_REVIEW');
+  expect(result.output.claimPrepMeta.review).toMatchObject({ amount: true, diagnosis: false, vouchers: [] });
 });
 
 it('a held case a person overrode is revised as documents complete (no suspense)', async () => {

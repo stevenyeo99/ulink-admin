@@ -48,6 +48,8 @@ async function choosePreparation(req, res) {
   const previous = latestDone(steps, BLOCK_NAME);
   if (!meta) return bad(res, 'The claim has not been prepared yet.');
   const review = { diagnosis: false, vouchers: [], rejections: [], ...meta.review };
+  // The amount check is still open (api-claim-preparation): it is decided by a correction, saved with these choices.
+  if (review.amount && req.body?.recheck !== true) return bad(res, 'Amounts: correct the voucher amounts or mark the amount check OK, then save all and check again.');
 
   // Diagnosis: a code from the table; required when the stop asked for it. The AI's pick: before any person's.
   const { diagCode } = req.body || {};
