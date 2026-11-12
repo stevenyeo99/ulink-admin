@@ -260,7 +260,7 @@ async function persistOutcome(caseRecord, rawOutcome) {
   // After a person corrected items (SYSTEM_4 E4-12): held for them whatever the switch — they send the request.
   const corrected = correctionHold(outcome.result, caseRecord.extractedFields);
   const unsure = askCovers(outcome.result, caseRecord.extractedFields) ? [] : [
-    ...(outcome.result.passed || !(await getSettings()).holdUnsureMissingDocsEmail ? [] : unsureDocumentPoints(outcome.result)),
+    ...(outcome.result.passed ? [] : unsureDocumentPoints(outcome.result, (await getSettings()).holdUnsureMissingDocsEmail)),
     ...corrected,
   ];
   const held = unsure.length > 0;

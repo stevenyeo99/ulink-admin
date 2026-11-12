@@ -20,6 +20,7 @@ const { Case, Setting } = require('../db/models');
 const { queueDedupedTask } = require('../modules/shared/emailTaskQueue');
 const { evaluateStp } = require('../modules/ias-claim-preparation/stpEligibility');
 const { unsureDocumentPoints } = require('../modules/document-checking/holdForReview');
+const { evaluateDocumentChecks } = require('../modules/document-checking/checklist');
 const { setSettings } = require('../modules/settings/settings');
 const documentChecking = require('../modules/document-checking/service');
 const { render } = require('../modules/email-sender/templates');
@@ -64,6 +65,25 @@ describe('#2 what counts as "the AI is unsure a document is missing"', () => {
       'Invoice date(s) are consistent with medical record date (AI confidence 1)',
       'Treatment date is consistent with medical record date (could not read clearly)',
     ]);
+  });
+
+  // Owner 2026-11-12 (UAT AYA-CL-26034500): the amount check always waits for a person, switch on or off.
+  it('an amount mismatch is held even with the switch off; the other findings only with it on', () => {
+    const checklist = [
+      { code: 'VOUCHER_AMOUNT_MISMATCH', label: 'Voucher amount', passed: false, confidence: 0.99 },
+      { code: 'NO_MEDICAL_REPORT', label: 'Medical report present', passed: false, confidence: 0.3 },
+    ];
+    expect(unsureDocumentPoints({ checklist }, false)).toEqual(['Voucher amount (AI confidence 0.99)']);
+    expect(unsureDocumentPoints({ checklist }, true)).toHaveLength(2);
+  });
+
+  it('the vouchers net of a refund slip: 102,950 - 5,250 = 97,700, and the refund fails the check', () => {
+    const base = require('./fixtures/documentChecking/real-complete-case.json').extractedFields;
+    const fields = { ...base, invoices: { present: true, items: [{ subtotal: 102950 }, { subtotal: -5250 }] }, claim: { ...base.claim, total_claim_amount: 97700 } };
+    const line = evaluateDocumentChecks(fields).checklist.find((l) => l.code === 'VOUCHER_AMOUNT_MISMATCH');
+    expect(line).toMatchObject({ passed: false, confidence: 1 });
+    expect(evaluateDocumentChecks({ ...fields, invoices: { present: true, items: [{ subtotal: 97700 }] } })
+      .checklist.find((l) => l.code === 'VOUCHER_AMOUNT_MISMATCH').passed).toBe(true);
   });
 });
 

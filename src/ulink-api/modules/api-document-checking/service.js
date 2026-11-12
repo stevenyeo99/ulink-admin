@@ -54,7 +54,7 @@ async function processCase({ caseRecord, input }) {
   // aside (heldEmail) and sent only if the person confirms (POST /api/cases/:id/release-missing-documents).
   // After a person corrected items (SYSTEM_4 E4-12): held for them whatever the switch — they send the request.
   const unsure = askCovers(result, extractedFields) ? [] : [
-    ...(result.passed || !(await getSettings()).holdUnsureMissingDocsEmail ? [] : unsureDocumentPoints(result)),
+    ...(result.passed ? [] : unsureDocumentPoints(result, (await getSettings()).holdUnsureMissingDocsEmail)),
     ...correctionHold(result, extractedFields),
   ];
   if (unsure.length) {

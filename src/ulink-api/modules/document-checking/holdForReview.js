@@ -12,11 +12,16 @@ const { isLowConfidence } = require('../assessment-summary/summary');
 // Date mismatches (2026-10-01): a follow-up pharmacy/lab voucher is often dated days after the visit, and a
 // handwritten 7 is often read as 1 — a person decides before the customer is asked for a corrected invoice.
 const ALWAYS_UNSURE = new Set(['INCOMPLETE_MEDICAL_REPORT', 'UNCLEAR_VOUCHER', 'TREATMENT_DATE_INCONSISTENT', 'INVOICE_DATE_INCONSISTENT']);
+// Held for a person even with the switch off (owner 2026-11-12, UAT AYA-CL-26034500): an amount mismatch or a refund
+// slip — a person revises each line amount, overrides the check or asks the customer. Never a claim revise or a
+// customer email on its own.
+const ALWAYS_HOLD = new Set(['VOUCHER_AMOUNT_MISMATCH']);
 
-function unsureDocumentPoints(documentCheckResult) {
+// switchOn: settings.holdUnsureMissingDocsEmail. Off: only the ALWAYS_HOLD findings.
+function unsureDocumentPoints(documentCheckResult, switchOn = true) {
   return (documentCheckResult?.checklist || [])
     .filter((item) => item.passed === false
-      && (ALWAYS_UNSURE.has(item.code) || isLowConfidence(item.confidence)))
+      && (ALWAYS_HOLD.has(item.code) || (switchOn && (ALWAYS_UNSURE.has(item.code) || isLowConfidence(item.confidence)))))
     .map((item) => `${item.label || item.code}${item.confidence != null ? ` (AI confidence ${item.confidence})` : ' (could not read clearly)'}`);
 }
 

@@ -127,22 +127,31 @@ function checkMissingVoucherBreakdown(fields) {
 }
 
 /**
- * Sums every voucher's own subtotal before comparing to the form's claimed amount — a
- * case can have more than one voucher (e.g. a hospital receipt + a separate pharmacy
- * receipt), and the claimed total is meant to match their combined subtotal, not any
- * single one of them (verified against real data: 45,000 + 9,690 = 54,690).
- * A zero/negative subtotal is a refund or cash-return slip, not a voucher (2026-10-01, case
- * df3ec579: a -5,250 return slip was summed as the voucher total) — skipped here and in the two
- * sums below, which must agree with this one.
+ * The vouchers' net total: every voucher's own subtotal, a refund / cash-return slip (negative subtotal) included —
+ * a case can have more than one voucher (45,000 + 9,690 = 54,690), and a refund lowers what was paid (owner 2026-11-12,
+ * UAT AYA-CL-26034500: 102,950 - 5,250 = 97,700). refunds: the voucher numbers below 0. null when no voucher amount
+ * was read. The one sum the amount check, its agreement note and its reason use.
+ */
+function voucherNet(fields) {
+  const items = fields.invoices?.items || [];
+  const subtotals = items.map((item) => item.subtotal).filter((amount) => typeof amount === 'number');
+  if (subtotals.length === 0) return null;
+  const refunds = items.map((item, i) => (item.subtotal < 0 ? i + 1 : null)).filter(Boolean);
+  return { total: subtotals.reduce((sum, amount) => sum + amount, 0), refunds };
+}
+
+/**
+ * Compares the vouchers' net total with the form's claimed amount. A refund slip fails the check too, whatever the
+ * total: a person revises the line amounts before IAS (owner 2026-11-12) — holdForReview always holds this check.
  */
 function checkVoucherAmountMismatch(fields) {
   if (fields.invoices?.present !== true) return null;
-  const subtotals = (fields.invoices.items || []).map((item) => item.subtotal).filter((amount) => amount > 0);
-  if (subtotals.length === 0) return null; // no readable amount on any voucher — nothing to compare
-  const voucherTotal = subtotals.reduce((sum, amount) => sum + amount, 0);
+  const net = voucherNet(fields);
+  if (!net) return null; // no readable amount on any voucher — nothing to compare
+  if (net.refunds.length) return ISSUES.VOUCHER_AMOUNT_MISMATCH;
   const claimedAmount = fields.claim.total_claim_amount;
   if (claimedAmount == null) return null;
-  return voucherTotal !== claimedAmount ? ISSUES.VOUCHER_AMOUNT_MISMATCH : null;
+  return net.total !== claimedAmount ? ISSUES.VOUCHER_AMOUNT_MISMATCH : null;
 }
 
 /**
@@ -159,9 +168,9 @@ function checkVoucherAmountMismatch(fields) {
  */
 function voucherAmountAgreement(fields) {
   if (fields.invoices?.present !== true) return null;
-  const subtotals = (fields.invoices.items || []).map((item) => item.subtotal).filter((amount) => amount > 0);
-  if (subtotals.length === 0) return null;
-  const voucherTotal = subtotals.reduce((sum, amount) => sum + amount, 0);
+  const net = voucherNet(fields);
+  if (!net) return null;
+  const voucherTotal = net.total;
   const claimedAmount = fields.claim?.total_claim_amount;
   if (claimedAmount == null) return null;
 
@@ -508,11 +517,11 @@ function reasonForIssue(issue, fields) {
         reason: `Pharmacy voucher(s) ${indexed(lacksBreakdown)} do not list the individual medicines and their prices.`,
       };
     case ISSUES.VOUCHER_AMOUNT_MISMATCH: {
-      const subtotals = invoiceItems.map((item) => item.subtotal).filter((amount) => amount > 0);
-      const voucherTotal = subtotals.reduce((sum, amount) => sum + amount, 0);
+      const net = voucherNet(fields);
+      const refund = net.refunds.length ? ` Voucher(s) ${net.refunds.join(', ')} are a refund: revise the line amounts before IAS.` : '';
       return {
         code: 'VOUCHER_AMOUNT_MISMATCH',
-        reason: `The vouchers add up to ${mmk(voucherTotal)}, but the claimed amount is ${mmk(fields.claim.total_claim_amount)}.`,
+        reason: `The vouchers add up to ${mmk(net.total)}${net.refunds.length ? ' (refunds deducted)' : ''}, but the claimed amount is ${fields.claim.total_claim_amount == null ? 'not read' : mmk(fields.claim.total_claim_amount)}.${refund}`,
       };
     }
     case ISSUES.INCOMPLETE_MEDICAL_REPORT:
@@ -1315,7 +1324,7 @@ const leastSure = (entries) => entries.filter((e) => typeof e.confidence === 'nu
 const CHECK_FIELDS = {
   INCOMPLETE_CLAIM_FORM: { paths: ['medical.detail_of_illness_injury', 'medical.full_description_of_treatment'] },
   MISSING_BANK_INFO: { paths: ['bank.bank_name', 'bank.bank_account_name', 'bank.bank_account_number'], anyOne: true },
-  VOUCHER_AMOUNT_MISMATCH: { paths: ['claim.total_claim_amount'], vouchers: (v) => v.subtotal > 0, voucherField: 'subtotal', compared: (item) => item.confidence != null },
+  VOUCHER_AMOUNT_MISMATCH: { paths: ['claim.total_claim_amount'], vouchers: (v) => typeof v.subtotal === 'number', voucherField: 'subtotal', compared: (item) => item.confidence != null },
   TREATMENT_DATE_INCONSISTENT: { paths: ['claim.appointment_date', 'claim.accident_date', 'medical_record.date'], compared: (item) => item.confidence != null },
   INVOICE_DATE_INCONSISTENT: { paths: ['medical_record.date'], vouchers: (v) => v.date != null, voucherField: 'date', compared: (item) => item.confidence != null },
 };

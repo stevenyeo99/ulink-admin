@@ -1,5 +1,5 @@
 {
-  "description": "Real complete case plus a refund / cash-return slip (-5,250, as in case df3ec579 2026-09-30). The refund slip is not a voucher: it must not change the voucher total, so the case still passes.",
+  "description": "Real complete case plus a refund / cash-return slip (-5,250, as in case df3ec579 2026-09-30). The refund is deducted (net 1,564,750 vs claimed 1,570,000) and a refund slip always fails the amount check, so a person revises the line amounts (owner 2026-11-12, UAT AYA-CL-26034500).",
   "extractedFields": {
     "bank": {
       "bank_name": "AYA",
@@ -96,8 +96,10 @@
     }
   },
   "expected": {
-    "passed": true,
-    "issues": [],
+    "passed": false,
+    "issues": [
+      "The amount in the voucher(s) is not consistent with the claimed amount"
+    ],
     "flagCodes": [],
     "flags": []
   }

@@ -104,10 +104,13 @@ describe('code review 2026-10-15', () => {
     expect(bank).toMatchObject({ confidence: null, note: null });
   });
 
-  it('the amount check ignores a refund slip\'s evidence, as it ignores its amount', () => {
+  // A refund slip counts and fails the check (owner 2026-11-12, UAT AYA-CL-26034500): its amount is offered for revision.
+  it('the amount check counts a refund slip and offers its amount for revision', () => {
     const f = fields();
     f.invoices.items.push({ subtotal: -5250, date: '2026-08-14', evidence: { confidence: 0.4, reason: 'faint', page: null } });
-    expect(item(f, 'VOUCHER_AMOUNT_MISMATCH').confidence).toBe(1);
+    const check = item(f, 'VOUCHER_AMOUNT_MISMATCH');
+    expect(check.passed).toBe(false);
+    expect(check.editItems).toContain(`invoices.items.${f.invoices.items.length - 1}.subtotal`);
   });
 
   it('the bank check passes on one sure value; an unsure account number shows once, on "Values read" (AYA-CL-26016756)', () => {

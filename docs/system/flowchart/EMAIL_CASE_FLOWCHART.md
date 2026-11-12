@@ -46,7 +46,7 @@ flowchart TD
   D -->|verified<br/>READY_FOR_DOCUMENT_CHECKING| E[4 · Document checking<br/>checklist + AI confidence]:::job
   E -->|missing, AI sure| IN([INCOMPLETE<br/>waits for the customer]):::done
   IN -.-> E4[/Customer: missing documents<br/>+ team copy/]:::mail
-  E -->|missing, AI unsure<br/>or a person corrected items| DR{{DOCUMENTS_REVIEW}}:::stop
+  E -->|missing, AI unsure, amount mismatch<br/>or refund, or a person corrected items| DR{{DOCUMENTS_REVIEW}}:::stop
   DR -->|send the request| IN
   DR -->|override: documents fine| MVD
   E -->|complete, AI unsure| DU{{DOCUMENTS_UNSURE}}:::stop
@@ -85,7 +85,7 @@ flowchart TD
 | `MANUAL_REVIEW` | The documents are too long for the AI, or its answer did not match the claim schema. | Read the documents and handle the claim by hand. | None |
 | `MEMBER_REVIEW_REQUIRED` | Member, coverage or bank details differ from IAS, the balance is not enough, or the claim can fall under an exclusion. | Fix in IAS (the case is checked again every run), Mark OK, correct a value, or override. A short balance or a possible exclusion: Bypass with a reason, and the claim then never goes STP. | None |
 | `BENEFIT_REVIEW` | The AI was not sure of a voucher's benefit head. | Choose the head. The member check runs again with it. | `holdUnsureBenefit` |
-| `DOCUMENTS_REVIEW` | Documents look incomplete, and the AI was unsure, or a person corrected items. The customer was not emailed. | If the documents are missing, send the request to the customer. If the documents are fine, override. | `holdUnsureMissingDocsEmail` |
+| `DOCUMENTS_REVIEW` | Documents look incomplete, and the AI was unsure, or a person corrected items. If the voucher total differs from the claimed amount, or a voucher is below 0, the case always stops here. The customer was not emailed. | If the documents are missing, send the request to the customer. If the documents are fine, override. Or correct a value, for example each voucher amount. | `holdUnsureMissingDocsEmail` (not for the amount check) |
 | `DOCUMENTS_UNSURE` | All documents passed, but the AI was unsure about some of them. | Use *Confirm and continue*, or ask for more information. | `holdUnsureDocumentPass` |
 | `CASE_NUMBER_UNCLEAR` | The TPA case number on the claim form is not `AYA-CL-` and 8 digits. | Fix the form value, then reset the case. | None |
 | `CONSOLE_UPLOAD_FAILED` | The console upload refused the documents. | Fix the cause, then use Try again on the case page. | None |

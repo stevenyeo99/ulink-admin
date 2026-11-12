@@ -42,6 +42,19 @@ it('switch off, or the AI sure: as before — API_INCOMPLETE and the customer em
   expect((await documentJob.process({ caseRecord, input })).nextStatus).toBe('API_INCOMPLETE');
 });
 
+// Owner 2026-11-12 (UAT AYA-CL-26034500): an amount mismatch or a refund slip always waits for a person — no claim
+// revise, no customer email — whatever the switch.
+it('an amount mismatch is held for a person even with the switch off', async () => {
+  getSettings.mockResolvedValue({ holdUnsureMissingDocsEmail: false });
+  documentChecking.checkCase.mockResolvedValue({
+    outcome: 'INCOMPLETE',
+    result: { passed: false, issues: ['Amounts differ'], details: [], checklist: [{ code: 'VOUCHER_AMOUNT_MISMATCH', label: 'Voucher amount', passed: false, confidence: 0.99 }] },
+  });
+  const result = await documentJob.process({ caseRecord, input });
+  expect(result.nextStatus).toBe('API_DOCUMENTS_REVIEW');
+  expect(result.output.heldEmail).toMatchObject({ audience: 'customer' });
+});
+
 it('a held case a person overrode is revised as documents complete (no suspense)', async () => {
   iasPreparation.checkCase.mockResolvedValue({ payload: { Items: [] }, diagnosis: null, lines: [], isStp: false, claimPrepMeta: {} });
   const result = await preparationJob.process({
