@@ -202,6 +202,10 @@ async function checkCase(caseRecord) {
     // A possible exclusion in IAS bypassed (accepted) or let through by an override (still in issues): never STP.
     exclusionLetThrough: [...(caseFields.memberVerifyResult?.accepted || []), ...(caseFields.memberVerifyResult?.issues || [])].some((finding) => finding.item === 'member:exclusion')
       || caseFields.memberVerifyResult?.exclusions?.checked === false, // could not be checked: a person approves
+    // A claim with the same incurred date in IAS bypassed or let through by an override, or not checked (owner 2026-11-12):
+    // never STP.
+    sameDateLetThrough: [...(caseFields.memberVerifyResult?.accepted || []), ...(caseFields.memberVerifyResult?.issues || [])].some((finding) => finding.item === 'member:same_date_claim')
+      || caseFields.memberVerifyResult?.sameDateClaims?.checked === false,
     // A policy contract exclusion let go on as an exception (accepted, not as "does not apply") or by a whole-check
     // override (still in issues): never STP (SYSTEM_5 contract exclusion). "Does not apply" keeps STP possible.
     // A member check overridden before the contract check ever ran (no contractExclusion): not checked, never STP.

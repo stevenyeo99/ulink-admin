@@ -22,7 +22,7 @@ const amount = (n) => Number(n).toLocaleString('en-US');
  *
  * Returns { isStp, source, currency, diagCode, benefits: [{ benefitType, total, allowed, limit }], reasons }.
  */
-function evaluateStp({ rules, blockedDiagnoses, blockedBenefits = [], blockOnReviewPoints = false, blockVitamins = false }, { source, currency, lines, diagCode, openReviewPoints = [], vitaminVouchers = [], balanceBypassed = false, checksOff = [], exclusionLetThrough = false, contractExclusionLetThrough = false, diagnosisFromMedicalRecord = false }) {
+function evaluateStp({ rules, blockedDiagnoses, blockedBenefits = [], blockOnReviewPoints = false, blockVitamins = false }, { source, currency, lines, diagCode, openReviewPoints = [], vitaminVouchers = [], balanceBypassed = false, checksOff = [], exclusionLetThrough = false, sameDateLetThrough = false, contractExclusionLetThrough = false, diagnosisFromMedicalRecord = false }) {
   const reasons = [];
   const totals = new Map();
   for (const { benefitType, subtotal } of lines) {
@@ -69,6 +69,9 @@ function evaluateStp({ rules, blockedDiagnoses, blockedBenefits = [], blockOnRev
 
   // A possible exclusion in IAS a person let through at member review (SYSTEM_5 member exclusion): a person approves.
   if (exclusionLetThrough) reasons.push('A possible member or policy exclusion in IAS was let through by a person, or the exclusions could not be checked — a person approves.');
+
+  // Another claim in IAS with the same incurred date, let through by a person, or not checked (owner 2026-11-12).
+  if (sameDateLetThrough) reasons.push('IAS has a claim with the same incurred date that a person let through, or the IAS claims could not be checked — a person approves.');
 
   // A possible policy contract exclusion a person let go on, or not checked because the member check was overridden
   // first (SYSTEM_5 contract exclusion): a person approves.

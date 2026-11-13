@@ -7,6 +7,7 @@ const { checkExclusions } = require('./exclusionFlags');
 const { checkBenefitEligibility } = require('./benefitEligibility');
 const { checkMemberBalance, balanceIssue } = require('./memberBalance');
 const { checkMemberExclusions } = require('./memberExclusion');
+const { checkSameDateClaims } = require('./sameDateClaims');
 const { lastReadSettings } = require('../settings/settings');
 const { switchedOff, offNote } = require('../ai-checklist/switches');
 const { CHECKS } = require('../ai-checklist/catalog');
@@ -65,12 +66,19 @@ async function checkCase(caseRecord) {
   const issue = holdUnsure ? balanceIssue(balance.lines, balance.unsure) : balance?.issue;
   // Member checks a super admin switched off (AI checklist page, SYSTEM_5 phase B): skipped, listed as turned off.
   const off = await switchedOff();
+  // Another claim in IAS with the same incurred date (owner 2026-11-12): after the balance, one more member finding
+  // (member:same_date_claim). The claim being checked is left out by its claim number; an email case also matches its
+  // own TPA case number (the same claim sent twice). Switched off: no IAS call.
+  const caseNumber = caseRecord.source === 'API' ? null : extractedFields.claim?.insurer_case_number || null;
+  const sameDate = iasResponse?.success === true && !off.has('member:same_date_claim')
+    ? await checkSameDateClaims(extractedFields, iasResponse, { claimNo: caseRecord.claimNo, caseNumber })
+    : null;
   // The member and policy exclusions in IAS, judged by meaning (SYSTEM_5 member exclusion): a likely match or an unsure
   // answer is one more member finding (member:exclusion). Switched off: no IAS or AI call.
   const exclusions = iasResponse?.success === true && !off.has('member:exclusion')
     ? await checkMemberExclusions(extractedFields, iasResponse, caseRecord.memberVerifyResult?.exclusions)
     : null;
-  const extra = [issue, exclusions?.issue].filter(Boolean);
+  const extra = [issue, sameDate?.issue, exclusions?.issue].filter(Boolean);
   let result = evaluate(extractedFields, iasResponse, extra, off);
   // The policy contract exclusion (SOP §6.3; SYSTEM_5 contract exclusion, owner 2026-10-27): only once the other member
   // checks pass — a case still failing on e.g. a DOB mismatch is checked again on a later run anyway. A match is one more
@@ -84,6 +92,7 @@ async function checkCase(caseRecord) {
   // Ran with nothing to judge (no diagnosis or treatment text): nothing is kept. Not run: the last answer is kept.
   const contractExclusion = contractRuns ? (contract ? { fingerprint: contract.fingerprint, flag: contract.flag } : { fingerprint: null, flag: null }) : previousContract;
   if (contractExclusion) result.contractExclusion = contractExclusion;
+  if (sameDate) result.sameDateClaims = { checked: sameDate.checked, note: sameDate.note, matches: sameDate.matches };
   if (exclusions) result.exclusions = { checked: exclusions.checked, note: exclusions.note, fingerprint: exclusions.fingerprint, events: exclusions.events };
   const memberOff = [...off].filter(([code]) => CHECKS.find((c) => c.code === code)?.section === 'member');
   if (memberOff.length) result.turnedOff = memberOff.map(([code, row]) => ({ code, note: offNote(row) }));

@@ -1,6 +1,6 @@
 // SYSTEM_5 member exclusion phase B: the exclusion step in the member check — the member:exclusion finding with its
 // level, Bypass only (as an exception), the AI answer reused, no STP after a bypass or override. IAS and the AI faked.
-jest.mock('../modules/member-verification/iasClient', () => ({ getMemberPolicyEvents: jest.fn(), getMemberLimitBalance: jest.fn(), getMemberInfo: jest.fn() }));
+jest.mock('../modules/member-verification/iasClient', () => ({ getMemberClaimHistory: jest.fn(async () => ({ success: true, payload: { claims: [] } })), getMemberPolicyEvents: jest.fn(), getMemberLimitBalance: jest.fn(), getMemberInfo: jest.fn() }));
 jest.mock('../modules/claim-recognition/llmClient', () => ({ synthesizeJson: jest.fn() }));
 jest.mock('../modules/ias-claim-preparation/medicalTranslation', () => ({ toEnglishMedicalText: jest.fn(async (t) => ({ ...t, translation: null })) }));
 

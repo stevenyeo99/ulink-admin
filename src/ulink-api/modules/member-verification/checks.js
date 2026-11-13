@@ -121,7 +121,7 @@ function checkCoverageActive(plan, treatmentDateYYYYMMDD) {
 // member:balance / member:exclusion (SYSTEM_5): the only action on them is this mark OK — the review page's "Bypass", with
 // a reason. member:contract_exclusion (SYSTEM_5 contract exclusion): marked as not applying (wrongStep check) or let go on
 // as an exception — the correction's wrongStep is kept on the accepted finding, for the STP rule.
-const MEMBER_ITEM_LABELS = { 'member:dob': 'Member check: date of birth', 'member:bank': 'Member check: bank details', 'member:bank_number': 'Member check: bank account number', 'member:policy': 'Member check: policy number', 'member:balance': 'Member check: balance', 'member:exclusion': 'Member check: exclusion in IAS', 'member:contract_exclusion': 'Member check: policy contract exclusion' };
+const MEMBER_ITEM_LABELS = { 'member:dob': 'Member check: date of birth', 'member:bank': 'Member check: bank details', 'member:bank_number': 'Member check: bank account number', 'member:policy': 'Member check: policy number', 'member:balance': 'Member check: balance', 'member:exclusion': 'Member check: exclusion in IAS', 'member:contract_exclusion': 'Member check: policy contract exclusion', 'member:same_date_claim': 'Member check: claim with the same incurred date' };
 // Not member:bank: a bank difference is a warning that never holds the case (SYSTEM_5 bank check), so nothing to mark OK.
 const ACCEPTABLE_MEMBER_ITEMS = new Set(Object.keys(MEMBER_ITEM_LABELS).filter((item) => item !== 'member:bank'));
 

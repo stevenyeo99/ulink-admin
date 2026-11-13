@@ -38,7 +38,7 @@ flowchart TD
   C -->|too long / unreadable| MR{{MANUAL_REVIEW}}:::stop
   C -->|RECOGNIZED| D[3 · Member verification<br/>member, policy, bank vs IAS<br/>AI head per voucher + IAS balance<br/>IAS exclusions, policy contract exclusion]:::job
   C -.->|RECOGNIZED| E2[/Customer: claim received/]:::mail
-  D -->|mismatch / balance not enough /<br/>possible exclusion| MV{{MEMBER_REVIEW_REQUIRED<br/>rechecked every run}}:::stop
+  D -->|mismatch / balance not enough /<br/>same incurred date / possible exclusion| MV{{MEMBER_REVIEW_REQUIRED<br/>rechecked every run}}:::stop
   MV -.-> E3[/Team: member verification hold/]:::mail
   MV -->|override / IAS fixed / Mark OK or Bypass| E
   D -->|AI unsure of a voucher's head| BR{{BENEFIT_REVIEW}}:::stop
@@ -83,7 +83,7 @@ flowchart TD
 | Stop | Why the case waits | What the person can do | Switch |
 |------|--------------------|------------------------|--------|
 | `MANUAL_REVIEW` | The documents are too long for the AI, or its answer did not match the claim schema. | Read the documents and handle the claim by hand. | None |
-| `MEMBER_REVIEW_REQUIRED` | Member, coverage or bank details differ from IAS, the balance is not enough, or the claim can fall under an exclusion. | Fix in IAS (the case is checked again every run), Mark OK, correct a value, or override. A short balance or a possible exclusion: Bypass with a reason, and the claim then never goes STP. | None |
+| `MEMBER_REVIEW_REQUIRED` | Member, coverage or bank details differ from IAS, the balance is not enough, or the claim can fall under an exclusion. IAS can also already have another claim with the same incurred date. | Fix in IAS (the case is checked again every run), Mark OK, correct a value, or override. A short balance or a possible exclusion: Bypass with a reason, and the claim then never goes STP. | None |
 | `BENEFIT_REVIEW` | The AI was not sure of a voucher's benefit head. | Choose the head. The member check runs again with it. | `holdUnsureBenefit` |
 | `DOCUMENTS_REVIEW` | Documents look incomplete, and the AI was unsure, or a person corrected items. If the voucher total differs from the claimed amount, or a voucher is below 0, the case always stops here. The customer was not emailed. | If the documents are missing, send the request to the customer. If the documents are fine, override. Or correct a value, for example each voucher amount. | `holdUnsureMissingDocsEmail` (not for the amount check) |
 | `DOCUMENTS_UNSURE` | All documents passed, but the AI was unsure about some of them. | Use *Confirm and continue*, or ask for more information. | `holdUnsureDocumentPass` |

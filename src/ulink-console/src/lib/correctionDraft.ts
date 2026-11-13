@@ -20,7 +20,7 @@ export function newDraft(option: CorrectionOption, passed?: boolean, wrongStep?:
 }
 
 /** A short balance or an exclusion in IAS (SYSTEM_5): the only action is a bypass with a reason, as an exception. */
-export const isBypassItem = (item: string) => ['member:balance', 'member:exclusion'].includes(item);
+export const isBypassItem = (item: string) => ['member:balance', 'member:exclusion', 'member:same_date_claim'].includes(item);
 
 /** What went wrong when the reviewer writes their own reason (no quick reason): a value was misread, a check was wrong. */
 export const defaultWrongStep = (option: CorrectionOption): WrongStep => (isBypassItem(option.item) ? 'exception' : option.kind === 'verdict' ? 'check' : 'reading');

@@ -173,6 +173,8 @@ module.exports = {
     getMemberLimitBalanceApi: process.env.GET_MEMBER_LIMIT_BALANCE_API,
     // The member's and the policy period's exclusion events (SYSTEM_5, docs/imp/CR/SYSTEM_5/PRD/MEMBER_EXCLUSION_PRD.md).
     getMemberPolicyEventsApi: process.env.GET_MEMBER_POLICY_EVENTS_API,
+    // The member's claims in a coverage period, for the same-incurred-date check (owner 2026-11-12).
+    getMemberClaimHistApi: process.env.GET_MEMBER_CLAIM_HIST_API || '/api/get_member_claim_hist',
     claimApi: process.env.CL_CLAIM_API,
     // API cases: revise the claim IAS already created (same body as claimApi, plus claimNo).
     claimRevisionApi: process.env.CL_CLAIM_REVISION_API,

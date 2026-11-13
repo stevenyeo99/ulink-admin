@@ -74,4 +74,17 @@ async function getMemberPolicyEvents(request) {
   return postIas(config.ias.getMemberPolicyEventsApi, request, 'member policy events');
 }
 
-module.exports = { getMemberInfo, getMemberLimitBalance, getMemberPolicyEvents };
+/**
+ * POST {IAS_URL}{GET_MEMBER_CLAIM_HIST_API} with { memberRefNo, meplEffDate (YYYY-MM-DD) } — the member's claims in the
+ * coverage period active on that date (docs/imp/UAT/IAS_MEMBER_CLAIM_HISTORY_API_SPECS.md).
+ *
+ * Returns { success: true, payload: { claims: [{ claimNo, tpaCaseNumber, incurredDate, incurredDates, status }] } } —
+ * claims empty when there are none — or { success: false, error }.
+ */
+async function getMemberClaimHistory({ memberRefNo, meplEffDate }) {
+  // The path has a default (config/index.js), so only the base URL can be missing.
+  if (!config.ias.baseUrl) throw new Error('IAS_URL must be configured');
+  return postIas(config.ias.getMemberClaimHistApi, { memberRefNo, meplEffDate }, 'member claim history');
+}
+
+module.exports = { getMemberInfo, getMemberLimitBalance, getMemberPolicyEvents, getMemberClaimHistory };

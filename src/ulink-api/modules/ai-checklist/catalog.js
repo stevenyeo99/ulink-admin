@@ -53,6 +53,8 @@ const CHECKS = [
     does: "Picks each voucher's benefit head, then compares each voucher amount with the member's remaining balance in IAS: the head, its benefit type and any combined limit, whichever is lowest. Vouchers that share a limit are added up." },
   { code: 'member:exclusion', section: 'member', question: 'Is the claim under a member or policy exclusion in IAS?', label: MEMBER_ITEM_LABELS['member:exclusion'], effect: 'stops', usesAi: true,
     does: "Reads the exclusions IAS holds for this member and this policy period, and judges by meaning whether the claim falls under one. Only exclusions dated on or before the treatment count. A likely match or an unsure answer stops the case for a person. Each line says whether the exclusion is at member or policy level." },
+  { code: 'member:same_date_claim', section: 'member', question: 'Does IAS already have a claim with the same incurred date?', label: MEMBER_ITEM_LABELS['member:same_date_claim'], effect: 'stops',
+    does: "Asks IAS for the member's claims in the coverage period and compares their incurred dates with this claim's visit date and each voucher date, whatever the claim's status. The claim being checked is left out by its claim number. An email case also matches an IAS claim with its own TPA case number, whatever the date. A match stops the case for a person." },
   // item: the member finding it raises (SYSTEM_5 contract exclusion), whose reason code is this check's code.
   { code: 'POSSIBLE_EXCLUSION', item: 'member:contract_exclusion', section: 'member', question: 'Could the diagnosis be excluded by the policy contract?', label: 'Possible policy contract exclusion', effect: 'stops', usesAi: true,
     does: 'Compares the diagnosis and the treatment with the exclusion clauses of the policy contract (not the member or policy exclusions in IAS). A possible match, with the AI\'s confidence and reason, waits for a person. It is never a rejection.' },
@@ -144,6 +146,7 @@ const RISK_IF_OK = {
   'member:bank': 'Low: the IAS claim pays to the IAS account. If the customer gave a new account, IAS must be updated.',
   'member:balance': 'The claim may pay more than the member has left. A bypassed claim never goes STP, and the approver decides.',
   'member:exclusion': 'The claim may be paid for something that IAS excludes for this member or policy. A bypassed claim never goes STP.',
+  'member:same_date_claim': 'The same treatment may be paid twice. A bypassed claim never goes STP.',
   POSSIBLE_EXCLUSION: '"Does not apply" keeps STP possible: if the clause does apply, an excluded condition may be paid automatically. "Let it go on" never goes STP.',
   BENEFIT_NOT_ELIGIBLE: "The claim may be for a benefit that the member's plan does not cover.",
   MISSING_MANDATORY_FIELD: 'The IAS claim may go with a value missing, and the customer is not asked for it.',
@@ -186,7 +189,7 @@ function reviewerActions(check) {
     ? ACCEPTABLE_MEMBER_ITEMS.has(check.item ?? check.code)
     : check.effect !== 'off' && !NOT_VERDICT_ITEMS.has(check.code);
   // The balance and exclusion findings' only action is a bypass with a reason (SYSTEM_5) — the same mark OK.
-  if (isVerdict) actions.push(['member:balance', 'member:exclusion'].includes(check.code) ? 'Bypass (with a reason)' : 'Mark passed');
+  if (isVerdict) actions.push(['member:balance', 'member:exclusion', 'member:same_date_claim'].includes(check.code) ? 'Bypass (with a reason)' : 'Mark passed');
   // A policy contract exclusion that applies can also go on as an exception (SYSTEM_5 contract exclusion).
   if (isVerdict && check.item === 'member:contract_exclusion') actions.push('Let it go on (with a reason, no STP)');
   if (isVerdict && check.section !== 'member' && ISSUES[check.code]) actions.push('Mark failed');

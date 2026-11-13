@@ -32,7 +32,7 @@ async function processCase({ caseRecord, input }) {
   const chosen = await ApiCaseStep.findOne({ where: { caseId: caseRecord.id, job: 'benefit-review', status: 'DONE' }, order: [['createdAt', 'DESC']] });
   const fresh = chosen && (!last || chosen.createdAt > last.createdAt); // later runs find the choice in the last picks
   const memberVerifyResult = withChosenPicks(last?.output?.memberVerifyResult, fresh ? chosen.output.picks : null);
-  const { outcome, result, iasResponse } = await checkCase({ id: caseRecord.id, extractedFields, recognizedType, memberVerifyResult });
+  const { outcome, result, iasResponse } = await checkCase({ id: caseRecord.id, source: 'API', claimNo: caseRecord.claimNo, extractedFields, recognizedType, memberVerifyResult });
   const nextStatus = OUTCOME_TO_STATUS[outcome];
   if (!nextStatus) throw new Error(`Unexpected member check outcome: ${outcome}`);
 

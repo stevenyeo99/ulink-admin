@@ -193,6 +193,20 @@ function memberLines(memberVerifyResult) {
   // The member balance (SYSTEM_5 member balance): one line per voucher, with the benefit type and head codes. A short
   // voucher is also a member finding (member:balance) — the review point sits on the member line above, not here.
   lines.push(...balanceLines('Member balance', memberVerifyResult.balance));
+  // Another claim in IAS with the same incurred date (owner 2026-11-12). A match is also a member finding — the review
+  // point sits on the member line above.
+  const sameDate = memberVerifyResult.sameDateClaims;
+  if (sameDate) {
+    lines.push(line({
+      decision: 'Same incurred date in IAS',
+      result: !sameDate.checked ? 'Not checked' : sameDate.matches.length ? 'Found' : 'None',
+      status: !sameDate.checked ? 'not_checked' : sameDate.matches.length ? 'issue' : 'ok',
+      why: !sameDate.checked ? sameDate.note
+        : sameDate.matches.length ? sameDate.matches.map((m) => `Claim ${m.claimNo || m.tpaCaseNumber || '(no claim number)'}${m.dates.length ? ` on ${m.dates.join(', ')}` : ''}${m.sameCaseNumber ? ` (same TPA case number ${m.tpaCaseNumber})` : ''}${m.status ? ` (${m.status})` : ''}`).join('; ')
+          : 'IAS holds no other claim with the same incurred date.',
+      verified: VERIFIED.RULE,
+    }));
+  }
   // The member and policy exclusions in IAS, judged by meaning (SYSTEM_5 member exclusion): each counted event with its
   // level and the AI's answer. A match is also a member finding — the review point sits on the member line above.
   const exclusions = memberVerifyResult.exclusions;

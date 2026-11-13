@@ -31,7 +31,7 @@ describe('api-member-verification', () => {
 
     const result = await memberJob.process({ caseRecord: recognized, input });
 
-    expect(memberEmail.checkCase).toHaveBeenCalledWith({ id: 'case-1', extractedFields, recognizedType: 'ayas_member_claim' });
+    expect(memberEmail.checkCase).toHaveBeenCalledWith(expect.objectContaining({ id: 'case-1', source: 'API', extractedFields, recognizedType: 'ayas_member_claim' }));
     expect(result).toMatchObject({
       nextStatus: 'API_READY_FOR_DOCUMENT_CHECKING',
       output: { outcome: 'MEMBER_VERIFIED', memberVerifyResult: { reasonCode: null }, iasMemberInfoResponse: { success: true }, email: null },
