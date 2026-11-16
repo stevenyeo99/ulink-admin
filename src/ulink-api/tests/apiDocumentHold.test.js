@@ -28,7 +28,7 @@ it('holds an unsure incomplete case for a person: team told, customer email kept
   documentChecking.checkCase.mockResolvedValue(incomplete(0.3));
   const result = await documentJob.process({ caseRecord, input });
   expect(result.nextStatus).toBe('API_DOCUMENTS_REVIEW');
-  expect(result.output.email).toMatchObject({ taskType: 'DOCUMENTS_INCOMPLETE', audience: 'internal', payload: { held: ['Medical report present (AI confidence 0.3)'] } });
+  expect(result.output.email).toMatchObject({ taskType: 'DOCUMENTS_INCOMPLETE', audience: 'internal', payload: { held: ['Not met: Medical report present'] } });
   expect(result.output.heldEmail).toMatchObject({ taskType: 'MISSING_DOCUMENTS', audience: 'customer' });
 });
 

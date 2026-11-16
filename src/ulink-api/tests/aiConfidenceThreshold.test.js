@@ -30,7 +30,7 @@ it('follows the saved setting once read', async () => {
 it('makes a failed checklist item at the threshold an unsure point (the held-email check)', async () => {
   await withThreshold(null);
   const result = (confidence) => ({ checklist: [{ code: 'NO_MEDICAL_REPORT', label: 'Medical report present', passed: false, confidence }] });
-  expect(unsureDocumentPoints(result(0.7))).toEqual(['Medical report present (AI confidence 0.7)']);
+  expect(unsureDocumentPoints(result(0.7))).toEqual(['Not met: Medical report present']);
   expect(unsureDocumentPoints(result(0.71))).toEqual([]);
 });
 

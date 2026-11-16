@@ -111,7 +111,7 @@ describe('vision claim (AYA-CL-26043392)', () => {
   it('an eye test slip the AI was unsure of holds the customer email for a person', () => {
     const { unsureDocumentPoints } = require('../modules/document-checking/holdForReview');
     const f = { ...fields(null), document_list: [{ ...p('a.pdf - page 3', 'eye_test_slip'), confidence: 0.4 }] };
-    expect(unsureDocumentPoints(evaluateDocumentChecks(f))).toEqual(['Need to fill treatment date in the eye test record (AI confidence 0.4)']);
+    expect(unsureDocumentPoints(evaluateDocumentChecks(f))).toEqual(['Not met: Need to fill treatment date in the eye test record']);
   });
 
   it('the medical record line passes with the eye test slip score and reason, not the AI "no medical record" text', () => {

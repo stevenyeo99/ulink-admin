@@ -51,7 +51,7 @@ describe('#2 what counts as "the AI is unsure a document is missing"', () => {
       { code: 'MISSING_BANK_INFO', label: 'Bank information', passed: false },
       { code: 'NO_MEDICAL_REPORT', label: 'Medical report present', passed: false, confidence: 0.9 },
       { code: 'UNCLEAR_VOUCHER', label: 'Voucher readable', passed: true },
-    ] })).toEqual(['Medical report legible (could not read clearly)', 'Medical report present (AI confidence 0.3)']);
+    ] })).toEqual(['Not met: Medical report legible', 'Not met: Medical report present']);
   });
 
   it('exactly 0.5 confidence, and any date mismatch, is unsure (2026-10-01, cases 04759562 / 42214c2a)', () => {
@@ -61,9 +61,9 @@ describe('#2 what counts as "the AI is unsure a document is missing"', () => {
       { code: 'TREATMENT_DATE_INCONSISTENT', label: 'Treatment date is consistent with medical record date', passed: false, confidence: null },
       { code: 'INVOICE_DATE_INCONSISTENT', label: 'Invoice date(s) are consistent with medical record date', passed: true, confidence: 1 },
     ] })).toEqual([
-      'Medical report present (AI confidence 0.5)',
-      'Invoice date(s) are consistent with medical record date (AI confidence 1)',
-      'Treatment date is consistent with medical record date (could not read clearly)',
+      'Not met: Medical report present',
+      'Not met: Invoice date(s) are consistent with medical record date',
+      'Not met: Treatment date is consistent with medical record date',
     ]);
   });
 
@@ -73,9 +73,9 @@ describe('#2 what counts as "the AI is unsure a document is missing"', () => {
       { code: 'VOUCHER_AMOUNT_MISMATCH', label: 'Voucher amount', passed: false, confidence: 0.99 },
       { code: 'NO_MEDICAL_REPORT', label: 'Medical report present', passed: false, confidence: 0.3 },
     ];
-    expect(unsureDocumentPoints({ checklist }, false)).toEqual(['Voucher amount (AI confidence 0.99)']);
-    expect(unsureDocumentPoints({ checklist: [{ ...checklist[0], confidence: 0.9485436893203884 }] }, false)).toEqual(['Voucher amount (AI confidence 0.95)']);
-    expect(unsureDocumentPoints({ checklist: [{ ...checklist[0], confidence: '0.4' }] }, false)).toEqual(['Voucher amount (AI confidence 0.4)']);
+    expect(unsureDocumentPoints({ checklist }, false)).toEqual(['Not met: Voucher amount']);
+    expect(unsureDocumentPoints({ checklist: [{ ...checklist[0], confidence: 0.9485436893203884 }] }, false)).toEqual(['Not met: Voucher amount']);
+    expect(unsureDocumentPoints({ checklist: [{ ...checklist[0], confidence: '0.4' }] }, false)).toEqual(['Not met: Voucher amount']);
     expect(unsureDocumentPoints({ checklist }, true)).toHaveLength(2);
   });
 
@@ -105,7 +105,7 @@ describe('#2 email case: holding the customer email', () => {
     await persist(true);
     expect(Case.update.mock.calls[0][0]).toMatchObject({ currentStatus: 'DOCUMENTS_REVIEW' });
     expect(taskTypes()).toEqual(['DOCUMENTS_INCOMPLETE']);
-    expect(queueDedupedTask.mock.calls[0][1].payload.held).toEqual(['Medical report present (AI confidence 0.3)']);
+    expect(queueDedupedTask.mock.calls[0][1].payload.held).toEqual(['Not met: Medical report present']);
   });
 
   it('switch on + AI sure, or switch off: the customer is emailed as before', async () => {
@@ -135,9 +135,9 @@ describe('#2 email case: holding the customer email', () => {
 });
 
 it('the team email says the customer has not been emailed and what to check', () => {
-  const email = render('DOCUMENTS_INCOMPLETE', { caseId: 'c1', issues: ['No medical report'], held: ['Medical report present (AI confidence 0.3)'] });
+  const email = render('DOCUMENTS_INCOMPLETE', { caseId: 'c1', issues: ['No medical report'], held: ['Not met: Medical report present'] });
   expect(email.subject).toBe('(ULINK AI) Check before the customer is asked — Case c1 — 1 missing');
-  expect(email.bodyText).toContain('ACTION NEEDED — the customer has NOT been asked yet. The case waits for you: Medical report present (AI confidence 0.3).');
+  expect(email.bodyText).toContain('ACTION NEEDED — the customer has NOT been asked yet. The case waits for you: Not met: Medical report present.');
   expect(email.bodyText).toContain('If they are missing, send the customer the request below.');
   // API customer email off: ULINK emails the customer.
   const off = render('DOCUMENTS_INCOMPLETE', { caseId: 'c1', claimNo: '2610080002', issues: ['No medical report'], held: ['a person corrected items on this case and sends the request'], contactCustomer: true });

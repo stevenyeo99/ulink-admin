@@ -45,13 +45,16 @@ function nextAction(fields = {}, summary = null, events = []) {
       return act(`Member check issue: ${points || fields.memberVerifyResult?.reason || 'see the review points'}. Fix IAS (the case is re-checked every run), or Override and continue.`);
     case 'DOCUMENTS_REVIEW':
     case 'API_DOCUMENTS_REVIEW': {
-      // Why the check waits (API: documentsHeldFor — the AI unsure, or a person corrected items); with the API customer
-      // email off, continuing does not email the customer: ULINK does.
+      // One line that points to the findings (owner, 2026-11-16): each is decided on the review page, where the findings
+      // list them — not repeated here.
+      const open = (summary?.lines || []).filter((l) => l.review && !l.overridden).length;
+      if (open) return act(`${step1(status)}${open} finding${open === 1 ? ' needs' : 's need'} your decision. Decide each one on the review page (Ask the customer, Mark OK or Revise), then Review and save.`);
+      // No open finding (e.g. a person corrected items): continue or override, on the case page.
       const heldFor = (fields.documentsHeldFor || []).join('; ');
       const why = heldFor ? `The case waits for you (${heldFor})` : 'The AI is unsure a document is missing';
       const ulinkEmails = status === 'API_DOCUMENTS_REVIEW' && !lastReadSettings().apiSendMissingDocumentsEmail;
       const go = ulinkEmails ? 'continue (ULINK emails the customer)' : 'send the request to the customer';
-      return act(`${step1(status)}${why}. Missing: ${missing || points || 'see the review points'}. Check the documents: if they are missing, ${go}; if they are fine, override.`);
+      return act(`${step1(status)}${why}. Missing: ${missing || 'see the review points'}. Check the documents: if they are missing, ${go}; if they are fine, override.`);
     }
     case 'DOCUMENTS_UNSURE':
     case 'API_DOCUMENTS_UNSURE':
