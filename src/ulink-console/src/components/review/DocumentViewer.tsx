@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import clsx from 'clsx';
-import { RotateCw, ZoomIn, ZoomOut } from 'lucide-react';
+import { ExternalLink, RotateCw, ZoomIn, ZoomOut } from 'lucide-react';
 import { authFetch } from '../../api/client';
 import type { PageRef, ViewFile } from '../../lib/caseFiles';
 
@@ -43,6 +43,9 @@ export function DocumentViewer({ files, open, onOpen }: { files: ViewFile[]; ope
 
   if (!file) return <p className="p-4 text-sm text-slate-500">No documents on this case yet. For an API case, upload them on the right when they come in, or they arrive from the IAS console.</p>;
   const groups = [...new Set(files.map((f) => f.group))];
+  // The PDF fits the frame width (owner, 2026-11-16): a scanned page is readable without zooming. The same view opens in
+  // a new window, for full screen or a second monitor, while the findings stay here.
+  const viewUrl = url && (file.pdf ? `${url}#page=${page}&view=FitH` : url);
 
   return (
     <div className="flex h-full min-h-[32rem] gap-3">
@@ -67,6 +70,11 @@ export function DocumentViewer({ files, open, onOpen }: { files: ViewFile[]; ope
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="mb-2 flex items-center gap-2 text-xs text-slate-600">
           <span className="truncate font-medium" title={file.name}>{file.name}</span>
+          {viewUrl && (
+            <a href={viewUrl} target="_blank" rel="noopener noreferrer" className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-ulink-teal-dark hover:bg-slate-900/5">
+              <ExternalLink size={13} /> Open in new window
+            </a>
+          )}
           {file.pdf ? (
             <label className="ml-auto flex items-center gap-1">
               Page
@@ -89,7 +97,7 @@ export function DocumentViewer({ files, open, onOpen }: { files: ViewFile[]; ope
         <div className="flex-1 overflow-auto rounded-lg border border-slate-900/10 bg-slate-50">
           {failed && <p className="p-4 text-sm text-red-600">Couldn't open this file. Reload the page, or open it from the case page.</p>}
           {!failed && !url && <p className="p-4 text-sm text-slate-400">Loading…</p>}
-          {url && file.pdf && <iframe key={`${url}#${page}`} title={file.name} src={`${url}#page=${page}`} className="h-full min-h-[32rem] w-full" />}
+          {url && file.pdf && <iframe key={`${url}#${page}`} title={file.name} src={viewUrl ?? undefined} className="h-full min-h-[32rem] w-full" />}
           {url && !file.pdf && (
             <img
               src={url}
