@@ -49,24 +49,27 @@ export function DocumentViewer({ files, open, onOpen }: { files: ViewFile[]; ope
 
   return (
     <div className="flex h-full min-h-[32rem] gap-3">
-      <nav aria-label="Documents" className="w-44 shrink-0 overflow-y-auto pr-1 text-xs">
-        {groups.map((group) => (
-          <div key={group} className="mb-3">
-            <p className="mb-1 font-semibold text-slate-500">{group}</p>
-            {files.filter((f) => f.group === group).map((f) => (
-              <button
-                key={f.key}
-                onClick={() => onOpen({ fileKey: f.key, page: 1 })}
-                aria-current={f.key === file.key}
-                className={clsx('block w-full truncate rounded px-2 py-1 text-left', f.key === file.key ? 'bg-ulink-teal/10 font-medium text-ulink-teal-dark' : 'text-slate-600 hover:bg-slate-900/5')}
-                title={f.name}
-              >
-                {f.name.split('/').pop()}
-              </button>
-            ))}
-          </div>
-        ))}
-      </nav>
+      {/* One file: no list (owner, 2026-11-16) — its name is above the document, and the document gets the width. */}
+      {files.length > 1 && (
+        <nav aria-label="Documents" className="w-44 shrink-0 overflow-y-auto pr-1 text-xs">
+          {groups.map((group) => (
+            <div key={group} className="mb-3">
+              <p className="mb-1 font-semibold text-slate-500">{group}</p>
+              {files.filter((f) => f.group === group).map((f) => (
+                <button
+                  key={f.key}
+                  onClick={() => onOpen({ fileKey: f.key, page: 1 })}
+                  aria-current={f.key === file.key}
+                  className={clsx('block w-full truncate rounded px-2 py-1 text-left', f.key === file.key ? 'bg-ulink-teal/10 font-medium text-ulink-teal-dark' : 'text-slate-600 hover:bg-slate-900/5')}
+                  title={f.name}
+                >
+                  {f.name.split('/').pop()}
+                </button>
+              ))}
+            </div>
+          ))}
+        </nav>
+      )}
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="mb-2 flex items-center gap-2 text-xs text-slate-600">
           <span className="truncate font-medium" title={file.name}>{file.name}</span>
@@ -97,7 +100,8 @@ export function DocumentViewer({ files, open, onOpen }: { files: ViewFile[]; ope
         <div className="flex-1 overflow-auto rounded-lg border border-slate-900/10 bg-slate-50">
           {failed && <p className="p-4 text-sm text-red-600">Couldn't open this file. Reload the page, or open it from the case page.</p>}
           {!failed && !url && <p className="p-4 text-sm text-slate-400">Loading…</p>}
-          {url && file.pdf && <iframe key={`${url}#${page}`} title={file.name} src={viewUrl ?? undefined} className="h-full min-h-[32rem] w-full" />}
+          {/* No page thumbnails in the frame (navpanes=0): the page gets the width. The new window keeps them. */}
+          {url && file.pdf && <iframe key={`${url}#${page}`} title={file.name} src={`${viewUrl}&navpanes=0`} className="h-full min-h-[32rem] w-full" />}
           {url && !file.pdf && (
             <img
               src={url}
