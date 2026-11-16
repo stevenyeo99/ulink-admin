@@ -18,12 +18,16 @@ export function CaseOverridePanel({
   override,
   summary,
   onSaved,
+  heldActions = true,
 }: {
   /** After a save: what happened, for the page to show. */
   onSaved?: (message: string) => void;
   caseRecord: CaseDetail;
   override: CaseOverrideInfo;
   summary: AssessmentSummary;
+  /** The "documents are missing — continue" block. Off on the review page (owner, 2026-11-16): there each finding is
+   * decided in place (Ask the customer / Mark OK / Revise), so the block was a second path to the same decision. */
+  heldActions?: boolean;
 }) {
   const queryClient = useQueryClient();
   const [finding, setFinding] = useState('');
@@ -66,7 +70,7 @@ export function CaseOverridePanel({
 
   return (
     <section className="mb-6 rounded-xl2 border border-ulink-orange/25 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
-      {isHeld && <HeldEmailActions caseRecord={caseRecord} onSaved={onSaved} />}
+      {isHeld && heldActions && <HeldEmailActions caseRecord={caseRecord} onSaved={onSaved} />}
       <h2 className="text-sm font-semibold text-slate-800">{action}</h2>
       <p className="mb-4 mt-1 text-sm text-slate-600">
         {isUnsurePass

@@ -225,7 +225,7 @@ export function ReviewWorkspacePage() {
           {isSuperAdmin() && <PreparationReviewPanel key={`preparation-${id}`} caseRecord={caseRecord} corrections={pendingCorrections} onSaved={setSaved} />}
           {/* Override and continue (same rules as the case page): a reviewer who checked the member or documents by hand,
               or fixed it in IAS, lets the case go on to the next job without leaving the review page. */}
-          {isSuperAdmin() && <CaseOverridePanel key={`override-${id}`} caseRecord={caseRecord} override={override} summary={assessmentSummary} onSaved={setSaved} />}
+          {isSuperAdmin() && <CaseOverridePanel key={`override-${id}`} caseRecord={caseRecord} override={override} summary={assessmentSummary} onSaved={setSaved} heldActions={false} />}
           {/* Each finding is corrected in place (Edit / Mark OK / Mark wrong); here only the corrections made so far. */}
           <CaseCorrectionPanel key={`corrections-${id}`} caseId={id} corrections={corrections} />
           <ReviewerChecklistPanel key={`requests-${id}`} caseId={id} requests={requests} />
