@@ -122,6 +122,7 @@ export function FindingsPanel({
   confirmed,
   documentsOverridden = false,
   onPendingChange,
+  onRequestLinesChange,
   saveBelow = false,
   onSaved,
   status = '',
@@ -137,6 +138,8 @@ export function FindingsPanel({
   onSaved?: (message: string) => void;
   /** The open changes, each time they change — for a save elsewhere on the page (the claim preparation stop). */
   onPendingChange?: (pending: PendingCorrections) => void;
+  /** The new request lines not saved yet, each time they change — for the email draft on the page. */
+  onRequestLinesChange?: (lines: string[]) => void;
   /** The changes are saved with the claim preparation below, in one save: no save button here. */
   saveBelow?: boolean;
   /** Mark OK on an unsure value: the reviewer checked it against the document (SYSTEM_4 E5b), with a reason; null when they can't. */
@@ -197,6 +200,7 @@ export function FindingsPanel({
   const notReady = pending.filter((d) => draftProblem(d)).length;
   // The reviewer's own new request lines (4.10), saved with the decisions.
   const [newLines, setNewLines] = useState<string[]>([]);
+  useEffect(() => { onRequestLinesChange?.(newLines); }, [newLines, onRequestLinesChange]);
   const [lineText, setLineText] = useState('');
   const corrections = pending.filter((d) => !d.ask);
   const asks = pending.filter((d) => d.ask);
@@ -561,8 +565,11 @@ export function FindingsPanel({
         </section>
       )}
       {decisions.length > 0 && (
-        <section>
-          <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Member and claim</h3>
+        // Closed when every line passed (owner, 2026-11-16): open by itself when one needs attention.
+        <details className="mb-4" open={decisions.some((l) => l.status !== 'ok' || l.review) || undefined}>
+          <summary className="mb-1 cursor-pointer text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Member and claim{decisions.some((l) => l.status !== 'ok' || l.review) ? '' : ` · ${decisions.length} passed`}
+          </summary>
           <ul className="divide-y divide-slate-900/5">
             {decisions.map((l) => (
               <li key={`${l.area}-${l.decision}`} className="py-2 text-sm">
@@ -572,7 +579,7 @@ export function FindingsPanel({
               </li>
             ))}
           </ul>
-        </section>
+        </details>
       )}
       {canCorrect && requestsAllowed && !saveBelow && (
         // The reviewer's own request lines (SYSTEM_5 review actions 4.10): what the customer must send or fix that the

@@ -19,6 +19,7 @@ export function CaseOverridePanel({
   summary,
   onSaved,
   heldActions = true,
+  closed = false,
 }: {
   /** After a save: what happened, for the page to show. */
   onSaved?: (message: string) => void;
@@ -28,6 +29,8 @@ export function CaseOverridePanel({
   /** The "documents are missing — continue" block. Off on the review page (owner, 2026-11-16): there each finding is
    * decided in place (Ask the customer / Mark OK / Revise), so the block was a second path to the same decision. */
   heldActions?: boolean;
+  /** Starts closed (review page, owner 2026-11-16): the per-finding decisions are the main path there. */
+  closed?: boolean;
 }) {
   const queryClient = useQueryClient();
   const [finding, setFinding] = useState('');
@@ -68,10 +71,12 @@ export function CaseOverridePanel({
   const canSubmit = finding !== '' && !reasonShort && !mutation.isPending;
   const missing = caseRecord.documentCheckResult?.issues ?? [];
 
+  const startClosed = closed && !isUnsurePass;
+  const Wrap = startClosed ? 'details' : 'section';
   return (
-    <section className="mb-6 rounded-xl2 border border-ulink-orange/25 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
+    <Wrap className="mb-6 rounded-xl2 border border-ulink-orange/25 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
       {isHeld && heldActions && <HeldEmailActions caseRecord={caseRecord} onSaved={onSaved} />}
-      <h2 className="text-sm font-semibold text-slate-800">{action}</h2>
+      {startClosed ? <summary className="cursor-pointer text-sm font-semibold text-slate-800">{action} (the whole {checkName})</summary> : <h2 className="text-sm font-semibold text-slate-800">{action}</h2>}
       <p className="mb-4 mt-1 text-sm text-slate-600">
         {isUnsurePass
           ? "The documents passed, but the AI wasn't sure about the review points on this page, or a person asked for something the AI can't check. Check them against the documents; if they're right, confirm and the case continues. Confirming also marks the requested lines done."
@@ -173,7 +178,7 @@ export function CaseOverridePanel({
           </AlertDialog.Content>
         </AlertDialog.Portal>
       </AlertDialog.Root>
-    </section>
+    </Wrap>
   );
 }
 

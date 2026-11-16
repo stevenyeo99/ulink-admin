@@ -20,7 +20,11 @@ const REFRESH = ['case', 'cases', 'review-queue', 'cases-overview', 'approvals',
  * (and a case with nothing to edit) sees the draft alone. Where the case stays (requests.stays, the API decides which
  * stops): *Save lines* — the case does not move, and its revision goes to IAS with suspense.
  */
-export function ReviewerChecklistPanel({ caseId, requests }: { caseId: string; requests: RequestsInfo }) {
+// addLines false (review page, where new lines are added with the findings and saved with the decisions — owner,
+// 2026-11-16): no Add line / Comment / Save here, and no Remove (it needs that save); the lines already asked keep Done.
+// pendingLines: with addLines false, the new lines added elsewhere and not saved yet — the draft shows them at once.
+// draftClosed: the email draft starts closed (review page, owner 2026-11-16).
+export function ReviewerChecklistPanel({ caseId, requests, addLines = true, pendingLines = [], draftClosed = false }: { caseId: string; requests: RequestsInfo; addLines?: boolean; pendingLines?: string[]; draftClosed?: boolean }) {
   const queryClient = useQueryClient();
   const refresh = () => REFRESH.forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
   const [newRows, setNewRows] = useState<string[]>(() => (requests.open.length ? [] : ['']));
@@ -44,7 +48,11 @@ export function ReviewerChecklistPanel({ caseId, requests }: { caseId: string; r
     onSuccess: () => { setDoneId(null); setDoneComment(''); refresh(); },
   });
 
-  if (!isSuperAdmin() || (!requests.allowed && !requests.open.length)) return <EmailDraftPanel caseId={caseId} lines={null} />;
+  if (!isSuperAdmin() || (!requests.allowed && !requests.open.length)) return <EmailDraftPanel caseId={caseId} lines={null} closed={draftClosed} />;
+  // Nothing asked yet and lines are added elsewhere: the draft alone.
+  // The draft's reviewer lines: null = the saved ones; else the saved ones and the new ones.
+  const draftLines = addLines ? lines : pendingLines.length ? [...requests.open.map((r) => r.text), ...pendingLines] : null;
+  if (!addLines && !requests.open.length) return <EmailDraftPanel caseId={caseId} lines={draftLines} closed={draftClosed} />;
 
   return (
     <>
@@ -67,7 +75,7 @@ export function ReviewerChecklistPanel({ caseId, requests }: { caseId: string; r
                   </div>
                   <div className="flex shrink-0 gap-1">
                     <Button variant="ghost" onClick={() => setDoneId(doneId === r.id ? null : r.id)} disabled={removed.has(r.id)}>Done</Button>
-                    {requests.allowed && (
+                    {requests.allowed && addLines && (
                       <Button variant="ghost" onClick={() => setRemoved((s) => { const n = new Set(s); if (n.has(r.id)) n.delete(r.id); else n.add(r.id); return n; })}>
                         {removed.has(r.id) ? 'Keep' : 'Remove'}
                       </Button>
@@ -86,7 +94,7 @@ export function ReviewerChecklistPanel({ caseId, requests }: { caseId: string; r
         )}
         {done.isError && <p className="mb-3 text-sm text-red-600">{(done.error as Error).message}</p>}
 
-        {requests.allowed && (
+        {requests.allowed && addLines && (
           <>
             {newRows.map((row, i) => (
               <div key={i} className="mb-2 flex gap-2">
@@ -122,7 +130,7 @@ export function ReviewerChecklistPanel({ caseId, requests }: { caseId: string; r
         )}
       </section>
 
-      <EmailDraftPanel caseId={caseId} lines={lines} />
+      <EmailDraftPanel caseId={caseId} lines={draftLines} closed={draftClosed} />
     </>
   );
 }
@@ -132,7 +140,7 @@ export function ReviewerChecklistPanel({ caseId, requests }: { caseId: string; r
  * items and the reviewer lines being edited. Copy only — the system never sends it.
  */
 // lines: the reviewer lines being edited; null = the open ones saved.
-function EmailDraftPanel({ caseId, lines }: { caseId: string; lines: string[] | null }) {
+function EmailDraftPanel({ caseId, lines, closed = false }: { caseId: string; lines: string[] | null; closed?: boolean }) {
   // Asked again a moment after the lines stop changing, not on every key.
   const key = JSON.stringify(lines);
   const [settled, setSettled] = useState(key);
@@ -152,10 +160,13 @@ function EmailDraftPanel({ caseId, lines }: { caseId: string; lines: string[] | 
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const Wrap = closed ? 'details' : 'section';
+  const count = (n: number, what: string) => `${n} ${what} line${n === 1 ? '' : 's'}`;
   return (
-    <section className="mb-6 rounded-xl2 border border-slate-900/10 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold text-slate-800">Email draft to the customer</h2>
+    <Wrap className="mb-6 rounded-xl2 border border-slate-900/10 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
+      {closed && <summary className="cursor-pointer text-sm font-semibold text-slate-800">Email draft to the customer ({count(data.system.length, 'system')}, {count(data.reviewer.length, 'reviewer')})</summary>}
+      <div className={clsx('mb-2 flex items-center gap-3', closed ? 'mt-3 justify-end' : 'justify-between')}>
+        {!closed && <h2 className="text-sm font-semibold text-slate-800">Email draft to the customer</h2>}
         <Button variant="ghost" onClick={copy}>
           <Copy size={14} className="mr-1 inline" /> {copied ? 'Copied' : 'Copy'}
         </Button>
@@ -166,7 +177,7 @@ function EmailDraftPanel({ caseId, lines }: { caseId: string; lines: string[] | 
         <DraftList title="Reviewer checklist" items={data.reviewer} empty="No lines." />
       </div>
       <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-3 font-sans text-sm text-slate-700">{data.text}</pre>
-    </section>
+    </Wrap>
   );
 }
 

@@ -22,7 +22,8 @@ const toBase64 = (file: File) =>
  * Upload the documents the customer sent (SYSTEM_4 E4-04): merged into one PDF, read and checked again on the next run,
  * then sent to the IAS console as the case's next submission before the IAS claim is revised. Any user.
  */
-export function CaseUploadPanel({ caseRecord }: { caseRecord: CaseDetail }) {
+// closed: starts closed (review page, owner 2026-11-16) — a reviewer uploads only when the customer sent something.
+export function CaseUploadPanel({ caseRecord, closed = false }: { caseRecord: CaseDetail; closed?: boolean }) {
   const queryClient = useQueryClient();
   const [files, setFiles] = useState<File[]>([]);
   const [comment, setComment] = useState('');
@@ -46,9 +47,10 @@ export function CaseUploadPanel({ caseRecord }: { caseRecord: CaseDetail }) {
         : null;
   const canSend = files.length > 0 && !problem && comment.trim().length >= 3 && !upload.isPending;
 
+  const Wrap = closed ? 'details' : 'section';
   return (
-    <section className="mb-6 rounded-xl2 border border-ulink-teal/30 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
-      <h2 className="text-sm font-semibold text-slate-800">Upload documents</h2>
+    <Wrap className="mb-6 rounded-xl2 border border-ulink-teal/30 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
+      {closed ? <summary className="cursor-pointer text-sm font-semibold text-slate-800">Upload documents the customer sent</summary> : <h2 className="text-sm font-semibold text-slate-800">Upload documents</h2>}
       <p className="mb-3 mt-1 text-sm text-slate-600">
         Documents the customer sent you (PDF, JPG or PNG, up to {MAX_FILES} files, 20 MB). They are read and checked again on the next
         run, then go to the IAS console as this case's next submission; the IAS claim is revised once the console gives them a barcode (usually 15–30 minutes).
@@ -77,6 +79,6 @@ export function CaseUploadPanel({ caseRecord }: { caseRecord: CaseDetail }) {
       </Button>
       {upload.isError && <p className="mt-2 text-sm text-red-600">{(upload.error as Error).message}</p>}
       {upload.isSuccess && <p className="mt-2 text-sm text-ulink-teal-dark">Uploaded. The case is read and checked again on the next run.</p>}
-    </section>
+    </Wrap>
   );
 }

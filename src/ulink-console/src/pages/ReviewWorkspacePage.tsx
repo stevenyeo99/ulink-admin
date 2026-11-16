@@ -41,6 +41,8 @@ export function ReviewWorkspacePage() {
   const claimTried = useRef<string | null>(null);
   // Corrections not saved yet: at the claim preparation stop they are saved with its choices, in one save.
   const [pendingCorrections, setPendingCorrections] = useState<PendingCorrections>({ items: [], notReady: 0, lines: [] });
+  // New request lines typed in the findings, not saved yet: the email draft shows them at once.
+  const [newRequestLines, setNewRequestLines] = useState<string[]>([]);
   // What the last save did, so the reviewer sees it after its panel goes away (the case moved on).
   const [saved, setSaved] = useState<string | null>(null);
 
@@ -104,6 +106,9 @@ export function ReviewWorkspacePage() {
   const unsureCount = assessmentSummary.reviewPoints.filter((p) => !p.overridden).length;
   // The benefit choice saves the review page's corrections with it too (SYSTEM_5 member balance phase C).
   const atPreparationStop = ['API_PREPARATION_REVIEW', 'BENEFIT_REVIEW', 'API_BENEFIT_REVIEW'].includes(caseRecord.currentStatus) && isSuperAdmin();
+  // New request lines are added in the findings ("Your own request lines") and saved with the decisions: the same
+  // condition as FindingsPanel's section. Then "Ask for more information" keeps only the lines already asked.
+  const linesInFindings = corrections.allowed && isSuperAdmin() && requests.allowed && !requests.stays && !atPreparationStop;
 
   // "✓ Right" (E5b): recorded as learning data; the list refreshes to show it.
   const me = getSession()?.user.username;
@@ -193,8 +198,6 @@ export function ReviewWorkspacePage() {
             </div>
           )}
           {nextAction && <NextActionBox next={nextAction} className="mb-4" />}
-          {/* Missing documents: upload them here too (shows only while the case waits on documents). */}
-          <CaseUploadPanel caseRecord={caseRecord} />
           <h2 className="mb-2 text-sm font-semibold text-slate-800">
             AI findings <span className="font-normal text-slate-500">— unsure means at or below {Math.round(threshold * 100)}%</span>
           </h2>
@@ -213,6 +216,7 @@ export function ReviewWorkspacePage() {
             confirmed={confirmed}
             documentsOverridden={assessmentSummary.lines.some((l) => l.area === 'documents' && l.overridden)}
             onPendingChange={setPendingCorrections}
+            onRequestLinesChange={setNewRequestLines}
             onSaved={setSaved}
             saveBelow={atPreparationStop}
             status={caseRecord.currentStatus}
@@ -220,15 +224,18 @@ export function ReviewWorkspacePage() {
             requestsAllowed={requests.allowed && !requests.stays}
             openRequestLines={requests.open.map((r) => r.text)}
           />
+          {/* Missing documents: upload them here too (shows only while the case waits on documents) — below the findings
+              and closed (owner, 2026-11-16): the page opens on the decisions. */}
+          <CaseUploadPanel caseRecord={caseRecord} closed />
           <CaseRetryPanel key={`retry-${id}`} caseId={id} retry={retry} />
           {isSuperAdmin() && <BenefitReviewPanel key={`benefit-${id}`} caseRecord={caseRecord} corrections={pendingCorrections} onSaved={setSaved} />}
           {isSuperAdmin() && <PreparationReviewPanel key={`preparation-${id}`} caseRecord={caseRecord} corrections={pendingCorrections} onSaved={setSaved} />}
           {/* Override and continue (same rules as the case page): a reviewer who checked the member or documents by hand,
               or fixed it in IAS, lets the case go on to the next job without leaving the review page. */}
-          {isSuperAdmin() && <CaseOverridePanel key={`override-${id}`} caseRecord={caseRecord} override={override} summary={assessmentSummary} onSaved={setSaved} heldActions={false} />}
+          {isSuperAdmin() && <CaseOverridePanel key={`override-${id}`} caseRecord={caseRecord} override={override} summary={assessmentSummary} onSaved={setSaved} heldActions={false} closed />}
           {/* Each finding is corrected in place (Edit / Mark OK / Mark wrong); here only the corrections made so far. */}
           <CaseCorrectionPanel key={`corrections-${id}`} caseId={id} corrections={corrections} />
-          <ReviewerChecklistPanel key={`requests-${id}`} caseId={id} requests={requests} />
+          <ReviewerChecklistPanel key={`requests-${id}`} caseId={id} requests={requests} addLines={!linesInFindings} pendingLines={newRequestLines} draftClosed />
         </section>
       </div>
     </div>
