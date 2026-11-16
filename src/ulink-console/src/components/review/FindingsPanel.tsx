@@ -542,7 +542,8 @@ export function FindingsPanel({
           </ul>
         </section>
       )}
-      {choiceValues.length > 0 && (
+      {/* Only while a person can edit it: read-only, "other" reads as what IAS got (owner, 2026-11-16, AYA-CL-26016756). */}
+      {canCorrect && choiceValues.length > 0 && (
         <section className="mb-4">
           <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Used for the IAS claim</h3>
           <ul className="divide-y divide-slate-900/5">
