@@ -79,7 +79,7 @@ describe('resolveDateRange (explicit ranges)', () => {
 
 describe('run', () => {
   const today = todayInIasTimezone();
-  const claim = (clNo, tpaCaseNumber) => ({ clNo, tpaCaseNumber, crtDate: '2026-06-30T14:50:18' });
+  const claim = (clNo, tpaCaseNumber) => ({ clNo, tpaCaseNumber, crtDate: '2026-06-30T14:50:18', mbrRefNo: ' 12/OUKATA(N)166006 ' });
   const iasReturns = (claims) => listApiClaims.mockResolvedValue({ success: true, payload: { claims } });
 
   beforeEach(() => {
@@ -102,7 +102,7 @@ describe('run', () => {
       caseId: 'case-1',
       job: 'api-claim-intake',
       status: 'DONE',
-      output: { clNo: '2604050015', tpaCaseNumber: 'STEVENEVERHILLC58', crtDate: '2026-06-30T14:50:18' },
+      output: { clNo: '2604050015', tpaCaseNumber: 'STEVENEVERHILLC58', crtDate: '2026-06-30T14:50:18', mbrRefNo: '12/OUKATA(N)166006' },
     }), expect.anything());
     expect(models.CaseEvent.create).toHaveBeenCalledTimes(2);
   });

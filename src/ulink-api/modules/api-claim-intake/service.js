@@ -79,7 +79,8 @@ async function createCase(claim, range) {
         job: BLOCK_NAME,
         status: 'DONE',
         input: range,
-        output: { clNo: claimNo, tpaCaseNumber, crtDate: claim.crtDate ?? null },
+        // mbrRefNo: the member check's fallback when IAS finds no member under the NRC read from the claim form.
+        output: { clNo: claimNo, tpaCaseNumber, crtDate: claim.crtDate ?? null, mbrRefNo: claim.mbrRefNo?.trim() || null },
         startedAt: now,
         finishedAt: now,
       }, { transaction });

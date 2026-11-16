@@ -81,3 +81,19 @@ it('no benefit on the member plan to choose from: no stop', async () => {
   getMemberInfo.mockResolvedValue({ ...info, payload: { ...info.payload, memberPlans: [{ ...info.payload.memberPlans[0], coverageLimits: [] }] } });
   expect((await checkCase(caseRecord([voucher(1000)]))).outcome).not.toBe('BENEFIT_REVIEW');
 });
+
+it('an API case IAS finds no member for under the form NRC is asked again with the claim list mbrRefNo, only then', async () => {
+  pickBenefit.mockResolvedValue({ pick: { benefitType: 'IP', benefitHead: 'SUR' }, confidence: 0.9 });
+  getMemberInfo.mockResolvedValueOnce({ success: false, error: 'No record found' });
+  const { outcome } = await checkCase({ ...caseRecord([voucher(1000)]), memberRefNo: '12/ABC(N)2' });
+  expect(getMemberInfo.mock.calls.map(([r]) => r.memberNrc)).toEqual(['12/ABC(N)1', '12/ABC(N)2']);
+  expect(outcome).toBe('MEMBER_VERIFIED');
+
+  getMemberInfo.mockClear(); // found under the form NRC: no second call
+  await checkCase({ ...caseRecord([voucher(1000)]), memberRefNo: '12/ABC(N)2' });
+  expect(getMemberInfo).toHaveBeenCalledTimes(1);
+
+  getMemberInfo.mockClear().mockResolvedValueOnce({ success: false, error: 'No record found' }); // no mbrRefNo: no second call
+  expect((await checkCase(caseRecord([voucher(1000)]))).result.reasonCode).toBe('MEMBER_NOT_FOUND');
+  expect(getMemberInfo).toHaveBeenCalledTimes(1);
+});

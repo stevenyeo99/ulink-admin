@@ -51,7 +51,12 @@ async function checkCase(caseRecord) {
     throw new Error(`Case ${caseRecord.id} is missing claimant_nrc_passport or accident_date/appointment_date needed for IAS lookup`);
   }
 
-  const iasResponse = await getMemberInfo({ memberNrc, meplEffDate });
+  let iasResponse = await getMemberInfo({ memberNrc, meplEffDate });
+  // An API case: IAS finds no member under the NRC read from the claim form — ask again with the claim list's
+  // mbrRefNo (owner, 2026-11-16). Only as a fallback: the NRC read from the form is always asked first.
+  if (iasResponse?.success !== true && caseRecord.memberRefNo && caseRecord.memberRefNo !== memberNrc) {
+    iasResponse = await getMemberInfo({ memberNrc: caseRecord.memberRefNo, meplEffDate });
+  }
   // The member's balance for each voucher (SYSTEM_5 member balance): only once IAS knows the member. A short voucher is
   // one more member finding (member:balance), listed after the member's own. The last check's head picks come back
   // with the case (caseRecord.memberVerifyResult), so a case re-checked every run is not picked again.
