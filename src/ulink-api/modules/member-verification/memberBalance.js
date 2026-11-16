@@ -1,4 +1,5 @@
 const { getMemberLimitBalance } = require('./iasClient');
+const { coveringPolicy } = require('./exclusions');
 const { balanceRequest, memberPlanKey, checkBalance, balanceLineText } = require('./balance');
 const { claimBenefitType } = require('./benefitEligibility');
 const { pickBenefit } = require('../ias-claim-preparation/benefitPicker');
@@ -69,6 +70,15 @@ async function pickHeads(extractedFields, memberPlansRaw, previousPicks = [], ba
   return picks;
 }
 
+// The IAS balance answer. IAS has no balance under the policy ref no for some policies (UAT AYA-CL-26016756): when the
+// first call fails, it asks again with the policy no (POCY_NO) in place of the policy ref no.
+async function readBalance(request, iasMemberInfoResponse, treatmentDate) {
+  const first = await getMemberLimitBalance(request);
+  const policyNo = coveringPolicy(iasMemberInfoResponse, treatmentDate)?.POCY_NO;
+  if (first?.success === true || !policyNo) return first;
+  return getMemberLimitBalance({ memberRefNo: request.memberRefNo, policyNo, policyEffDate: request.policyEffDate });
+}
+
 /**
  * Returns { checked, note, picks, lines, issue }. checked false (with a note) when the balance could not be read: the
  * IAS record has no member ref / policy, IAS answered success: false, or it has no entry for the member's plan — the
@@ -82,7 +92,7 @@ async function checkMemberBalance(extractedFields, iasMemberInfoResponse, previo
 
   const request = balanceRequest(iasMemberInfoResponse, extractedFields.claim?.accident_date || extractedFields.claim?.appointment_date || null);
   if (!request) return notChecked('The IAS member record has no member ref, policy number or policy start date.');
-  const balanceResponse = await getMemberLimitBalance(request);
+  const balanceResponse = await readBalance(request, iasMemberInfoResponse, extractedFields.claim?.accident_date || extractedFields.claim?.appointment_date || null);
   if (balanceResponse?.success !== true) return notChecked(`IAS did not return the balance${balanceResponse?.error ? ` (${balanceResponse.error})` : ''}.`);
 
   const planKey = memberPlanKey(iasMemberInfoResponse);
@@ -158,7 +168,7 @@ async function recheckBalance(extractedFields, iasMemberInfoResponse, memberVeri
   const notChecked = (note) => ({ checked: false, note, lines: [], issue: null, uncovered: [], hold: false });
   const request = balanceRequest(iasMemberInfoResponse, extractedFields.claim?.accident_date || extractedFields.claim?.appointment_date || null);
   if (!request) return notChecked('The IAS member record has no member ref, policy number or policy start date.');
-  const balanceResponse = await getMemberLimitBalance(request);
+  const balanceResponse = await readBalance(request, iasMemberInfoResponse, extractedFields.claim?.accident_date || extractedFields.claim?.appointment_date || null);
   if (balanceResponse?.success !== true) return notChecked(`IAS did not return the balance${balanceResponse?.error ? ` (${balanceResponse.error})` : ''}.`);
 
   const items = extractedFields.invoices?.items || [];

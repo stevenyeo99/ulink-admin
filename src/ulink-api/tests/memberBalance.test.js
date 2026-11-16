@@ -22,7 +22,7 @@ it('takes the lowest balance among every covering limit: Outpatient 0 is used up
   const { short, lines } = checkBalance(sample, plan, [voucher(1, 150000, 'OP', 'RX')]);
   expect(lines[0]).toMatchObject({ balanceLeft: 0, limit: 'T OP', enough: false });
   expect(short).toHaveLength(1);
-  expect(balanceLineText(lines[0])).toBe('Voucher 1 (OP Outpatient / RX Prescribed Medicine): voucher 150,000, balance 0 (T OP), not enough');
+  expect(balanceLineText(lines[0])).toBe('Voucher 1 (OP Outpatient / RX Prescribed Medicine): voucher 150,000, not enough. Balance: Head Level - RX 660,000; Type Level - OP 0 (not enough); Combine Head Level 8,587,070; Combine Head Level 0 (not enough); Combine Type Level 8,587,070');
 });
 
 it('adds up vouchers that share a limit: the second sees the balance left', () => {
@@ -30,8 +30,8 @@ it('adds up vouchers that share a limit: the second sees the balance left', () =
   const { lines, short } = checkBalance(sample, plan, [voucher(1, 5000000, 'IP', 'SUR'), voucher(2, 5000000, 'IP', 'SUR')]);
   expect(lines.map((l) => [l.balanceLeft, l.enough])).toEqual([[8587070, true], [3587070, false]]);
   expect(short.map((l) => l.voucher)).toEqual([2]);
-  expect(balanceLineText(lines[0])).toBe('Voucher 1 (IP Inpatient / SUR Surgeon’s Fee): voucher 5,000,000, balance 8,587,070 (CT combined), enough');
-  expect(balanceLineText(lines[1])).toBe('Voucher 2 (IP Inpatient / SUR Surgeon’s Fee): voucher 5,000,000, balance left 3,587,070 (CT combined), not enough');
+  expect(balanceLineText(lines[0])).toBe('Voucher 1 (IP Inpatient / SUR Surgeon’s Fee): voucher 5,000,000, enough. Balance: Head Level - SUR 11,000,000; Type Level - IP 9,434,070; Combine Head Level 8,587,070; Combine Type Level 8,587,070');
+  expect(balanceLineText(lines[1])).toBe('Voucher 2 (IP Inpatient / SUR Surgeon’s Fee): voucher 5,000,000, not enough. Balance: Head Level - SUR 6,000,000 left; Type Level - IP 4,434,070 left (not enough); Combine Head Level 3,587,070 left (not enough); Combine Type Level 3,587,070 left (not enough)');
 });
 
 it('compares every non-null balance field: a lifetime limit counts too', () => {
@@ -53,7 +53,7 @@ it('a voucher with no head is checked against the type limits only', () => {
   // OP with no head: T OP 0 and CT 8,587,070 — not the head limits (H RX 660,000).
   const { lines } = checkBalance(sample, plan, [voucher(1, 10000, 'OP', null)]);
   expect(lines[0]).toMatchObject({ balanceLeft: 0, limit: 'T OP', enough: false });
-  expect(balanceLineText(lines[0])).toBe('Voucher 1 (OP Outpatient): voucher 10,000, balance 0 (T OP), not enough');
+  expect(balanceLineText(lines[0])).toBe('Voucher 1 (OP Outpatient): voucher 10,000, not enough. Balance: Type Level - OP 0 (not enough); Combine Type Level 8,587,070');
 });
 
 it('null is no limit; no covering limit is enough; a voucher with no amount or type is not checked', () => {

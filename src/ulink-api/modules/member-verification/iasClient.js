@@ -51,11 +51,12 @@ async function getMemberInfo({ memberNrc, meplEffDate }) {
  *
  * Returns { success: true, payload: { results: [{ plan_id, rev_no, pocy_plan_desc, limits: [...] }] } }.
  */
-async function getMemberLimitBalance({ memberRefNo, policyRefNo, policyEffDate }) {
+// request: { memberRefNo, policyRefNo | policyNo, policyEffDate }, sent as given.
+async function getMemberLimitBalance(request) {
   if (!config.ias.baseUrl || !config.ias.getMemberLimitBalanceApi) {
     throw new Error('IAS_URL and GET_MEMBER_LIMIT_BALANCE_API must be configured');
   }
-  return postIas(config.ias.getMemberLimitBalanceApi, { memberRefNo, policyRefNo, policyEffDate }, 'member limit balance');
+  return postIas(config.ias.getMemberLimitBalanceApi, request, 'member limit balance');
 }
 
 /**

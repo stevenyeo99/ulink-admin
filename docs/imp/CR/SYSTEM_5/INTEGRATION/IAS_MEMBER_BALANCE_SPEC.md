@@ -8,6 +8,10 @@ request =
     "policyEffDate": "09012025"
 }
 
+fallback = if IAS answers success: false (for example "No record found"), ULINK sends the request again with
+"policyNo" (the policy's POCY_NO from the member info answer) in place of "policyRefNo". UAT AYA-CL-26016756 has a
+balance only under the policy no.
+
 
 response =
 

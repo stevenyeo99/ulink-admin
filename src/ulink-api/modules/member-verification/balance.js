@@ -46,6 +46,18 @@ function covers(limit, voucher) {
     && (b.benefit_head_code == null || (voucher.benefitHead != null && code(b.benefit_head_code) === code(voucher.benefitHead))));
 }
 
+// What the balance line shows for one limit (owner, 2026-11-16): "Head Level - VACC", "Type Level - OP",
+// "Combine Head Level", "Combine Type Level", with the kind of amount when it is not the yearly one ("per visit").
+const LEVELS = { H: 'Head Level', T: 'Type Level', CH: 'Combine Head Level', CT: 'Combine Type Level' };
+const LEVEL_ORDER = Object.keys(LEVELS);
+function limitLevel(limit, voucher, field) {
+  const type = limit.limit_type_code;
+  const level = type === 'H' ? `${LEVELS.H} - ${voucher.benefitHead}` : type === 'T' ? `${LEVELS.T} - ${voucher.benefitType}` : LEVELS[type] ?? type;
+  const kind = BALANCE_FIELDS[field] ?? VISIT_FIELDS[field] ?? null;
+  return kind ? `${level} ${kind}` : level;
+}
+const levelRank = (limit) => (LEVEL_ORDER.includes(limit.limit_type_code) ? LEVEL_ORDER.indexOf(limit.limit_type_code) : LEVEL_ORDER.length);
+
 function limitLabel(limit, voucher, field) {
   const code = limit.limit_type_code === 'H' ? voucher.benefitHead : limit.limit_type_code === 'T' ? voucher.benefitType : 'combined';
   const kind = BALANCE_FIELDS[field] ?? VISIT_FIELDS[field] ?? null;
@@ -85,27 +97,32 @@ function checkBalance(balanceResponse, planKey, vouchers) {
 
     const covering = limits.map((limit, index) => ({ limit, index })).filter(({ limit }) => covers(limit, voucher));
     let lowest = null;
+    const balances = []; // every covering limit's balance, H, T, CH, CT: the line shows them all
     for (const { limit, index } of covering) {
       for (const field of COMPARED_FIELDS) {
         if (limit[field] == null) continue;
         const before = field in BALANCE_FIELDS ? used.get(`${index}:${field}`) || 0 : 0;
         const left = Number(limit[field]) - before;
         if (!lowest || left < lowest.left) lowest = { left, label: limitLabel(limit, voucher, field), earlier: before > 0 };
+        balances.push({ limit, level: limitLevel(limit, voucher, field), left, earlier: before > 0, enough: left >= Number(voucher.amount) });
       }
     }
+    balances.sort((a, b) => levelRank(a.limit) - levelRank(b.limit));
     for (const { index, limit } of covering) {
       for (const field of Object.keys(BALANCE_FIELDS)) {
         if (limit[field] != null) used.set(`${index}:${field}`, (used.get(`${index}:${field}`) || 0) + Number(voucher.amount));
       }
     }
     return lowest
-      ? { ...base, balanceLeft: lowest.left, limit: lowest.label, earlier: lowest.earlier, enough: lowest.left >= Number(voucher.amount) }
+      ? { ...base, balanceLeft: lowest.left, limit: lowest.label, earlier: lowest.earlier, enough: lowest.left >= Number(voucher.amount), balances: balances.map((b) => ({ level: b.level, left: b.left, earlier: b.earlier, enough: b.enough })) }
       : { ...base, balanceLeft: null, limit: null, earlier: false, enough: true }; // no limit covers it
   });
   return { planFound: true, lines, short: lines.filter((l) => l.enough === false) };
 }
 
-// "Voucher 2 (OP Outpatient / RX Prescribed Medicine): voucher 100,000, balance left 50,000 (H RX), not enough"
+// "Voucher 2 (OP Outpatient / RX Prescribed Medicine): voucher 100,000, not enough. Balance: Head Level - RX 50,000 left
+// (not enough); Type Level - OP 1,540,000; Combine Type Level 44,000,000" — every covering limit, one per "; " (the
+// console shows each on its own line). "left": earlier vouchers of the claim share that limit.
 function balanceLineText(line) {
   const type = [line.benefitType, line.benefitTypeDesc].filter(Boolean).join(' ');
   const head = line.benefitHead == null ? null : [line.benefitHead, line.benefitHeadDesc].filter(Boolean).join(' ');
@@ -114,7 +131,8 @@ function balanceLineText(line) {
   const claimed = `${line.voucher == null ? 'claimed' : 'voucher'} ${amount(line.amount)}`;
   if (line.enough == null) return `${what}: ${line.amount == null || !Number.isFinite(Number(line.amount)) ? 'no amount read' : claimed}, balance not checked`;
   if (line.balanceLeft == null) return `${what}: ${claimed}, no limit, enough`;
-  return `${what}: ${claimed}, ${line.earlier ? 'balance left' : 'balance'} ${amount(line.balanceLeft)} (${line.limit}), ${line.enough ? 'enough' : 'not enough'}`;
+  const balances = (line.balances || []).map((b) => `${b.level} ${amount(b.left)}${b.earlier ? ' left' : ''}${b.enough ? '' : ' (not enough)'}`);
+  return `${what}: ${claimed}, ${line.enough ? 'enough' : 'not enough'}. Balance: ${balances.join('; ')}`;
 }
 
 module.exports = { balanceRequest, memberPlanKey, checkBalance, balanceLineText };

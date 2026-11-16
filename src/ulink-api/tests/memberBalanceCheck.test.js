@@ -42,7 +42,7 @@ it('picks a head per voucher, asks IAS with the member values, and raises member
   expect(balance.lines.map((l) => l.enough)).toEqual([true, false]);
   expect(balance.issue).toEqual({
     item: 'member:balance', reasonCode: 'BALANCE_NOT_ENOUGH',
-    reason: 'Balance not enough: Voucher 2 (IP Inpatient / SUR Surgeon’s Fee): voucher 5,000,000, balance left 3,587,070 (CT combined), not enough.',
+    reason: 'Balance not enough: Voucher 2 (IP Inpatient / SUR Surgeon’s Fee): voucher 5,000,000, not enough. Balance: Head Level - SUR 6,000,000 left; Type Level - IP 4,434,070 left (not enough); Combine Head Level 3,587,070 left (not enough); Combine Type Level 3,587,070 left (not enough).',
     coverKeys: ['2|IP|SUR|5000000'],
   });
 });
@@ -66,7 +66,19 @@ it('an unsure head is checked against the type the claim form names; no voucher:
   expect(unsure.lines[0]).toMatchObject({ benefitHead: null, limit: 'T OP', enough: false });
 
   const none = await checkMemberBalance(fields([], { claim: { type_of_patient: 'Outpatient', total_claim_amount: 5000 } }), opInfo);
-  expect(none.lines[0].text).toBe('Claim total (OP Outpatient): claimed 5,000, balance 0 (T OP), not enough');
+  expect(none.lines[0].text).toBe('Claim total (OP Outpatient): claimed 5,000, not enough. Balance: Type Level - OP 0 (not enough); Combine Type Level 8,587,070');
+});
+
+it('no balance under the policy ref no: asks again with the policy no (UAT AYA-CL-26016756)', async () => {
+  const withNo = { ...info, payload: { ...info.payload, policies: [{ POCY_REF_NO: 'P1', POCY_NO: '0001', EFF_DATE: '09012025' }] } };
+  getMemberLimitBalance.mockResolvedValueOnce({ success: false, error: 'No record found' });
+  const balance = await checkMemberBalance(fields([surgeon(1000)]), withNo);
+  expect(getMemberLimitBalance).toHaveBeenNthCalledWith(2, { memberRefNo: 'M1', policyNo: '0001', policyEffDate: '09012025' });
+  expect(balance.checked).toBe(true);
+  // No POCY_NO: no second call.
+  getMemberLimitBalance.mockClear().mockResolvedValueOnce({ success: false, error: 'No record found' });
+  expect(await checkMemberBalance(fields([surgeon(1000)]), info)).toMatchObject({ checked: false });
+  expect(getMemberLimitBalance).toHaveBeenCalledTimes(1);
 });
 
 it('a balance IAS cannot give is not checked and stops nothing', async () => {
