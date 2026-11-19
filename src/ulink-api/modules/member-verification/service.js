@@ -2,7 +2,7 @@ const { laneWhere, laneOrder } = require('../review-lane/marker');
 const { sequelize, Sequelize, Case, CaseEvent } = require('../../db/models');
 const config = require('../../config');
 const { getMemberInfo } = require('./iasClient');
-const { evaluate, memberRefNoIssue } = require('./checks');
+const { evaluate, memberRefNoIssue, idKey } = require('./checks');
 const { checkExclusions } = require('./exclusionFlags');
 const { checkBenefitEligibility } = require('./benefitEligibility');
 const { checkMemberBalance, balanceIssue } = require('./memberBalance');
@@ -55,7 +55,7 @@ async function checkCase(caseRecord) {
   let foundByRefNo = false;
   // An API case: IAS finds no member under the NRC read from the claim form — ask again with the claim list's
   // mbrRefNo (owner, 2026-11-16). Only as a fallback: the NRC read from the form is always asked first.
-  if (iasResponse?.success !== true && caseRecord.memberRefNo && caseRecord.memberRefNo !== memberNrc) {
+  if (iasResponse?.success !== true && caseRecord.memberRefNo && idKey(caseRecord.memberRefNo) !== idKey(memberNrc)) {
     iasResponse = await getMemberInfo({ memberNrc: caseRecord.memberRefNo, meplEffDate });
     foundByRefNo = iasResponse?.success === true;
   }
@@ -85,8 +85,11 @@ async function checkCase(caseRecord) {
   const exclusions = iasResponse?.success === true && !off.has('member:exclusion')
     ? await checkMemberExclusions(extractedFields, iasResponse, caseRecord.memberVerifyResult?.exclusions)
     : null;
-  // The member of the IAS claim (API cases: claim intake's mbrRefNo) against the form's NRC: first, as it says whose claim it is.
-  const refNo = caseRecord.memberRefNo && !off.has('member:ref_no') ? memberRefNoIssue(memberNrc, caseRecord.memberRefNo, foundByRefNo) : null;
+  // The member of the IAS claim (API cases: claim intake's mbrRefNo) against the member the form names: listed first of
+  // the extra findings (after the record's own, checks.js evaluate). Only once IAS found a member: no member is its own stop.
+  const refNo = caseRecord.memberRefNo && iasResponse?.success === true && !off.has('member:ref_no')
+    ? memberRefNoIssue({ formNrc: memberNrc, memberRefNo: caseRecord.memberRefNo, iasMemberRefNo: iasResponse.payload?.member?.MBR_REF_NO, foundByRefNo })
+    : null;
   const extra = [refNo, issue, sameDate?.issue, exclusions?.issue].filter(Boolean);
   let result = evaluate(extractedFields, iasResponse, extra, off);
   // The policy contract exclusion (SOP §6.3; SYSTEM_5 contract exclusion, owner 2026-10-27): only once the other member

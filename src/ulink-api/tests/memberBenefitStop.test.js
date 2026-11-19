@@ -90,15 +90,18 @@ it('an API case IAS finds no member for under the form NRC is asked again with t
   // The member was found by mbrRefNo, but the form's NRC differs: a person checks it (member:ref_no, UAT 17/11).
   expect(outcome).toBe('MEMBER_REVIEW_REQUIRED');
   expect(result.issues.map((i) => i.item)).toEqual(['member:ref_no']);
-  expect(result.issues[0].reason).toBe('The claim form NRC "12/ABC(N)1" is not the member of the IAS claim ("12/ABC(N)2"). IAS has no member under the form\'s NRC, so the member was checked by "12/ABC(N)2".');
+  expect(result.issues[0].reason).toBe("The claim form NRC 12/ABC(N)1 is not the member of the IAS claim (12/ABC(N)2). IAS has no member under the form's NRC, so the member was checked by 12/ABC(N)2.");
 
   getMemberInfo.mockClear(); // found under the form NRC: no second call, and a different mbrRefNo is another member's claim
   const other = await checkCase({ ...caseRecord([voucher(1000)]), memberRefNo: '12/ABC(N)2' });
   expect(getMemberInfo).toHaveBeenCalledTimes(1);
   expect(other.result.issues[0].reason).toContain("The documents may be another member's");
+  // Found under the form NRC with IAS's own reference number = mbrRefNo: the right member, however IAS writes the NRC.
+  getMemberInfo.mockResolvedValueOnce({ ...info, payload: { ...info.payload, member: { ...info.payload.member, MBR_REF_NO: '12/ABC(N)2' } } });
+  expect((await checkCase({ ...caseRecord([voucher(1000)]), memberRefNo: '12/ABC(N)2' })).outcome).toBe('MEMBER_VERIFIED');
 
-  // The same member, written with other case and spaces: no finding.
-  expect((await checkCase({ ...caseRecord([voucher(1000)]), memberRefNo: ' 12/abc (N)1' })).outcome).toBe('MEMBER_VERIFIED');
+  // The found member's own reference number, written with other case and spaces: no finding.
+  expect((await checkCase({ ...caseRecord([voucher(1000)]), memberRefNo: ' m 1' })).outcome).toBe('MEMBER_VERIFIED');
 
   getMemberInfo.mockClear().mockResolvedValueOnce({ success: false, error: 'No record found' }); // no mbrRefNo: no second call
   expect((await checkCase(caseRecord([voucher(1000)]))).result.reasonCode).toBe('MEMBER_NOT_FOUND');

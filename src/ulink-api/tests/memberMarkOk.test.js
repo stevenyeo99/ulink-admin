@@ -76,12 +76,14 @@ it('a member Mark OK reads as accepted, not as an AI mistake', () => {
 // UAT 17/11 (owner 2026-11-19): the member of the IAS claim differs from the form's NRC: a person can mark it OK.
 it('a member reference number finding is set aside by a person\'s Mark OK on the same values', () => {
   const { evaluate, memberRefNoIssue } = require('../modules/member-verification/checks');
-  const issue = memberRefNoIssue('12/ABC(N)1', '12/ABC(N)2', true);
+  const issue = memberRefNoIssue({ formNrc: '12/ABC(N)1', memberRefNo: '12/ABC(N)2', foundByRefNo: true });
   const ias = { success: true, payload: { member: {}, policies: [], memberPlans: [] } };
   expect(evaluate({}, ias, [issue]).outcome).toBe('MEMBER_REVIEW_REQUIRED');
   const corrections = [{ kind: 'verdict', item: 'member:ref_no', corrected: true, covers: issue.reason, by: 'reviewer', reason: "A child's claim: the parent's NRC is on the form." }];
   const result = evaluate({ corrections }, ias, [issue]);
   expect(result.outcome).toBe('MEMBER_VERIFIED');
   expect(result.accepted[0]).toMatchObject({ item: 'member:ref_no', by: 'reviewer' });
-  expect(memberRefNoIssue('12/ABC(N)1', null, false)).toBeNull(); // email cases: no mbrRefNo, no check
+  // The same values read with other spaces: the same finding, so the Mark OK still covers it.
+  expect(memberRefNoIssue({ formNrc: '12/ABC (N)1', memberRefNo: '12/abc(N)2', foundByRefNo: true }).reason).toBe(issue.reason);
+  expect(memberRefNoIssue({ formNrc: '12/ABC(N)1', memberRefNo: null })).toBeNull(); // email cases: no mbrRefNo, no check
 });

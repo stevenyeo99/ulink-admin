@@ -125,20 +125,24 @@ const MEMBER_ITEM_LABELS = { 'member:dob': 'Member check: date of birth', 'membe
 // Not member:bank: a bank difference is a warning that never holds the case (SYSTEM_5 bank check), so nothing to mark OK.
 const ACCEPTABLE_MEMBER_ITEMS = new Set(Object.keys(MEMBER_ITEM_LABELS).filter((item) => item !== 'member:bank'));
 
-// The IAS claim's member (mbrRefNo from the IAS claim list, API cases) against the NRC read from the claim form (UAT
-// 17/11, owner 2026-11-19): the claim in IAS may be another member's. Any difference stops the case for a person, who
-// marks it OK when it is right (a child's claim with the parent's NRC on the form, a misread). Case and spaces ignored.
-// foundByRefNo: IAS had no member under the form's NRC, so the member was looked up by mbrRefNo (service.js).
-const idKey = (value) => (value == null ? '' : String(value).toUpperCase().replace(/\s+/g, ''));
-function memberRefNoIssue(formNrc, memberRefNo, foundByRefNo) {
-  if (!idKey(formNrc) || !idKey(memberRefNo) || idKey(formNrc) === idKey(memberRefNo)) return null;
-  const differs = `The claim form NRC "${formNrc}" is not the member of the IAS claim ("${memberRefNo}").`;
+// The IAS claim's member (mbrRefNo from the IAS claim list, API cases) against the claim form (UAT 17/11, owner
+// 2026-11-19): the claim in IAS may be another member's. A difference stops the case for a person, who marks it OK when
+// it is right (a child's claim with the parent's NRC on the form, a misread). Case and spaces ignored (idKey).
+// Found by the form's NRC (service.js): that member's own reference number (MBR_REF_NO) must be mbrRefNo, so an NRC
+// written differently by IAS is no finding. Found by mbrRefNo (no member under the form's NRC): the form's NRC must be
+// mbrRefNo. The reason holds the values as compared (idKey), so a person's Mark OK stays while they are the same.
+const idKey = (value) => (norm(value) ?? '').replace(/ /g, '').toUpperCase();
+function memberRefNoIssue({ formNrc, memberRefNo, iasMemberRefNo, foundByRefNo }) {
+  const claimMember = idKey(memberRefNo);
+  if (!claimMember) return null;
+  const formMember = idKey(foundByRefNo ? formNrc : iasMemberRefNo || formNrc);
+  if (!formMember || formMember === claimMember) return null;
   return {
     item: 'member:ref_no',
     reasonCode: 'MEMBER_DETAILS_MISMATCH',
     reason: foundByRefNo
-      ? `${differs} IAS has no member under the form's NRC, so the member was checked by "${memberRefNo}".`
-      : `${differs} The documents may be another member's: the member was checked by the form's NRC.`,
+      ? `The claim form NRC ${formMember} is not the member of the IAS claim (${claimMember}). IAS has no member under the form's NRC, so the member was checked by ${claimMember}.`
+      : `IAS found member ${formMember} under the claim form NRC, but the IAS claim is for member ${claimMember}. The documents may be another member's.`,
   };
 }
 
@@ -277,4 +281,4 @@ function evaluate(extractedFields, iasResponse, extraIssues = [], off = new Map(
   return { outcome: 'MEMBER_VERIFIED', reasonCode: null, checks, reason: null, ...(accepted.length ? { accepted } : {}), ...(bankWarning ? { bankWarning } : {}), ...(bankNote ? { bankNote } : {}) };
 }
 
-module.exports = { evaluate, memberRefNoIssue, ACCEPTABLE_MEMBER_ITEMS, MEMBER_ITEM_LABELS };
+module.exports = { evaluate, memberRefNoIssue, idKey, ACCEPTABLE_MEMBER_ITEMS, MEMBER_ITEM_LABELS };
