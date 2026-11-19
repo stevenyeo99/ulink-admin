@@ -767,7 +767,7 @@ function buildEvaluatorChecklist(extractedFields) {
 function buildMandatoryFieldChecklist(extractedFields) {
   return MANDATORY_FIELDS.map(({ section, field, get, path, isMissing = (value) => value == null }) => {
     const passed = !isMissing(get(extractedFields));
-    return { code: 'MISSING_MANDATORY_FIELD', label: `${section}: ${field}`, passed, ...(path && !passed ? { editItems: [path] } : {}) };
+    return { code: 'MISSING_MANDATORY_FIELD', label: `${section}: ${field}`, section, field, passed, ...(path && !passed ? { editItems: [path] } : {}) };
   });
 }
 

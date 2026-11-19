@@ -46,3 +46,17 @@ it('the assessment (case page, team emails, IAS remark) names the removed vouche
   const lineOf = buildAssessmentSummary({ extractedFields: removed }).lines.find((l) => l.decision === 'Vouchers removed by a person');
   expect(lineOf.why).toBe('A removed voucher is not part of this claim, so it is not checked and not sent to IAS: voucher 2 (218,915 MMK, 2026-06-10) removed by ulink — Not part of this claim.');
 });
+
+// UAT 17/11 (case 2606100014): a date check marked OK must clear its issue, or the next check holds the case again.
+it('Mark OK on a failed date check clears its issue from the result', () => {
+  const { applyVerdicts } = require('../modules/ai-feedback/corrections');
+  const { evaluateDocumentChecks } = require('../modules/document-checking/checklist');
+  const fixture = require('./fixtures/documentChecking/invoice-date-inconsistent.json');
+  const f = fixture.extractedFields || fixture.input || fixture;
+  const result = evaluateDocumentChecks(f);
+  const dateIssues = result.issues.filter((i) => /date/.test(i));
+  expect(dateIssues.length).toBeGreaterThan(0);
+  const corrections = ['TREATMENT_DATE_INCONSISTENT', 'INVOICE_DATE_INCONSISTENT'].map((item) => ({ kind: 'verdict', item, corrected: true, by: 'ulink', reason: 'follow up treatment', aiValue: false }));
+  const after = applyVerdicts(result, corrections);
+  expect(after.issues.filter((i) => /date/.test(i))).toEqual([]);
+});

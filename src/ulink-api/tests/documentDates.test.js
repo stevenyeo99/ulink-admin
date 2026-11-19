@@ -52,7 +52,8 @@ it('an undated document is a review point (STP stops, a passed check waits for a
   expect(summary.reviewPoints.map((r) => r.decision)).toEqual(['Medical documents dated']);
   expect(unsurePassedPoints(documentCheckResult)).toEqual(['Medical documents without a date: prescription has no date (a.pdf - page 3).']);
   expect(documentCheckResult.issues).toEqual([]);
-  expect(correctionOptions({}, documentCheckResult).some((o) => o.item === 'DOCUMENT_DATES')).toBe(false);
+  // A person can mark it OK (UAT 17/11, owner 2026-11-19: e.g. a medical book cover), only for the pages they saw.
+  expect(correctionOptions({}, documentCheckResult).find((o) => o.item === 'DOCUMENT_DATES')).toMatchObject({ current: false, covers: 'a.pdf - page 3' });
 });
 
 it('all dated: no review point', () => {

@@ -32,6 +32,8 @@ interface Finding {
   edits?: string[];
   /** The pages the check looked at, each a link (UAT 17/11). */
   pages?: CheckPage[];
+  /** The missing mandatory fields with nothing to edit: a Mark OK each ("verdict:MISSING_MANDATORY_FIELD:<label>"). */
+  oks?: string[];
 }
 
 // A voucher's evidence ("voucher 2") covers its amount and its date: Right confirms both.
@@ -110,7 +112,8 @@ function buildFindings(checklist: ChecklistItem[], options: CorrectionOption[]):
   // Medical documents dated: a rule, not the AI's score — an undated document is an open finding (no "AI 0%" badge).
   const dates = checklist.find((c) => c.code === 'DOCUMENT_DATES');
   const datesRow: Finding[] = dates
-    ? [{ key: 'document-dates', label: dates.label, passed: (dates.confidence ?? null) === 0 ? false : true, confidence: null, why: dates.note ?? null, pages: dates.pages, page: null, correct: null, confirms: [] }]
+    // Mark OK (UAT 17/11): e.g. page 3 is the medical book cover, so it has no date.
+    ? [{ key: 'document-dates', code: 'DOCUMENT_DATES', label: dates.label, passed: (dates.confidence ?? null) === 0 ? false : true, confidence: null, why: dates.note ?? null, pages: dates.pages, page: null, correct: canCorrect('verdict:DOCUMENT_DATES'), confirms: [] }]
     : [];
   const documents: Finding[] = (checklist.find((c) => c.code === 'DOCUMENT_LIST')?.documents ?? []).map((d, i) => ({
     key: `document-${i}`, label: `Document: ${d.label}`, value: d.date, passed: true, confidence: null,
@@ -137,6 +140,8 @@ function buildFindings(checklist: ChecklistItem[], options: CorrectionOption[]):
       why: missing.length ? `Not found: ${missing.join('; ')}` : `All ${mandatory.length} found.`, page: null, correct: null, confirms: [],
       // A missing field a person can correct (an "unclear" reading the document shows elsewhere): ✎ Edit on this row.
       edits: mandatory.filter((c) => c.passed === false).flatMap((c) => c.editItems ?? []).map((item) => `value:${item}`).filter((item) => canCorrect(item)),
+      // A missing field with nothing to edit (e.g. the form has no email box): Mark OK on it (UAT 17/11).
+      oks: mandatory.filter((c) => c.passed === false && !c.editItems?.length).map((c) => `verdict:MISSING_MANDATORY_FIELD:${c.label}`).filter((item) => canCorrect(item)),
     });
   }
   return [...values, ...checks, ...datesRow, ...info, ...documents];
@@ -315,7 +320,11 @@ export function FindingsPanel({
   // A voucher removed in a draft decides every finding that compared it (as the API's undecided rule, UAT 17/11).
   const removedNow = new Set(Object.values(drafts).filter((d) => d.option.type === 'remove' && !draftProblem(d)).map((d) => d.option.item.split('.')[2]));
   const comparesRemoved = (f: Finding) => (f.edits ?? []).some((item) => removedNow.has(item.match(/^value:invoices\.items\.(\d+)\./)?.[1] ?? ''));
-  const hasDecision = (f: Finding) => Object.entries(drafts).some(([k, d]) => (k === f.key || k.startsWith(`${f.key}|`)) && !draftProblem(d)) || isConfirmed(f) || comparesRemoved(f);
+  const readyAt = (key: string) => Boolean(drafts[key]) && !draftProblem(drafts[key]);
+  // The mandatory fields: every missing one decided (an Edit or its Mark OK), as the API's undecided rule.
+  const hasDecision = (f: Finding) => (f.code === 'MISSING_MANDATORY_FIELD'
+    ? readyAt(`${f.key}|ask`) || [...(f.edits ?? []), ...(f.oks ?? [])].every((item) => readyAt(`${f.key}|${item}`))
+    : Object.entries(drafts).some(([k, d]) => (k === f.key || k.startsWith(`${f.key}|`)) && !draftProblem(d)) || isConfirmed(f) || comparesRemoved(f));
   // The vouchers a finding compared, to remove: one that is not part of the claim (its amount compared).
   const removesOf = (f: Finding) => (f.edits ?? []).map((item) => item.match(/^value:invoices\.items\.(\d+)\.subtotal$/)?.[1])
     .filter((n): n is string => n != null).map((n) => optionOf(`value:invoices.items.${n}.remove`)).filter((o): o is CorrectionOption => o != null);
@@ -354,7 +363,8 @@ export function FindingsPanel({
     const canMarkWrong = canCorrect && !asking && option?.kind === 'verdict' && option.current === true && !!option.canFail && !hasDraft(option);
     // The verdict when the check offers one, else the finding's own code (the mandatory fields line).
     // Not the reviewer's own open lines (PERSON_REQUEST): those are already a request (the lines box below).
-    const askOption: CorrectionOption | null = canAskHere && f.passed === false && f.code && f.code !== 'PERSON_REQUEST'
+    // Not the undated documents: the API's line passes (it holds as unsure), so the customer is not asked from it.
+    const askOption: CorrectionOption | null = canAskHere && f.passed === false && f.code && f.code !== 'PERSON_REQUEST' && f.code !== 'DOCUMENT_DATES'
       ? (option?.kind === 'verdict' ? option : { kind: 'verdict', item: f.code, label: f.label, type: 'verdict', current: false })
       : null;
     const othersOpen = Object.keys(drafts).some((k) => k !== askKey(f) && (k === f.key || k.startsWith(`${f.key}|`)));
@@ -399,6 +409,11 @@ export function FindingsPanel({
               <Check size={14} /> Mark OK
             </Button>
           )}
+          {canCorrect && (f.oks ?? []).map((item) => optionOf(item)!).filter((o) => o && !hasDraft(o)).map((o) => (
+            <Button key={o.item} size="sm" aria-label={`Mark OK: ${o.label}`} onClick={() => openDraft(`${f.key}|${o.kind}:${o.item}`, o, true)} className="border border-ulink-teal bg-white text-ulink-teal-dark shadow-none hover:bg-ulink-teal/10">
+              <Check size={14} /> Mark OK: {o.label.replace(/^Mandatory field .*?: /, '')}
+            </Button>
+          ))}
           {canConfirm && (
             <Button size="sm" aria-label={`Mark OK: ${f.label}`} disabled={confirming} onClick={() => setConfirmReason((r) => ({ ...r, [f.key]: CONFIRM_QUICK_REASON }))} className="border border-ulink-teal bg-white text-ulink-teal-dark shadow-none hover:bg-ulink-teal/10">
               <Check size={14} /> Mark OK
@@ -459,6 +474,7 @@ export function FindingsPanel({
         {draftForm(askKey(f), null, checkOf(f.code)?.ifFails ?? null)}
         {(f.edits ?? []).map((item) => <div key={item}>{draftForm(`${f.key}|${item}`)}</div>)}
         {removesOf(f).map((o) => <div key={o.item}>{draftForm(`${f.key}|${o.kind}:${o.item}`)}</div>)}
+        {(f.oks ?? []).map((item) => <div key={item}>{draftForm(`${f.key}|${item}`)}</div>)}
       </li>
     );
   };
@@ -517,6 +533,7 @@ export function FindingsPanel({
         {draftForm(f.key)}
         {(f.edits ?? []).map((item) => <div key={item}>{draftForm(`${f.key}|${item}`)}</div>)}
         {removesOf(f).map((o) => <div key={o.item}>{draftForm(`${f.key}|${o.kind}:${o.item}`)}</div>)}
+        {(f.oks ?? []).map((item) => <div key={item}>{draftForm(`${f.key}|${item}`)}</div>)}
       </li>
     );
   };

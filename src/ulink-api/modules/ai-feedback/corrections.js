@@ -7,7 +7,7 @@
 // extractedFields.corrections, newest per item kept. Verdicts are applied by the document check (applyVerdicts).
 // The AI's own value is kept in the correction (aiValue) — and, for API cases, in the earlier recognition step.
 
-const { ISSUES, FIELD_LABELS, isRealDate, valueAt } = require('../document-checking/checklist');
+const { ISSUES, FIELD_LABELS, isRealDate, valueAt, issueForFlag } = require('../document-checking/checklist');
 const { parseFollowUp } = require('../document-checking/labFollowUp');
 const { ACCEPTABLE_MEMBER_ITEMS, MEMBER_ITEM_LABELS } = require('../member-verification/checks');
 
@@ -64,6 +64,13 @@ function setAt(fields, path, value) {
   parent[keys.at(-1)] = value;
 }
 
+// A missing mandatory field's own verdict item: one line per field, all with the same code.
+const mandatoryItem = (line) => `MISSING_MANDATORY_FIELD:${line.label}`;
+// What a Mark OK on undated documents covers: the undated pages themselves, not the wording of the note.
+const undatedKey = (line) => (line.undated || []).flatMap((g) => g.pages || [g.label]).sort().join(' | ');
+// The verdict item of a checklist line.
+const lineItem = (line) => (line.code === 'MISSING_MANDATORY_FIELD' ? mandatoryItem(line) : line.code);
+
 const priorCorrection = (fields, item) => (fields.corrections || []).find((c) => c.item === item) || null;
 
 /**
@@ -88,9 +95,18 @@ function correctionOptions(fields = {}, documentCheckResult = null, memberVerify
     { kind: 'value', item: `invoices.items.${i}.subtotal`, label: `Voucher ${i + 1} amount`, type: 'amount', current: voucher.subtotal ?? null, signed: true },
     { kind: 'value', item: `invoices.items.${i}.date`, label: `Voucher ${i + 1} date`, type: 'date', current: voucher.date ?? null },
   ]);
-  const verdicts = (documentCheckResult?.checklist || [])
+  const lines = documentCheckResult?.checklist || [];
+  const verdicts = lines
     .filter((line) => line.code && !NOT_VERDICT_ITEMS.has(line.code) && typeof line.passed === 'boolean')
     .map((line) => ({ kind: 'verdict', item: line.code, label: line.label, type: 'verdict', current: line.passed, canFail: Boolean(ISSUES[line.code]) }));
+  // Mark OK where a finding had no action (UAT 17/11, owner 2026-11-19), so every document finding can be decided:
+  // a medical document without a date (e.g. a medical book cover), covering the pages the person saw (covers: a new
+  // undated page holds the case again); and a missing mandatory field with nothing to edit (e.g. no email on the form).
+  // Only while it is open (confidence 0): once marked OK it is sure (confidence 1) and not offered again.
+  const dates = lines.find((line) => line.code === 'DOCUMENT_DATES' && line.undated?.length && line.confidence === 0);
+  const datesOk = dates ? [{ kind: 'verdict', item: 'DOCUMENT_DATES', label: dates.label, type: 'verdict', current: false, canFail: false, covers: undatedKey(dates) }] : [];
+  const mandatoryOk = lines.filter((line) => line.code === 'MISSING_MANDATORY_FIELD' && line.passed === false && !line.editItems?.length)
+    .map((line) => ({ kind: 'verdict', item: mandatoryItem(line), label: `Mandatory field ${line.label}`, type: 'verdict', current: false, canFail: false }));
   // A member finding marked OK is no longer an issue (checks.js sets it aside): only the open ones are offered.
   const member = (memberVerifyResult?.issues || [])
     .filter((issue) => ACCEPTABLE_MEMBER_ITEMS.has(issue.item))
@@ -102,7 +118,7 @@ function correctionOptions(fields = {}, documentCheckResult = null, memberVerify
   const restore = (fields.invoices?.removed || []).map((r, k) => (
     { kind: 'value', item: `invoices.removed.${k}.restore`, label: `Put back voucher ${r.voucher + 1}`, type: 'restore', current: false, voucher: r.voucher + 1,
       note: `${voucherText(r.item)}: removed by ${r.by} — ${r.reason}` }));
-  return [...values, ...choices, ...vouchers, ...remove, ...restore, ...verdicts, ...member];
+  return [...values, ...choices, ...vouchers, ...remove, ...restore, ...verdicts, ...datesOk, ...mandatoryOk, ...member];
 }
 
 /**
@@ -166,8 +182,9 @@ function aiOriginal(fields, option, documentCheckResult) {
   // Remove / put back a voucher: the AI read it as a voucher of this claim (aiValue null: no value of its own).
   if (isVoucherMove(option.item)) return { aiValue: null, aiConfidence: null, page: fields.invoices?.items?.[Number(option.item.split('.')[2])]?.evidence?.page ?? null };
   if (option.kind === 'verdict') {
-    const line = (documentCheckResult?.checklist || []).find((l) => l.code === option.item);
-    return { aiValue: line?.passed ?? null, aiConfidence: line?.confidence ?? null, page: null };
+    const line = (documentCheckResult?.checklist || []).find((l) => lineItem(l) === option.item);
+    // Undated documents: the AI's line "passes" but holds the case (confidence 0), so what the AI said is: not OK.
+    return { aiValue: option.item === 'DOCUMENT_DATES' ? false : line?.passed ?? null, aiConfidence: line?.confidence ?? null, page: null };
   }
   const voucher = option.item.match(VOUCHER_ITEM);
   const evidence = voucher
@@ -244,12 +261,23 @@ function applyVerdicts(result, corrections = []) {
   if (!verdicts.length) return result;
   let { issues, details, flags } = result;
   const checklist = result.checklist.map((line) => {
-    const verdict = verdicts.find((v) => v.item === line.code);
-    if (!verdict) return line;
-    if (verdict.corrected) {
+    const verdict = verdicts.find((v) => v.item === lineItem(line));
+    // covers: the finding the person saw (the undated pages); a changed one is a new finding, held again.
+    if (!verdict || (verdict.covers != null && verdict.covers !== undatedKey(line))) return line;
+    if (verdict.corrected && line.code === 'MISSING_MANDATORY_FIELD') {
+      // One field of many with the same code: only its own request goes.
+      // section / field on the line (checklist.js); a line stored before them: from its label "section: field".
+      const field = line.field ?? line.label.split(': ').slice(1).join(': ');
+      const own = issueForFlag({ code: line.code, field });
+      details = details.filter((d) => d.issue !== own);
+      issues = issues.filter((i) => i !== own);
+      flags = flags.filter((f) => !(f.code === line.code && f.field === field));
+    } else if (verdict.corrected) {
       // Only this line's issue goes: customer wording another line still raises stays (e.g. the delegation letter).
       const own = new Set([ISSUES[line.code], ...details.filter((d) => d.code === line.code).map((d) => d.issue)].filter(Boolean));
-      details = details.filter((d) => d.code !== line.code && !(d.code == null && d.issue === ISSUES[line.code]));
+      // Also the copy with no code (evaluateDocumentChecks lists a date flag's issue twice): else its text stays, and the
+      // case is held again after a person marked the date check OK (UAT 17/11, case 2606100014).
+      details = details.filter((d) => d.code !== line.code && !(d.code == null && own.has(d.issue)));
       issues = issues.filter((i) => !own.has(i) || details.some((d) => d.issue === i));
       flags = flags.filter((f) => f.code !== line.code);
     } else if (ISSUES[line.code] && !issues.includes(ISSUES[line.code])) {
@@ -321,4 +349,4 @@ const MIN_REASON_LENGTH = 10;
 const REASON_TOO_SHORT = `Write a reason of at least ${MIN_REASON_LENGTH} characters.`;
 const reasonLongEnough = (reason) => typeof reason === 'string' && reason.trim().length >= MIN_REASON_LENGTH;
 
-module.exports = { isVoucherMove, VOUCHER_REMOVE, voucherText, failedCodes, askCovers, requestsReleased, MIN_REASON_LENGTH, REASON_TOO_SHORT, reasonLongEnough, NOT_VERDICT_ITEMS, WRONG_STEP_LABELS, EXCEPTION_STEPS, recheckFrom, correctionHold, correctionOptions, validateCorrection, aiOriginal, applyCorrection, applyVerdicts, correctionText };
+module.exports = { isVoucherMove, VOUCHER_REMOVE, voucherText, mandatoryItem, failedCodes, askCovers, requestsReleased, MIN_REASON_LENGTH, REASON_TOO_SHORT, reasonLongEnough, NOT_VERDICT_ITEMS, WRONG_STEP_LABELS, EXCEPTION_STEPS, recheckFrom, correctionHold, correctionOptions, validateCorrection, aiOriginal, applyCorrection, applyVerdicts, correctionText };

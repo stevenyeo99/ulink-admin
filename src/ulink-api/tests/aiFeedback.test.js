@@ -160,6 +160,18 @@ describe('POST /api/cases/:id/corrections', () => {
     expect((await send(createCorrections, { body: { items: all } })).status).toBe(400);
   });
 
+  // UAT 17/11: the vitamins found are gone with their voucher; with another change only, they are still open.
+  it('removing the voucher with the vitamins decides the vitamins finding', async () => {
+    const two = { ...fields(), invoices: { present: true, items: [{ subtotal: 100, date: '2026-08-17', voucher_type: 'lab' }, { subtotal: 200, date: '2026-08-17', voucher_type: 'other', has_vitamin_or_supplement: true }] } };
+    const result = { passed: false, issues: [], details: [], checklist: [{ code: 'VITAMIN_OR_SUPPLEMENT', label: 'Vitamins / supplements found on the vouchers', passed: false, vouchers: [2] }] };
+    Case.findByPk.mockResolvedValue(emailCase({ currentStatus: 'DOCUMENTS_REVIEW', extractedFields: two, documentCheckResult: result }));
+    const other = await send(createCorrections, { body: { items: [{ kind: 'value', item: 'invoices.items.0.date', value: '2026-08-18', reason: 'receipt shows the 18th', wrongStep: 'reading' }] } });
+    expect(other.status).toBe(400);
+    expect(other.body.error.message).toContain('Vitamins / supplements found on the vouchers');
+    const removed = await send(createCorrections, { body: { items: [{ kind: 'value', item: 'invoices.items.1.remove', reason: 'Not part of this claim.', wrongStep: 'reading' }] } });
+    expect(removed.status).toBe(200);
+  });
+
   it('email case: stores it, writes the corrected fields, sends the case back to the document check', async () => {
     Case.findByPk.mockResolvedValue(emailCase());
     const { status } = await send(createCorrection, { body });

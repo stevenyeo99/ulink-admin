@@ -1,7 +1,8 @@
 const { sequelize, Case, CaseEvent, ApiCaseStep, AiFeedback, CaseRequest } = require('../../db/models');
 const { apiCaseView } = require('../../modules/api-pipeline/caseView');
 const { OVERRIDE_TARGETS } = require('../../modules/case-override/override');
-const { correctionOptions, validateCorrection, aiOriginal, applyCorrection, correctionText, recheckFrom, reasonLongEnough, REASON_TOO_SHORT, failedCodes, isVoucherMove, VOUCHER_REMOVE } = require('../../modules/ai-feedback/corrections');
+const { correctionOptions, validateCorrection, aiOriginal, applyCorrection, correctionText, recheckFrom, reasonLongEnough, REASON_TOO_SHORT, failedCodes, isVoucherMove, VOUCHER_REMOVE, mandatoryItem } = require('../../modules/ai-feedback/corrections');
+const { oneReview } = require('../../modules/assessment-summary/nextAction');
 const { REQUEST_FROM, MAX_LINES, validateLines, openRequests } = require('../../modules/case-requests/requests');
 const { endClaim } = require('../../modules/case-claim/claim');
 const { markFor, BEING_CHECKED } = require('../../modules/review-lane/marker');
@@ -88,9 +89,17 @@ function undecided(fields, options, items, askCustomer) {
   const member = options.filter((o) => o.item.startsWith('member:') && !decided.has(o.item)).map((o) => o.label);
   if (!/DOCUMENTS_(REVIEW|UNSURE)$/.test(fields.currentStatus)) return member;
   const lines = (fields.documentCheckResult?.checklist || []).filter((l) => l.passed === false);
+  // The vitamins found (UAT 17/11): decided in the claim panel when the preview is ready (the review page's one review,
+  // FindingsPanel decidedBelow), or gone with their vouchers when all of them are removed (line.vouchers: 1-based).
+  // One review: the rule nextAction.js owns (the console's claimAtDocumentStop is the same test).
+  const vitamins = lines.find((l) => l.code === 'VITAMIN_OR_SUPPLEMENT');
+  if (vitamins && (oneReview(fields) || (vitamins.vouchers?.length && vitamins.vouchers.every((n) => removed.has(String(n - 1)))))) decided.add(vitamins.code);
+  // A line is decided by its own verdict, a revised value it compared (editItems), or Ask the customer. The missing
+  // mandatory fields: every one of them (an Edit or its own Mark OK, UAT 17/11).
+  const lineDecided = (l) => (l.editItems || []).some((item) => decided.has(item)) || decided.has(mandatoryItem(l));
   const documents = failedCodes(fields.documentCheckResult)
     .filter((code) => !decided.has(code) && !asked.has(code)
-      && !lines.filter((l) => l.code === code).some((l) => (l.editItems || []).some((item) => decided.has(item))))
+      && !(code === 'MISSING_MANDATORY_FIELD' ? lines.filter((l) => l.code === code).every(lineDecided) : lines.filter((l) => l.code === code).some(lineDecided)))
     .map((code) => lines.find((l) => l.code === code)?.label || code);
   return [...member, ...new Set(documents)];
 }
@@ -184,6 +193,8 @@ async function saveCorrections(req, res, items, { askCustomer = [], requestLines
         // A member Mark OK covers exactly the finding the person saw (member-verification/checks.js).
         // member:balance: the short vouchers it saw (coverKeys), not the balance figure.
         ...(option.item.startsWith('member:') ? { covers: option.note, ...(option.coverKeys ? { coverKeys: option.coverKeys } : {}) } : {}),
+        // The undated documents a person marked OK: only those pages (corrections.js applyVerdicts).
+        ...(option.covers ? { covers: option.covers } : {}),
       };
       extractedFields = applyCorrection(extractedFields, correction);
       saved.push({ row, correction });
