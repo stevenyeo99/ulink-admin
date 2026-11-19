@@ -108,3 +108,19 @@ it('checks an API case with the IAS case number, not the one read from the docum
     extractedFields: { claim: { insurer_case_number: 'AYA-CL-26016756', appointment_date: '2026-05-06' } },
   }));
 });
+
+// The document stop shows the claim preparation findings too (UAT 17/11, owner 2026-11-19): a preview, nothing to IAS.
+it('a held case carries the claim preparation preview; a preview that fails never stops the check', async () => {
+  getSettings.mockResolvedValue({ holdUnsureMissingDocsEmail: true, holdUnsureDiagnosis: true, aiConfidenceThreshold: 0.7 });
+  documentChecking.checkCase.mockResolvedValue(incomplete(0.3));
+  const withMember = { ...input, 'api-member-verification': { iasMemberInfoResponse: { payload: {} }, memberVerifyResult: {} } };
+  iasPreparation.checkCase.mockResolvedValue({ isStp: false, claimPrepMeta: { diagnosis: { pick: { diagCode: 'R69' }, defaulted: true }, lines: [] } });
+  const held = await documentJob.process({ caseRecord, input: withMember });
+  expect(held.nextStatus).toBe('API_DOCUMENTS_REVIEW');
+  expect(held.output.preparationPreview).toMatchObject({ review: { diagnosis: true }, isStp: false, claimPrepMeta: { diagnosis: { pick: { diagCode: 'R69' } } } });
+
+  iasPreparation.checkCase.mockRejectedValue(new Error('LM Studio is down'));
+  const failed = await documentJob.process({ caseRecord, input: withMember });
+  expect(failed.nextStatus).toBe('API_DOCUMENTS_REVIEW');
+  expect(failed.output.preparationPreview).toEqual({ error: 'LM Studio is down' });
+});

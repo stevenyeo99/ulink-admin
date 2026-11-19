@@ -17,6 +17,7 @@ const named = (code: string | null | undefined, desc: string | null | undefined)
 type Choice = { type: string; head: string };
 // A voucher's manual rejection as typed; removed: no rejection on this voucher.
 type Rejection = { amount: string; remark: string; removed: boolean };
+const DOCUMENT_STOPS = ['API_DOCUMENTS_REVIEW', 'API_DOCUMENTS_UNSURE'];
 const money = (n: number | null | undefined) => (typeof n === 'number' ? n.toLocaleString('en-US') : '—');
 
 /**
@@ -33,7 +34,11 @@ const money = (n: number | null | undefined) => (typeof n === 'number' ? n.toLoc
 // document check; claim preparation then uses the choices and does not stop again unless a corrected voucher needs one.
 export function PreparationReviewPanel({ caseRecord, corrections, onSaved }: { caseRecord: CaseDetail; corrections?: PendingCorrections; onSaved?: (message: string) => void }) {
   const queryClient = useQueryClient();
-  const meta = caseRecord.claimPrepMeta;
+  // At the document stop (UAT 17/11): the preview the document check ran. Only the choices are saved here; the case moves
+  // with the document decision above, and claim preparation then uses them.
+  const atDocumentStop = DOCUMENT_STOPS.includes(caseRecord.currentStatus);
+  const preview = caseRecord.preparationPreview;
+  const meta = atDocumentStop ? (preview?.claimPrepMeta ? { ...preview.claimPrepMeta, review: preview.review ?? undefined } : null) : caseRecord.claimPrepMeta;
   const review = meta?.review ?? { diagnosis: false, vouchers: [] };
   const flaggedRejections = review.rejections ?? [];
   const diagnosis = meta?.diagnosis;
@@ -70,7 +75,7 @@ export function PreparationReviewPanel({ caseRecord, corrections, onSaved }: { c
   });
   // A code picked from the suggestions joins the list below, chosen.
   const [picked, setPicked] = useState<DiagnosisCandidate | null>(null);
-  const fixes = corrections?.items ?? [];
+  const fixes = atDocumentStop ? [] : corrections?.items ?? [];
   const save = useMutation({
     mutationFn: async () => {
       const choice = {
@@ -85,13 +90,18 @@ export function PreparationReviewPanel({ caseRecord, corrections, onSaved }: { c
       return createCorrections(caseRecord.id, fixes);
     },
     onSuccess: () => {
-      onSaved?.(fixes.length
+      onSaved?.(atDocumentStop
+        ? 'Claim choices saved. Now decide the document findings above: the claim is prepared with your choices after that.'
+        : fixes.length
         ? 'Saved. The case is checked again from the document check on the next pipeline run, then the revision is prepared with your choices.'
         : 'Saved. The revision is prepared with your choices on the next pipeline run.');
       for (const key of ['case', 'cases', 'review-queue', 'cases-overview']) queryClient.invalidateQueries({ queryKey: [key] });
     },
   });
-  if (caseRecord.currentStatus !== 'API_PREPARATION_REVIEW' || !meta) return null;
+  if (atDocumentStop && preview?.error) {
+    return <p className="mt-4 rounded-lg border border-slate-900/10 bg-white/70 p-3 text-sm text-slate-600">The claim preparation findings are not ready: the AI or IAS did not answer. Claim preparation checks them again after the documents are decided.</p>;
+  }
+  if ((caseRecord.currentStatus !== 'API_PREPARATION_REVIEW' && !atDocumentStop) || !meta) return null;
 
   const flagged = review.vouchers;
   const sure = lines.map((_, i) => i).filter((i) => !flagged.includes(i));
@@ -173,9 +183,11 @@ export function PreparationReviewPanel({ caseRecord, corrections, onSaved }: { c
 
   return (
     <section className="mb-6 rounded-xl2 border border-slate-900/10 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
-      <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-slate-800"><Stethoscope size={15} /> Step 2 of 2: check the claim preparation</h2>
+      <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-slate-800"><Stethoscope size={15} /> {atDocumentStop ? 'Claim preparation findings' : 'Step 2 of 2: check the claim preparation'}</h2>
       <p className="mt-1 text-sm text-slate-600">
-        The documents are done. Check what the AI wasn't sure of below; the revision is prepared with your choices and only then goes to IAS.
+        {atDocumentStop
+          ? 'What the claim will be when the documents are decided. Nothing has gone to IAS. Save your choices here first, then save the document findings above: the claim is then prepared with your choices and does not stop again for them.'
+          : "The documents are done. Check what the AI wasn't sure of below; the revision is prepared with your choices and only then goes to IAS."}
       </p>
       {review.amount && (
         <p className="mt-2 text-sm text-amber-700">
@@ -365,7 +377,7 @@ export function PreparationReviewPanel({ caseRecord, corrections, onSaved }: { c
           </>
         ) : (
           <Button disabled={missing.length > 0 || !changed || !!reasonProblem(comment) || save.isPending} onClick={() => save.mutate()}>
-            {save.isPending ? 'Saving…' : 'Save and prepare the revision'}
+            {save.isPending ? 'Saving…' : atDocumentStop ? 'Save the claim choices' : 'Save and prepare the revision'}
           </Button>
         )}
       </div>

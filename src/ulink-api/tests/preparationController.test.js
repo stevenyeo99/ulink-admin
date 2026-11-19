@@ -119,3 +119,19 @@ it('recheck (one save with corrections): the choices are stored, the case stays 
   expect(CaseEvent.create.mock.calls[0][0].message).toMatch(/checked again first/);
   expect(endClaim).not.toHaveBeenCalled();
 });
+
+// The document stop (UAT 17/11, owner 2026-11-19): the document check ran claim preparation as a preview. The person's
+// choices are kept there and the case does not move: the document decision moves it, and claim preparation uses them.
+it('at the document stop: decides on the preview, keeps the choices, and leaves the case where it is', async () => {
+  Case.findByPk.mockResolvedValue({ id: 'c1', source: 'API', currentStatus: 'API_DOCUMENTS_REVIEW' });
+  const [recognition, member, prepared] = steps(null);
+  const preview = { job: 'api-document-checking', status: 'DONE', output: { preparationPreview: { claimPrepMeta: prepared.output.claimPrepMeta, review: { diagnosis: true, vouchers: [], rejections: [] } } } };
+  ApiCaseStep.findAll.mockResolvedValue([recognition, member, preview]);
+
+  expect((await send({})).body.error.message).toMatch(/^Diagnosis/);
+  const { status, body } = await send({ diagCode: 'K05.1' });
+  expect(status).toBe(200);
+  expect(body.currentStatus).toBe('API_DOCUMENTS_REVIEW');
+  expect(Case.update).toHaveBeenCalledWith({ currentStatus: 'API_DOCUMENTS_REVIEW' }, expect.objectContaining({ where: { id: 'c1', currentStatus: 'API_DOCUMENTS_REVIEW' } }));
+  expect(ApiCaseStep.create.mock.calls[0][0].output.diagnosis).toMatchObject({ diagCode: 'K05.1' });
+});

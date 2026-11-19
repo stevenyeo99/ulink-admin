@@ -14,6 +14,10 @@ const logger = require('../../utils/logger');
 // — the diagnosis code, a voucher's benefit, a voucher's manual rejection (vitamins / supplements), or several. The choices are a 'preparation-review' step; claim preparation runs again with
 // them and never asks the AI for those again. Nothing goes to IAS from here.
 const STATUS = 'API_PREPARATION_REVIEW';
+// The document stop (UAT 17/11, owner 2026-11-19): the document check ran claim preparation as a preview, and the person
+// decides the claim preparation here too, in the same visit. The choices are kept and the case does not move: the
+// person's document decision moves it, and claim preparation then uses the choices.
+const DOCUMENT_STOPS = ['API_DOCUMENTS_REVIEW', 'API_DOCUMENTS_UNSURE'];
 const NEXT = 'API_READY_FOR_CLAIM_PREPARATION';
 const BLOCK_NAME = 'preparation-review';
 
@@ -36,10 +40,12 @@ async function choosePreparation(req, res) {
   const caseRecord = await Case.findByPk(req.params.id);
   if (!caseRecord) return res.status(404).json({ error: { message: `Case ${req.params.id} not found`, status: 404 } });
   if (caseRecord.reviewPendingAt) return res.status(409).json({ error: { message: BEING_CHECKED, status: 409 } });
-  if (caseRecord.source !== 'API' || caseRecord.currentStatus !== STATUS) return bad(res, 'This case is not waiting for the claim preparation check.');
+  const atDocumentStop = DOCUMENT_STOPS.includes(caseRecord.currentStatus);
+  if (caseRecord.source !== 'API' || (caseRecord.currentStatus !== STATUS && !atDocumentStop)) return bad(res, 'This case is not waiting for the claim preparation check.');
 
   const steps = await ApiCaseStep.findAll({ where: { caseId: caseRecord.id }, order: [['createdAt', 'ASC']] });
-  const meta = latestDone(steps, 'api-claim-preparation')?.claimPrepMeta;
+  const preview = atDocumentStop ? latestDone(steps, 'api-document-checking')?.preparationPreview : null;
+  const meta = atDocumentStop ? (preview?.claimPrepMeta && { ...preview.claimPrepMeta, review: preview.review }) : latestDone(steps, 'api-claim-preparation')?.claimPrepMeta;
   const recognized = latestDone(steps, 'api-claim-recognition')?.extractedFields;
   const items = recognized?.invoices?.items || [];
   // The diagnosis's own text, before translation; a preparation from before it was kept: from the recognition.
@@ -49,7 +55,7 @@ async function choosePreparation(req, res) {
   if (!meta) return bad(res, 'The claim has not been prepared yet.');
   const review = { diagnosis: false, vouchers: [], rejections: [], ...meta.review };
   // The amount check is still open (api-claim-preparation): it is decided by a correction, saved with these choices.
-  if (review.amount && req.body?.recheck !== true) return bad(res, 'Amounts: correct the voucher amounts or mark the amount check OK, then save all and check again.');
+  if (review.amount && !atDocumentStop && req.body?.recheck !== true) return bad(res, 'Amounts: correct the voucher amounts or mark the amount check OK, then save all and check again.');
 
   // Diagnosis: a code from the table; required when the stop asked for it. The AI's pick: before any person's.
   const { diagCode } = req.body || {};
@@ -124,25 +130,26 @@ async function choosePreparation(req, res) {
     ...rejections.filter((r) => sentRejections.some((s) => s?.voucher === r.voucher))
       .map((r) => `voucher ${r.voucher + 1} manual rejection ${r.amount == null ? 'none' : `${r.amount.toLocaleString('en-US')} MMK`}`),
   ].filter(Boolean).join('; ');
-  const recheck = req.body?.recheck === true;
-  const next = recheck ? STATUS : NEXT;
+  const recheck = req.body?.recheck === true || atDocumentStop;
+  const status = caseRecord.currentStatus;
+  const next = recheck ? status : NEXT;
   const now = new Date();
   const moved = await sequelize.transaction(async (transaction) => {
     // Saved with corrections (recheck): the corrections move and mark the case, not this choice.
-    const [count] = await Case.update({ currentStatus: next, ...(recheck ? {} : markFor(caseRecord, by)) }, { where: { id: caseRecord.id, currentStatus: STATUS }, transaction });
+    const [count] = await Case.update({ currentStatus: next, ...(recheck ? {} : markFor(caseRecord, by)) }, { where: { id: caseRecord.id, currentStatus: status }, transaction });
     if (count !== 1) return false;
     await ApiCaseStep.create({
       caseId: caseRecord.id, job: BLOCK_NAME, status: 'DONE', input: null,
       output: { diagnosis, benefits, rejections, by, comment }, startedAt: now, finishedAt: now,
     }, { transaction });
     await CaseEvent.create({
-      caseId: caseRecord.id, blockName: BLOCK_NAME, prevStatus: STATUS, newStatus: next, reasonCode: 'MANUAL_PREPARATION',
-      message: `Chosen by ${by}: ${what || 'earlier choices kept'}${recheck ? ' (saved with corrections: checked again first)' : ''} — comment: ${comment}`,
+      caseId: caseRecord.id, blockName: BLOCK_NAME, prevStatus: status, newStatus: next, reasonCode: 'MANUAL_PREPARATION',
+      message: `Chosen by ${by}: ${what || 'earlier choices kept'}${atDocumentStop ? ' (at the document stop: used when the documents are decided)' : recheck ? ' (saved with corrections: checked again first)' : ''} — comment: ${comment}`,
     }, { transaction });
     return true;
   });
   if (!moved) return res.status(409).json({ error: { message: 'The case changed while you were reviewing it. Reload the page and check again.', status: 409 } });
-  if (recheck) return res.json({ caseId: caseRecord.id, currentStatus: STATUS });
+  if (recheck) return res.json({ caseId: caseRecord.id, currentStatus: status });
   await endClaim(caseRecord.id, req.user.username); // the holder decided the case — their own claim ends (SYSTEM_4 E4-22)
   reviewLane().triggerReviewLane(caseRecord.source); // SYSTEM_5 review lane: processed at once
   logger.info('Claim preparation decided by a person', { caseId: caseRecord.id, diagnosis: diagnosis?.diagCode ?? null, vouchers: sent.length, rejections: sentRejections.length, username: req.user.username });

@@ -7,6 +7,9 @@ const { correctionHold, askCovers, requestsReleased } = require('../ai-feedback/
 const { buildAssessmentSummary, assessmentSummaryText } = require('../assessment-summary/summary');
 const { caseBasics } = require('../assessment-summary/journey');
 const { openRequests, withRequests, requestHold, requestedLines, requestedDedupeKey } = require('../case-requests/requests');
+const { checkCase: prepareClaim } = require('../ias-claim-preparation/service');
+const { reviewNeeded } = require('../ias-claim-preparation/preparationReview');
+const logger = require('../../utils/logger');
 
 // api-document-checking: API case workflow job 5 (docs/imp/day1/api-case-workflow.md section 6.5).
 //
@@ -31,6 +34,29 @@ function emailFor(result) {
 function withIasCaseNumber(extractedFields, tpaCaseNumber) {
   if (!extractedFields || !tpaCaseNumber) return extractedFields;
   return { ...extractedFields, claim: { ...extractedFields.claim, insurer_case_number: tpaCaseNumber } };
+}
+
+// The claim preparation findings at the document stop (UAT 17/11, owner 2026-11-19): when this check stops the case for a
+// person, claim preparation runs as a preview, so the review page shows the document findings and the claim findings
+// (diagnosis code, voucher benefits, vitamins, STP) at one stop, and the person decides both in one visit. Nothing goes
+// to IAS: only the real claim preparation job builds the revision. The person's choices (preparation-review) are used
+// here and later, so claim preparation does not stop again for them. A preview that fails (the AI or IAS does not
+// answer) never stops the document check: the case page says so, and claim preparation asks again after the stop.
+async function preparationPreview(caseRecord, input, extractedFields, recognizedType, documentCheckResult) {
+  const member = input['api-member-verification'];
+  if (!member?.iasMemberInfoResponse) return null;
+  try {
+    const prepared = await prepareClaim({
+      id: caseRecord.id, source: caseRecord.source, claimNo: caseRecord.claimNo, createdAt: caseRecord.createdAt,
+      memberVerifyResult: member.memberVerifyResult, iasMemberInfoResponse: member.iasMemberInfoResponse,
+      documentCheckResult, extractedFields, recognizedType, preparationChoice: input['preparation-review'] || null,
+    });
+    const claimPrepMeta = prepared.claimPrepMeta;
+    return { claimPrepMeta, review: reviewNeeded(claimPrepMeta, await getSettings()), isStp: prepared.isStp ?? null };
+  } catch (error) {
+    logger.warn(`Claim preparation preview failed for case ${caseRecord.id}: ${error.message}`);
+    return { error: error.message };
+  }
 }
 
 const OUTCOME_TO_STATUS = {
@@ -80,6 +106,7 @@ async function processCase({ caseRecord, input }) {
         documentCheckResult: result,
         checkedAt: new Date().toISOString(),
         heldEmail: emailFor(result),
+        preparationPreview: await preparationPreview(caseRecord, input, extractedFields, recognizedType, result),
         email: { taskType: 'DOCUMENTS_INCOMPLETE', audience: 'internal', payload: { caseId: caseRecord.id, claimNo: caseRecord.claimNo, issues: result.issues, held: unsure, contactCustomer: !(await getSettings()).apiSendMissingDocumentsEmail, assessment }, dedupeKey: `held|${issuesKey}` },
       },
       nextStatus: 'API_DOCUMENTS_REVIEW',
@@ -110,7 +137,10 @@ async function processCase({ caseRecord, input }) {
   const unsurePassed = result.passed ? unsurePassedPoints(result) : [];
   if (requested.length || (unsurePassed.length && (await getSettings()).holdUnsureDocumentPass)) {
     return {
-      output: { outcome, documentCheckResult: result, checkedAt: new Date().toISOString(), email: null },
+      output: {
+        outcome, documentCheckResult: result, checkedAt: new Date().toISOString(), email: null,
+        preparationPreview: await preparationPreview(caseRecord, input, extractedFields, recognizedType, result),
+      },
       nextStatus: 'API_DOCUMENTS_UNSURE',
       message: requested.length
         ? `Documents complete — a person checks the requested lines first: ${requested.join('; ')}`
@@ -136,7 +166,8 @@ const job = {
   name: 'api-document-checking',
   inputStatus: 'API_READY_FOR_DOCUMENT_CHECKING',
   inputs: ['api-claim-recognition'],
-  optionalInputs: ['api-member-verification'],
+  // preparation-review: a person's claim preparation choices, for the preview at the document stop.
+  optionalInputs: ['api-member-verification', 'preparation-review'],
   batchLimit: config.documentChecking.batchLimit,
   process: processCase,
 };

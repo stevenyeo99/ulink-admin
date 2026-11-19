@@ -243,6 +243,9 @@ export interface CaseDetail {
   iasMemberInfoResponse: unknown;
   iasClaimPayload: unknown;
   claimPrepMeta: ClaimPrepMeta | null;
+  /** API cases at the document stop: claim preparation run as a preview (nothing sent to IAS), so the reviewer decides
+   *  the claim findings in the same visit (UAT 17/11). error: the preview did not run (the AI or IAS did not answer). */
+  preparationPreview?: { claimPrepMeta?: ClaimPrepMeta; review?: ClaimPrepMeta['review'] | null; isStp?: boolean | null; error?: string } | null;
   iasClaimResult: unknown;
   claimNo: string | null;
   source: Source;

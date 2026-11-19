@@ -13,6 +13,8 @@ const FIELDS = {
   documentCheckResult: ['api-document-checking', (o) => o.documentCheckResult],
   // Why the document check waits for a person before the customer request (API_DOCUMENTS_REVIEW).
   documentsHeldFor: ['api-document-checking', (o) => o.email?.payload?.held],
+  // The claim preparation preview at the document stop (API_DOCUMENTS_REVIEW / API_DOCUMENTS_UNSURE, UAT 17/11).
+  preparationPreview: ['api-document-checking', (o) => o.preparationPreview],
   iasClaimPayload: ['api-claim-preparation', (o) => o.payload],
   claimPrepMeta: ['api-claim-preparation', (o) => o.claimPrepMeta],
   isStp: ['api-claim-preparation', (o) => o.isStp],

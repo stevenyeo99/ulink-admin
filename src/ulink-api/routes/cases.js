@@ -504,7 +504,9 @@ router.post('/:id/retry', requireNotHeldByOther, retryCase);
  *       a preparation-review step and moves the case to API_READY_FOR_CLAIM_PREPARATION; claim preparation then uses
  *       them and does not ask the AI again. A comment is required and kept in the history. With recheck true (the
  *       review page's one save with corrections), the choices are stored but the case stays at API_PREPARATION_REVIEW;
- *       the corrections saved right after move it back to the document check.
+ *       the corrections saved right after move it back to the document check. Also at API_DOCUMENTS_REVIEW and
+ *       API_DOCUMENTS_UNSURE, on the claim preparation preview that the document check ran: the choices are stored and
+ *       the case stays where it is; the document decision moves it, and claim preparation then uses the choices.
  *     parameters:
  *       - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
  *     requestBody:

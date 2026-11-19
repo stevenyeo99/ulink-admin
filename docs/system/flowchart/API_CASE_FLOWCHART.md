@@ -2,7 +2,7 @@
 
 This chart shows how an API case moves from the IAS claim list to the IAS revision. It shows the pipeline jobs in order, the stops where a person decides, and the emails that go out. The source is `src/ulink-api/modules/pipeline/service.js` (`API_STEPS`) and the input and output statuses of each `api-*` job.
 
-Last checked against the code: 2026-11-05. Published copy: https://claude.ai/artifact/6wQz6VycRj8e3TgdbvYWWg (private, republish it from this file after each change).
+Last checked against the code: 2026-11-19. Published copy: https://claude.ai/artifact/6wQz6VycRj8e3TgdbvYWWg (private, republish it from this file after each change).
 
 Image: [API_CASE_FLOWCHART.svg](API_CASE_FLOWCHART.svg). A Claude Code hook renders it from the chart below after each save of this file (`.claude/hooks/render-api-flowchart.sh`, which also renders `EMAIL_CASE_FLOWCHART.md`). If you edit the file outside Claude Code, run `.claude/hooks/render-api-flowchart.sh --all`.
 
@@ -16,7 +16,7 @@ This part is for business users. The chart below has the detail.
 2. The system downloads the claim's documents from the IAS console. If there are none, the member is asked for them.
 3. The AI reads every page.
 4. The system checks the member in IAS: the member, the policy, the coverage, the bank details and the balance. If something does not match, a person checks the case.
-5. The system checks that every required document is there. If documents are missing, the member gets an email with the list. When the member replies with the documents, the system takes them as an upload and checks the case again.
+5. The system checks that every required document is there. If documents are missing, the member gets an email with the list. If a person must check the documents first, the same stop also shows the claim preparation findings (diagnosis code, voucher benefits, vitamins), so the person decides both in one visit. When the member replies with the documents, the system takes them as an upload and checks the case again.
 6. The system sends any new documents to the IAS console.
 7. The system prepares the claim and revises it in IAS. Missing documents do not stop this step: the claim waits in IAS as suspended until the documents come.
 8. A straight-through claim (STP) needs no person to approve it. For an STP claim, the system gets the settlement report from IAS and emails it to the member. Any other claim waits for a JD3 approver in IAS.
@@ -51,9 +51,9 @@ flowchart TD
   D -->|AI unsure of a voucher's head| BR{{API_BENEFIT_REVIEW}}:::stop
   BR -->|person chooses the head| D
   D -->|verified| E[5 · Document checking<br/>checklist + AI confidence]:::job
-  E -->|complete, AI unsure| DU{{API_DOCUMENTS_UNSURE}}:::stop
+  E -->|complete, AI unsure| DU{{API_DOCUMENTS_UNSURE<br/>+ claim preparation preview}}:::stop
   DU -->|person confirms| F
-  E -->|missing, AI unsure, amount mismatch<br/>with another finding, or a person corrected items| DR{{API_DOCUMENTS_REVIEW}}:::stop
+  E -->|missing, AI unsure, amount mismatch<br/>with another finding, or a person corrected items| DR{{API_DOCUMENTS_REVIEW<br/>+ claim preparation preview}}:::stop
   DR -.-> E4[/Team: check before the customer is asked/]:::mail
   DR -->|documents are missing| F
   DR -->|case-page upload| UP
@@ -102,8 +102,8 @@ flowchart TD
 | `API_BENEFIT_REVIEW` | The AI was not sure of a voucher's benefit head (switch `holdUnsureBenefit`). | Choose the head from the member's plan on the *Choose the benefit* panel, and correct a misread amount. The member check runs again and checks the balance. | None |
 | `API_BALANCE_REVIEW` | The member balance dropped while the case waited for its documents: a voucher no longer fits. | Bypass with a reason (the only action). The revision is then prepared and never goes STP. Asked again every run: goes on by itself once the balance is enough. | None |
 | `API_MEMBER_REVIEW_REQUIRED` | Member or policy details differ from IAS, or the IAS balance is not enough for a voucher (`member:balance`), or IAS already has another claim with the same incurred date (`member:same_date_claim`, any status), or the claim may fall under a member or policy exclusion in IAS (`member:exclusion`) or a policy contract clause (`member:contract_exclusion`), or the account number on the claim form has the wrong number of digits for its bank (`member:bank_number`: AYA 11, CB 16, KBZ 17, YOMA 15, UAB 15 or 16). | A bank difference is a warning only and never holds the case. Fix IAS (rechecked every run), Mark OK, correct a value, or override. A short balance or a possible exclusion in IAS: Bypass with a reason only, and the claim then never goes STP. A contract exclusion: *Does not apply* (STP stays possible) or *Let it go on* (never STP). An account number length: Mark OK when the number is right, or correct it (checked again). | None |
-| `API_DOCUMENTS_UNSURE` | The documents are complete, but the AI was unsure of an item. A reviewer's open request line also holds the case here, even when the switch is off. | Use the `Confirm and continue` button, or correct a value. | `holdUnsureDocumentPass` |
-| `API_DOCUMENTS_REVIEW` | Documents are missing and the AI was unsure, or a person corrected items. If the amount check fails together with another finding, the case always stops here. An amount check that fails alone goes on to claim preparation. | Documents are missing: continue (suspended revision). Documents are fine: override. Or correct a value, for example each voucher amount. | `holdUnsureMissingDocsEmail` (not for the amount check) |
+| `API_DOCUMENTS_UNSURE` | The documents are complete, but the AI was unsure of an item. A reviewer's open request line also holds the case here, even when the switch is off. | Use the `Confirm and continue` button, or correct a value. The stop also shows the claim preparation findings, from a preview that sends nothing to IAS. Choose the diagnosis code, the voucher benefits and the vitamin rejections here and save them first. Claim preparation then uses them and does not stop again for them. | `holdUnsureDocumentPass` |
+| `API_DOCUMENTS_REVIEW` | Documents are missing and the AI was unsure, or a person corrected items. If the amount check fails together with another finding, the case always stops here. An amount check that fails alone goes on to claim preparation. | Documents are missing: continue (suspended revision). Documents are fine: override. Or correct a value, for example each voucher amount. The stop also shows the claim preparation findings, from a preview that sends nothing to IAS. Choose the diagnosis code, the voucher benefits and the vitamin rejections here and save them first. Claim preparation then uses them and does not stop again for them. | `holdUnsureMissingDocsEmail` (not for the amount check) |
 | `API_CONSOLE_UPLOAD_FAILED` | Case-page uploads did not reach the IAS console. | Retry from the case page. | None |
 | `API_CONSOLE_BARCODE_MISSING` | Case-page uploads got no barcode in time. | Nothing to click: the barcode job checks again every run and continues when the barcode arrives. If it stays, look in the IAS console. | None |
 | `API_UPLOAD_NOT_IN_CONSOLE` | Older cases only: an upload from the case page did not appear in the IAS console in time. | Look in the IAS console. Console watch keeps checking every run. | None |
