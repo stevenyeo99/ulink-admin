@@ -32,7 +32,8 @@ async function processCase({ caseRecord, input }) {
   const chosen = await ApiCaseStep.findOne({ where: { caseId: caseRecord.id, job: 'benefit-review', status: 'DONE' }, order: [['createdAt', 'DESC']] });
   const fresh = chosen && (!last || chosen.createdAt > last.createdAt); // later runs find the choice in the last picks
   const memberVerifyResult = withChosenPicks(last?.output?.memberVerifyResult, fresh ? chosen.output.picks : null);
-  // memberRefNo: IAS's mbrRefNo from the claim list (claim intake), asked only when IAS finds no member under the NRC.
+  // memberRefNo: IAS's mbrRefNo from the claim list (claim intake): asked only when IAS finds no member under the NRC, and
+  // compared with the form's NRC (member:ref_no, UAT 17/11).
   const memberRefNo = input['api-claim-intake']?.mbrRefNo ?? null;
   const { outcome, result, iasResponse } = await checkCase({ id: caseRecord.id, source: 'API', claimNo: caseRecord.claimNo, extractedFields, recognizedType, memberVerifyResult, memberRefNo });
   const nextStatus = OUTCOME_TO_STATUS[outcome];

@@ -121,9 +121,26 @@ function checkCoverageActive(plan, treatmentDateYYYYMMDD) {
 // member:balance / member:exclusion (SYSTEM_5): the only action on them is this mark OK — the review page's "Bypass", with
 // a reason. member:contract_exclusion (SYSTEM_5 contract exclusion): marked as not applying (wrongStep check) or let go on
 // as an exception — the correction's wrongStep is kept on the accepted finding, for the STP rule.
-const MEMBER_ITEM_LABELS = { 'member:dob': 'Member check: date of birth', 'member:bank': 'Member check: bank details', 'member:bank_number': 'Member check: bank account number', 'member:policy': 'Member check: policy number', 'member:balance': 'Member check: balance', 'member:exclusion': 'Member check: exclusion in IAS', 'member:contract_exclusion': 'Member check: policy contract exclusion', 'member:same_date_claim': 'Member check: claim with the same incurred date' };
+const MEMBER_ITEM_LABELS = { 'member:dob': 'Member check: date of birth', 'member:bank': 'Member check: bank details', 'member:bank_number': 'Member check: bank account number', 'member:policy': 'Member check: policy number', 'member:balance': 'Member check: balance', 'member:exclusion': 'Member check: exclusion in IAS', 'member:contract_exclusion': 'Member check: policy contract exclusion', 'member:same_date_claim': 'Member check: claim with the same incurred date', 'member:ref_no': 'Member check: member of the IAS claim' };
 // Not member:bank: a bank difference is a warning that never holds the case (SYSTEM_5 bank check), so nothing to mark OK.
 const ACCEPTABLE_MEMBER_ITEMS = new Set(Object.keys(MEMBER_ITEM_LABELS).filter((item) => item !== 'member:bank'));
+
+// The IAS claim's member (mbrRefNo from the IAS claim list, API cases) against the NRC read from the claim form (UAT
+// 17/11, owner 2026-11-19): the claim in IAS may be another member's. Any difference stops the case for a person, who
+// marks it OK when it is right (a child's claim with the parent's NRC on the form, a misread). Case and spaces ignored.
+// foundByRefNo: IAS had no member under the form's NRC, so the member was looked up by mbrRefNo (service.js).
+const idKey = (value) => (value == null ? '' : String(value).toUpperCase().replace(/\s+/g, ''));
+function memberRefNoIssue(formNrc, memberRefNo, foundByRefNo) {
+  if (!idKey(formNrc) || !idKey(memberRefNo) || idKey(formNrc) === idKey(memberRefNo)) return null;
+  const differs = `The claim form NRC "${formNrc}" is not the member of the IAS claim ("${memberRefNo}").`;
+  return {
+    item: 'member:ref_no',
+    reasonCode: 'MEMBER_DETAILS_MISMATCH',
+    reason: foundByRefNo
+      ? `${differs} IAS has no member under the form's NRC, so the member was checked by "${memberRefNo}".`
+      : `${differs} The documents may be another member's: the member was checked by the form's NRC.`,
+  };
+}
 
 // extraIssues: findings from outside this record's fields, listed after its own (member-verification/memberBalance.js's
 // member:balance) — set aside by a person's mark OK the same way.
@@ -260,4 +277,4 @@ function evaluate(extractedFields, iasResponse, extraIssues = [], off = new Map(
   return { outcome: 'MEMBER_VERIFIED', reasonCode: null, checks, reason: null, ...(accepted.length ? { accepted } : {}), ...(bankWarning ? { bankWarning } : {}), ...(bankNote ? { bankNote } : {}) };
 }
 
-module.exports = { evaluate, ACCEPTABLE_MEMBER_ITEMS, MEMBER_ITEM_LABELS };
+module.exports = { evaluate, memberRefNoIssue, ACCEPTABLE_MEMBER_ITEMS, MEMBER_ITEM_LABELS };

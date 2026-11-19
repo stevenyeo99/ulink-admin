@@ -85,13 +85,20 @@ it('no benefit on the member plan to choose from: no stop', async () => {
 it('an API case IAS finds no member for under the form NRC is asked again with the claim list mbrRefNo, only then', async () => {
   pickBenefit.mockResolvedValue({ pick: { benefitType: 'IP', benefitHead: 'SUR' }, confidence: 0.9 });
   getMemberInfo.mockResolvedValueOnce({ success: false, error: 'No record found' });
-  const { outcome } = await checkCase({ ...caseRecord([voucher(1000)]), memberRefNo: '12/ABC(N)2' });
+  const { outcome, result } = await checkCase({ ...caseRecord([voucher(1000)]), memberRefNo: '12/ABC(N)2' });
   expect(getMemberInfo.mock.calls.map(([r]) => r.memberNrc)).toEqual(['12/ABC(N)1', '12/ABC(N)2']);
-  expect(outcome).toBe('MEMBER_VERIFIED');
+  // The member was found by mbrRefNo, but the form's NRC differs: a person checks it (member:ref_no, UAT 17/11).
+  expect(outcome).toBe('MEMBER_REVIEW_REQUIRED');
+  expect(result.issues.map((i) => i.item)).toEqual(['member:ref_no']);
+  expect(result.issues[0].reason).toBe('The claim form NRC "12/ABC(N)1" is not the member of the IAS claim ("12/ABC(N)2"). IAS has no member under the form\'s NRC, so the member was checked by "12/ABC(N)2".');
 
-  getMemberInfo.mockClear(); // found under the form NRC: no second call
-  await checkCase({ ...caseRecord([voucher(1000)]), memberRefNo: '12/ABC(N)2' });
+  getMemberInfo.mockClear(); // found under the form NRC: no second call, and a different mbrRefNo is another member's claim
+  const other = await checkCase({ ...caseRecord([voucher(1000)]), memberRefNo: '12/ABC(N)2' });
   expect(getMemberInfo).toHaveBeenCalledTimes(1);
+  expect(other.result.issues[0].reason).toContain("The documents may be another member's");
+
+  // The same member, written with other case and spaces: no finding.
+  expect((await checkCase({ ...caseRecord([voucher(1000)]), memberRefNo: ' 12/abc (N)1' })).outcome).toBe('MEMBER_VERIFIED');
 
   getMemberInfo.mockClear().mockResolvedValueOnce({ success: false, error: 'No record found' }); // no mbrRefNo: no second call
   expect((await checkCase(caseRecord([voucher(1000)]))).result.reasonCode).toBe('MEMBER_NOT_FOUND');
