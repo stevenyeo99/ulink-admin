@@ -1,5 +1,6 @@
 const { ISSUES, FIELD_LABELS, JUDGMENT_CHECKLIST_LABELS, issueForFlag } = require('../document-checking/checklist');
 const { MEMBER_ITEM_LABELS, ACCEPTABLE_MEMBER_ITEMS } = require('../member-verification/checks');
+const { RESULT_LABELS } = require('../document-checking/resultLabels');
 const { NOT_VERDICT_ITEMS } = require('../ai-feedback/corrections');
 
 // The AI checklist page (SYSTEM_5 phase A, docs/imp/CR/SYSTEM_5/PRD/SYSTEM_5_PRD.md): every check the member check and
@@ -84,7 +85,7 @@ const CHECKS = [
   { code: 'INVOICE_NAME_INCONSISTENT', section: 'vouchers', question: 'Is the claimant the patient on each voucher?', label: D('INVOICE_NAME_INCONSISTENT'), effect: 'stops', usesAi: true,
     does: 'Compares the claimant name on the claim form with the patient name on each voucher. Vouchers with no name are left out. Not compared on a claim for a child.',
     fields: ['claimant.claimant_name'] },
-  { code: 'INVOICE_DATE_INCONSISTENT', section: 'vouchers', question: 'Does each voucher date match the medical record date?', label: 'Invoice date(s) are consistent with medical record date', effect: 'stops',
+  { code: 'INVOICE_DATE_INCONSISTENT', section: 'vouchers', question: 'Does each voucher date match the medical record date?', label: RESULT_LABELS.INVOICE_DATE_INCONSISTENT.pass, effect: 'stops',
     does: "Each voucher date must match the medical record date. One exception: a lab or imaging voucher (no consultation or doctor fee) dated after the visit passes when the doctor's note gives a follow-up period, such as \"1 week\", and the voucher is inside it. Without a period, or when the AI is unsure, a person decides.",
     fields: ['voucher.date', 'medical_record.date', 'medical_record.follow_up'] },
 
@@ -95,7 +96,7 @@ const CHECKS = [
     does: 'The medical record must be clear enough to read.' },
   { code: 'EYE_TEST_SLIP_UNDATED', section: 'medicalRecord', question: 'Is the eye test slip dated?', label: ISSUES.EYE_TEST_SLIP_UNDATED, effect: 'stops',
     does: 'If there is an eye test slip, it must show the treatment date. Shown only on claims with an eye test slip.' },
-  { code: 'TREATMENT_DATE_INCONSISTENT', section: 'medicalRecord', question: 'Does the treatment date match the medical record?', label: 'Treatment date is consistent with medical record date', effect: 'stops',
+  { code: 'TREATMENT_DATE_INCONSISTENT', section: 'medicalRecord', question: 'Does the treatment date match the medical record?', label: RESULT_LABELS.TREATMENT_DATE_INCONSISTENT.pass, effect: 'stops',
     does: "The claim date (accident date, or the visit date) must match the medical record date. It also passes when it is the date of a lab or imaging voucher that the doctor's follow-up period explains.",
     fields: ['claim.accident_date', 'claim.appointment_date', 'medical_record.date'] },
   { code: 'PATIENT_NAME_INCONSISTENT', section: 'medicalRecord', question: 'Is the claimant the patient on the medical record?', label: D('PATIENT_NAME_INCONSISTENT'), effect: 'stops', usesAi: true,
@@ -123,7 +124,7 @@ const CHECKS = [
     does: 'Whether each medical document found has a date.' },
   { code: 'BENEFIT_TYPE', section: 'aiRead', question: 'Which benefit type do the documents show?', label: 'Benefit type', effect: 'info', usesAi: true,
     does: 'The benefit type that the documents show, next to the one on the claim form.' },
-  { code: 'VITAMIN_OR_SUPPLEMENT', section: 'aiRead', question: 'Are there vitamins or supplements on the vouchers?', label: 'No vitamins / supplements on the vouchers', effect: 'info', usesAi: true,
+  { code: 'VITAMIN_OR_SUPPLEMENT', section: 'aiRead', question: 'Are there vitamins or supplements on the vouchers?', label: RESULT_LABELS.VITAMIN_OR_SUPPLEMENT.pass, effect: 'info', usesAi: true,
     does: 'Lists the vitamin and supplement lines on each voucher.',
     onFail: 'If the System settings switch for vitamins is on, the claim does not go STP: a person approves it. The case goes on.' },
   { code: 'VALUE_FORMAT', section: 'aiRead', question: 'Do the values read look valid?', label: 'Values read look valid', effect: 'info',

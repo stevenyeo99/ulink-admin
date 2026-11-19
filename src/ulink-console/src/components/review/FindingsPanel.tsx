@@ -162,6 +162,7 @@ export function FindingsPanel({
   onPendingChange,
   onRequestLinesChange,
   saveBelow = false,
+  claimBelow = false,
   onSaved,
   status = '',
   requestsAllowed = false,
@@ -180,6 +181,9 @@ export function FindingsPanel({
   onRequestLinesChange?: (lines: string[]) => void;
   /** The changes are saved with the claim preparation below, in one save: no save button here. */
   saveBelow?: boolean;
+  /** The claim preparation panel below is part of this review (the document stop, UAT 17/11): its save sends the new
+   * request lines too (the lines box stays here), and the vitamins are decided there (their row is information here). */
+  claimBelow?: boolean;
   /** Mark OK on an unsure value: the reviewer checked it against the document (SYSTEM_4 E5b), with a reason; null when they can't. */
   onConfirm: ((items: string[], reason: string) => Promise<boolean>) | null;
   /** A confirmation is being saved — the buttons wait (no double count). */
@@ -254,11 +258,6 @@ export function FindingsPanel({
       for (const key of ['case', 'cases', 'review-queue', 'reviewed', 'cases-overview', 'approvals']) queryClient.invalidateQueries({ queryKey: [key] });
     },
   });
-  useEffect(() => {
-    onPendingChange?.({ items: corrections.map(draftItem), notReady, lines: corrections.map(draftLine) });
-    // pending and notReady are derived from drafts.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drafts, onPendingChange]);
   // Corrections no longer allowed (the case moved, someone else decided it): open changes can't be saved.
   useEffect(() => {
     if (!canCorrect) {
@@ -282,11 +281,15 @@ export function FindingsPanel({
   // checks still read "Turned off" in the case page assessment. Kept out of Passed.
   const notChecked = findings.filter((f) => f.passed === null);
   const isUnsure = (f: Finding) => f.passed === true && f.confidence != null && f.confidence <= threshold;
-  const open = findings.filter((f) => f.passed === false || isUnsure(f));
+  // Decided in the claim panel below (UAT 17/11): the vitamins found are its manual rejection. Information here, not
+  // counted. Only found (failed): a pass, or the AI unsure, has no rejection there (as nextAction.js decidedInClaim).
+  const decidedBelow = (f: Finding) => claimBelow && f.code === 'VITAMIN_OR_SUPPLEMENT' && f.passed === false;
+  const below = findings.filter(decidedBelow);
+  const open = findings.filter((f) => (f.passed === false || isUnsure(f)) && !decidedBelow(f));
   const unsure = documentsOverridden ? [] : open.filter(isUnsure);
   const failed = documentsOverridden ? [] : open.filter((f) => f.passed === false);
   const handled = documentsOverridden ? open : [];
-  const passed = findings.filter((f) => !open.includes(f) && !notChecked.includes(f));
+  const passed = findings.filter((f) => !open.includes(f) && !notChecked.includes(f) && !below.includes(f));
   const decisions = lines.filter((l) => l.area === 'member' || l.area === 'claim');
   // Values claim preparation reads that are picked from a list (voucher type, type of patient): shown so a wrong one can
   // be corrected before the claim goes to IAS.
@@ -468,6 +471,11 @@ export function FindingsPanel({
           ) : (
             f.page && <span className="text-slate-400">{f.page} (file not on this case)</span>
           )}
+          {decidedBelow(f) && (
+            <button onClick={() => document.getElementById('claim-preparation')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="font-medium text-ulink-orange-dark hover:underline">
+              Decide the rejection in claim preparation below
+            </button>
+          )}
           {/* A passed line needs no Mark OK: every Mark OK is on an open finding, with a reason (SYSTEM_5 review actions). */}
           {isConfirmed(f) && <span className="text-ulink-teal-dark">✓ Marked OK by you</span>}
           {canCorrect && optionOf(f.correct) && !hasDraft(optionOf(f.correct)!) && (() => {
@@ -508,6 +516,12 @@ export function FindingsPanel({
   const firstOpen = toDecide.find((f) => !hasDecision(f));
   const allDecided = !decideAll || decidedCount >= needDecision;
   const changes = pending.length + newLines.length;
+  // The decisions not saved yet, for a save below (the claim panel): after allDecided, which it passes up.
+  useEffect(() => {
+    onPendingChange?.({ items: corrections.map(draftItem), notReady, lines: pending.map(draftLine), asks: asks.map(askItem), allDecided });
+    // pending, notReady and allDecided are derived from drafts (and the case).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drafts, allDecided, onPendingChange]);
   const section = (title: string, items: Finding[], tone: string) =>
     items.length > 0 && (
       <section className="mb-4">
@@ -527,6 +541,7 @@ export function FindingsPanel({
       )}
       {section('Unsure', unsure, 'text-amber-700')}
       {section('Failed', failed, 'text-red-700')}
+      {section('Decided in claim preparation below', below, 'text-slate-600')}
       {section('Handled by a person (override)', handled, 'text-slate-500')}
       {passed.length > 0 && (
         <section className="mb-4">
@@ -621,7 +636,7 @@ export function FindingsPanel({
           </ul>
         </details>
       )}
-      {canCorrect && requestsAllowed && !saveBelow && (
+      {canCorrect && requestsAllowed && (!saveBelow || claimBelow) && (
         // The reviewer's own request lines (SYSTEM_5 review actions 4.10): what the customer must send or fix that the
         // checklist does not cover. Saved with the decisions; they go out with the request, never in an automatic email.
         <section className="mb-4 rounded-lg border border-slate-900/10 bg-white/70 p-3">

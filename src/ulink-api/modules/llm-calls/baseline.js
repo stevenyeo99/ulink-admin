@@ -1,6 +1,7 @@
 const { CASE_STATUSES } = require('../case-status/catalog');
 const { OVERRIDE_AREAS } = require('../case-override/override');
 const { buildAssessmentSummary } = require('../assessment-summary/summary');
+const { RESULT_LABELS } = require('../document-checking/resultLabels');
 
 // The baseline (SYSTEM_4 D3): how the AI's checks come out today, from the results already stored on the cases — the
 // "before" numbers to compare with after a prompt change (E3) or once reviewer corrections exist (E4-15). Pure: the
@@ -37,7 +38,7 @@ function baselineFrom(cases, threshold) {
       if (item.passed === null || item.passed === undefined) continue;
       if (['DOCUMENT_LIST', 'BENEFIT_TYPE', 'DOCUMENT_DATES'].includes(item.code)) continue; // information only, not checks
       const key = item.code === 'MISSING_MANDATORY_FIELD' ? 'MISSING_MANDATORY_FIELD' : item.code;
-      const entry = items.get(key) || { label: key === 'MISSING_MANDATORY_FIELD' ? 'Mandatory fields (each)' : item.label || key, evaluated: 0, failed: 0, scores: [] };
+      const entry = items.get(key) || { label: key === 'MISSING_MANDATORY_FIELD' ? 'Mandatory fields (each)' : RESULT_LABELS[key]?.pass ?? (item.label || key), evaluated: 0, failed: 0, scores: [] };
       entry.evaluated += 1;
       if (item.passed === false) entry.failed += 1;
       if (typeof item.confidence === 'number') entry.scores.push(item.confidence);

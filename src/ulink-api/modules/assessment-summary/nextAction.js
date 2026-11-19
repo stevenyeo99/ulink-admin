@@ -12,8 +12,9 @@ const TEAM = 'Claims team';
 const { CLAIM_EVENTS } = require('../case-claim/events');
 
 // The open review points, as "<decision> (<confidence>%)", at most three.
-function openPoints(summary) {
-  const open = (summary?.lines || []).filter((l) => l.review && !l.overridden);
+// skip: lines decided elsewhere (the vitamins in the claim panel, at one review).
+function openPoints(summary, skip = () => false) {
+  const open = (summary?.lines || []).filter((l) => l.review && !l.overridden && !skip(l));
   const named = open.slice(0, 3).map((l) => (l.confidence == null ? l.decision : `${l.decision} (${Math.round(Number(l.confidence) * 100)}%)`));
   return named.length ? `${named.join('; ')}${open.length > 3 ? ` and ${open.length - 3} more` : ''}` : null;
 }
@@ -31,10 +32,21 @@ const act = (text, who = TEAM) => ({ text, who, act: true });
 // API cases stop twice for a person: the documents (step 1), then the claim preparation (step 2). Email cases have no step 2.
 const step1 = (status) => (status.startsWith('API_') ? 'Step 1 of 2: documents. ' : '');
 const wait = (text, who = null) => ({ text, who, act: false });
+// One review at the document stop (UAT 17/11, owner 2026-11-19): the claim preparation preview is ready, so the review
+// page shows it under the document findings, with one save for both. Not "Step 1 of 2" then.
+// API cases only: the email flow has no preview. The console's claimAtDocumentStop (ReviewWorkspacePage) is the same test.
+const oneReview = (fields) => String(fields.currentStatus).startsWith('API_')
+  && Boolean(fields.preparationPreview?.claimPrepMeta) && !fields.preparationPreview?.error;
+const ONE_REVIEW = 'Documents and claim preparation: ';
+// At one review the vitamins found are decided in the claim panel (its manual rejection), not as a document finding. The
+// review page moves the same line (FindingsPanel decidedBelow). summary.js puts the code on the "Found" line only.
+const decidedInClaim = (fields) => (l) => oneReview(fields) && l.code === 'VITAMIN_OR_SUPPLEMENT';
+// The start of the document stop's text: one review, or step 1 of 2.
+const stepText = (fields) => (oneReview(fields) ? ONE_REVIEW : step1(fields.currentStatus));
 
 function nextAction(fields = {}, summary = null, events = []) {
   const status = fields.currentStatus;
-  const points = openPoints(summary);
+  const points = openPoints(summary, decidedInClaim(fields));
   const missing = missingList(fields);
   const said = lastMessage(fields, events);
   const stpReasons = (fields.claimPrepMeta?.stp?.reasons || []).join(' ');
@@ -47,17 +59,23 @@ function nextAction(fields = {}, summary = null, events = []) {
     case 'API_DOCUMENTS_REVIEW': {
       // One line that points to the findings (owner, 2026-11-16): each is decided on the review page, where the findings
       // list them — not repeated here.
-      const open = (summary?.lines || []).filter((l) => l.review && !l.overridden).length;
+      // One review: the vitamins are decided in the claim panel, so they are not a finding to decide (the review page's count).
+      const open = (summary?.lines || []).filter((l) => l.review && !l.overridden && !decidedInClaim(fields)(l)).length;
+      if (open && oneReview(fields)) return act(`${ONE_REVIEW}${open} finding${open === 1 ? ' needs' : 's need'} your decision. Decide each one and check the claim preparation below it on the review page, then Save all and check again.`);
       if (open) return act(`${step1(status)}${open} finding${open === 1 ? ' needs' : 's need'} your decision. Decide each one on the review page (Ask the customer, Mark OK or Revise), then Review and save.`);
       // No open finding (e.g. a person corrected items): continue or override, on the case page.
       const heldFor = (fields.documentsHeldFor || []).join('; ');
       const why = heldFor ? `The case waits for you (${heldFor})` : 'The AI is unsure a document is missing';
       const ulinkEmails = status === 'API_DOCUMENTS_REVIEW' && !lastReadSettings().apiSendMissingDocumentsEmail;
       const go = ulinkEmails ? 'continue (ULINK emails the customer)' : 'send the request to the customer';
-      return act(`${step1(status)}${why}. Missing: ${missing || 'see the review points'}. Check the documents: if they are missing, ${go}; if they are fine, override.`);
+      return act(`${stepText(fields)}${why}. Missing: ${missing || 'see the review points'}. Check the documents: if they are missing, ${go}; if they are fine, override.`);
     }
     case 'DOCUMENTS_UNSURE':
     case 'API_DOCUMENTS_UNSURE':
+      // Mark OK saves at once here, so the claim choices are saved alone, then Confirm and continue moves the case.
+      if (oneReview(fields)) {
+        return act(`${ONE_REVIEW}the documents passed, but the AI was unsure about: ${points || 'see the review points'}. Check them and the claim preparation below them on the review page: save your claim choices, then Confirm and continue.`);
+      }
       return act(`${step1(status)}The documents passed, but the AI was unsure about: ${points || 'see the review points'}. Check them against the documents, then Confirm and continue.`);
     case 'API_PREPARATION_REVIEW': {
       // Step 2 of 2 (owner, 2026-10-20): after the documents, so a reviewer who just fixed the checklist sees why it stopped again.

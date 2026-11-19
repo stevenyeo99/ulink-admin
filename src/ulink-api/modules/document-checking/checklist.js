@@ -1,6 +1,7 @@
 const { todayInIasTimezone } = require('../shared/iasDates');
 const { lastReadSettings } = require('../settings/settings');
 const { followUpVerdicts, labVouchersOffDate } = require('./labFollowUp');
+const { RESULT_LABELS, resultLabel } = require('./resultLabels');
 
 /**
  * Canonical customer-facing issue wording + the evaluator logic that decides which apply
@@ -873,11 +874,10 @@ function buildDateConsistencyChecklist(extractedFields) {
 
   const treatmentPassed = !dateFlags.some((flag) => flag.code === 'TREATMENT_DATE_INCONSISTENT');
   const invoicePassed = !dateFlags.some((flag) => flag.code === 'INVOICE_DATE_INCONSISTENT');
-  // The label follows the result (UAT 17/11, owner 2026-11-19): a failed check said "consistent" and users read it as a pass.
   return [
     {
       code: 'TREATMENT_DATE_INCONSISTENT',
-      label: `Treatment date is ${treatmentPassed ? '' : 'in'}consistent with medical record date`,
+      label: resultLabel('TREATMENT_DATE_INCONSISTENT', treatmentPassed),
       passed: treatmentPassed,
       confidence: treatmentAgreement?.confidence ?? null,
       note: treatmentAgreement?.note ?? null,
@@ -886,7 +886,7 @@ function buildDateConsistencyChecklist(extractedFields) {
     },
     {
       code: 'INVOICE_DATE_INCONSISTENT',
-      label: `Invoice date(s) are ${invoicePassed ? '' : 'in'}consistent with medical record date`,
+      label: resultLabel('INVOICE_DATE_INCONSISTENT', invoicePassed),
       passed: invoicePassed,
       confidence: worstInvoiceAgreement?.confidence ?? null,
       note: worstInvoiceAgreement?.note ?? null,
@@ -980,10 +980,11 @@ function vitaminCheck(fields) {
   const rejections = vouchers.map((n) => ({ voucher: n, ...vitaminRejection(items[n - 1]) }));
   const all = amountsRead(vouchers.flatMap((n) => vitaminLines(items[n - 1])));
 
+  const passed = vouchers.length ? false : unsureVouchers.length ? null : true;
   return {
     code: 'VITAMIN_OR_SUPPLEMENT',
-    label: 'No vitamins / supplements on the vouchers',
-    passed: vouchers.length ? false : unsureVouchers.length ? null : true,
+    label: resultLabel('VITAMIN_OR_SUPPLEMENT', passed),
+    passed,
     vouchers,
     unsureVouchers,
     rejections,
@@ -1413,7 +1414,7 @@ function fieldsReadCheck(fields, checklist = []) {
 // The pages each check looked at (UAT 17/11, owner 2026-11-19): the review page links each one ("Claimed amount
 // Page#2"), so the reviewer sees where a finding comes from. field: a key value's page (the AI's field_evidence);
 // vouchers: each voucher's page (the filter picks which); kinds: the pages of those kinds in the AI's page list. Built
-// when the case is read (withPages), so cases checked before this show them too. A new check: one line here.
+// when the case is read (forCasePage), so cases checked before this show them too. A new check: one line here.
 const field = (path) => ({ field: path });
 const VOUCHERS = { vouchers: () => true };
 const CLAIM_FORM = { kinds: ['claim_form'], what: 'Claim form' };
@@ -1477,16 +1478,18 @@ function pagesFor(item, fields) {
   return pages.filter((p) => !seen.has(`${p.what}|${p.page}`) && seen.add(`${p.what}|${p.page}`));
 }
 
-// The stored check result with each item's pages, for the case and review pages (nothing is written back).
-function withPages(documentCheckResult, extractedFields) {
-  if (!documentCheckResult?.checklist || !extractedFields) return documentCheckResult;
+// The stored check result as the case and review pages show it (nothing is written back): each item's pages, and the
+// label that follows its result (resultLabels.js) on a check stored before the label did.
+function forCasePage(documentCheckResult, extractedFields) {
+  if (!documentCheckResult?.checklist) return documentCheckResult;
   return {
     ...documentCheckResult,
     checklist: documentCheckResult.checklist.map((item) => {
-      const pages = pagesFor(item, extractedFields);
-      return pages.length ? { ...item, pages } : item;
+      const labelled = RESULT_LABELS[item.code] ? { ...item, label: resultLabel(item.code, item.passed, item.label) } : item;
+      const pages = extractedFields ? pagesFor(item, extractedFields) : [];
+      return pages.length ? { ...labelled, pages } : labelled;
     }),
   };
 }
 
-module.exports = { ISSUES, FIELD_LABELS, JUDGMENT_CHECKLIST_LABELS, issueForFlag, evaluateDocumentChecks, evaluateJudgmentDependentChecks, vitaminCheck, vitaminRejection, documentListCheck, benefitTypeCheck, documentDatesCheck, withEditItems, withPages, formatCheck, fieldsReadCheck, isRealDate, valueAt };
+module.exports = { ISSUES, FIELD_LABELS, JUDGMENT_CHECKLIST_LABELS, issueForFlag, evaluateDocumentChecks, evaluateJudgmentDependentChecks, vitaminCheck, vitaminRejection, documentListCheck, benefitTypeCheck, documentDatesCheck, withEditItems, forCasePage, formatCheck, fieldsReadCheck, isRealDate, valueAt };

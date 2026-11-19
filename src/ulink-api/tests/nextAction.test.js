@@ -85,3 +85,28 @@ it('preparation review: says the documents are done, or names what is missing, t
   await getSettings();
   expect(nextAction(incomplete).text).toBe(`${said} ULINK emails the customer for them. If the customer must send more, add your own lines on the case page.`);
 });
+
+// UAT 17/11 (owner 2026-11-19): the claim preparation preview is ready, so the document stop is one review with one save.
+it('at the document stop with a ready claim preview, asks for one review of both', () => {
+  const preparationPreview = { claimPrepMeta: { lines: [] } };
+  // The vitamins are decided in the claim panel: not counted.
+  const vitamins = { decision: 'Vitamins / supplements', code: 'VITAMIN_OR_SUPPLEMENT', review: { reason: 'x' } };
+  const review = nextAction({ currentStatus: 'API_DOCUMENTS_REVIEW', preparationPreview }, summaryWith({ decision: 'Voucher amount', review: { reason: 'x' } }, vitamins));
+  expect(review.text).toBe('Documents and claim preparation: 1 finding needs your decision. Decide each one and check the claim preparation below it on the review page, then Save all and check again.');
+  const unsure = nextAction({ currentStatus: 'API_DOCUMENTS_UNSURE', preparationPreview }, summaryWith(point('Patient name', '0.62')));
+  expect(unsure.text).toBe('Documents and claim preparation: the documents passed, but the AI was unsure about: Patient name (62%). Check them and the claim preparation below them on the review page: save your claim choices, then Confirm and continue.');
+  // A failed preview, or an email case: as before.
+  expect(nextAction({ currentStatus: 'API_DOCUMENTS_REVIEW', preparationPreview: { error: 'IAS down' } }, summaryWith({ decision: 'Voucher amount', review: { reason: 'x' } })).text).toMatch(/^Step 1 of 2: documents\./);
+  expect(nextAction({ currentStatus: 'DOCUMENTS_REVIEW', preparationPreview }, summaryWith({ decision: 'Voucher amount', review: { reason: 'x' } })).text).toMatch(/^1 finding needs your decision\./);
+  expect(nextAction({ currentStatus: 'API_DOCUMENTS_UNSURE', preparationPreview: { error: 'IAS down' } }, summaryWith(point('Patient name', '0.62'))).text).toMatch(/^Step 1 of 2: documents\./);
+});
+
+it('at one review, the vitamins found are decided in the claim panel: not counted, not named', () => {
+  const preparationPreview = { claimPrepMeta: { lines: [] } };
+  const vitamins = { decision: 'Vitamins / supplements', code: 'VITAMIN_OR_SUPPLEMENT', review: { reason: 'x' } };
+  // Only the vitamins open: no "Step 1 of 2" text.
+  expect(nextAction({ currentStatus: 'API_DOCUMENTS_REVIEW', preparationPreview }, summaryWith(vitamins)).text).toMatch(/^Documents and claim preparation: /);
+  expect(nextAction({ currentStatus: 'API_DOCUMENTS_UNSURE', preparationPreview }, summaryWith(vitamins, point('Patient name', '0.62'))).text).toContain('unsure about: Patient name (62%).');
+  // Without one review they count as before.
+  expect(nextAction({ currentStatus: 'API_DOCUMENTS_REVIEW' }, summaryWith(vitamins)).text).toMatch(/^Step 1 of 2: documents\. 1 finding needs/);
+});

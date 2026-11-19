@@ -94,6 +94,10 @@ export interface PendingCorrections {
   notReady: number;
   /** One line per change, for the reviewer: "Voucher 1 date: 2025-10-08 → 2026-10-08". */
   lines: string[];
+  /** Ask the customer decisions (the document stop: saved with the claim choices, in one save). */
+  asks: ReturnType<typeof askItem>[];
+  /** Every finding that needs a decision has one: the one save at the document stop waits for this. */
+  allDecided: boolean;
 }
 
 /** The change as a reviewer reads it, with the reason. */

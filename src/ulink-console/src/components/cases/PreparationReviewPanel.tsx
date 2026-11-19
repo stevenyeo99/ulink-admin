@@ -32,7 +32,10 @@ const money = (n: number | null | undefined) => (typeof n === 'number' ? n.toLoc
 // corrections: the review page's corrections not saved yet (review workspace only). Saved with these choices in one save:
 // the choices first, kept without moving the case (recheck), then the corrections, which check the case again from the
 // document check; claim preparation then uses the choices and does not stop again unless a corrected voucher needs one.
-export function PreparationReviewPanel({ caseRecord, corrections, onSaved }: { caseRecord: CaseDetail; corrections?: PendingCorrections; onSaved?: (message: string) => void }) {
+// oneReview: the review page at the document stop with a ready preview (its claimAtDocumentStop): the document decisions
+// above are saved here, with the claim choices. requestLines: new request lines typed in the findings, not saved yet.
+// onSaved: decisions is true when the document decisions above were saved too (their drafts are done).
+export function PreparationReviewPanel({ caseRecord, corrections, oneReview = false, requestLines = [], onSaved }: { caseRecord: CaseDetail; corrections?: PendingCorrections; oneReview?: boolean; requestLines?: string[]; onSaved?: (message: string, decisions?: boolean) => void }) {
   const queryClient = useQueryClient();
   // At the document stop (UAT 17/11): the preview the document check ran. Only the choices are saved here; the case moves
   // with the document decision above, and claim preparation then uses them.
@@ -75,7 +78,10 @@ export function PreparationReviewPanel({ caseRecord, corrections, onSaved }: { c
   });
   // A code picked from the suggestions joins the list below, chosen.
   const [picked, setPicked] = useState<DiagnosisCandidate | null>(null);
-  const fixes = atDocumentStop ? [] : corrections?.items ?? [];
+  const fixes = atDocumentStop && !oneReview ? [] : corrections?.items ?? [];
+  const asks = oneReview ? corrections?.asks ?? [] : [];
+  const newLines = oneReview ? requestLines : [];
+  const documentDecisions = fixes.length + asks.length + newLines.length;
   const save = useMutation({
     mutationFn: async () => {
       const choice = {
@@ -84,18 +90,21 @@ export function PreparationReviewPanel({ caseRecord, corrections, onSaved }: { c
         rejections: Object.entries(rejections).map(([i, r]) => ({ voucher: Number(i), amount: r.removed ? null : Number(r.amount), remark: r.removed ? null : r.remark.trim() })),
         comment: comment.trim(),
       };
-      if (!fixes.length) return choosePreparation(caseRecord.id, choice);
-      // Corrections only: the case is checked again and comes back to this stop.
+      if (!documentDecisions) return choosePreparation(caseRecord.id, choice);
+      // The choices first, kept without moving the case (at the document stop the save never moves it); then the
+      // decisions, which check the case again from the document check.
       if (changed) await choosePreparation(caseRecord.id, { ...choice, recheck: true });
-      return createCorrections(caseRecord.id, fixes);
+      return createCorrections(caseRecord.id, fixes, asks, newLines);
     },
     onSuccess: () => {
-      onSaved?.(atDocumentStop
+      onSaved?.(oneReview && documentDecisions
+        ? `Saved. The case is checked again from the document check${changed ? ', then the claim is prepared with your choices' : ''}.`
+        : atDocumentStop
         ? 'Claim choices saved. Now decide the document findings above: the claim is prepared with your choices after that.'
         : fixes.length
         ? 'Saved. The case is checked again from the document check on the next pipeline run, then the revision is prepared with your choices.'
-        : 'Saved. The revision is prepared with your choices on the next pipeline run.');
-      for (const key of ['case', 'cases', 'review-queue', 'cases-overview']) queryClient.invalidateQueries({ queryKey: [key] });
+        : 'Saved. The revision is prepared with your choices on the next pipeline run.', oneReview && documentDecisions > 0);
+      for (const key of ['case', 'cases', 'review-queue', 'reviewed', 'cases-overview', 'approvals']) queryClient.invalidateQueries({ queryKey: [key] });
     },
   });
   if (atDocumentStop && preview?.error) {
@@ -118,8 +127,9 @@ export function PreparationReviewPanel({ caseRecord, corrections, onSaved }: { c
     return r.remark.trim() ? null : 'a remark';
   };
   const missing = [
-    // The amount check: decided by a correction (a voucher amount, the claimed amount, or the check marked OK).
-    ...(review.amount && !fixes.length ? ['the voucher amounts (correct them, or mark the amount check OK)'] : []),
+    // The amount check: decided by a correction (a voucher amount, the claimed amount, or the check marked OK). At the
+    // document stop it is a document finding above, decided there.
+    ...(review.amount && !fixes.length && !atDocumentStop ? ['the voucher amounts (correct them, or mark the amount check OK)'] : []),
     ...(review.diagnosis && !code ? ['the diagnosis code'] : []),
     ...flagged.filter((i) => !complete(choices[i])).map((i) => `voucher ${i + 1}`),
     ...Object.entries(choices).filter(([, c]) => !complete(c)).map(([i]) => `voucher ${Number(i) + 1}`),
@@ -127,6 +137,14 @@ export function PreparationReviewPanel({ caseRecord, corrections, onSaved }: { c
       .map(([i, p]) => `voucher ${Number(i) + 1} rejection (${p})`),
   ].filter((m, i, all) => all.indexOf(m) === i);
   const changed = Boolean(code) || Object.keys(choices).length > 0 || Object.keys(rejections).length > 0;
+  // The one save at the document stop. With document decisions: all decided and complete. The claim must then be fully
+  // chosen when the decisions move the case on to claim preparation (a correction or Mark OK), not for an Ask the
+  // customer alone (the claim is prepared again with the new documents). Without any (Mark OK saves at once at the unsure
+  // stop): the claim choices alone, as before.
+  const requireChoices = changed || fixes.length > 0;
+  const oneSaveBlocked = documentDecisions
+    ? !corrections?.allDecided || (corrections?.notReady ?? 0) > 0 || (requireChoices && missing.length > 0) || (changed && !!reasonProblem(comment))
+    : !changed || missing.length > 0 || !!reasonProblem(comment);
   // The vouchers' rows show on a claim with vitamins / supplements (the AI found some, one was rejected, or the AI was
   // unsure); Add shows on every claim, for an item the AI did not flag or that ULINK refers (owner, 2026-10-20).
   const vitaminCase = flaggedRejections.length > 0 || lines.some((l) => l.vitamin?.found === true || l.vitamin?.rejection);
@@ -182,14 +200,16 @@ export function PreparationReviewPanel({ caseRecord, corrections, onSaved }: { c
   };
 
   return (
-    <section className="mb-6 rounded-xl2 border border-slate-900/10 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
-      <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-slate-800"><Stethoscope size={15} /> {atDocumentStop ? 'Claim preparation findings' : 'Step 2 of 2: check the claim preparation'}</h2>
+    <section id="claim-preparation" className="mb-6 scroll-mt-4 rounded-xl2 border border-slate-900/10 bg-white/80 p-5 shadow-glass backdrop-blur-xl">
+      <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-slate-800"><Stethoscope size={15} /> {oneReview ? '2. Claim preparation' : atDocumentStop ? 'Claim preparation findings' : 'Step 2 of 2: check the claim preparation'}</h2>
       <p className="mt-1 text-sm text-slate-600">
-        {atDocumentStop
+        {oneReview
+          ? 'What the claim will be when the documents are decided. Nothing has gone to IAS. Change what is wrong, then save the documents and the claim together below.'
+          : atDocumentStop
           ? 'What the claim will be when the documents are decided. Nothing has gone to IAS. Save your choices here first, then save the document findings above: the claim is then prepared with your choices and does not stop again for them.'
           : "The documents are done. Check what the AI wasn't sure of below; the revision is prepared with your choices and only then goes to IAS."}
       </p>
-      {review.amount && (
+      {review.amount && !atDocumentStop && (
         <p className="mt-2 text-sm text-amber-700">
           The voucher amounts do not match the claimed amount, or a voucher is a refund. Correct each voucher amount or the claimed amount on the amount check, or mark the check OK. Then save all and check again.
         </p>
@@ -357,7 +377,29 @@ export function PreparationReviewPanel({ caseRecord, corrections, onSaved }: { c
       {missing.length > 0 && <p className="mt-1 text-xs text-amber-700">Still to choose: {missing.join(', ')}.</p>}
       {save.isError && <p className="mt-2 text-sm text-red-600">{(save.error as Error).message}</p>}
       <div id="preparation-save" className="mt-3">
-        {fixes.length > 0 ? (
+        {oneReview ? (
+          <>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Document decisions saved with this</p>
+            {corrections?.lines.length || newLines.length ? (
+              <ul className="mb-2 mt-1 list-disc pl-5 text-sm text-slate-700">
+                {(corrections?.lines ?? []).map((line, i) => <li key={i}>{line}</li>)}
+                {newLines.map((line) => <li key={`line:${line}`}>New request line: {line}</li>)}
+              </ul>
+            ) : (
+              <p className="mb-2 mt-1 text-sm text-slate-500">None yet.</p>
+            )}
+            {documentDecisions > 0 && !corrections?.allDecided && <p className="mb-2 text-xs text-amber-700">Decide every document finding above first.</p>}
+            {(corrections?.notReady ?? 0) > 0 && <p className="mb-2 text-xs text-amber-700">Finish the decisions above first: each needs a reason.</p>}
+            <p className="mb-2 text-xs text-slate-600">
+              {documentDecisions
+                ? `One save: ${changed ? 'these claim choices and ' : ''}the document decisions. The case is checked again from the document check${changed ? ', then the claim is prepared with these choices' : ''}.`
+                : 'No document decision to save with this: only the claim choices are saved, and the case stays here.'}
+            </p>
+            <Button disabled={oneSaveBlocked || save.isPending} onClick={() => save.mutate()}>
+              {save.isPending ? 'Saving…' : documentDecisions ? 'Save all and check again' : 'Save the claim choices'}
+            </Button>
+          </>
+        ) : fixes.length > 0 ? (
           <>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Corrections saved with this</p>
             <ul className="mb-2 mt-1 list-disc pl-5 text-sm text-slate-700">

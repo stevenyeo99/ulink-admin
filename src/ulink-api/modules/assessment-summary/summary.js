@@ -123,8 +123,9 @@ function formatConfidence(confidence) {
 }
 
 // brief: optional short form of `why` for "why the case went this way" (journey.js), when `why` is long.
-function line({ decision, result, status, why, confidence = null, verified, review = null, brief = null }) {
-  return { decision, result, status, why: why || NOT_RECORDED, confidence, verified, review, ...(brief ? { brief } : {}) };
+// code: the check, where another part of the system picks the line out (the vitamins found: nextAction.js one review).
+function line({ decision, result, status, why, confidence = null, verified, review = null, brief = null, code = null }) {
+  return { decision, result, status, why: why || NOT_RECORDED, confidence, verified, review, ...(brief ? { brief } : {}), ...(code ? { code } : {}) };
 }
 
 // A result the AI rated at or below the threshold is worth a look even when it passed.
@@ -404,6 +405,7 @@ function vitaminLine(item) {
   if (item.passed === false) {
     return line({
       decision: 'Vitamins / supplements',
+      code: item.code,
       result: 'Found',
       status: blocks ? 'issue' : 'ok',
       why: `${item.note}${blocks ? ' A person approves this claim; it does not go STP.' : ''}`,

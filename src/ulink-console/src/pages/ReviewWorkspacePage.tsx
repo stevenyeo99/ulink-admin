@@ -43,11 +43,13 @@ export function ReviewWorkspacePage() {
   const [confirming, setConfirming] = useState(false);
   const claimTried = useRef<string | null>(null);
   // Corrections not saved yet: at the claim preparation stop they are saved with its choices, in one save.
-  const [pendingCorrections, setPendingCorrections] = useState<PendingCorrections>({ items: [], notReady: 0, lines: [] });
+  const [pendingCorrections, setPendingCorrections] = useState<PendingCorrections>({ items: [], notReady: 0, lines: [], asks: [], allDecided: true });
   // New request lines typed in the findings, not saved yet: the email draft shows them at once.
   const [newRequestLines, setNewRequestLines] = useState<string[]>([]);
   // What the last save did, so the reviewer sees it after its panel goes away (the case moved on).
   const [saved, setSaved] = useState<string | null>(null);
+  // A new findings panel after the one save at the document stop: its decisions were saved by the claim panel.
+  const [findingsRound, setFindingsRound] = useState(0);
 
   // Polls every 5 seconds while the review lane checks the case again after a decision (SYSTEM_5), so the banner below
   // shows where it is and the buttons come back when it stops again.
@@ -109,6 +111,10 @@ export function ReviewWorkspacePage() {
   const unsureCount = assessmentSummary.reviewPoints.filter((p) => !p.overridden).length;
   // The benefit choice saves the review page's corrections with it too (SYSTEM_5 member balance phase C).
   const atPreparationStop = ['API_PREPARATION_REVIEW', 'BENEFIT_REVIEW', 'API_BENEFIT_REVIEW'].includes(caseRecord.currentStatus) && isSuperAdmin();
+  // One review at the document stop (UAT 17/11): the claim preparation findings are under the document findings, and the
+  // claim panel's save sends both. Without a ready preview, the findings save alone, as before.
+  const claimAtDocumentStop = ['API_DOCUMENTS_REVIEW', 'API_DOCUMENTS_UNSURE'].includes(caseRecord.currentStatus) && isSuperAdmin()
+    && Boolean(caseRecord.preparationPreview?.claimPrepMeta) && !caseRecord.preparationPreview?.error;
   // New request lines are added in the findings ("Your own request lines") and saved with the decisions: the same
   // condition as FindingsPanel's section. Then "Ask for more information" keeps only the lines already asked.
   const linesInFindings = corrections.allowed && isSuperAdmin() && requests.allowed && !requests.stays && !atPreparationStop;
@@ -152,6 +158,21 @@ export function ReviewWorkspacePage() {
       setMoving(false);
     }
   };
+
+  // One element, placed by the stop (the one review puts it under the findings; elsewhere it keeps its place).
+  const preparation = (
+    <PreparationReviewPanel
+      key={`preparation-${id}`}
+      caseRecord={caseRecord}
+      corrections={pendingCorrections}
+      oneReview={claimAtDocumentStop}
+      requestLines={newRequestLines}
+      onSaved={(message, decisions) => {
+        setSaved(message);
+        if (decisions) setFindingsRound((r) => r + 1); // the decisions are saved: none open, no second save
+      }}
+    />
+  );
 
   return (
     <div className="flex h-full flex-col overflow-hidden px-4 py-4 sm:px-6">
@@ -215,11 +236,11 @@ export function ReviewWorkspacePage() {
           )}
           {nextAction && <NextActionBox next={nextAction} className="mb-4" />}
           <h2 className="mb-2 text-sm font-semibold text-slate-800">
-            AI findings <span className="font-normal text-slate-500">— unsure means at or below {Math.round(threshold * 100)}%</span>
+            {claimAtDocumentStop ? '1. Documents: ' : ''}AI findings <span className="font-normal text-slate-500">— unsure means at or below {Math.round(threshold * 100)}%</span>
           </h2>
           {confirmError && <p className="mb-2 text-sm text-red-600">{confirmError}</p>}
           <FindingsPanel
-            key={`findings-${id}`} // a new case starts with no open changes (they belong to the case they were made on)
+            key={`findings-${id}-${findingsRound}`} // a new case starts with no open changes (they belong to the case they were made on)
             checklist={checklist}
             lines={assessmentSummary.lines}
             options={corrections.options}
@@ -237,18 +258,21 @@ export function ReviewWorkspacePage() {
             onPendingChange={setPendingCorrections}
             onRequestLinesChange={setNewRequestLines}
             onSaved={setSaved}
-            saveBelow={atPreparationStop}
+            saveBelow={atPreparationStop || claimAtDocumentStop}
+            claimBelow={claimAtDocumentStop}
             status={caseRecord.currentStatus}
             // The review page's save moves the case back to the document check; where it stays, lines are added on the case page.
             requestsAllowed={requests.allowed && !requests.stays}
             openRequestLines={requests.open.map((r) => r.text)}
           />
+          {/* Right under the findings at the one-review document stop: part 2 of the review, with the one save. */}
+          {claimAtDocumentStop && preparation}
           {/* Missing documents: upload them here too (shows only while the case waits on documents) — below the findings
               and closed (owner, 2026-11-16): the page opens on the decisions. */}
           <CaseUploadPanel caseRecord={caseRecord} closed />
           <CaseRetryPanel key={`retry-${id}`} caseId={id} retry={retry} />
           {isSuperAdmin() && <BenefitReviewPanel key={`benefit-${id}`} caseRecord={caseRecord} corrections={pendingCorrections} onSaved={setSaved} />}
-          {isSuperAdmin() && <PreparationReviewPanel key={`preparation-${id}`} caseRecord={caseRecord} corrections={pendingCorrections} onSaved={setSaved} />}
+          {!claimAtDocumentStop && isSuperAdmin() && preparation}
           {/* Override and continue (same rules as the case page): a reviewer who checked the member or documents by hand,
               or fixed it in IAS, lets the case go on to the next job without leaving the review page. */}
           {isSuperAdmin() && <CaseOverridePanel key={`override-${id}`} caseRecord={caseRecord} override={override} summary={assessmentSummary} onSaved={setSaved} heldActions={false} closed />}
