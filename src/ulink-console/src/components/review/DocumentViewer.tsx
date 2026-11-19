@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react';
 import clsx from 'clsx';
-import { ExternalLink, RotateCw, ZoomIn, ZoomOut } from 'lucide-react';
+import { ExternalLink, PanelLeftClose, RotateCw, ZoomIn, ZoomOut } from 'lucide-react';
 import { authFetch } from '../../api/client';
+import { Button } from '../common/Button';
 import type { PageRef, ViewFile } from '../../lib/caseFiles';
 
 /**
  * Left side of the review workspace (SYSTEM_4 E4-20): the case's files, the open page, zoom and rotate. Files are
  * fetched with the login token. PDFs open in the browser's own viewer at the page; images zoom and rotate here.
  */
-export function DocumentViewer({ files, open, onOpen }: { files: ViewFile[]; open: PageRef | null; onOpen: (ref: PageRef) => void }) {
+export function DocumentViewer({ files, open, onOpen, onHide }: { files: ViewFile[]; open: PageRef | null; onOpen: (ref: PageRef) => void; onHide?: () => void }) {
   const file = files.find((f) => f.key === open?.fileKey) ?? files[0];
   // open is null until a page is chosen; with no files, file is undefined too — compare only a real choice.
   const page = open && open.fileKey === file?.key ? open.page : 1;
@@ -72,6 +73,12 @@ export function DocumentViewer({ files, open, onOpen }: { files: ViewFile[]; ope
       )}
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="mb-2 flex items-center gap-2 text-xs text-slate-600">
+          {/* UAT 17/11 item 3: hide the document on the document itself; the strip left behind shows it again. */}
+          {onHide && (
+            <Button variant="ghost" size="sm" onClick={onHide} className="shrink-0 border border-slate-900/15">
+              <PanelLeftClose size={14} /> Hide document
+            </Button>
+          )}
           <span className="truncate font-medium" title={file.name}>{file.name}</span>
           {viewUrl && (
             <a href={viewUrl} target="_blank" rel="noopener noreferrer" className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-ulink-teal-dark hover:bg-slate-900/5">

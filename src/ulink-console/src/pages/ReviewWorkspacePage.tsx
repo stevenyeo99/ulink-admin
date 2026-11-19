@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import clsx from 'clsx';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, ChevronRight, PanelLeftOpen } from 'lucide-react';
 import { claimCase, confirmFinding, getCase, getNextCase, releaseCase } from '../api/casesApi';
 import { getSession, isSuperAdmin } from '../lib/session';
 import { Button } from '../components/common/Button';
@@ -33,6 +34,8 @@ export function ReviewWorkspacePage() {
   const queryClient = useQueryClient();
   const threshold = useConfidenceThreshold();
   const [open, setOpen] = useState<PageRef | null>(null);
+  // UAT 17/11 item 3: the reviewer can hide the document, and the findings take the center.
+  const [docHidden, setDocHidden] = useState(false);
   const [queueEmpty, setQueueEmpty] = useState(false);
   const [moving, setMoving] = useState(false);
   const [nextError, setNextError] = useState<string | null>(null);
@@ -174,11 +177,24 @@ export function ReviewWorkspacePage() {
         {isSuperAdmin() && <CaseClaimBar caseId={id} claim={claim ?? null} />}
       </header>
 
-      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-        <section aria-label="Document" className="min-h-0 overflow-hidden rounded-xl2 border border-slate-900/10 bg-white/80 p-3">
-          <DocumentViewer files={files} open={open} onOpen={setOpen} />
-        </section>
-        <section aria-label="AI findings" className="min-h-0 overflow-y-auto rounded-xl2 border border-slate-900/10 bg-white/80 p-4">
+      <div className={docHidden ? 'flex min-h-0 flex-1 gap-4' : 'grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]'}>
+        {docHidden ? (
+          // The hidden document leaves a narrow strip where it was: the way back is where the reviewer hid it.
+          <button
+            onClick={() => setDocHidden(false)}
+            title="Show document"
+            className="flex w-10 shrink-0 flex-col items-center gap-2 rounded-xl2 border border-slate-900/10 bg-white/80 py-3 text-xs font-medium text-slate-600 hover:bg-slate-900/5"
+          >
+            <PanelLeftOpen size={15} />
+            <span className="[writing-mode:vertical-rl]">Show document</span>
+          </button>
+        ) : (
+          <section aria-label="Document" className="min-h-0 overflow-hidden rounded-xl2 border border-slate-900/10 bg-white/80 p-3">
+            <DocumentViewer files={files} open={open} onOpen={setOpen} onHide={() => setDocHidden(true)} />
+          </section>
+        )}
+        {/* Hidden document: the findings take the full width (owner, 2026-11-19: a capped width left an empty gap on a wide screen and still wrapped the button rows). */}
+        <section aria-label="AI findings" className={clsx('min-h-0 overflow-y-auto rounded-xl2 border border-slate-900/10 bg-white/80 p-4', docHidden && 'flex-1')}>
           {/* What to do with this case now, before the findings (the same "Next" as the case page). */}
           {saved && (
             <div role="status" className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-ulink-teal/30 bg-ulink-teal/5 px-4 py-3 text-sm text-slate-800">
@@ -208,7 +224,10 @@ export function ReviewWorkspacePage() {
             lines={assessmentSummary.lines}
             options={corrections.options}
             files={files}
-            onOpenPage={setOpen}
+            onOpenPage={(ref) => {
+              setOpen(ref);
+              setDocHidden(false); // a page link shows the document again at that page
+            }}
             caseId={id}
             canCorrect={corrections.allowed && isSuperAdmin()}
             onConfirm={isSuperAdmin() ? confirm : null}
