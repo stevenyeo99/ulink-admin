@@ -6,7 +6,7 @@ import { AlertTriangle, Check, ChevronDown, FileText, Mail, Pencil, Plus, X } fr
 import { ConfidenceBadge } from '../common/ConfidenceBadge';
 import { ReasonText } from '../common/ReasonText';
 import { useConfidenceThreshold } from '../../hooks/useConfidenceThreshold';
-import type { AssessmentLine, ChecklistItem, CorrectionOption, FieldRead, WrongStep } from '../../types/case';
+import type { AssessmentLine, CheckPage, ChecklistItem, CorrectionOption, FieldRead, WrongStep } from '../../types/case';
 import { pageRef, type PageRef, type ViewFile } from '../../lib/caseFiles';
 import { InlineCorrection } from './InlineCorrection';
 import { CONFIRM_QUICK_REASON, CONTRACT_EXCLUSION_ITEM, isBypassItem, askItem, newAskDraft, draftItem, draftLine, draftProblem, newDraft, reasonProblem, type CorrectionDraft, type PendingCorrections } from '../../lib/correctionDraft';
@@ -30,6 +30,8 @@ interface Finding {
   confirms: string[];
   /** A rule check: the values it compared ("value:…"), each offered for ✎ Edit on the check's own line. */
   edits?: string[];
+  /** The pages the check looked at, each a link (UAT 17/11). */
+  pages?: CheckPage[];
 }
 
 // A voucher's evidence ("voucher 2") covers its amount and its date: Right confirms both.
@@ -43,6 +45,41 @@ const correctionItemFor = (field: string) => {
   const voucher = field.match(/^voucher (\d+)$/);
   return voucher ? `value:invoices.items.${Number(voucher[1]) - 1}.subtotal` : `value:${field}`;
 };
+
+// The pages a check looked at, grouped by what is on them: "Voucher 1 Page#6 · Medical record Page#3, Page#4". Each page
+// opens on the left; a page of a file not on this case is shown without a link.
+function PageLinks({ pages, files, onOpenPage }: { pages?: CheckPage[]; files: ViewFile[]; onOpenPage: (ref: PageRef) => void }) {
+  if (!pages?.length) return null;
+  const groups: { what: string; pages: string[] }[] = [];
+  for (const p of pages) {
+    const last = groups[groups.length - 1];
+    if (last?.what === p.what) last.pages.push(p.page);
+    else groups.push({ what: p.what, pages: [p.page] });
+  }
+  return (
+    <p className="mt-1 flex flex-wrap items-center gap-x-1 text-xs text-slate-500">
+      <FileText size={12} className="shrink-0" />
+      {groups.map((g, gi) => (
+        <span key={`${g.what}-${gi}`}>
+          {gi > 0 && <span className="mx-1 text-slate-300">·</span>}
+          {g.what}{' '}
+          {g.pages.map((page, pi) => {
+            const ref = pageRef(page, files);
+            const text = `Page#${page.match(/ - page (\d+)$/)?.[1] ?? '?'}`;
+            return (
+              <span key={page}>
+                {pi > 0 && ', '}
+                {ref
+                  ? <button onClick={() => onOpenPage(ref)} title={page} className="text-ulink-teal-dark hover:underline">{text}</button>
+                  : <span title={`${page} (file not on this case)`}>{text}</span>}
+              </span>
+            );
+          })}
+        </span>
+      ))}
+    </p>
+  );
+}
 
 /**
  * The findings of a case, built from what the checks stored (no AI): every value the AI read with its evidence
@@ -73,7 +110,7 @@ function buildFindings(checklist: ChecklistItem[], options: CorrectionOption[]):
   // Medical documents dated: a rule, not the AI's score — an undated document is an open finding (no "AI 0%" badge).
   const dates = checklist.find((c) => c.code === 'DOCUMENT_DATES');
   const datesRow: Finding[] = dates
-    ? [{ key: 'document-dates', label: dates.label, passed: (dates.confidence ?? null) === 0 ? false : true, confidence: null, why: dates.note ?? null, page: null, correct: null, confirms: [] }]
+    ? [{ key: 'document-dates', label: dates.label, passed: (dates.confidence ?? null) === 0 ? false : true, confidence: null, why: dates.note ?? null, pages: dates.pages, page: null, correct: null, confirms: [] }]
     : [];
   const documents: Finding[] = (checklist.find((c) => c.code === 'DOCUMENT_LIST')?.documents ?? []).map((d, i) => ({
     key: `document-${i}`, label: `Document: ${d.label}`, value: d.date, passed: true, confidence: null,
@@ -87,7 +124,8 @@ function buildFindings(checklist: ChecklistItem[], options: CorrectionOption[]):
       const edits = (c.editItems ?? []).map((item) => `value:${item}`).filter((item) => canCorrect(item));
       return {
         key: `check-${c.code}`, code: c.code ?? null, label: c.label, passed: c.passed, confidence: c.confidence ?? null,
-        why: c.note ?? c.reason ?? null, page: pageOf(c.usedFields), correct: canCorrect(`verdict:${c.code}`),
+        // The check's own pages when it has them; else the page of the least sure value it used.
+        why: c.note ?? c.reason ?? null, pages: c.pages, page: c.pages?.length ? null : pageOf(c.usedFields), correct: canCorrect(`verdict:${c.code}`),
         // A check with no verdict of its own (the values check): "✓ Right" confirms the values it named, as read.
         confirms: canCorrect(`verdict:${c.code}`) ? [`verdict:${c.code}`] : edits,
         edits,
@@ -330,6 +368,7 @@ export function FindingsPanel({
           {f.confidence != null && <ConfidenceBadge confidence={f.confidence} failed={f.passed === false} />}
         </div>
         <ReasonText text={f.why} />
+        <PageLinks pages={f.pages} files={files} onOpenPage={onOpenPage} />
         {guide && (
           <details className="mt-1 text-xs text-slate-600">
             <summary className="cursor-pointer font-medium text-ulink-teal-dark">What to do</summary>
@@ -420,6 +459,7 @@ export function FindingsPanel({
           {f.confidence != null && <ConfidenceBadge confidence={f.confidence} failed={f.passed === false} />}
         </div>
         <ReasonText text={f.why} plain />
+        <PageLinks pages={f.pages} files={files} onOpenPage={onOpenPage} />
         <div className="mt-1 flex flex-wrap gap-3 text-xs">
           {ref ? (
             <button onClick={() => onOpenPage(ref)} className="inline-flex items-center gap-1 text-ulink-teal-dark hover:underline">

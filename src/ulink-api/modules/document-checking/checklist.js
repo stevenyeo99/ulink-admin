@@ -1410,4 +1410,83 @@ function fieldsReadCheck(fields, checklist = []) {
   };
 }
 
-module.exports = { ISSUES, FIELD_LABELS, JUDGMENT_CHECKLIST_LABELS, issueForFlag, evaluateDocumentChecks, evaluateJudgmentDependentChecks, vitaminCheck, vitaminRejection, documentListCheck, benefitTypeCheck, documentDatesCheck, withEditItems, formatCheck, fieldsReadCheck, isRealDate, valueAt };
+// The pages each check looked at (UAT 17/11, owner 2026-11-19): the review page links each one ("Claimed amount
+// Page#2"), so the reviewer sees where a finding comes from. field: a key value's page (the AI's field_evidence);
+// vouchers: each voucher's page (the filter picks which); kinds: the pages of those kinds in the AI's page list. Built
+// when the case is read (withPages), so cases checked before this show them too. A new check: one line here.
+const field = (path) => ({ field: path });
+const VOUCHERS = { vouchers: () => true };
+const CLAIM_FORM = { kinds: ['claim_form'], what: 'Claim form' };
+const MEDICAL_RECORD = { kinds: [...MEDICAL_KINDS, 'eye_test_slip'], what: 'Medical record' };
+const DELEGATION_LETTER = { kinds: ['delegation_letter'], what: 'Delegation letter' };
+const PAGE_SOURCES = {
+  INCOMPLETE_CLAIM_FORM: [CLAIM_FORM],
+  MISSING_VOUCHER: [VOUCHERS],
+  NO_MEDICAL_REPORT: [MEDICAL_RECORD],
+  EYE_TEST_SLIP_UNDATED: [{ kinds: ['eye_test_slip'], what: 'Eye test slip' }],
+  UNCLEAR_VOUCHER: [VOUCHERS],
+  INCORRECT_VOUCHER: [VOUCHERS],
+  MISSING_VOUCHER_BREAKDOWN: [VOUCHERS],
+  VOUCHER_AMOUNT_MISMATCH: [field('claim.total_claim_amount'), VOUCHERS],
+  INCOMPLETE_MEDICAL_REPORT: [MEDICAL_RECORD],
+  MISSING_BANK_INFO: [field('bank.bank_name'), field('bank.bank_account_name'), field('bank.bank_account_number')],
+  TREATMENT_DATE_INCONSISTENT: [field('claim.appointment_date'), field('claim.accident_date'), field('medical_record.date')],
+  INVOICE_DATE_INCONSISTENT: [field('medical_record.date'), VOUCHERS],
+  DELEGATION_LETTER_REQUIRED: [field('claimant.claimant_name'), field('bank.bank_account_name'), DELEGATION_LETTER],
+  DELEGATION_PAYEE_INCONSISTENT: [DELEGATION_LETTER, field('bank.bank_account_name')],
+  PATIENT_NAME_INCONSISTENT: [field('claimant.claimant_name'), MEDICAL_RECORD],
+  PROVIDER_NAME_INCONSISTENT: [MEDICAL_RECORD],
+  HOSPITAL_NAME_INCONSISTENT: [field('medical.hospital_or_clinic_name'), MEDICAL_RECORD, VOUCHERS],
+  DIAGNOSIS_TREATMENT_INCONSISTENT: [field('medical.detail_of_illness_injury'), field('medical.full_description_of_treatment'), MEDICAL_RECORD],
+  INVOICE_NAME_INCONSISTENT: [field('claimant.claimant_name'), VOUCHERS],
+  VITAMIN_OR_SUPPLEMENT: [{ vouchers: (v) => v.has_vitamin_or_supplement === true }],
+};
+
+const capitalized = (text) => text.charAt(0).toUpperCase() + text.slice(1);
+
+// [{ what, page }] for one checklist item; page: the page label as the AI gave it ("claim.pdf - page 2").
+function pagesFor(item, fields) {
+  if (item.passed === null) return []; // a check that did not run (switched off, nothing to compare) looked at no page
+  const evidencePage = new Map();
+  for (const e of Array.isArray(fields.field_evidence) ? fields.field_evidence : []) {
+    if (e?.page && !evidencePage.has(e.field)) evidencePage.set(e.field, e.page);
+  }
+  const vouchers = fields.invoices?.items || [];
+  // The medical record date without its own page: the doctor's notes of that date.
+  const fieldPages = (path) => (evidencePage.has(path) ? [evidencePage.get(path)]
+    : path === 'medical_record.date' && fields.medical_record?.date ? doctorNotesOn(fields, fields.medical_record.date).map((d) => d.page).filter(Boolean) : []);
+  const fromField = (path) => fieldPages(path).map((page) => ({ what: FIELD_LABELS[path] || path, page }));
+  const fromVoucher = (v, i) => (v?.evidence?.page ? [{ what: `Voucher ${i + 1}`, page: v.evidence.page }] : []);
+  const fromSource = (source) => {
+    if (source.field) return fromField(source.field);
+    if (source.vouchers) return vouchers.flatMap((v, i) => (source.vouchers(v) ? fromVoucher(v, i) : []));
+    return (fields.document_list || []).filter((d) => d.page && source.kinds.includes(d.kind)).map((d) => ({ what: source.what, page: d.page }));
+  };
+  let pages = [];
+  if (PAGE_SOURCES[item.code]) pages = PAGE_SOURCES[item.code].flatMap(fromSource);
+  // The values check names the values it found a problem in.
+  else if (item.code === 'VALUE_FORMAT') {
+    pages = (item.usedFields || []).flatMap((f) => {
+      const voucher = /^voucher (\d+)$/.exec(f);
+      return voucher ? fromVoucher(vouchers[voucher[1] - 1], voucher[1] - 1) : fromField(f);
+    });
+  } else if (item.code === 'DOCUMENT_DATES') {
+    pages = (item.undated || []).flatMap((g) => g.pages.map((page) => ({ what: capitalized(g.label), page })));
+  }
+  const seen = new Set();
+  return pages.filter((p) => !seen.has(`${p.what}|${p.page}`) && seen.add(`${p.what}|${p.page}`));
+}
+
+// The stored check result with each item's pages, for the case and review pages (nothing is written back).
+function withPages(documentCheckResult, extractedFields) {
+  if (!documentCheckResult?.checklist || !extractedFields) return documentCheckResult;
+  return {
+    ...documentCheckResult,
+    checklist: documentCheckResult.checklist.map((item) => {
+      const pages = pagesFor(item, extractedFields);
+      return pages.length ? { ...item, pages } : item;
+    }),
+  };
+}
+
+module.exports = { ISSUES, FIELD_LABELS, JUDGMENT_CHECKLIST_LABELS, issueForFlag, evaluateDocumentChecks, evaluateJudgmentDependentChecks, vitaminCheck, vitaminRejection, documentListCheck, benefitTypeCheck, documentDatesCheck, withEditItems, withPages, formatCheck, fieldsReadCheck, isRealDate, valueAt };

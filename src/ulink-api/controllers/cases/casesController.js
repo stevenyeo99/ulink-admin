@@ -18,7 +18,7 @@ const { markFor, BEING_CHECKED, OUTSIDE_WAITS } = require('../../modules/review-
 const reviewLane = () => require('../../modules/review-lane/lane'); // at call time: the lane loads every job module
 const logger = require('../../utils/logger');
 const { releaseMissingDocumentsEmail } = require('../../modules/document-checking/service');
-const { withEditItems } = require('../../modules/document-checking/checklist');
+const { withEditItems, withPages } = require('../../modules/document-checking/checklist');
 const { retryOptions, consoleUploadReasonOf } = require('../../modules/case-retry/retry');
 const { uploadDocuments, UploadRefused } = require('../../modules/case-upload/upload');
 const { correctionsInfo } = require('./correctionsController');
@@ -442,7 +442,10 @@ async function getCase(req, res) {
   // claim: who is reviewing the case right now, or null (SYSTEM_4 E4-22).
   const claim = claimView(await CaseClaim.findByPk(caseRecord.id));
   if (caseRecord.source !== 'API') {
-    return res.json({ case: caseRecord, events, documents, ...reviewInfo(caseRecord), retry: retryOptions(caseRecord.currentStatus), corrections: await correctionsInfo(caseRecord, caseRecord), requests: await requestsInfo(caseRecord), claim });
+    // The pages each check looked at, for the review page (UAT 17/11).
+    const checked = withPages(caseRecord.documentCheckResult, caseRecord.extractedFields);
+    const emailCase = checked === caseRecord.documentCheckResult ? caseRecord : { ...caseRecord.toJSON(), documentCheckResult: checked };
+    return res.json({ case: emailCase, events, documents, ...reviewInfo(caseRecord), retry: retryOptions(caseRecord.currentStatus), corrections: await correctionsInfo(caseRecord, caseRecord), requests: await requestsInfo(caseRecord), claim });
   }
 
   // API cases: their job data lives in ulink_api_case_steps. Fill the same case fields the page
@@ -452,7 +455,7 @@ async function getCase(req, res) {
   const fields = { ...caseRecord.toJSON(), ...apiCaseView(apiSteps) };
   // API cases checked before each rule check carried its compared values (editItems): added here for the review page.
   // Email cases get them at their next document check.
-  fields.documentCheckResult = withEditItems(fields.documentCheckResult, fields.extractedFields);
+  fields.documentCheckResult = withPages(withEditItems(fields.documentCheckResult, fields.extractedFields), fields.extractedFields);
   const consoleUploadReason = consoleUploadReasonOf(apiSteps);
   res.json({ case: fields, events, documents, apiSteps, ...reviewInfo(fields), retry: retryOptions(caseRecord.currentStatus, { consoleUploadReason }), corrections: await correctionsInfo(caseRecord, fields), requests: await requestsInfo(caseRecord), claim });
 }

@@ -64,6 +64,13 @@ export interface ChecklistItem {
   editItems?: string[]; // the values a rule check compared, as correction items — offered for ✎ Edit on its line
   documents?: DocumentFound[]; // DOCUMENT_LIST only: the kind and date of each page (system checklist step 1)
   benefitType?: { code: string; desc: string; treatment: string | null }; // BENEFIT_TYPE only: the IAS benefit type the documents show (step 2)
+  pages?: CheckPage[]; // the pages the check looked at, added when the case is read (UAT 17/11)
+}
+
+// One page a check looked at: what is on it ("Voucher 2", "Claimed amount") and the AI's page label ("claim.pdf - page 7").
+export interface CheckPage {
+  what: string;
+  page: string;
 }
 
 // One page as the AI classified it (document_list), with its own confidence and reason. Information only.
