@@ -871,11 +871,14 @@ function buildDateConsistencyChecklist(extractedFields) {
       : invoiceAgreements.reduce((worst, agreement) => (agreement.confidence < worst.confidence
         || (agreement.confidence === worst.confidence && agreement.explained && !worst.explained) ? agreement : worst));
 
+  const treatmentPassed = !dateFlags.some((flag) => flag.code === 'TREATMENT_DATE_INCONSISTENT');
+  const invoicePassed = !dateFlags.some((flag) => flag.code === 'INVOICE_DATE_INCONSISTENT');
+  // The label follows the result (UAT 17/11, owner 2026-11-19): a failed check said "consistent" and users read it as a pass.
   return [
     {
       code: 'TREATMENT_DATE_INCONSISTENT',
-      label: 'Treatment date is consistent with medical record date',
-      passed: !dateFlags.some((flag) => flag.code === 'TREATMENT_DATE_INCONSISTENT'),
+      label: `Treatment date is ${treatmentPassed ? '' : 'in'}consistent with medical record date`,
+      passed: treatmentPassed,
       confidence: treatmentAgreement?.confidence ?? null,
       note: treatmentAgreement?.note ?? null,
       reason: treatmentAgreement?.note ?? 'Nothing to compare: no claim date or no medical record date was read.',
@@ -883,8 +886,8 @@ function buildDateConsistencyChecklist(extractedFields) {
     },
     {
       code: 'INVOICE_DATE_INCONSISTENT',
-      label: 'Invoice date(s) are consistent with medical record date',
-      passed: !dateFlags.some((flag) => flag.code === 'INVOICE_DATE_INCONSISTENT'),
+      label: `Invoice date(s) are ${invoicePassed ? '' : 'in'}consistent with medical record date`,
+      passed: invoicePassed,
       confidence: worstInvoiceAgreement?.confidence ?? null,
       note: worstInvoiceAgreement?.note ?? null,
       reason: worstInvoiceAgreement?.note ?? 'Nothing to compare: no voucher date or no medical record date was read.',

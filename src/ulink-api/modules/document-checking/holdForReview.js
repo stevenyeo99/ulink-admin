@@ -35,9 +35,10 @@ function unsureDocumentPoints(documentCheckResult, switchOn = true) {
   return (documentCheckResult?.checklist || [])
     .filter((item) => item.passed === false
       && (ALWAYS_HOLD.has(item.code) || (switchOn && (ALWAYS_UNSURE.has(item.code) || isLowConfidence(item.confidence)))))
-    // "Not met:" — the label names the check as it passes ("Treatment date is consistent with …"); no AI confidence: a
-    // rule that failed is not the AI being unsure (owner, 2026-11-16 review page). The finding itself shows the score.
-    .map((item) => `Not met: ${item.label || item.code}`);
+    // "Not met:" — the label names the check as it passes; a label that already names the problem ("Treatment date is
+    // inconsistent with …", UAT 17/11) needs none. No AI confidence: a rule that failed is not the AI being unsure (owner,
+    // 2026-11-16 review page). The finding itself shows the score.
+    .map((item) => (/\binconsistent\b/.test(item.label || '') ? item.label : `Not met: ${item.label || item.code}`));
 }
 
 // Switch "documents the AI passed but wasn't sure about: a person confirms first" (settings.holdUnsureDocumentPass,

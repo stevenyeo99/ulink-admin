@@ -57,13 +57,13 @@ describe('#2 what counts as "the AI is unsure a document is missing"', () => {
   it('exactly 0.5 confidence, and any date mismatch, is unsure (2026-10-01, cases 04759562 / 42214c2a)', () => {
     expect(unsureDocumentPoints({ checklist: [
       { code: 'NO_MEDICAL_REPORT', label: 'Medical report present', passed: false, confidence: 0.5 },
-      { code: 'INVOICE_DATE_INCONSISTENT', label: 'Invoice date(s) are consistent with medical record date', passed: false, confidence: 1 },
-      { code: 'TREATMENT_DATE_INCONSISTENT', label: 'Treatment date is consistent with medical record date', passed: false, confidence: null },
+      { code: 'INVOICE_DATE_INCONSISTENT', label: 'Invoice date(s) are inconsistent with medical record date', passed: false, confidence: 1 },
+      { code: 'TREATMENT_DATE_INCONSISTENT', label: 'Treatment date is inconsistent with medical record date', passed: false, confidence: null },
       { code: 'INVOICE_DATE_INCONSISTENT', label: 'Invoice date(s) are consistent with medical record date', passed: true, confidence: 1 },
     ] })).toEqual([
       'Not met: Medical report present',
-      'Not met: Invoice date(s) are consistent with medical record date',
-      'Not met: Treatment date is consistent with medical record date',
+      'Invoice date(s) are inconsistent with medical record date',
+      'Treatment date is inconsistent with medical record date',
     ]);
   });
 
