@@ -1,7 +1,7 @@
 const { sequelize, Case, CaseEvent, ApiCaseStep } = require('../../db/models');
 const { findCandidates, findByCode, findByText } = require('../../modules/icd10/lookup');
 const { uniqueBenefitCandidates } = require('../../modules/shared/iasBenefits');
-const { voucherKey, sameVoucher, sameDiagnosis, diagnosisSource } = require('../../modules/ias-claim-preparation/preparationReview');
+const { voucherKey, choiceFor, sameDiagnosis, diagnosisSource } = require('../../modules/ias-claim-preparation/preparationReview');
 const { requiredComment } = require('./casesController');
 const { endClaim } = require('../../modules/case-claim/claim');
 const { markFor, BEING_CHECKED } = require('../../modules/review-lane/marker');
@@ -65,10 +65,11 @@ async function choosePreparation(req, res) {
     if (!code) return bad(res, 'Diagnosis: choose an ICD-10 code from the list or the search.');
     const { text = null, source: _source, translation, chosen, review: _review, ...ai } = meta.diagnosis || {};
     diagnosis = { ...code, text, source: sourceNow, aiPick: chosen && previous?.diagnosis ? previous.diagnosis.aiPick : ai };
+  } else if (previous?.diagnosis && sameDiagnosis(previous.diagnosis, { source: sourceNow, text: meta.diagnosis?.text ?? null })) {
+    // An earlier choice for the same diagnosis text stays, and counts as decided (the review page shows it, UAT 17/11).
+    diagnosis = previous.diagnosis;
   } else if (review.diagnosis) {
     return bad(res, 'Diagnosis: choose the code — the AI was not sure of it.');
-  } else if (previous?.diagnosis && sameDiagnosis(previous.diagnosis, { source: sourceNow, text: meta.diagnosis?.text ?? null })) {
-    diagnosis = previous.diagnosis;
   }
 
   // Benefits: a voucher of this case, a type + head on the member's own plan; every flagged voucher decided.
@@ -88,12 +89,16 @@ async function choosePreparation(req, res) {
     const { chosen, ...ai } = line;
     benefits.push({ voucher: i, key: voucherKey(items[i]), benefitType: b.benefitType, benefitHead: head, aiPick: chosen && earlier ? earlier.aiPick : ai });
   }
-  const missing = review.vouchers.filter((i) => !benefits.some((b) => b.voucher === i));
-  if (missing.length) return bad(res, `Benefit: choose for voucher ${missing.map((i) => i + 1).join(', ')} — the AI was not sure.`);
-  // Earlier choices on vouchers not sent this time stay, while their voucher is the same.
-  for (const b of previous?.benefits || []) {
-    if (!benefits.some((x) => x.voucher === b.voucher) && items[b.voucher] && sameVoucher(b.key, voucherKey(items[b.voucher]))) benefits.push(b);
+  // Earlier choices on vouchers not sent this time stay, while their voucher is the same (choiceFor: also under another
+  // number) and the pair is still on the member's plan, and count as decided.
+  for (const [i, item] of items.entries()) {
+    const b = benefits.some((x) => x.voucher === i) ? null : choiceFor(previous?.benefits, i, item);
+    if (b && plan.some((c) => c.type === b.benefitType && (c.head || null) === (b.benefitHead || null))) benefits.push(b);
   }
+  // removing: the vouchers removed in the same save (the review page's one save, UAT 17/11) need no choice.
+  const removing = new Set(Array.isArray(req.body?.removing) ? req.body.removing : []);
+  const missing = review.vouchers.filter((i) => !removing.has(i) && !benefits.some((b) => b.voucher === i));
+  if (missing.length) return bad(res, `Benefit: choose for voucher ${missing.map((i) => i + 1).join(', ')} — the AI was not sure.`);
 
   // Manual rejections: a voucher of this case; every voucher the stop flagged decided (a rejection or none).
   const sentRejections = Array.isArray(req.body?.rejections) ? req.body.rejections : [];
@@ -115,12 +120,16 @@ async function choosePreparation(req, res) {
     if (remark.length > 500) return bad(res, `${name}: the remark is longer than 500 characters.`);
     rejections.push({ voucher: i, key, amount: r.amount, remark });
   }
-  const undecided = review.rejections.filter((i) => !rejections.some((r) => r.voucher === i));
-  if (undecided.length) return bad(res, `Manual rejection: set it for voucher ${undecided.map((i) => i + 1).join(', ')} — the AI was not sure of its vitamins / supplements.`);
-  for (const r of previous?.rejections || []) {
-    if (!rejections.some((x) => x.voucher === r.voucher) && items[r.voucher] && sameVoucher(r.key, voucherKey(items[r.voucher]))) rejections.push(r);
+  for (const [i, item] of items.entries()) {
+    const r = rejections.some((x) => x.voucher === i) ? null : choiceFor(previous?.rejections, i, item);
+    if (r) rejections.push(r);
   }
+  const undecided = review.rejections.filter((i) => !removing.has(i) && !rejections.some((r) => r.voucher === i));
+  if (undecided.length) return bad(res, `Manual rejection: set it for voucher ${undecided.map((i) => i + 1).join(', ')} — the AI was not sure of its vitamins / supplements.`);
   if (!diagnosis && !benefits.length && !rejections.length) return bad(res, 'Choose the diagnosis code, a benefit or a manual rejection.');
+  // Earlier choices count as decided, but a save must bring something new (a choice, or a recheck with corrections).
+  const sentAny = (typeof diagCode === 'string' && diagCode.trim()) || sent.length || sentRejections.length;
+  if (!sentAny && req.body?.recheck !== true) return bad(res, 'Nothing new to save: your earlier choices are already kept.');
 
   const by = req.user.name ? `${req.user.name} (${req.user.username})` : req.user.username;
   const what = [

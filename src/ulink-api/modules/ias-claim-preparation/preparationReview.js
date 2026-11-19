@@ -49,10 +49,17 @@ function reviewNeeded(claimPrepMeta, { holdUnsureDiagnosis, holdUnsureBenefit, h
 // What identifies a voucher for a person's benefit choice: a re-read that changes it drops the choice.
 const voucherKey = (item) => ({ subtotal: item?.subtotal ?? null, date: item?.date ?? null, voucherType: item?.voucher_type ?? null });
 const sameVoucher = (a, b) => a.subtotal === b.subtotal && a.date === b.date && a.voucherType === b.voucherType;
+// A person's choice for voucher i: the one saved on it, else one saved on the same voucher under another number — a
+// voucher before it was removed or put back (UAT 17/11), so the numbers moved. The choice comes back numbered i.
+function choiceFor(list, i, item) {
+  const key = voucherKey(item);
+  const found = (list || []).find((c) => c.voucher === i && sameVoucher(c.key, key)) || (list || []).find((c) => sameVoucher(c.key, key));
+  return found ? { ...found, voucher: i } : null;
+}
 
 // What identifies the diagnosis for a person's code: the claim form's own text (source), before the AI translates it —
 // the translation's wording changes from run to run. A choice saved before source was kept: the English text.
 const diagnosisSource = (medical) => `${medical?.detail_of_illness_injury || ''}\n${medical?.full_description_of_treatment || ''}`;
 const sameDiagnosis = (choice, now) => (choice?.source != null ? choice.source === now.source : choice?.text === now.text);
 
-module.exports = { diagnosisUnsure, benefitUnsure, rejectionUnsure, reviewNeeded, voucherKey, sameVoucher, diagnosisSource, sameDiagnosis };
+module.exports = { diagnosisUnsure, benefitUnsure, rejectionUnsure, reviewNeeded, voucherKey, sameVoucher, choiceFor, diagnosisSource, sameDiagnosis };

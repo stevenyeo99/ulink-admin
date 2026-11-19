@@ -52,14 +52,21 @@ export function PreparationReviewPanel({ caseRecord, corrections, oneReview = fa
   const types = plan.filter((c, i) => plan.findIndex((o) => o.type === c.type) === i);
   const headsOf = (type: string) => plan.filter((c) => c.type === type && c.head);
 
+  // At the document stop, the choices saved after the preview (UAT 17/11): shown read-only and counted as decided, as
+  // claim preparation will use them. Not copied into the form: only what the person changes now is sent (the API keeps
+  // the rest). The API sends only the choices that still apply (caseView.js stillApplies, the save's own rules).
+  const saved = atDocumentStop ? caseRecord.preparationChoice ?? null : null;
+  const savedDiagnosis = saved?.diagnosis ?? null;
+  const savedBenefit = (i: number) => saved?.benefits?.find((b) => b.voucher === i);
+  const savedRejection = (i: number) => saved?.rejections?.find((r) => r.voucher === i);
   const [code, setCode] = useState('');
-  const [changeDiagnosis, setChangeDiagnosis] = useState(review.diagnosis);
+  const [changeDiagnosis, setChangeDiagnosis] = useState(review.diagnosis && !savedDiagnosis);
   const [text, setText] = useState('');
   const [choices, setChoices] = useState<Record<number, Choice>>({});
   const [showSure, setShowSure] = useState(false);
   const [comment, setComment] = useState('');
-  // Flagged vouchers start open with the AI's rejection, if any, to check.
-  const [rejections, setRejections] = useState<Record<number, Rejection>>(() => Object.fromEntries(flaggedRejections.map((i) => {
+  // Flagged vouchers start open with the AI's rejection, if any, to check; not one with a saved rejection.
+  const [rejections, setRejections] = useState<Record<number, Rejection>>(() => Object.fromEntries(flaggedRejections.filter((i) => !savedRejection(i)).map((i) => {
     const ai = meta?.lines[i]?.vitamin?.ai;
     return [i, { amount: ai?.vitamin_exclude_amount != null ? String(ai.vitamin_exclude_amount) : '', remark: ai?.vitamin_remark ?? '', removed: false }];
   })));
@@ -80,14 +87,17 @@ export function PreparationReviewPanel({ caseRecord, corrections, oneReview = fa
   const [picked, setPicked] = useState<DiagnosisCandidate | null>(null);
   const fixes = atDocumentStop && !oneReview ? [] : corrections?.items ?? [];
   const asks = oneReview ? corrections?.asks ?? [] : [];
+  // Vouchers removed in the same save (UAT 17/11): no claim choice is needed or sent for them.
+  const removing = fixes.map((f) => f.item.match(/^invoices\.items\.(\d+)\.remove$/)?.[1]).filter((n): n is string => n != null).map(Number);
   const newLines = oneReview ? requestLines : [];
   const documentDecisions = fixes.length + asks.length + newLines.length;
   const save = useMutation({
     mutationFn: async () => {
       const choice = {
         ...(code ? { diagCode: code } : {}),
-        benefits: Object.entries(choices).map(([i, c]) => ({ voucher: Number(i), benefitType: c.type, benefitHead: c.head || null })),
-        rejections: Object.entries(rejections).map(([i, r]) => ({ voucher: Number(i), amount: r.removed ? null : Number(r.amount), remark: r.removed ? null : r.remark.trim() })),
+        benefits: Object.entries(choices).filter(([i]) => !removing.includes(Number(i))).map(([i, c]) => ({ voucher: Number(i), benefitType: c.type, benefitHead: c.head || null })),
+        rejections: Object.entries(rejections).filter(([i]) => !removing.includes(Number(i))).map(([i, r]) => ({ voucher: Number(i), amount: r.removed ? null : Number(r.amount), remark: r.removed ? null : r.remark.trim() })),
+        ...(removing.length ? { removing } : {}),
         comment: comment.trim(),
       };
       if (!documentDecisions) return choosePreparation(caseRecord.id, choice);
@@ -130,10 +140,10 @@ export function PreparationReviewPanel({ caseRecord, corrections, oneReview = fa
     // The amount check: decided by a correction (a voucher amount, the claimed amount, or the check marked OK). At the
     // document stop it is a document finding above, decided there.
     ...(review.amount && !fixes.length && !atDocumentStop ? ['the voucher amounts (correct them, or mark the amount check OK)'] : []),
-    ...(review.diagnosis && !code ? ['the diagnosis code'] : []),
-    ...flagged.filter((i) => !complete(choices[i])).map((i) => `voucher ${i + 1}`),
-    ...Object.entries(choices).filter(([, c]) => !complete(c)).map(([i]) => `voucher ${Number(i) + 1}`),
-    ...Object.entries(rejections).map(([i, r]) => [i, rejectionProblem(Number(i), r)] as const).filter(([, p]) => p)
+    ...(review.diagnosis && !code && !savedDiagnosis ? ['the diagnosis code'] : []),
+    ...flagged.filter((i) => !removing.includes(i) && !complete(choices[i]) && !savedBenefit(i)).map((i) => `voucher ${i + 1}`),
+    ...Object.entries(choices).filter(([i, c]) => !removing.includes(Number(i)) && !complete(c)).map(([i]) => `voucher ${Number(i) + 1}`),
+    ...Object.entries(rejections).filter(([i]) => !removing.includes(Number(i))).map(([i, r]) => [i, rejectionProblem(Number(i), r)] as const).filter(([, p]) => p)
       .map(([i, p]) => `voucher ${Number(i) + 1} rejection (${p})`),
   ].filter((m, i, all) => all.indexOf(m) === i);
   const changed = Boolean(code) || Object.keys(choices).length > 0 || Object.keys(rejections).length > 0;
@@ -148,10 +158,10 @@ export function PreparationReviewPanel({ caseRecord, corrections, oneReview = fa
   // The vouchers' rows show on a claim with vitamins / supplements (the AI found some, one was rejected, or the AI was
   // unsure); Add shows on every claim, for an item the AI did not flag or that ULINK refers (owner, 2026-10-20).
   const vitaminCase = flaggedRejections.length > 0 || lines.some((l) => l.vitamin?.found === true || l.vitamin?.rejection);
-  const rejectionRows = lines.map((_, i) => i).filter((i) => rejections[i] || lines[i].vitamin?.rejection);
+  const rejectionRows = lines.map((_, i) => i).filter((i) => rejections[i] || lines[i].vitamin?.rejection || savedRejection(i));
   const addable = lines.map((_, i) => i).filter((i) => !rejectionRows.includes(i));
 
-  const codes = [aiCode, picked, ...((diagnosis?.candidates ?? []) as DiagnosisCandidate[]), ...(search.data?.candidates ?? [])]
+  const codes = [aiCode, picked, savedDiagnosis as DiagnosisCandidate | null, ...((diagnosis?.candidates ?? []) as DiagnosisCandidate[]), ...(search.data?.candidates ?? [])]
     .filter((c): c is DiagnosisCandidate => Boolean(c?.diagCode))
     .filter((c, i, all) => all.findIndex((o) => o.diagCode === c.diagCode) === i);
 
@@ -170,6 +180,7 @@ export function PreparationReviewPanel({ caseRecord, corrections, oneReview = fa
           {line.voucherType ? ` · ${line.voucherType}` : ''}
           {line.subtotal != null ? ` · ${line.subtotal.toLocaleString('en-US')}` : ''}
           <span className="text-slate-500"> — AI: {aiName}{percent(line.confidence)}</span>
+          {!c && savedBenefit(i) && <span className="text-ulink-teal-dark"> · saved: {savedBenefit(i)!.benefitType} / {savedBenefit(i)!.benefitHead ?? '-'}</span>}
         </p>
         <ReasonText text={line.reason} label="AI reasoning" />
         {c ? (
@@ -186,14 +197,14 @@ export function PreparationReviewPanel({ caseRecord, corrections, oneReview = fa
         ) : null}
         <div className="mt-2 flex flex-wrap gap-2">
           {!c && (
-            <Button size="sm" variant="ghost" aria-label={`${flagged.includes(i) ? 'Choose' : 'Change'} the benefit of voucher ${i + 1}`} onClick={() => setChoice(i, { type: ai?.benefitType ?? '', head: ai?.benefitHead ?? '' })} className="border border-ulink-orange bg-white text-ulink-orange-dark shadow-none hover:bg-ulink-orange/10">
+            <Button size="sm" variant="ghost" aria-label={`${flagged.includes(i) ? 'Choose' : 'Change'} the benefit of voucher ${i + 1}`} onClick={() => setChoice(i, savedBenefit(i) ? { type: savedBenefit(i)!.benefitType, head: savedBenefit(i)!.benefitHead ?? '' } : { type: ai?.benefitType ?? '', head: ai?.benefitHead ?? '' })} className="border border-ulink-orange bg-white text-ulink-orange-dark shadow-none hover:bg-ulink-orange/10">
               <Pencil size={14} /> {flagged.includes(i) ? 'Choose' : 'Change'}
             </Button>
           )}
           {firstChosen && (
             <Button size="sm" variant="ghost" onClick={() => setChoice(i, firstChosen[1])} className="border border-ulink-orange bg-white text-ulink-orange-dark shadow-none hover:bg-ulink-orange/10">Same as voucher {Number(firstChosen[0]) + 1}</Button>
           )}
-          {c && !flagged.includes(i) && <Button size="sm" variant="ghost" onClick={() => setChoice(i, null)} className="border border-slate-300 text-slate-600 shadow-none">Keep the AI's</Button>}
+          {c && (savedBenefit(i) || !flagged.includes(i)) && <Button size="sm" variant="ghost" onClick={() => setChoice(i, null)} className="border border-slate-300 text-slate-600 shadow-none">{savedBenefit(i) ? 'Keep the saved one' : "Keep the AI's"}</Button>}
         </div>
       </li>
     );
@@ -209,6 +220,11 @@ export function PreparationReviewPanel({ caseRecord, corrections, oneReview = fa
           ? 'What the claim will be when the documents are decided. Nothing has gone to IAS. Save your choices here first, then save the document findings above: the claim is then prepared with your choices and does not stop again for them.'
           : "The documents are done. Check what the AI wasn't sure of below; the revision is prepared with your choices and only then goes to IAS."}
       </p>
+      {saved && (
+        <p className="mt-2 rounded-lg bg-ulink-teal/10 px-3 py-2 text-sm text-ulink-teal-dark">
+          Your saved choices are marked "saved" below (by {saved.by}). Claim preparation uses them. To change one, choose again and save.
+        </p>
+      )}
       {review.amount && !atDocumentStop && (
         <p className="mt-2 text-sm text-amber-700">
           The voucher amounts do not match the claimed amount, or a voucher is a refund. Correct each voucher amount or the claimed amount on the amount check, or mark the check OK. Then save all and check again.
@@ -218,7 +234,9 @@ export function PreparationReviewPanel({ caseRecord, corrections, oneReview = fa
       <h3 className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">Diagnosis code</h3>
       {!changeDiagnosis ? (
         <p className="mt-1 text-sm text-slate-700">
-          {named(aiCode?.diagCode, aiCode?.diagDesc)}{percent(diagnosis?.confidence)}{' '}
+          {savedDiagnosis
+            ? <>{named(savedDiagnosis.diagCode, savedDiagnosis.diagDesc)} <span className="text-slate-500">— saved (AI: {aiCode?.diagCode ?? 'none'})</span></>
+            : <>{named(aiCode?.diagCode, aiCode?.diagDesc)}{percent(diagnosis?.confidence)}</>}{' '}
           <Button size="sm" variant="ghost" aria-label="Change the diagnosis code" onClick={() => setChangeDiagnosis(true)} className="border border-ulink-orange bg-white text-ulink-orange-dark shadow-none hover:bg-ulink-orange/10"><Pencil size={14} /> Change</Button>
         </p>
       ) : (
@@ -291,12 +309,15 @@ export function PreparationReviewPanel({ caseRecord, corrections, oneReview = fa
             {rejectionRows.map((i) => {
               const line = lines[i];
               const r = rejections[i];
-              const sent = line.vitamin?.rejection;
+              // A saved rejection goes over the AI's (amount null: no rejection on this voucher).
+              const kept = savedRejection(i);
+              const sent = kept ? (kept.amount == null ? null : { vitamin_exclude_amount: kept.amount, vitamin_remark: kept.remark }) : line.vitamin?.rejection;
               return (
                 <li key={i} className="py-2 text-sm">
                   <p className="text-slate-800">
                     <span className="font-medium">Voucher {i + 1}</span>{line.voucherType ? ` · ${line.voucherType}` : ''} · {money(line.subtotal)}
-                    {!r && sent && <span className="text-slate-500"> — {line.vitamin?.chosen ? 'chosen' : 'AI'}: {money(sent.vitamin_exclude_amount)} MMK</span>}
+                    {!r && sent && <span className="text-slate-500"> — {kept ? 'saved' : line.vitamin?.chosen ? 'chosen' : 'AI'}: {money(sent.vitamin_exclude_amount)} MMK</span>}
+                    {!r && kept && !sent && <span className="text-ulink-teal-dark"> — saved: No rejection</span>}
                   </p>
                   {!r && sent?.vitamin_remark && <p className="mt-0.5 text-xs text-slate-500">{sent.vitamin_remark}</p>}
                   {r && !r.removed && (
@@ -332,11 +353,11 @@ export function PreparationReviewPanel({ caseRecord, corrections, oneReview = fa
                       </Button>
                     )}
                     {/* Added on a voucher with no rejection: Remove takes the row away; otherwise No rejection is a decision. */}
-                    {!r?.removed && (sent || flaggedRejections.includes(i)) && (
+                    {!r?.removed && (sent || flaggedRejections.includes(i)) && !(kept && !sent) && (
                       <Button size="sm" variant="ghost" onClick={() => setRejection(i, { amount: '', remark: '', removed: true })} className="border border-ulink-orange bg-white text-ulink-orange-dark shadow-none hover:bg-ulink-orange/10">No rejection</Button>
                     )}
-                    {r && !flaggedRejections.includes(i) && (
-                      <Button size="sm" variant="ghost" onClick={() => setRejection(i, null)} className="border border-slate-300 text-slate-600 shadow-none">{sent ? 'Keep as it was' : 'Remove'}</Button>
+                    {r && (kept || !flaggedRejections.includes(i)) && (
+                      <Button size="sm" variant="ghost" onClick={() => setRejection(i, null)} className="border border-slate-300 text-slate-600 shadow-none">{kept ? 'Keep the saved one' : sent ? 'Keep as it was' : 'Remove'}</Button>
                     )}
                   </div>
                 </li>
@@ -388,11 +409,20 @@ export function PreparationReviewPanel({ caseRecord, corrections, oneReview = fa
             ) : (
               <p className="mb-2 mt-1 text-sm text-slate-500">None yet.</p>
             )}
-            {documentDecisions > 0 && !corrections?.allDecided && <p className="mb-2 text-xs text-amber-700">Decide every document finding above first.</p>}
+            {documentDecisions > 0 && !corrections?.allDecided && (
+              <p className="mb-2 text-xs text-amber-700">
+                Still to decide above: {(corrections?.openLabels ?? []).map((l) => l.replace(/\.$/, '')).join('; ')}.{' '}
+                {corrections?.firstOpenKey && (
+                  <button type="button" onClick={() => document.getElementById(`finding-${corrections.firstOpenKey}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })} className="font-medium underline">
+                    Go to the first one
+                  </button>
+                )}
+              </p>
+            )}
             {(corrections?.notReady ?? 0) > 0 && <p className="mb-2 text-xs text-amber-700">Finish the decisions above first: each needs a reason.</p>}
             <p className="mb-2 text-xs text-slate-600">
               {documentDecisions
-                ? `One save: ${changed ? 'these claim choices and ' : ''}the document decisions. The case is checked again from the document check${changed ? ', then the claim is prepared with these choices' : ''}.`
+                ? `One save: ${changed ? 'these claim choices and ' : ''}the document decisions. The case is checked again${changed ? ', then the claim is prepared with these choices' : ''}.`
                 : 'No document decision to save with this: only the claim choices are saved, and the case stays here.'}
             </p>
             <Button disabled={oneSaveBlocked || save.isPending} onClick={() => save.mutate()}>

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import * as AlertDialog from '@radix-ui/react-alert-dialog';
-import { AlertTriangle, Check, ChevronDown, FileText, Mail, Pencil, Plus, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, FileText, Mail, Pencil, Plus, Trash2, Undo2, X } from 'lucide-react';
 import { ConfidenceBadge } from '../common/ConfidenceBadge';
 import { ReasonText } from '../common/ReasonText';
 import { useConfidenceThreshold } from '../../hooks/useConfidenceThreshold';
@@ -312,8 +312,18 @@ export function FindingsPanel({
     return null;
   };
   // Decided: a complete draft (reason long enough) or a Mark OK already saved — an empty card is not a decision.
-  const hasDecision = (f: Finding) => Object.entries(drafts).some(([k, d]) => (k === f.key || k.startsWith(`${f.key}|`)) && !draftProblem(d)) || isConfirmed(f);
-  const memberDecided = (o: CorrectionOption) => !!drafts[o.item] && !draftProblem(drafts[o.item]);
+  // A voucher removed in a draft decides every finding that compared it (as the API's undecided rule, UAT 17/11).
+  const removedNow = new Set(Object.values(drafts).filter((d) => d.option.type === 'remove' && !draftProblem(d)).map((d) => d.option.item.split('.')[2]));
+  const comparesRemoved = (f: Finding) => (f.edits ?? []).some((item) => removedNow.has(item.match(/^value:invoices\.items\.(\d+)\./)?.[1] ?? ''));
+  const hasDecision = (f: Finding) => Object.entries(drafts).some(([k, d]) => (k === f.key || k.startsWith(`${f.key}|`)) && !draftProblem(d)) || isConfirmed(f) || comparesRemoved(f);
+  // The vouchers a finding compared, to remove: one that is not part of the claim (its amount compared).
+  const removesOf = (f: Finding) => (f.edits ?? []).map((item) => item.match(/^value:invoices\.items\.(\d+)\.subtotal$/)?.[1])
+    .filter((n): n is string => n != null).map((n) => optionOf(`value:invoices.items.${n}.remove`)).filter((o): o is CorrectionOption => o != null);
+  // Vouchers removed by a person, to put back.
+  const restores = options.filter((o) => o.type === 'restore');
+  // A balance finding only on vouchers removed in a draft goes with them (as the API's undecided rule).
+  const memberDecided = (o: CorrectionOption) => (!!drafts[o.item] && !draftProblem(drafts[o.item]))
+    || Boolean(o.coverKeys?.length && o.coverKeys.every((k) => removedNow.has(String(Number(k.split('|')[0]) - 1))));
 
   // A failed or unsure finding (SYSTEM_5 review actions 4.1): a card with "Needs your decision", What to do, and clear
   // buttons — Mark OK and Revise first.
@@ -339,6 +349,7 @@ export function FindingsPanel({
         key: `${f.key}|${o.kind}:${o.item}`, o,
         label: `Revise ${o.label}${o.current != null ? ` (${typeof o.current === 'number' ? o.current.toLocaleString('en-US') : String(o.current)})` : ''}`,
       })),
+      ...removesOf(f).filter((o) => !hasDraft(o)).map((o) => ({ key: `${f.key}|${o.kind}:${o.item}`, o, label: o.label })),
     ] : [];
     const canMarkWrong = canCorrect && !asking && option?.kind === 'verdict' && option.current === true && !!option.canFail && !hasDraft(option);
     // The verdict when the check offers one, else the finding's own code (the mandatory fields line).
@@ -396,7 +407,7 @@ export function FindingsPanel({
           {isConfirmed(f) && <span className="inline-flex items-center gap-1 text-ulink-teal-dark"><Check size={14} /> Marked OK by you</span>}
           {revise.map(({ key, o, label }) => (
             <Button key={key} size="sm" aria-label={`${label}: ${f.label}`} onClick={() => openDraft(key, o)} className="border border-ulink-orange bg-white text-ulink-orange-dark shadow-none hover:bg-ulink-orange/10">
-              <Pencil size={14} /> {label}
+              {o.type === 'remove' ? <Trash2 size={14} /> : <Pencil size={14} />} {label}
             </Button>
           ))}
           {canMarkWrong && (
@@ -447,6 +458,7 @@ export function FindingsPanel({
         {draftForm(f.key, guide?.risk)}
         {draftForm(askKey(f), null, checkOf(f.code)?.ifFails ?? null)}
         {(f.edits ?? []).map((item) => <div key={item}>{draftForm(`${f.key}|${item}`)}</div>)}
+        {removesOf(f).map((o) => <div key={o.item}>{draftForm(`${f.key}|${o.kind}:${o.item}`)}</div>)}
       </li>
     );
   };
@@ -504,6 +516,7 @@ export function FindingsPanel({
         ) : null}
         {draftForm(f.key)}
         {(f.edits ?? []).map((item) => <div key={item}>{draftForm(`${f.key}|${item}`)}</div>)}
+        {removesOf(f).map((o) => <div key={o.item}>{draftForm(`${f.key}|${o.kind}:${o.item}`)}</div>)}
       </li>
     );
   };
@@ -518,7 +531,11 @@ export function FindingsPanel({
   const changes = pending.length + newLines.length;
   // The decisions not saved yet, for a save below (the claim panel): after allDecided, which it passes up.
   useEffect(() => {
-    onPendingChange?.({ items: corrections.map(draftItem), notReady, lines: pending.map(draftLine), asks: asks.map(askItem), allDecided });
+    onPendingChange?.({
+      items: corrections.map(draftItem), notReady, lines: pending.map(draftLine), asks: asks.map(askItem), allDecided,
+      openLabels: [...toDecide.filter((f) => !hasDecision(f)).map((f) => f.label), ...memberFindings.filter((o) => !memberDecided(o)).map((o) => o.label)],
+      firstOpenKey: firstOpen?.key ?? null,
+    });
     // pending, notReady and allDecided are derived from drafts (and the case).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drafts, allDecided, onPendingChange]);
@@ -635,6 +652,24 @@ export function FindingsPanel({
             ))}
           </ul>
         </details>
+      )}
+      {restores.length > 0 && (
+        <section className="mb-4">
+          <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-600">Vouchers removed by a person · {restores.length}</h3>
+          <ul className="divide-y divide-slate-900/5">
+            {restores.map((o) => (
+              <li key={o.item} className="py-2 text-sm">
+                <p className="text-slate-700">Voucher {o.voucher}: {o.note} Not checked and not sent to IAS.</p>
+                {canCorrect && !hasDraft(o) && (
+                  <Button size="sm" variant="ghost" onClick={() => openDraft(`restore|${o.item}`, o)} className="mt-1 border border-slate-400 text-slate-700 shadow-none">
+                    <Undo2 size={14} /> {o.label}
+                  </Button>
+                )}
+                {draftForm(`restore|${o.item}`)}
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
       {canCorrect && requestsAllowed && (!saveBelow || claimBelow) && (
         // The reviewer's own request lines (SYSTEM_5 review actions 4.10): what the customer must send or fix that the

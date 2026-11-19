@@ -253,6 +253,14 @@ export interface CaseDetail {
   /** API cases at the document stop: claim preparation run as a preview (nothing sent to IAS), so the reviewer decides
    *  the claim findings in the same visit (UAT 17/11). error: the preview did not run (the AI or IAS did not answer). */
   preparationPreview?: { claimPrepMeta?: ClaimPrepMeta; review?: ClaimPrepMeta['review'] | null; isStp?: boolean | null; error?: string } | null;
+  // The claim choices a person saved after that preview (ulink-api caseView.js): shown over it on the review page.
+  preparationChoice?: {
+    by: string;
+    comment: string;
+    diagnosis?: { diagCode: string; diagDesc?: string | null } | null;
+    benefits?: { voucher: number; key: SavedVoucherKey; benefitType: string; benefitHead: string | null }[];
+    rejections?: { voucher: number; key: SavedVoucherKey; amount: number | null; remark: string | null }[];
+  };
   iasClaimResult: unknown;
   claimNo: string | null;
   source: Source;
@@ -447,13 +455,17 @@ export interface CorrectionOption {
   kind: 'value' | 'verdict';
   item: string;
   label: string;
-  type: 'text' | 'date' | 'amount' | 'verdict' | 'choice';
+  /** remove / restore: remove a voucher that is not part of the claim, or put it back (UAT 17/11). */
+  type: 'text' | 'date' | 'amount' | 'verdict' | 'choice' | 'remove' | 'restore';
   current: string | number | boolean | null;
   /** type 'choice': the values a person picks from (voucher type, type of patient). */
   choices?: string[];
   canFail?: boolean;
   /** A member finding ("member:…"): what the member check found — the reviewer marks it OK one by one. */
   note?: string;
+  /** remove / restore: the voucher's number (1-based). member:balance: the short vouchers it covers ("2|OP|LAB|5000"). */
+  voucher?: number;
+  coverKeys?: string[];
 }
 
 export interface Correction {
@@ -599,4 +611,11 @@ export interface ReviewedResponse {
   /** A review round is working now. */
   lastRoundRunning: boolean;
   highlightMinutes: number;
+}
+
+// A saved claim choice's voucher (ulink-api preparationReview.js voucherKey): a choice applies only to that voucher.
+export interface SavedVoucherKey {
+  subtotal: number | null;
+  date: string | null;
+  voucherType: string | null;
 }

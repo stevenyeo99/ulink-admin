@@ -432,8 +432,19 @@ function formatLine(item) {
 // and why — one line, so the case page, team emails and the IAS remark all show it. Never a review point.
 function correctionLines(extractedFields) {
   const corrections = extractedFields?.corrections || [];
-  if (!corrections.length) return [];
-  return [line({
+  // Vouchers a person removed or put back (UAT 17/11, corrections.js applyCorrection): a removed one is left out of every
+  // check and of the IAS claim. The history keeps a put back too.
+  const moves = (extractedFields?.invoices?.moves || [])
+    .map((m) => `voucher ${m.voucher + 1} (${m.text}) ${m.action} by ${m.by} — ${String(m.reason).replace(/\.$/, '')}`);
+  const removedLine = moves.length ? [line({
+    decision: 'Vouchers removed by a person',
+    result: `${(extractedFields.invoices.removed || []).length} removed`,
+    status: 'ok',
+    why: `A removed voucher is not part of this claim, so it is not checked and not sent to IAS: ${moves.join('; ')}.`,
+    verified: VERIFIED.PERSON,
+  })] : [];
+  if (!corrections.length) return removedLine;
+  return [...removedLine, line({
     decision: 'Corrected by a person',
     result: `${corrections.length} correction${corrections.length > 1 ? 's' : ''}`,
     status: 'ok',

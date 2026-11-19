@@ -5,7 +5,7 @@ const { pickDiagnosis, pickRuledDiagnosis } = require('./diagnosisPicker');
 const { diagnosisRule } = require('./diagnosisRules');
 const { lastReadSettings } = require('../settings/settings');
 const { pickBenefit } = require('./benefitPicker');
-const { voucherKey, sameVoucher, diagnosisSource, sameDiagnosis } = require('./preparationReview');
+const { choiceFor, diagnosisSource, sameDiagnosis } = require('./preparationReview');
 const { savedHead, recheckBalance, heldBalanceEnough } = require('../member-verification/memberBalance');
 const logger = require('../../utils/logger');
 const { caseChecksOff } = require('../ai-checklist/switches');
@@ -89,9 +89,9 @@ async function checkCase(caseRecord) {
   const chosen = choice && { by: choice.by, comment: choice.comment };
   const source = diagnosisSource(medical);
   const chosenDiagnosis = choice?.diagnosis && sameDiagnosis(choice.diagnosis, { source, text: diagnosisText || null }) ? choice.diagnosis : null;
-  const chosenBenefit = (i, item) => (choice?.benefits || []).find((b) => b.voucher === i && sameVoucher(b.key, voucherKey(item)));
+  const chosenBenefit = (i, item) => choiceFor(choice?.benefits, i, item);
   // A person's manual rejection (vitamins / supplements) on a voucher: theirs, on any voucher, while it is the same.
-  const chosenRejection = (i, item) => (choice?.rejections || []).find((r) => r.voucher === i && sameVoucher(r.key, voucherKey(item)));
+  const chosenRejection = (i, item) => choiceFor(choice?.rejections, i, item);
 
   const memberPlansRaw = iasMemberInfoResponse?.payload?.memberPlans;
   const benefitContext = {

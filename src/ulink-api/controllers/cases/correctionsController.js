@@ -1,7 +1,7 @@
 const { sequelize, Case, CaseEvent, ApiCaseStep, AiFeedback, CaseRequest } = require('../../db/models');
 const { apiCaseView } = require('../../modules/api-pipeline/caseView');
 const { OVERRIDE_TARGETS } = require('../../modules/case-override/override');
-const { correctionOptions, validateCorrection, aiOriginal, applyCorrection, correctionText, recheckFrom, reasonLongEnough, REASON_TOO_SHORT, failedCodes } = require('../../modules/ai-feedback/corrections');
+const { correctionOptions, validateCorrection, aiOriginal, applyCorrection, correctionText, recheckFrom, reasonLongEnough, REASON_TOO_SHORT, failedCodes, isVoucherMove, VOUCHER_REMOVE } = require('../../modules/ai-feedback/corrections');
 const { REQUEST_FROM, MAX_LINES, validateLines, openRequests } = require('../../modules/case-requests/requests');
 const { endClaim } = require('../../modules/case-claim/claim');
 const { markFor, BEING_CHECKED } = require('../../modules/review-lane/marker');
@@ -77,6 +77,13 @@ function recheckTarget(items, prevStatus, source) {
 // every failed document line — decided by its own verdict, a revised value it compared (editItems), or Ask the customer.
 function undecided(fields, options, items, askCustomer) {
   const decided = new Set(items.map((i) => i?.item));
+  // A removed voucher decides every finding that compared it (its amount, its date): they do not apply to it now.
+  const removed = new Set(items.map((i) => i?.item?.match(VOUCHER_REMOVE)?.[1]).filter(Boolean));
+  for (const line of fields.documentCheckResult?.checklist || []) {
+    for (const item of line.editItems || []) if (removed.has(item.match(/^invoices\.items\.(\d+)\./)?.[1])) decided.add(item);
+  }
+  // A balance finding only on removed vouchers (its coverKeys start with the voucher's 1-based number) goes with them.
+  for (const o of options) if (o.coverKeys?.length && o.coverKeys.every((k) => removed.has(String(Number(String(k).split('|')[0]) - 1)))) decided.add(o.item);
   const asked = new Set(askCustomer.map((a) => a.item));
   const member = options.filter((o) => o.item.startsWith('member:') && !decided.has(o.item)).map((o) => o.label);
   if (!/DOCUMENTS_(REVIEW|UNSURE)$/.test(fields.currentStatus)) return member;
@@ -121,6 +128,13 @@ async function saveCorrections(req, res, items, { askCustomer = [], requestLines
   }
 
   const bad = (message) => res.status(400).json({ error: { message, status: 400 } });
+  // Remove / put back a voucher (UAT 17/11): applied after the value corrections, the removals from the last voucher
+  // down, so each change still names the voucher the person saw. Both in one save would renumber under each other.
+  const moves = checked.filter((c) => isVoucherMove(c.option.item));
+  if (moves.some((c) => c.option.type === 'remove') && moves.some((c) => c.option.type === 'restore')) return bad('Remove a voucher and put one back in two saves.');
+  const voucherNo = (c) => Number(c.option.item.match(/\.(\d+)\./)[1]);
+  checked.sort((a, b) => (isVoucherMove(a.option.item) - isVoucherMove(b.option.item)) || (isVoucherMove(a.option.item) ? voucherNo(b) - voucherNo(a) : 0));
+  if (moves.filter((c) => c.option.type === 'remove').length >= (fields.extractedFields.invoices?.items || []).length) return bad('Keep at least one voucher on the claim.');
   const prevStatus = caseRecord.currentStatus;
   // Ask the customer: a failed document line of this case, once, with a reason.
   const failedLines = (fields.documentCheckResult?.checklist || []).filter((l) => l.passed === false);

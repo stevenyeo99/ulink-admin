@@ -123,3 +123,19 @@ describe('getCase', () => {
     expect(body.assessmentSummary.needsReview).toBe(true);
   });
 });
+
+// UAT 17/11 (owner 2026-11-19): the claim choices saved after the document check's preview show over it.
+describe('apiCaseView preparationChoice', () => {
+  const { apiCaseView } = require('../modules/api-pipeline/caseView');
+  const key = { subtotal: 218915, date: '2026-06-10', voucherType: 'other' };
+  const choice = { by: 'ulink', comment: 'ok', diagnosis: null, benefits: [], rejections: [{ voucher: 1, key, amount: null, remark: null }] };
+  const read = (subtotal) => step('api-claim-recognition', { extractedFields: { invoices: { items: [{ subtotal: 36750 }, { subtotal, date: '2026-06-10', voucher_type: 'other' }] } } }, '2026-11-19T09:00Z');
+  const doc = step('api-document-checking', { preparationPreview: { claimPrepMeta: {} } }, '2026-11-19T10:00Z');
+  it('is the latest saved choice when it is newer than the preview, and none when older', () => {
+    expect(apiCaseView([read(218915), doc, step('preparation-review', choice, '2026-11-19T10:05Z')]).preparationChoice).toEqual(choice);
+    expect(apiCaseView([read(218915), step('preparation-review', choice, '2026-11-19T09:55Z'), doc]).preparationChoice).toBeUndefined();
+  });
+  it('drops a choice whose voucher changed since (the save and claim preparation would not use it)', () => {
+    expect(apiCaseView([read(0), doc, step('preparation-review', choice, '2026-11-19T10:05Z')]).preparationChoice.rejections).toEqual([]);
+  });
+});

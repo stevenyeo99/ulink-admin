@@ -136,6 +136,30 @@ describe('POST /api/cases/:id/corrections', () => {
   };
   const body = { kind: 'value', item: 'invoices.items.0.date', value: '2026-08-14', reason: 'receipt shows the 14th', wrongStep: 'reading' };
 
+  // UAT 17/11: Remove a voucher in the same save as a value change of a later voucher — the value first, so it lands on
+  // the voucher the person saw; the removal then numbers it down. From the member check (the balance uses the vouchers).
+  it('a removal and a later voucher\'s change in one save: each lands on the voucher the person saw', async () => {
+    const three = { ...fields(), invoices: { present: true, items: [
+      { subtotal: 100, date: '2026-08-17', voucher_type: 'lab' }, { subtotal: 200, date: '2026-08-17', voucher_type: 'other' }, { subtotal: 300, date: '2026-08-17', voucher_type: 'pharmacy' },
+    ] } };
+    Case.findByPk.mockResolvedValue(emailCase({ extractedFields: three, documentCheckResult: evaluateDocumentChecks(three) }));
+    const items = [
+      { kind: 'value', item: 'invoices.items.1.remove', reason: 'Not part of this claim.', wrongStep: 'reading' },
+      { kind: 'value', item: 'invoices.items.2.subtotal', value: '350', reason: 'receipt shows 350', wrongStep: 'reading' },
+    ];
+    const { status } = await send(createCorrections, { body: { items } });
+    expect(status).toBe(200);
+    const [update] = Case.update.mock.calls[0];
+    expect(update.currentStatus).toBe('RECOGNIZED');
+    expect(update.extractedFields.invoices.items.map((v) => v.subtotal)).toEqual([100, 350]);
+    expect(update.extractedFields.invoices.removed[0]).toMatchObject({ voucher: 1, item: { subtotal: 200 }, reason: 'Not part of this claim.' });
+    expect(update.extractedFields.corrections.map((c) => c.item)).toEqual(['invoices.items.1.subtotal']);
+    // Removing every voucher is refused.
+    Case.update.mockClear();
+    const all = [0, 1, 2].map((i) => ({ kind: 'value', item: `invoices.items.${i}.remove`, reason: 'Not part of this claim.', wrongStep: 'reading' }));
+    expect((await send(createCorrections, { body: { items: all } })).status).toBe(400);
+  });
+
   it('email case: stores it, writes the corrected fields, sends the case back to the document check', async () => {
     Case.findByPk.mockResolvedValue(emailCase());
     const { status } = await send(createCorrection, { body });

@@ -1,6 +1,6 @@
 import { AlertTriangle } from 'lucide-react';
 import clsx from 'clsx';
-import { CONTRACT_EXCLUSION_ITEM, DRAFT_STATE, defaultWrongStep, draftAction, draftProblem, quickReasons, type CorrectionDraft } from '../../lib/correctionDraft';
+import { CONTRACT_EXCLUSION_ITEM, DRAFT_STATE, defaultWrongStep, draftAction, draftProblem, quickReasons, type CorrectionDraft, isVoucherMove } from '../../lib/correctionDraft';
 import { Button } from '../common/Button';
 
 const inputClass =
@@ -35,7 +35,7 @@ export function InlineCorrection({ draft, onChange, onUndo, risk, customerText, 
     return (
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-ulink-teal/30 bg-ulink-teal/5 px-3 py-2 text-sm">
         <span className="font-semibold text-ulink-teal-dark">{DRAFT_STATE[action]}, not saved</span>
-        {option.kind === 'value' && !draft.ask && <span className="text-slate-700">→ "{draft.value.trim()}"</span>}
+        {option.kind === 'value' && !draft.ask && !isVoucherMove(option) && <span className="text-slate-700">→ "{draft.value.trim()}"</span>}
         <span className="min-w-0 flex-1 truncate text-slate-600" title={draft.reason}>Reason: {draft.reason.trim()}</span>
         <Button size="sm" variant="ghost" onClick={() => onDone(false)}>Change</Button>
         <Button size="sm" variant="ghost" onClick={onUndo}>Undo</Button>
@@ -52,7 +52,7 @@ export function InlineCorrection({ draft, onChange, onUndo, risk, customerText, 
           <span className="mt-1 block text-xs text-slate-500">Sent after the case is checked again, if this is still missing.</span>
         </p>
       )}
-      {option.kind === 'value' && !draft.ask && (
+      {option.kind === 'value' && !draft.ask && !isVoucherMove(option) && (
         <div className="mb-2 grid gap-2 sm:grid-cols-2">
           <div>
             <span className="mb-1 block text-xs font-medium text-slate-600">The AI read</span>

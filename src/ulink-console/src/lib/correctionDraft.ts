@@ -16,8 +16,13 @@ export interface CorrectionDraft {
 // decision) and can be changed. wrongStep: the answer the reviewer already chose (a policy contract exclusion's two
 // buttons).
 export function newDraft(option: CorrectionOption, passed?: boolean, wrongStep?: WrongStep): CorrectionDraft {
-  return { option, passed, value: option.current == null ? '' : String(option.current), wrongStep: wrongStep ?? defaultWrongStep(option), reason: '' };
+  // Remove / put back a voucher: the action is the change, no value to type.
+  const value = isVoucherMove(option) ? 'true' : option.current == null ? '' : String(option.current);
+  return { option, passed, value, wrongStep: wrongStep ?? defaultWrongStep(option), reason: '' };
 }
+
+/** Remove a voucher that is not part of the claim, or put it back (UAT 17/11, ulink-api corrections.js). */
+export const isVoucherMove = (option: CorrectionOption) => option.type === 'remove' || option.type === 'restore';
 
 /** A short balance or an exclusion in IAS (SYSTEM_5): the only action is a bypass with a reason, as an exception. */
 export const isBypassItem = (item: string) => ['member:balance', 'member:exclusion', 'member:same_date_claim'].includes(item);
@@ -44,11 +49,13 @@ export function draftProblem(d: CorrectionDraft): string | null {
 }
 
 /** What the reviewer is doing, in the words of the button they clicked. */
-export type DraftAction = 'Mark OK' | 'Mark wrong' | 'Revise' | 'Bypass' | 'Does not apply' | 'Let it go on' | 'Ask the customer';
+export type DraftAction = 'Mark OK' | 'Mark wrong' | 'Revise' | 'Bypass' | 'Does not apply' | 'Let it go on' | 'Ask the customer' | 'Remove' | 'Put back';
 export function draftAction(d: CorrectionDraft): DraftAction {
   if (d.ask) return 'Ask the customer';
   if (d.option.item === CONTRACT_EXCLUSION_ITEM) return d.wrongStep === 'exception' ? 'Let it go on' : 'Does not apply';
   if (isBypassItem(d.option.item)) return 'Bypass';
+  if (d.option.type === 'remove') return 'Remove';
+  if (d.option.type === 'restore') return 'Put back';
   if (d.option.kind === 'value') return 'Revise';
   return d.passed ? 'Mark OK' : 'Mark wrong';
 }
@@ -57,6 +64,7 @@ export function draftAction(d: CorrectionDraft): DraftAction {
 export const DRAFT_STATE: Record<DraftAction, string> = {
   'Mark OK': 'Marked OK', 'Mark wrong': 'Marked wrong', Revise: 'Revised', Bypass: 'Bypassed', 'Does not apply': 'Does not apply', 'Let it go on': 'Let go on',
   'Ask the customer': 'Customer will be asked',
+  Remove: 'Removed', 'Put back': 'Put back',
 };
 
 /** A ready reason: one click fills the reason box and sets what went wrong (PRD 4.3). The reviewer can add to it. */
@@ -82,6 +90,11 @@ const QUICK_REASONS: Record<DraftAction, QuickReason[]> = {
     { text: 'The document is not attached.', wrongStep: 'check' },
     { text: 'The document is not clear enough to read.', wrongStep: 'check' },
   ],
+  Remove: [
+    { text: 'This voucher is not part of this claim.', wrongStep: 'reading' },
+    { text: 'The AI read the same voucher twice.', wrongStep: 'reading' },
+  ],
+  'Put back': [{ text: 'This voucher is part of this claim after all.', wrongStep: 'reading' }],
 };
 export const quickReasons = (d: CorrectionDraft) => QUICK_REASONS[draftAction(d)];
 
@@ -98,6 +111,9 @@ export interface PendingCorrections {
   asks: ReturnType<typeof askItem>[];
   /** Every finding that needs a decision has one: the one save at the document stop waits for this. */
   allDecided: boolean;
+  /** The findings still to decide, by label, and the first one's key (its row id is `finding-<key>`). */
+  openLabels: string[];
+  firstOpenKey: string | null;
 }
 
 /** The change as a reviewer reads it, with the reason. */
@@ -106,6 +122,7 @@ export function draftLine(d: CorrectionDraft): string {
   if (d.ask) return `${d.option.label}: ask the customer.${reason}`;
   if (d.option.item === CONTRACT_EXCLUSION_ITEM) return `${d.option.label}: ${d.wrongStep === 'exception' ? 'let go on (no STP)' : 'does not apply'}.${reason}`;
   if (d.option.kind === 'verdict') return `${d.option.label}: ${draftAction(d) === 'Bypass' ? 'bypassed' : d.passed ? 'OK' : 'wrong'}.${reason}`;
+  if (isVoucherMove(d.option)) return `${d.option.label}${d.option.note ? ` (${d.option.note})` : ''}.${reason}`;
   return `${d.option.label}: ${d.option.current == null ? '(none)' : String(d.option.current)} → ${d.value.trim() || '…'}.${reason}`;
 }
 

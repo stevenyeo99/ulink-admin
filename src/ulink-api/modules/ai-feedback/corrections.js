@@ -41,6 +41,21 @@ const MEMBER_CHECK_FIELDS = new Set([
 const VOUCHER_TYPES = ['consultation', 'pharmacy', 'lab', 'optical', 'other'];
 const DATE_FIELDS = new Set(['claimant.claimant_dob', 'claim.appointment_date', 'claim.accident_date', 'medical_record.date']);
 const VOUCHER_ITEM = /^invoices\.items\.(\d+)\.(subtotal|date)$/;
+// Remove a voucher that is not part of the claim, and put it back (UAT 17/11, owner 2026-11-19). The voucher leaves
+// invoices.items, so every check, the balance and the IAS revision see only the vouchers that remain; it is kept in
+// invoices.removed with who, why and its own corrections. IAS gets nothing for it.
+const VOUCHER_REMOVE = /^invoices\.items\.(\d+)\.remove$/;
+const VOUCHER_RESTORE = /^invoices\.removed\.(\d+)\.restore$/;
+const VOUCHER_PATH = /^invoices\.items\.(\d+)\.(.+)$/;
+const isVoucherMove = (item) => VOUCHER_REMOVE.test(item) || VOUCHER_RESTORE.test(item);
+// The corrections of vouchers from index `from` on, numbered by `by` (a voucher before them left or came back).
+const shiftVouchers = (corrections, from, by) => corrections.map((c) => {
+  const m = c.item?.match(VOUCHER_PATH);
+  return m && Number(m[1]) >= from ? { ...c, item: `invoices.items.${Number(m[1]) + by}.${m[2]}` } : c;
+});
+const amountText = (n) => (typeof n === 'number' ? `${n.toLocaleString('en-US')} MMK` : 'no amount');
+// A removed voucher in one line, for the page, the history and the assessment: "218,915 MMK, 2026-06-10".
+const voucherText = (item) => `${amountText(item?.subtotal)}, ${item?.date ?? 'no date'}`;
 
 // Sets a value in place (on a copy the caller made).
 function setAt(fields, path, value) {
@@ -80,7 +95,14 @@ function correctionOptions(fields = {}, documentCheckResult = null, memberVerify
   const member = (memberVerifyResult?.issues || [])
     .filter((issue) => ACCEPTABLE_MEMBER_ITEMS.has(issue.item))
     .map((issue) => ({ kind: 'verdict', item: issue.item, label: MEMBER_ITEM_LABELS[issue.item], type: 'verdict', current: false, canFail: false, note: issue.reason, ...(issue.coverKeys ? { coverKeys: issue.coverKeys } : {}) }));
-  return [...values, ...choices, ...vouchers, ...verdicts, ...member];
+  // Remove: only while another voucher stays (no voucher at all: the claim would go to IAS on the form's amount).
+  const items = fields.invoices?.items || [];
+  const remove = items.length > 1 ? items.map((voucher, i) => (
+    { kind: 'value', item: `invoices.items.${i}.remove`, label: `Remove voucher ${i + 1}`, type: 'remove', current: false, voucher: i + 1, note: voucherText(voucher) })) : [];
+  const restore = (fields.invoices?.removed || []).map((r, k) => (
+    { kind: 'value', item: `invoices.removed.${k}.restore`, label: `Put back voucher ${r.voucher + 1}`, type: 'restore', current: false, voucher: r.voucher + 1,
+      note: `${voucherText(r.item)}: removed by ${r.by} — ${r.reason}` }));
+  return [...values, ...choices, ...vouchers, ...remove, ...restore, ...verdicts, ...member];
 }
 
 /**
@@ -109,6 +131,8 @@ function validateCorrection(body, options) {
     if (!body.passed && !option.canFail) return { error: 'This check has no customer wording for a failure; it can only be marked passed.' };
     return { option, corrected: body.passed };
   }
+  // Remove / put back: the action itself is the change.
+  if (option.type === 'remove' || option.type === 'restore') return { option, corrected: true };
   let value = body.value;
   if (option.type === 'amount') {
     value = typeof value === 'string' ? Number(value.replace(/,/g, '')) : value;
@@ -139,6 +163,8 @@ function aiOriginal(fields, option, documentCheckResult) {
   const prior = priorCorrection(fields, option.item);
   if (prior) return { aiValue: prior.aiValue, aiConfidence: prior.aiConfidence ?? null, page: prior.page ?? null };
   if (option.kind === 'verdict' && option.item.startsWith('member:')) return { aiValue: false, aiConfidence: null, page: null };
+  // Remove / put back a voucher: the AI read it as a voucher of this claim (aiValue null: no value of its own).
+  if (isVoucherMove(option.item)) return { aiValue: null, aiConfidence: null, page: fields.invoices?.items?.[Number(option.item.split('.')[2])]?.evidence?.page ?? null };
   if (option.kind === 'verdict') {
     const line = (documentCheckResult?.checklist || []).find((l) => l.code === option.item);
     return { aiValue: line?.passed ?? null, aiConfidence: line?.confidence ?? null, page: null };
@@ -158,6 +184,31 @@ function aiOriginal(fields, option, documentCheckResult) {
  */
 function applyCorrection(fields, correction) {
   const next = structuredClone(fields);
+  const removeAt = correction.item.match(VOUCHER_REMOVE);
+  if (removeAt) {
+    // The voucher leaves the list with its own corrections; the vouchers after it move up one number.
+    const i = Number(removeAt[1]);
+    const [item] = next.invoices.items.splice(i, 1);
+    const all = next.corrections || [];
+    const own = all.filter((c) => c.item?.match(VOUCHER_PATH)?.[1] === String(i));
+    next.corrections = shiftVouchers(all.filter((c) => !own.includes(c)), i + 1, -1);
+    next.invoices.removed = [...(next.invoices.removed || []),
+      { voucher: i, item, corrections: own, id: correction.id, by: correction.by, reason: correction.reason, at: correction.at }];
+    next.invoices.moves = [...(next.invoices.moves || []), { action: 'removed', voucher: i, text: voucherText(item), by: correction.by, reason: correction.reason, at: correction.at }];
+    return next;
+  }
+  const restoreAt = correction.item.match(VOUCHER_RESTORE);
+  if (restoreAt) {
+    // Back in its old place (or last), with its corrections; the vouchers from there move down one number.
+    const [entry] = next.invoices.removed.splice(Number(restoreAt[1]), 1);
+    const at = Math.min(entry.voucher, next.invoices.items.length);
+    next.invoices.items.splice(at, 0, entry.item);
+    next.corrections = [...shiftVouchers(next.corrections || [], at, 1), ...shiftVouchers(entry.corrections || [], 0, at - entry.voucher)];
+    if (!next.invoices.removed.length) delete next.invoices.removed;
+    // ponytail: put back in its number at removal time; after other removals the order can differ (no value moves).
+    next.invoices.moves = [...(next.invoices.moves || []), { action: 'put back', voucher: at, text: voucherText(entry.item), by: correction.by, reason: correction.reason, at: correction.at }];
+    return next;
+  }
   if (correction.kind === 'value') {
     setAt(next, correction.item, correction.corrected);
     const reason = `Corrected by ${correction.by}: ${correction.reason}`;
@@ -223,6 +274,8 @@ const shown = (value) => (value === true ? 'passed' : value === false ? 'failed'
 
 // One line per correction for the case history, the summary and the IAS remark: AI value → corrected value, who, why.
 function correctionText(c) {
+  // Remove / put back a voucher: a person's decision, not an AI value.
+  if (isVoucherMove(c.item || '')) return `${c.label}: by ${c.by} — ${c.reason}`;
   // A member Mark OK: the rules on IAS found it, not the AI — accepted, not "AI failed".
   if (c.item?.startsWith('member:')) return `${c.label}: marked OK by ${c.by} — ${c.reason}`;
   return `${c.label}: AI ${shown(c.aiValue)} → ${shown(c.corrected)} (corrected by ${c.by} — ${WRONG_STEP_LABELS[c.wrongStep]}: ${c.reason})`;
@@ -231,7 +284,7 @@ function correctionText(c) {
 // Where the case is checked again: the member check when the corrected value is one it compares with IAS, or the case
 // is still held there; the document check otherwise. { EMAIL, API } status pairs.
 // A voucher's amount or type: the member balance check uses them (SYSTEM_5 member balance phase C), so from the member check.
-const MEMBER_VOUCHER_ITEM = /^invoices\.items\.\d+\.(subtotal|voucher_type)$/;
+const MEMBER_VOUCHER_ITEM = /^invoices\.(items\.\d+\.(subtotal|voucher_type|remove)|removed\.\d+\.restore)$/;
 
 function recheckFrom(item, currentStatus) {
   // The balance dropped before the claim (BALANCE_REVIEW, SYSTEM_5 member balance phase D): its bypass goes back to claim
@@ -268,4 +321,4 @@ const MIN_REASON_LENGTH = 10;
 const REASON_TOO_SHORT = `Write a reason of at least ${MIN_REASON_LENGTH} characters.`;
 const reasonLongEnough = (reason) => typeof reason === 'string' && reason.trim().length >= MIN_REASON_LENGTH;
 
-module.exports = { failedCodes, askCovers, requestsReleased, MIN_REASON_LENGTH, REASON_TOO_SHORT, reasonLongEnough, NOT_VERDICT_ITEMS, WRONG_STEP_LABELS, EXCEPTION_STEPS, recheckFrom, correctionHold, correctionOptions, validateCorrection, aiOriginal, applyCorrection, applyVerdicts, correctionText };
+module.exports = { isVoucherMove, VOUCHER_REMOVE, voucherText, failedCodes, askCovers, requestsReleased, MIN_REASON_LENGTH, REASON_TOO_SHORT, reasonLongEnough, NOT_VERDICT_ITEMS, WRONG_STEP_LABELS, EXCEPTION_STEPS, recheckFrom, correctionHold, correctionOptions, validateCorrection, aiOriginal, applyCorrection, applyVerdicts, correctionText };

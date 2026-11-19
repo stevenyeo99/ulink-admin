@@ -74,6 +74,8 @@ export function choosePreparation(
     comment: string;
     // Saved with corrections: the choices are kept and the case does not move (the corrections move it).
     recheck?: boolean;
+    // Vouchers removed in the same save (0-based, UAT 17/11): they need no choice.
+    removing?: number[];
   }
 ): Promise<{ caseId: string; currentStatus: string }> {
   return request(`/api/cases/${id}/preparation`, { method: 'POST', body: JSON.stringify(choice) });

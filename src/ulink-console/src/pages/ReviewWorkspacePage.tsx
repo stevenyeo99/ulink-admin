@@ -43,13 +43,15 @@ export function ReviewWorkspacePage() {
   const [confirming, setConfirming] = useState(false);
   const claimTried = useRef<string | null>(null);
   // Corrections not saved yet: at the claim preparation stop they are saved with its choices, in one save.
-  const [pendingCorrections, setPendingCorrections] = useState<PendingCorrections>({ items: [], notReady: 0, lines: [], asks: [], allDecided: true });
+  const [pendingCorrections, setPendingCorrections] = useState<PendingCorrections>({ items: [], notReady: 0, lines: [], asks: [], allDecided: true, openLabels: [], firstOpenKey: null });
   // New request lines typed in the findings, not saved yet: the email draft shows them at once.
   const [newRequestLines, setNewRequestLines] = useState<string[]>([]);
   // What the last save did, so the reviewer sees it after its panel goes away (the case moved on).
   const [saved, setSaved] = useState<string | null>(null);
   // A new findings panel after the one save at the document stop: its decisions were saved by the claim panel.
   const [findingsRound, setFindingsRound] = useState(0);
+  // A new claim panel after each of its saves: the form starts again from what is now saved.
+  const [claimRound, setClaimRound] = useState(0);
 
   // Polls every 5 seconds while the review lane checks the case again after a decision (SYSTEM_5), so the banner below
   // shows where it is and the buttons come back when it stops again.
@@ -162,13 +164,14 @@ export function ReviewWorkspacePage() {
   // One element, placed by the stop (the one review puts it under the findings; elsewhere it keeps its place).
   const preparation = (
     <PreparationReviewPanel
-      key={`preparation-${id}`}
+      key={`preparation-${id}-${claimRound}`}
       caseRecord={caseRecord}
       corrections={pendingCorrections}
       oneReview={claimAtDocumentStop}
       requestLines={newRequestLines}
       onSaved={(message, decisions) => {
         setSaved(message);
+        setClaimRound((r) => r + 1);
         if (decisions) setFindingsRound((r) => r + 1); // the decisions are saved: none open, no second save
       }}
     />

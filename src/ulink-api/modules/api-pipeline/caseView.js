@@ -4,6 +4,9 @@
 // onto the same field names at read time, so every existing section of the page works for API
 // cases too — nothing is written back to ulink_cases.
 //
+const { choiceFor, sameDiagnosis, diagnosisSource } = require('../ias-claim-preparation/preparationReview');
+const { uniqueBenefitCandidates } = require('../shared/iasBenefits');
+
 // One line per field; a new API job whose output a page section should show adds one line here.
 const FIELDS = {
   recognizedType: ['api-claim-recognition', (o) => o.recognizedType],
@@ -47,7 +50,31 @@ function apiCaseView(steps) {
     const value = output && pick(output);
     if (value !== undefined) view[field] = value;
   }
+  // The person's claim choices saved after the document check's preview (UAT 17/11): the review page shows them over the
+  // preview, which was made before them. Claim preparation uses them already. The latest save holds every choice.
+  // The preview's time: the document check's last real run, not a copy of its result (isRun: a request line change).
+  const saved = latestDone.get('preparation-review');
+  const previewAt = lastRun.get('api-document-checking');
+  if (saved && previewAt && saved.at > previewAt) view.preparationChoice = stillApplies(saved.output, view);
   return view;
+}
+
+// The saved choices that still apply to the case as it is now: the same voucher (choiceFor), a benefit still on the
+// member's plan, and the same diagnosis text — the rules the save and claim preparation use. The review page shows only
+// these, numbered as the vouchers are now, and trusts them.
+function stillApplies(choice, view) {
+  const items = view.extractedFields?.invoices?.items || [];
+  const plan = uniqueBenefitCandidates(view.iasMemberInfoResponse?.payload?.memberPlans);
+  const onPlan = (b) => plan.some((c) => c.type === b.benefitType && (c.head || null) === (b.benefitHead || null));
+  const each = (list) => items.map((item, i) => choiceFor(list, i, item)).filter(Boolean);
+  const diagnosis = view.preparationPreview?.claimPrepMeta?.diagnosis;
+  const sourceNow = diagnosis?.source ?? diagnosisSource(view.extractedFields?.medical);
+  return {
+    ...choice,
+    diagnosis: choice.diagnosis && sameDiagnosis(choice.diagnosis, { source: sourceNow, text: diagnosis?.text ?? null }) ? choice.diagnosis : null,
+    benefits: each(choice.benefits).filter(onPlan),
+    rejections: each(choice.rejections),
+  };
 }
 
 module.exports = { apiCaseView };

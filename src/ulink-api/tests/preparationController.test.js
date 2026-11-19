@@ -135,3 +135,41 @@ it('at the document stop: decides on the preview, keeps the choices, and leaves 
   expect(Case.update).toHaveBeenCalledWith({ currentStatus: 'API_DOCUMENTS_REVIEW' }, expect.objectContaining({ where: { id: 'c1', currentStatus: 'API_DOCUMENTS_REVIEW' } }));
   expect(ApiCaseStep.create.mock.calls[0][0].output.diagnosis).toMatchObject({ diagCode: 'K05.1' });
 });
+
+// UAT 17/11 (owner 2026-11-19): the review page shows earlier choices read-only and does not send them again. A flagged
+// voucher or diagnosis with an earlier choice for the same voucher / diagnosis text counts as decided.
+it('an earlier choice for a flagged voucher or the unsure diagnosis counts as decided', async () => {
+  Case.findByPk.mockResolvedValue({ id: 'c1', source: 'API', currentStatus: 'API_DOCUMENTS_REVIEW' });
+  const [recognition, member, prepared] = steps(null);
+  const meta = prepared.output.claimPrepMeta;
+  const preview = { job: 'api-document-checking', status: 'DONE', createdAt: '2026-11-19T10:00Z', output: { preparationPreview: { claimPrepMeta: meta, review: { diagnosis: true, vouchers: [1], rejections: [1] } } } };
+  const earlier = { job: 'preparation-review', status: 'DONE', createdAt: '2026-11-19T10:05Z', output: {
+    by: 'Ulink (ulink)', comment: 'first',
+    diagnosis: { diagCode: 'K05.1', text: meta.diagnosis.text, source: null },
+    benefits: [{ voucher: 1, key: { subtotal: 50000, date: '2026-10-02', voucherType: 'pharmacy' }, benefitType: 'OP', benefitHead: 'RX' }],
+    rejections: [{ voucher: 1, key: { subtotal: 50000, date: '2026-10-02', voucherType: 'pharmacy' }, amount: null, remark: null }],
+  } };
+  ApiCaseStep.findAll.mockResolvedValue([recognition, member, preview, earlier]);
+  // Only a new rejection on voucher 1 (voucher 0 has none flagged): the earlier diagnosis, benefit and rejection count.
+  const { status } = await send({ rejections: [{ voucher: 0, amount: 1000, remark: 'Vit C - 1,000 MMK is not covered.' }] });
+  expect(status).toBe(200);
+  const out = ApiCaseStep.create.mock.calls[0][0].output;
+  expect(out.diagnosis).toMatchObject({ diagCode: 'K05.1' });
+  expect(out.benefits).toEqual([expect.objectContaining({ voucher: 1, benefitType: 'OP' })]);
+  expect(out.rejections.map((r) => r.voucher).sort()).toEqual([0, 1]);
+});
+
+// UAT 17/11: a voucher removed in the same save (removing) needs no choice; a choice saved before a removal follows
+// its voucher to the new number.
+it('a flagged voucher being removed needs no choice, and an earlier choice follows its voucher', async () => {
+  Case.findByPk.mockResolvedValue({ id: 'c1', source: 'API', currentStatus: 'API_DOCUMENTS_REVIEW' });
+  const [recognition, member, prepared] = steps(null);
+  const preview = { job: 'api-document-checking', status: 'DONE', output: { preparationPreview: { claimPrepMeta: prepared.output.claimPrepMeta, review: { diagnosis: false, vouchers: [0, 1], rejections: [] } } } };
+  // Voucher 2 (pharmacy) was chosen when it was voucher 3: the choice is found by its voucher.
+  const earlier = { job: 'preparation-review', status: 'DONE', output: { by: 'Ulink (ulink)', comment: 'first',
+    benefits: [{ voucher: 2, key: { subtotal: 50000, date: '2026-10-02', voucherType: 'pharmacy' }, benefitType: 'OP', benefitHead: 'RX' }] } };
+  ApiCaseStep.findAll.mockResolvedValue([recognition, member, preview, earlier]);
+  const { status } = await send({ recheck: true, removing: [0] });
+  expect(status).toBe(200);
+  expect(ApiCaseStep.create.mock.calls[0][0].output.benefits).toEqual([expect.objectContaining({ voucher: 1, benefitType: 'OP' })]);
+});
