@@ -9,3 +9,5 @@ graphify-out/
 /DEPLOY ENV
 
 /docs/imp/UAT
+
+/src/ulink-api/.env.*
