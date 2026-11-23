@@ -86,6 +86,15 @@ list, restart or change them.
 - [x] Owner confirmed (2026-10-14): `ulink-api-n14` does not use our Supabase DB, IMAP inbox or port 3088, and no
       other user/app reads `ulink-attachments/csr/` (stays 750, ulinkai only).
 - [x] Deploy ulink-api (Docker) — Part 6.1 / `DEPLOY_API.md` S1–S8 (2026-10-14).
+- [x] Prod Part 7.1: `/home/ulinkai/prod/` folders created (Part 1.3 with `E=prod`), owned by ulinkai (2026-11-23).
+- [x] Prod Part 7.2 + 7.5: `ulinkai-console-prod-nginx.conf` installed in `/etc/nginx/conf.d/`; nginx listens on 5174,
+      3089 free (2026-11-23).
+- [x] Prod Part 7.4: console deployed to prod directly (no UAT run first, owner's choice) (2026-11-23).
+- [x] Prod Part 7.3 + 7.6: prod `.env` installed (600). First API deploy `ulink-api_20261123-1224_e7fa177`, then
+      container `ulink-api-prod` created with the same image as `ulink-api-uat` and the Docker log cap. Listens on 3089,
+      `/api/docs` answers (2026-11-23).
+- [ ] Prod still open: IT opens 5174 from the Outline source. One case tested by hand, then cron. Prod uses the
+      current DB, inbox and Freshdesk, so UAT runs no pipelines until it moves to new DB and inbox values.
 
 Each part ends with a check. Do not continue until it passes.
 
